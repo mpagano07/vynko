@@ -14,7 +14,7 @@ import Link from 'next/link';
 export default function DashboardPage() {
   const router = useRouter();
   const { profile, tenant, loading: authLoading, isAuthenticated } = useAuth();
-  const { products, isLoading: productsLoading } = useProducts();
+  const { products, isLoading: productsLoading } = useProducts(tenant?.id);
 
   useEffect(() => {
     // Redirect to login if not authenticated

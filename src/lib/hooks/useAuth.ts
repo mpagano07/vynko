@@ -23,33 +23,24 @@ export function useAuth() {
   const [tenant, setTenant] = useState<TenantInfo | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadProfileAndTenant = useCallback(async (authUser: User) => {
+  const loadProfileAndTenant = useCallback(async () => {
     try {
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authUser.id)
-        .maybeSingle();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
 
-      setProfile(profileData);
+      const response = await fetch('/api/session', {
+        credentials: 'include',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'x-refresh-token': session.refresh_token ?? '',
+        },
+      });
 
-      const { data: tenantUser } = await supabase
-        .from('tenant_users')
-        .select('tenant_id')
-        .eq('user_id', authUser.id)
-        .maybeSingle();
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to fetch session');
 
-      if (tenantUser?.tenant_id) {
-        const { data: tenantData } = await supabase
-          .from('tenants')
-          .select('*')
-          .eq('id', tenantUser.tenant_id)
-          .maybeSingle();
-
-        setTenant(tenantData);
-      } else {
-        setTenant(null);
-      }
+      setProfile(data.profile);
+      setTenant(data.tenant);
     } catch (err) {
       console.error('Error loading profile/tenant:', err);
     }
@@ -65,7 +56,7 @@ export function useAuth() {
 
       if (session?.user) {
         setUser(session.user);
-        await loadProfileAndTenant(session.user);
+        await loadProfileAndTenant();
       } else {
         setUser(null);
         setProfile(null);
@@ -82,14 +73,13 @@ export function useAuth() {
 
         if (session?.user) {
           setUser(session.user);
-          await loadProfileAndTenant(session.user);
+          await loadProfileAndTenant();
         } else {
           setUser(null);
           setProfile(null);
           setTenant(null);
         }
 
-        // After SIGNED_IN, ensure loading is false
         if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
           setLoading(false);
         }

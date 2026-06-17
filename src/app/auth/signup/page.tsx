@@ -1,7 +1,7 @@
 'use client';
 
-import { Suspense, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,35 +9,54 @@ import { Card } from '@/components/ui/card';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 
-export const dynamic = 'force-dynamic';
-
-function LoginContent() {
+export default function SignupPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const redirectTo = searchParams?.get('redirect') || '/';
-
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (password !== confirmPassword) {
+      toast.error('Las contraseñas no coinciden');
+      return;
+    }
+
+    if (password.length < 6) {
+      toast.error('La contraseña debe tener al menos 6 caracteres');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
       });
 
       if (error) throw error;
 
-      toast.success('Sesión iniciada correctamente');
-      router.push(redirectTo);
-      router.refresh();
+      if (data?.user?.identities?.length === 0) {
+        toast.error('Este email ya está registrado');
+        return;
+      }
+
+      if (data?.session) {
+        toast.success('Cuenta creada correctamente');
+        router.push('/');
+        router.refresh();
+      } else {
+        toast.success(
+          'Cuenta creada. Revisa tu email para confirmar el registro.'
+        );
+        router.push('/login');
+      }
     } catch (error: unknown) {
       const maybeError = error as { message?: string };
-      toast.error(maybeError?.message || 'Error al iniciar sesión');
+      toast.error(maybeError?.message || 'Error al crear cuenta');
     } finally {
       setLoading(false);
     }
@@ -65,10 +84,10 @@ function LoginContent() {
       <Card className="w-full max-w-md p-8">
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-bold mb-2">StockPilot</h1>
-          <p className="text-gray-600">Gestión de stock inteligente</p>
+          <p className="text-gray-600">Crea tu cuenta</p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-4">
+        <form onSubmit={handleSignup} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-2 text-gray-700">
               Email
@@ -88,28 +107,34 @@ function LoginContent() {
             </label>
             <Input
               type="password"
-              placeholder="••••••••"
+              placeholder="Mínimo 6 caracteres"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              minLength={6}
             />
           </div>
 
-          <div className="text-right">
-            <Link
-              href="/auth/forgot-password"
-              className="text-sm text-blue-600 hover:text-blue-800"
-            >
-              ¿Olvidaste tu contraseña?
-            </Link>
+          <div>
+            <label className="block text-sm font-medium mb-2 text-gray-700">
+              Confirmar contraseña
+            </label>
+            <Input
+              type="password"
+              placeholder="Repite la contraseña"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              minLength={6}
+            />
           </div>
 
           <Button
             type="submit"
-            disabled={loading || !email || !password}
+            disabled={loading || !email || !password || !confirmPassword}
             className="w-full"
           >
-            {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
+            {loading ? 'Creando cuenta...' : 'Crear cuenta'}
           </Button>
         </form>
 
@@ -151,31 +176,15 @@ function LoginContent() {
         </Button>
 
         <p className="text-sm text-gray-500 text-center mt-6">
-          ¿No tienes cuenta?{' '}
+          ¿Ya tienes cuenta?{' '}
           <Link
-            href="/auth/signup"
+            href="/login"
             className="text-blue-600 hover:text-blue-800 font-medium"
           >
-            Regístrate
+            Inicia sesión
           </Link>
         </p>
       </Card>
     </div>
-  );
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-          <Card className="w-full max-w-md p-8 text-center">
-            <div className="animate-pulse">Cargando...</div>
-          </Card>
-        </div>
-      }
-    >
-      <LoginContent />
-    </Suspense>
   );
 }

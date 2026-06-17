@@ -39,12 +39,13 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const authRoutes = ['/login', '/register', '/auth/callback'];
+  const authRoutes = ['/login', '/register', '/auth/callback', '/auth/signup', '/auth/forgot-password', '/auth/reset-password'];
   const isOnboardingRoute = request.nextUrl.pathname === '/onboarding';
   const isAuthRoute = authRoutes.includes(request.nextUrl.pathname);
+  const isApiRoute = request.nextUrl.pathname.startsWith('/api/');
 
   // If no user and trying to access protected route, redirect to login
-  if (!user && !isAuthRoute && !isOnboardingRoute) {
+  if (!user && !isAuthRoute && !isOnboardingRoute && !isApiRoute) {
     return NextResponse.redirect(
       new URL(`/login?redirect=${encodeURIComponent(request.nextUrl.pathname)}`, request.url)
     );
@@ -52,35 +53,46 @@ export async function middleware(request: NextRequest) {
 
   // If user is authenticated, check tenant status
   if (user) {
-    const { data: tenantUser, error: tenantError } = await supabase
+    const { data: tenantUser } = await supabase
       .from('tenant_users')
       .select('tenant_id')
       .eq('user_id', user.id)
       .maybeSingle();
 
-    // On DB errors (e.g., 500 from RLS during first-time setup), treat as no tenant
-    const tenantId = tenantError ? null : tenantUser?.tenant_id;
+    const tenantId = tenantUser?.tenant_id;
 
-    if (!tenantId) {
-      // No tenant -> must complete onboarding
-      if (!isOnboardingRoute) {
-        return NextResponse.redirect(new URL('/onboarding', request.url));
+    if (isApiRoute) {
+      // For API routes: inject tenant-id if available, never redirect
+      if (tenantId) {
+        const requestHeaders = new Headers(request.headers);
+        requestHeaders.set('x-tenant-id', tenantId);
+
+        response = NextResponse.next({
+          request: {
+            headers: requestHeaders,
+          },
+        });
       }
     } else {
-      // User has a tenant -> cannot onboard or login again
-      if (isOnboardingRoute || isAuthRoute) {
-        return NextResponse.redirect(new URL('/', request.url));
+      // For page routes
+      if (!tenantId) {
+        if (!isOnboardingRoute) {
+          return NextResponse.redirect(new URL('/onboarding', request.url));
+        }
+      } else {
+        if (isOnboardingRoute || isAuthRoute) {
+          return NextResponse.redirect(new URL('/', request.url));
+        }
+
+        const requestHeaders = new Headers(request.headers);
+        requestHeaders.set('x-tenant-id', tenantId);
+
+        response = NextResponse.next({
+          request: {
+            headers: requestHeaders,
+          },
+        });
       }
-
-      // Inject the x-tenant-id header for API routes
-      const requestHeaders = new Headers(request.headers);
-      requestHeaders.set('x-tenant-id', tenantId);
-
-      response = NextResponse.next({
-        request: {
-          headers: requestHeaders,
-        },
-      });
     }
   }
 
