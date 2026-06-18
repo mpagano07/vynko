@@ -4,7 +4,7 @@ import { Sidebar } from '@/components/ui/sidebar';
 import { Header } from '@/components/ui/header';
 
 import { Toaster } from 'react-hot-toast';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 
 export const metadata: Metadata = {
   title: 'StockPilot',
@@ -12,6 +12,9 @@ export const metadata: Metadata = {
   generator: 'Next.js',
   applicationName: 'StockPilot',
   referrer: 'origin-when-cross-origin',
+};
+
+export const viewport: Viewport = {
   colorScheme: 'light dark',
   themeColor: '#3b82f6',
 };
@@ -23,9 +26,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es">
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-      </head>
+      <head />
       <body className="min-h-screen bg-gray-50 antialiased dark:bg-gray-950 flex flex-col md:flex-row font-sans">
         <Toaster position="top-right" />
         <React.Suspense fallback={<div />}> 
