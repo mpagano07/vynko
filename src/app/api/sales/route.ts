@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { checkAndNotifyStock } from '@/lib/notifications';
 
 async function getAuthenticatedUser(): Promise<{ tenantId: string; userId: string } | null> {
   const supabase = await createServerSupabaseClient();
@@ -160,6 +161,8 @@ export async function POST(request: Request) {
           reason: `Venta #${sale.id.slice(0, 8)}`,
           created_by: auth.userId,
         });
+
+      await checkAndNotifyStock(auth.tenantId, item.product_id);
     }
 
     return NextResponse.json({ ...sale, items: itemsWithSaleId }, { status: 201 });

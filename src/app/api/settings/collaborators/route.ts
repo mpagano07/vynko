@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { createNotification } from '@/lib/notifications';
 
 async function getOwnersTenant(userId: string): Promise<{ tenantId: string } | null> {
   const { data: tu } = await supabaseAdmin
@@ -130,6 +131,14 @@ export async function POST(request: Request) {
         .eq('id', existingProfile.id)
         .single();
 
+      await createNotification({
+        tenantId: ownership.tenantId,
+        type: 'collaborator_joined',
+        title: 'Nuevo colaborador',
+        message: `${profile?.full_name || email} se unió al equipo como ${assignRole}.`,
+        data: { user_id: existingProfile.id, role: assignRole },
+      });
+
       return NextResponse.json({
         collaborator: {
           id: newMember.id,
@@ -184,6 +193,14 @@ export async function POST(request: Request) {
         .select('email, full_name, avatar_url')
         .eq('id', authUser.id)
         .single();
+
+      await createNotification({
+        tenantId: ownership.tenantId,
+        type: 'collaborator_joined',
+        title: 'Nuevo colaborador',
+        message: `${profile?.full_name || email} se unió al equipo como ${assignRole}.`,
+        data: { user_id: authUser.id, role: assignRole },
+      });
 
       return NextResponse.json({
         collaborator: {

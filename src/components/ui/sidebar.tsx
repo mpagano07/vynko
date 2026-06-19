@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { useNotifications } from '@/lib/hooks/useNotifications';
 import { cn } from '@/lib/utils/cn';
 
 interface NavItem {
@@ -17,12 +18,14 @@ const navItems: NavItem[] = [
   { name: 'Productos', href: '/products' },
   { name: 'Proveedores', href: '/providers' },
   { name: 'Escáner', href: '/scanning' },
+  { name: 'Notificaciones', href: '/notifications' },
   { name: 'Configuración', href: '/settings' },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const { profile, tenant, loading } = useAuth();
+  const { unreadCount } = useNotifications();
 
   // Hide sidebar on login/auth pages
   if (pathname?.includes('/login') || pathname?.includes('/auth') || pathname?.includes('/onboarding')) {
@@ -55,13 +58,18 @@ export function Sidebar() {
             key={item.name}
             href={item.href}
             className={cn(
-              'flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors',
+              'flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors',
               pathname === item.href
                 ? 'bg-gray-800 text-white'
                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
             )}
           >
-            {item.name}
+            <span>{item.name}</span>
+            {item.name === 'Notificaciones' && unreadCount > 0 && (
+              <span className="flex items-center justify-center h-5 min-w-5 px-1.5 text-[10px] font-bold text-white bg-rose-500 rounded-full">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
           </Link>
         ))}
       </nav>
