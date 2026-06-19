@@ -13,6 +13,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { name: 'Dashboard', href: '/' },
+  { name: 'Ventas', href: '/sales' },
   { name: 'Productos', href: '/products' },
   { name: 'Escáner', href: '/scanning' },
   { name: 'Configuración', href: '/settings' },

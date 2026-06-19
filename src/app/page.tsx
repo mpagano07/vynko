@@ -2,10 +2,11 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useProducts } from '@/lib/hooks/useProducts';
+import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Package, AlertOctagon, TrendingUp, Users, ArrowRight, CheckCircle2 } from 'lucide-react';
@@ -15,6 +16,35 @@ export default function DashboardPage() {
   const router = useRouter();
   const { profile, tenant, loading: authLoading, isAuthenticated } = useAuth();
   const { products, isLoading: productsLoading } = useProducts(tenant?.id);
+  const [salesData, setSalesData] = useState<{ todayTotal: number; saleCount: number } | null>(null);
+  const [salesLoading, setSalesLoading] = useState(true);
+
+  useEffect(() => {
+    if (!tenant?.id) return;
+
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const headers: Record<string, string> = {};
+        if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+        const res = await fetch('/api/sales', { headers });
+        if (!res.ok) return;
+        const sales: Record<string, unknown>[] = await res.json();
+
+        const today = new Date();
+        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
+
+        const todaySales = sales.filter(s => (s.created_at as string) >= todayStart);
+        const todayTotal = todaySales.reduce((sum, s) => sum + ((s.total_cents as number) || 0), 0);
+
+        setSalesData({ todayTotal, saleCount: todaySales.length });
+      } catch (err) {
+        console.error('Error fetching sales:', err);
+      } finally {
+        setSalesLoading(false);
+      }
+    })();
+  }, [tenant?.id]);
 
   useEffect(() => {
     // Redirect to login if not authenticated
@@ -23,7 +53,7 @@ export default function DashboardPage() {
     }
   }, [authLoading, isAuthenticated, router]);
 
-  if (authLoading || productsLoading) {
+  if (authLoading || productsLoading || salesLoading) {
     return (
       <div className="space-y-6">
         <div className="h-8 bg-gray-200 dark:bg-gray-800 rounded w-1/3 animate-pulse" />
@@ -66,10 +96,11 @@ export default function DashboardPage() {
         <Card className="p-6 flex items-start justify-between">
           <div>
             <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Ventas hoy</h3>
-            <p className="text-3xl font-extrabold mt-2 text-gray-900 dark:text-white">$0</p>
-            <p className="text-xs text-green-500 font-semibold mt-2 flex items-center gap-1">
-              <TrendingUp className="h-3.5 w-3.5" />
-              +0% vs ayer
+            <p className="text-3xl font-extrabold mt-2 text-gray-900 dark:text-white">
+              ${salesData ? (salesData.todayTotal / 100).toFixed(2) : '0.00'}
+            </p>
+            <p className="text-xs text-gray-500 mt-2">
+              {salesData ? `${salesData.saleCount} venta(s)` : 'Sin ventas'}
             </p>
           </div>
           <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400">
@@ -205,10 +236,25 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex gap-3">
-              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 flex items-center justify-center font-bold text-xs">3</span>
+              <span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs ${
+                salesData && salesData.saleCount > 0
+                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                  : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500'
+              }`}>
+                {salesData && salesData.saleCount > 0 ? '✓' : '3'}
+              </span>
               <div>
                 <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Registrar tu primera venta</h4>
                 <p className="text-xs text-gray-500 mt-0.5">Comienza a operar vendiendo tus productos registrados.</p>
+                {(!salesData || salesData.saleCount === 0) && (
+                  <Button
+                    size="sm"
+                    className="mt-2 text-xs h-7 px-3"
+                    onClick={() => router.push('/sales')}
+                  >
+                    Registrar venta
+                  </Button>
+                )}
               </div>
             </div>
           </div>
