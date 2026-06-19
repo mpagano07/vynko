@@ -15,6 +15,7 @@ interface TenantInfo {
   id: string;
   name: string;
   slug: string;
+  description?: string;
 }
 
 export function useAuth() {

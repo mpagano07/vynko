@@ -41,7 +41,36 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=auth_failed`);
   }
 
-  // Check if user already has a tenant
+  const { data: pendingInvites } = await supabaseAdmin
+    .from('invitations')
+    .select('id, tenant_id, role')
+    .eq('email', data.user.email?.toLowerCase() || '')
+    .is('accepted_at', null);
+
+  if (pendingInvites && pendingInvites.length > 0) {
+    let acceptedTenant: string | null = null;
+    for (const inv of pendingInvites) {
+      await supabaseAdmin.from('profiles').upsert(
+        { id: data.user.id, email: data.user.email, tenant_id: inv.tenant_id },
+        { onConflict: 'id' }
+      );
+      const { error: tuErr } = await supabaseAdmin.from('tenant_users').upsert(
+        { tenant_id: inv.tenant_id, user_id: data.user.id, role: inv.role },
+        { onConflict: 'tenant_id,user_id' }
+      );
+      if (!tuErr) {
+        acceptedTenant = inv.tenant_id;
+        await supabaseAdmin.from('invitations')
+          .update({ accepted_at: new Date().toISOString() })
+          .eq('id', inv.id);
+      }
+    }
+    if (acceptedTenant) {
+      response.headers.set('location', `${origin}/`);
+      return response;
+    }
+  }
+
   const { data: tenantUsers } = await supabaseAdmin
     .from('tenant_users')
     .select('tenant_id')
@@ -49,10 +78,8 @@ export async function GET(request: NextRequest) {
 
   const tenantUser = tenantUsers?.[0];
   if (tenantUser?.tenant_id) {
-    // Existing user with tenant → go to dashboard
     response.headers.set('location', `${origin}/`);
   }
-  // else → stays redirect to /onboarding (already set above)
 
   return response;
 }

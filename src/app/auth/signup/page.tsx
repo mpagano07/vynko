@@ -45,6 +45,7 @@ export default function SignupPage() {
       }
 
       if (data?.session) {
+        await fetch('/api/invitations/accept', { method: 'POST' });
         toast.success('Cuenta creada correctamente');
         router.push('/');
         router.refresh();
