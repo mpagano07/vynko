@@ -33,8 +33,6 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
   const onResultRef = useRef(onResult);
   const onErrorRef = useRef(onError);
   const lastScanRef = useRef<{ code: string; time: number } | null>(null);
-  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
-  const [selectedCamera, setSelectedCamera] = useState<string>('');
   const [status, setStatus] = useState<'initializing' | 'scanning' | 'error' | 'idle'>('initializing');
   const [statusMessage, setStatusMessage] = useState('Inicializando cámara...');
 
@@ -51,9 +49,14 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
         // ignore cleanup errors
       }
     }
+    if (videoRef.current?.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach((t) => t.stop());
+      videoRef.current.srcObject = null;
+    }
   }, []);
 
-  const startCamera = useCallback(async (deviceId?: string) => {
+  const startCamera = useCallback(async () => {
     if (!readerRef.current || !videoRef.current) return;
 
     try {
@@ -63,8 +66,32 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
 
       lastScanRef.current = null;
 
+      const video = videoRef.current;
+      video.setAttribute('autoplay', 'true');
+      video.setAttribute('muted', 'true');
+      video.setAttribute('playsinline', 'true');
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+        },
+      });
+
+      video.srcObject = stream;
+
+      await new Promise<void>((resolve, reject) => {
+        const onCanPlay = () => {
+          video.removeEventListener('canplay', onCanPlay);
+          resolve();
+        };
+        video.addEventListener('canplay', onCanPlay);
+        video.play().catch(reject);
+      });
+
       await readerRef.current.decodeFromVideoDevice(
-        deviceId || null,
+        null,
         videoRef.current,
         (result) => {
           if (result) {
@@ -99,24 +126,7 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
       try {
         const reader = new BrowserMultiFormatReader(HINTS);
         readerRef.current = reader;
-
-        const devices = await reader.listVideoInputDevices();
-        if (cancelled) return;
-
-        if (devices.length === 0) {
-          setStatus('error');
-          setStatusMessage('No se detectó ninguna cámara');
-          return;
-        }
-
-        setCameras(devices);
-        const backCamera = devices.find(
-          (d) => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('trasera')
-        );
-        const defaultDevice = backCamera?.deviceId || devices[0].deviceId;
-        setSelectedCamera(defaultDevice);
-
-        await startCamera(defaultDevice);
+        await startCamera();
       } catch (err: unknown) {
         if (cancelled) return;
         const msg = err instanceof Error ? err.message : 'Error al acceder a la cámara';
@@ -134,11 +144,6 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
       readerRef.current = null;
     };
   }, [startCamera, stopScanning, onError]);
-
-  const switchCamera = async (deviceId: string) => {
-    setSelectedCamera(deviceId);
-    await startCamera(deviceId);
-  };
 
   return (
     <div className={cn('relative overflow-hidden rounded-lg bg-black', className)}>
@@ -164,7 +169,7 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
           <div className="text-center text-white px-4">
             <p className="text-sm mb-3">{statusMessage}</p>
             <button
-              onClick={() => startCamera(selectedCamera || undefined)}
+              onClick={startCamera}
               className="rounded-md bg-white px-4 py-2 text-sm font-medium text-black hover:bg-gray-200"
             >
               Reintentar
@@ -180,25 +185,6 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
           </div>
           <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent animate-pulse" />
         </>
-      )}
-
-      {cameras.length > 1 && (
-        <div className="absolute bottom-3 left-3 right-3 flex justify-center gap-2">
-          {cameras.map((cam) => (
-            <button
-              key={cam.deviceId}
-              onClick={() => switchCamera(cam.deviceId)}
-              className={cn(
-                'rounded-full px-3 py-1 text-xs font-medium transition-colors',
-                selectedCamera === cam.deviceId
-                  ? 'bg-white text-black'
-                  : 'bg-white/20 text-white hover:bg-white/30'
-              )}
-            >
-              {cam.label || `Cámara ${cameras.indexOf(cam) + 1}`}
-            </button>
-          ))}
-        </div>
       )}
     </div>
   );
