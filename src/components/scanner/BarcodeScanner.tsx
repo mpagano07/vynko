@@ -11,6 +11,7 @@ interface BarcodeScannerProps {
 }
 
 const SCAN_THROTTLE_MS = 2000;
+const SCAN_INTERVAL_MS = 400;
 
 const HINTS = new Map();
 HINTS.set(DecodeHintType.TRY_HARDER, true);
@@ -33,6 +34,8 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
   const onResultRef = useRef(onResult);
   const onErrorRef = useRef(onError);
   const lastScanRef = useRef<{ code: string; time: number } | null>(null);
+  const scanTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startedRef = useRef(false);
   const [status, setStatus] = useState<'initializing' | 'scanning' | 'error' | 'idle'>('initializing');
   const [statusMessage, setStatusMessage] = useState('Inicializando cámara...');
 
@@ -41,7 +44,11 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
     onErrorRef.current = onError;
   }, [onResult, onError]);
 
-  const stopScanning = useCallback(() => {
+  const stop = useCallback(() => {
+    if (scanTimerRef.current) {
+      clearInterval(scanTimerRef.current);
+      scanTimerRef.current = null;
+    }
     if (readerRef.current) {
       try {
         readerRef.current.reset();
@@ -56,21 +63,17 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
     }
   }, []);
 
-  const startCamera = useCallback(async () => {
-    if (!readerRef.current || !videoRef.current) return;
+  const start = useCallback(async () => {
+    if (!readerRef.current || !videoRef.current || startedRef.current) return;
+    startedRef.current = true;
 
     try {
       setStatus('initializing');
       setStatusMessage('Iniciando cámara...');
-      stopScanning();
 
       lastScanRef.current = null;
 
       const video = videoRef.current;
-      video.setAttribute('autoplay', 'true');
-      video.setAttribute('muted', 'true');
-      video.setAttribute('playsinline', 'true');
-
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: 'environment',
@@ -80,20 +83,14 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
       });
 
       video.srcObject = stream;
+      await video.play();
 
-      await new Promise<void>((resolve, reject) => {
-        const onCanPlay = () => {
-          video.removeEventListener('canplay', onCanPlay);
-          resolve();
-        };
-        video.addEventListener('canplay', onCanPlay);
-        video.play().catch(reject);
-      });
+      scanTimerRef.current = setInterval(async () => {
+        if (!readerRef.current || !videoRef.current) return;
+        if (videoRef.current.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
 
-      await readerRef.current.decodeFromVideoDevice(
-        null,
-        videoRef.current,
-        (result) => {
+        try {
+          const result = await readerRef.current.decode(videoRef.current);
           if (result) {
             const text = result.getText();
             if (text) {
@@ -106,8 +103,10 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
               onResultRef.current(text);
             }
           }
+        } catch {
+          // no barcode found in this frame — expected
         }
-      );
+      }, SCAN_INTERVAL_MS);
 
       setStatus('scanning');
       setStatusMessage('');
@@ -117,33 +116,22 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
       setStatusMessage(msg);
       onErrorRef.current?.(msg);
     }
-  }, [stopScanning]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
 
-    const init = async () => {
-      try {
-        const reader = new BrowserMultiFormatReader(HINTS);
-        readerRef.current = reader;
-        await startCamera();
-      } catch (err: unknown) {
-        if (cancelled) return;
-        const msg = err instanceof Error ? err.message : 'Error al acceder a la cámara';
-        setStatus('error');
-        setStatusMessage(msg);
-        onError?.(msg);
-      }
-    };
+    const reader = new BrowserMultiFormatReader(HINTS);
+    readerRef.current = reader;
 
-    init();
+    start();
 
     return () => {
       cancelled = true;
-      stopScanning();
+      stop();
       readerRef.current = null;
     };
-  }, [startCamera, stopScanning, onError]);
+  }, [start, stop]);
 
   return (
     <div className={cn('relative overflow-hidden rounded-lg bg-black', className)}>
@@ -151,7 +139,6 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
         ref={videoRef}
         className="h-full w-full object-cover"
         playsInline
-        autoPlay
         muted
       />
 
@@ -169,7 +156,7 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
           <div className="text-center text-white px-4">
             <p className="text-sm mb-3">{statusMessage}</p>
             <button
-              onClick={startCamera}
+              onClick={() => { startedRef.current = false; start(); }}
               className="rounded-md bg-white px-4 py-2 text-sm font-medium text-black hover:bg-gray-200"
             >
               Reintentar
