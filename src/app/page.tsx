@@ -25,6 +25,12 @@ export default function DashboardPage() {
   const router = useRouter();
   const { profile, tenant, loading: authLoading, isAuthenticated } = useAuth();
   const { products, isLoading: productsLoading } = useProducts(tenant?.id);
+
+  useEffect(() => {
+    if (!authLoading && isAuthenticated && !tenant) {
+      router.replace('/onboarding');
+    }
+  }, [authLoading, isAuthenticated, tenant, router]);
   const [salesData, setSalesData] = useState<{ todayTotal: number; saleCount: number } | null>(null);
   const [salesLoading, setSalesLoading] = useState(true);
   const [salesChartData, setSalesChartData] = useState<{ date: string; day: string; total: number }[]>([]);
