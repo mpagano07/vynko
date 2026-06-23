@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { BrowserMultiFormatReader } from '@zxing/library';
+import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library';
 import { cn } from '@/lib/utils/cn';
 
 interface BarcodeScannerProps {
@@ -10,11 +10,29 @@ interface BarcodeScannerProps {
   className?: string;
 }
 
+const SCAN_THROTTLE_MS = 2000;
+
+const HINTS = new Map();
+HINTS.set(DecodeHintType.TRY_HARDER, true);
+HINTS.set(DecodeHintType.POSSIBLE_FORMATS, [
+  BarcodeFormat.EAN_13,
+  BarcodeFormat.EAN_8,
+  BarcodeFormat.UPC_A,
+  BarcodeFormat.UPC_E,
+  BarcodeFormat.CODE_128,
+  BarcodeFormat.CODE_39,
+  BarcodeFormat.ITF,
+  BarcodeFormat.RSS_14,
+  BarcodeFormat.RSS_EXPANDED,
+  BarcodeFormat.CODABAR,
+]);
+
 export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
   const onResultRef = useRef(onResult);
   const onErrorRef = useRef(onError);
+  const lastScanRef = useRef<{ code: string; time: number } | null>(null);
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string>('');
   const [status, setStatus] = useState<'initializing' | 'scanning' | 'error' | 'idle'>('initializing');
@@ -43,6 +61,8 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
       setStatusMessage('Iniciando cámara...');
       stopScanning();
 
+      lastScanRef.current = null;
+
       await readerRef.current.decodeFromVideoDevice(
         deviceId || null,
         videoRef.current,
@@ -50,6 +70,12 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
           if (result) {
             const text = result.getText();
             if (text) {
+              const now = Date.now();
+              const last = lastScanRef.current;
+              if (last && last.code === text && now - last.time < SCAN_THROTTLE_MS) {
+                return;
+              }
+              lastScanRef.current = { code: text, time: now };
               onResultRef.current(text);
             }
           }
@@ -71,7 +97,7 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
 
     const init = async () => {
       try {
-        const reader = new BrowserMultiFormatReader();
+        const reader = new BrowserMultiFormatReader(HINTS);
         readerRef.current = reader;
 
         const devices = await reader.listVideoInputDevices();
@@ -120,6 +146,8 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
         ref={videoRef}
         className="h-full w-full object-cover"
         playsInline
+        autoPlay
+        muted
       />
 
       {status === 'initializing' && (
