@@ -24,18 +24,19 @@ function CallbackContent() {
       return;
     }
 
-    // The Supabase client auto-exchanges the code during initialization
-    // (detectSessionInUrl: true). Just wait for the session to be ready.
     const check = async () => {
-      for (let i = 0; i < 30; i++) {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          window.location.href = '/';
+      try {
+        const { error } = await supabase.auth.exchangeCodeForSession(code as string);
+        if (error) {
+          console.error('Error exchanging code:', error);
+          window.location.href = `/login?error=${encodeURIComponent(error.message)}`;
           return;
         }
-        await new Promise((r) => setTimeout(r, 500));
+        window.location.href = '/';
+      } catch (err: any) {
+        console.error('Unexpected callback error:', err);
+        window.location.href = '/login?error=callback_exception';
       }
-      window.location.href = '/login?error=timeout';
     };
     check();
   }, [searchParams]);
