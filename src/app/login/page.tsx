@@ -26,9 +26,10 @@ function LoginContent() {
     const saved = localStorage.getItem('stockpilot_remember');
     if (saved) {
       try {
-        const { email: savedEmail } = JSON.parse(saved);
+        const { email: savedEmail, password: savedPassword } = JSON.parse(saved);
         if (savedEmail) {
           setEmail(savedEmail);
+          if (savedPassword) setPassword(savedPassword);
           setRemember(true);
         }
       } catch {}
@@ -39,9 +40,14 @@ function LoginContent() {
     e.preventDefault();
     setLoading(true);
 
-    const target = e.target as HTMLFormElement;
-    const emailVal = (target.elements.namedItem('email') as HTMLInputElement)?.value || email;
-    const passwordVal = (target.elements.namedItem('password') as HTMLInputElement)?.value || password;
+    const emailVal = email;
+    const passwordVal = password;
+
+    if (!emailVal.trim() || !passwordVal.trim()) {
+      toast.error('Completá ambos campos para iniciar sesión');
+      setLoading(false);
+      return;
+    }
 
     try {
       const { error } = await supabase.auth.signInWithPassword({
@@ -52,7 +58,7 @@ function LoginContent() {
       if (error) throw error;
 
       if (remember) {
-        localStorage.setItem('stockpilot_remember', JSON.stringify({ email: emailVal }));
+        localStorage.setItem('stockpilot_remember', JSON.stringify({ email: emailVal, password: passwordVal }));
       } else {
         localStorage.removeItem('stockpilot_remember');
       }
@@ -149,7 +155,7 @@ function LoginContent() {
           <h2 className="text-2xl font-bold text-white mb-1">Iniciar sesión</h2>
           <p className="text-gray-400 mb-8">Ingresá tus credenciales para continuar</p>
 
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} noValidate className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1.5 text-gray-300">
                 Email

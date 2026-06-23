@@ -148,7 +148,14 @@ export function Sidebar() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            {tenant && <p className="text-xs text-gray-400 -mt-6 mb-4">{tenant.name}</p>}
+            {tenant && (
+              <div className="flex items-center gap-2 -mt-6 mb-4 px-2 py-1.5 rounded-lg bg-gray-800/60 border border-gray-700/50">
+                <div className="w-6 h-6 rounded-md bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                  <span className="text-xs font-bold text-blue-400">{(tenant.name || 'T')[0].toUpperCase()}</span>
+                </div>
+                <p className="text-sm font-semibold text-gray-200 truncate">{tenant.name}</p>
+              </div>
+            )}
             <nav className="flex-1 space-y-2 overflow-y-auto">
               <SidebarNav onNavClick={close} tenantPlan={tenant?.subscription_plan} userRole={role} />
             </nav>
@@ -161,7 +168,14 @@ export function Sidebar() {
       <aside className="hidden md:flex flex-col w-64 h-screen bg-gray-900 text-white p-4 border-r border-gray-800">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-blue-400">StockPilot</h1>
-          {tenant && <p className="text-xs text-gray-400 mt-1">{tenant.name}</p>}
+          {tenant && (
+            <div className="flex items-center gap-2 mt-2 px-2 py-1.5 rounded-lg bg-gray-800/60 border border-gray-700/50">
+              <div className="w-6 h-6 rounded-md bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                <span className="text-xs font-bold text-blue-400">{(tenant.name || 'T')[0].toUpperCase()}</span>
+              </div>
+              <p className="text-sm font-semibold text-gray-200 truncate">{tenant.name}</p>
+            </div>
+          )}
         </div>
         <nav className="flex-1 space-y-2 overflow-y-auto">
           <SidebarNav tenantPlan={tenant?.subscription_plan} userRole={role} />

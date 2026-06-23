@@ -111,9 +111,14 @@ export default function DashboardPage() {
             ¡Hola, {profile?.full_name || 'Usuario'}!
           </h1>
           {tenant && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Estás administrando el inventario de <strong>{tenant.name}</strong>.
-            </p>
+            <div className="flex items-center gap-2 mt-2">
+              <div className="w-7 h-7 rounded-md bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center flex-shrink-0">
+                <span className="text-xs font-bold text-blue-600 dark:text-blue-400">{(tenant.name || 'T')[0].toUpperCase()}</span>
+              </div>
+              <p className="text-base font-semibold text-gray-700 dark:text-gray-300">
+                {tenant.name}
+              </p>
+            </div>
           )}
         </div>
       </div>
