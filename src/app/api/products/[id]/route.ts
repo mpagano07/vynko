@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { checkAndNotifyStock } from '@/lib/notifications';
 
 async function getAuthenticatedTenant(): Promise<string | null> {
   const supabase = await createServerSupabaseClient();
@@ -47,6 +48,10 @@ export async function PATCH(
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    if (body.stock !== undefined || body.min_stock !== undefined) {
+      await checkAndNotifyStock(tenantId, id);
     }
 
     return NextResponse.json({ ...data, price: (data as any).price_cents != null ? (data as any).price_cents / 100 : 0 });

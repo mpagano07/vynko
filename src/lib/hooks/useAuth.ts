@@ -17,6 +17,7 @@ interface TenantInfo {
   slug: string;
   description?: string;
   subscription_plan?: string;
+  created_at?: string;
 }
 
 export function useAuth() {

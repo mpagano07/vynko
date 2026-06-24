@@ -7,7 +7,7 @@ import { useNotifications } from '@/lib/hooks/useNotifications';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
 import { cn } from '@/lib/utils/cn';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, LogOut } from 'lucide-react';
+import { X, LogOut, Clock } from 'lucide-react';
 
 interface NavItem {
   name: string;
@@ -159,6 +159,7 @@ export function Sidebar() {
             <nav className="flex-1 space-y-2 overflow-y-auto">
               <SidebarNav onNavClick={close} tenantPlan={tenant?.subscription_plan} userRole={role} />
             </nav>
+            <TrialCounter tenant={tenant} />
             {userSection}
           </motion.aside>
         )}
@@ -177,11 +178,46 @@ export function Sidebar() {
             </div>
           )}
         </div>
-        <nav className="flex-1 space-y-2 overflow-y-auto">
+        <nav className="flex-1 space-y-2 overflow-y-auto mt-4">
           <SidebarNav tenantPlan={tenant?.subscription_plan} userRole={role} />
         </nav>
+        <TrialCounter tenant={tenant} />
         {userSection}
       </aside>
     </>
+  );
+}
+
+function TrialCounter({ tenant }: { tenant: any }) {
+  if (!tenant || !tenant.created_at) return null;
+  const plan = tenant.subscription_plan || 'starter';
+  if (plan !== 'starter') return null;
+
+  const TRIAL_DAYS = 30;
+  const trialEndsAt = new Date(new Date(tenant.created_at).getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+  const now = new Date();
+  const daysLeft = Math.ceil((trialEndsAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (daysLeft < 0) return null;
+
+  return (
+    <div className="mb-4 p-3 rounded-lg bg-blue-900/30 border border-blue-800/50">
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-1.5 text-blue-300">
+          <Clock className="w-3.5 h-3.5" />
+          <span className="text-xs font-semibold uppercase tracking-wider">Prueba</span>
+        </div>
+        <span className="text-xs font-bold text-blue-200">{daysLeft} días</span>
+      </div>
+      <div className="w-full bg-gray-800 rounded-full h-1.5 mt-2 overflow-hidden">
+        <div 
+          className="bg-blue-500 h-full rounded-full transition-all duration-500" 
+          style={{ width: `${Math.max(0, Math.min(100, (daysLeft / TRIAL_DAYS) * 100))}%` }}
+        />
+      </div>
+      <p className="text-[10px] text-blue-400/80 mt-2">
+        {daysLeft === 0 ? 'Tu prueba termina hoy' : `Quedan ${daysLeft} días de prueba gratuita.`}
+      </p>
+    </div>
   );
 }
