@@ -109,8 +109,8 @@ export default function BillingPage() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      {/* Trial / Renewal banner */}
-      {subscription && (
+      {/* Trial / Renewal banner - only shown for trials or when renewal is within 7 days */}
+      {subscription && (isTrial || (daysUntilRenewal !== null && daysUntilRenewal <= 7)) && (
         <div className={`rounded-xl p-4 flex items-start gap-3 ${
           isTrial && daysUntilTrialEnd !== null && daysUntilTrialEnd <= 7
             ? 'bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900'
@@ -170,15 +170,6 @@ export default function BillingPage() {
                   {daysUntilRenewal === 0
                     ? 'El cobro se procesará hoy'
                     : `El ${new Date(subscription.currentPeriodEnd!).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })} se renovará tu suscripción`}
-                </p>
-              </>
-            ) : daysUntilRenewal !== null ? (
-              <>
-                <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-300">
-                  {daysUntilRenewal} días hasta el próximo cobro
-                </p>
-                <p className="text-xs mt-0.5 text-indigo-600 dark:text-indigo-400">
-                  Próximo ciclo: {new Date(subscription.currentPeriodEnd!).toLocaleDateString('es-AR')}
                 </p>
               </>
             ) : null}
