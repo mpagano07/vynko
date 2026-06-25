@@ -2,7 +2,9 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { PLANS } from '@/lib/plans';
+import { useAuth } from '@/lib/hooks/useAuth';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
 } from 'recharts';
@@ -18,6 +20,8 @@ const chartData = [
 ];
 
 export default function LandingPage() {
+  const router = useRouter();
+  const { user, profile, logout } = useAuth();
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState('');
   const [waitlistLoading, setWaitlistLoading] = useState(false);
@@ -60,18 +64,37 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <Link
-                href="/login"
-                className="text-sm font-medium text-gray-300 hover:text-white transition-colors px-4 py-2"
-              >
-                Iniciar sesión
-              </Link>
-              <Link
-                href="/auth/signup"
-                className="text-sm font-medium bg-cyan-500 hover:bg-cyan-400 text-black px-4 py-2 rounded-lg transition-colors"
-              >
-                Comenzar gratis
-              </Link>
+              {user ? (
+                <>
+                  <Link
+                    href="/dashboard"
+                    className="text-sm font-medium text-gray-300 hover:text-white transition-colors px-4 py-2"
+                  >
+                    {profile?.full_name || user.email}
+                  </Link>
+                  <button
+                    onClick={async () => { await logout(); router.push('/'); }}
+                    className="text-sm font-medium bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-lg border border-gray-700 transition-colors"
+                  >
+                    Cerrar sesión
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/login"
+                    className="text-sm font-medium text-gray-300 hover:text-white transition-colors px-4 py-2"
+                  >
+                    Iniciar sesión
+                  </Link>
+                  <Link
+                    href="/auth/signup"
+                    className="text-sm font-medium bg-cyan-500 hover:bg-cyan-400 text-black px-4 py-2 rounded-lg transition-colors"
+                  >
+                    Comenzar gratis
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
