@@ -1,19 +1,33 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { PLANS } from '@/lib/plans';
-import { CreditCard, CheckCircle2, Loader2, Zap, ArrowRight } from 'lucide-react';
+import { CreditCard, CheckCircle2, Loader2, Zap, ArrowRight, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function BillingPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-10 w-10 animate-spin text-indigo-500" />
+      </div>
+    }>
+      <BillingContent />
+    </Suspense>
+  );
+}
+
+function BillingContent() {
   const { role } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const blockedReason = searchParams?.get('blocked');
 
   useEffect(() => {
     if (role && role === 'member') router.replace('/dashboard');
@@ -115,10 +129,38 @@ export default function BillingPage() {
 
   const isTrial = subscription?.status === 'free' || subscription?.status === 'inactive';
 
+  const autoBlockedReason = blockedReason
+    ? blockedReason
+    : subscription?.status === 'past_due'
+    ? 'payment_past_due'
+    : isTrial && daysUntilTrialEnd !== null && daysUntilTrialEnd < 0
+    ? 'trial_expired'
+    : null;
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      {/* Trial / Renewal banner - only shown for trials or when renewal is within 7 days */}
-      {subscription && (isTrial || (daysUntilRenewal !== null && daysUntilRenewal <= 7)) && (
+      {autoBlockedReason && (
+        <div className="rounded-xl p-5 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 flex items-start gap-4">
+          <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/50 flex-shrink-0">
+            <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
+          </div>
+          <div className="flex-1">
+            <p className="text-base font-bold text-red-800 dark:text-red-300">
+              {autoBlockedReason === 'trial_expired'
+                ? 'Tu período de prueba finalizó'
+                : 'Suscripción vencida'}
+            </p>
+            <p className="text-sm text-red-600 dark:text-red-400 mt-1">
+              {autoBlockedReason === 'trial_expired'
+                ? 'Los 30 días de prueba gratuita terminaron. Seleccioná uno de los planes para seguir usando todas las funcionalidades de StockPilot.'
+                : 'No se pudo procesar el pago de tu suscripción. Seleccioná un plan o actualizá tu método de pago para recuperar el acceso.'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Trial / Renewal banner - only shown when not already blocked */}
+      {subscription && !autoBlockedReason && (isTrial || (daysUntilRenewal !== null && daysUntilRenewal <= 7)) && (
         <div className={`rounded-xl p-4 flex items-start gap-3 ${
           isTrial && daysUntilTrialEnd !== null && daysUntilTrialEnd <= 7
             ? 'bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900'
