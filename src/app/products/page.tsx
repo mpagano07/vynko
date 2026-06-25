@@ -26,7 +26,9 @@ import {
   Loader2,
   FolderKanban,
   ImageIcon,
-  Upload
+  Upload,
+  FileSpreadsheet,
+  Download,
 } from 'lucide-react';
 
 export default function ProductsPage() {
@@ -69,6 +71,94 @@ export default function ProductsPage() {
   });
   const [isSubmittingCategory, setIsSubmittingCategory] = useState(false);
   const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
+
+  // Import Excel State
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importRows, setImportRows] = useState<Record<string, any>[]>([]);
+  const [importColumns, setImportColumns] = useState<string[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [importResults, setImportResults] = useState<{ row: number; status: string; name?: string; error?: string }[] | null>(null);
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportResults(null);
+
+    try {
+      const buf = await file.arrayBuffer();
+      const XLSX = await import('xlsx');
+      const wb = XLSX.read(buf, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const data: Record<string, any>[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+      if (data.length === 0) {
+        toast.error('El archivo está vacío');
+        return;
+      }
+
+      const colMap: Record<string, string> = {
+        nombre: 'name', producto: 'name', name: 'name',
+        sku: 'sku', codigo: 'sku', código: 'sku',
+        barcode: 'barcode', 'código de barras': 'barcode', 'codigo de barras': 'barcode', gtin: 'barcode',
+        precio: 'price', price: 'price', 'precio venta': 'price',
+        costo: 'cost', cost: 'cost',
+        stock: 'stock', cantidad: 'stock',
+        minimo: 'min_stock', 'stock mínimo': 'min_stock', 'min stock': 'min_stock', min_stock: 'min_stock',
+        maximo: 'max_stock', 'stock máximo': 'max_stock', 'max stock': 'max_stock', max_stock: 'max_stock',
+        descripcion: 'description', description: 'description',
+        categoria: 'category_name', category: 'category_name',
+      };
+
+      const cols = Object.keys(data[0]);
+      const mapped = data.map(row => {
+        const mappedRow: Record<string, any> = {};
+        for (const [col, val] of Object.entries(row)) {
+          const key = colMap[col.toLowerCase().trim()] || col;
+          mappedRow[key] = val;
+        }
+        if (mappedRow.price !== undefined) mappedRow.price = Number(String(mappedRow.price).replace(/[^0-9.,]/g, '').replace(',', '.'));
+        if (mappedRow.cost !== undefined) mappedRow.cost = Number(String(mappedRow.cost).replace(/[^0-9.,]/g, '').replace(',', '.'));
+        if (mappedRow.stock !== undefined) mappedRow.stock = Number(mappedRow.stock);
+        if (mappedRow.min_stock !== undefined) mappedRow.min_stock = Number(mappedRow.min_stock);
+        if (mappedRow.max_stock !== undefined) mappedRow.max_stock = Number(mappedRow.max_stock);
+        return mappedRow;
+      });
+
+      setImportColumns(cols);
+      setImportRows(mapped);
+      toast.success(`${mapped.length} producto(s) leídos del archivo`);
+    } catch {
+      toast.error('Error al leer el archivo. Asegurate de que sea un Excel válido (.xlsx o .xls)');
+    }
+  };
+
+  const handleImport = async () => {
+    if (importRows.length === 0) return;
+    setImporting(true);
+    setImportResults(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/products/import', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ products: importRows }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al importar');
+
+      setImportResults(data.results);
+      toast.success(`Importación completada: ${data.summary.created} creados, ${data.summary.updated} actualizados`);
+      mutateProducts();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setImporting(false);
+    }
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -301,6 +391,10 @@ export default function ProductsPage() {
           <Button variant="outline" onClick={() => setIsCategoryModalOpen(true)} className="flex items-center gap-2">
             <FolderKanban className="h-4 w-4" />
             Categorías
+          </Button>
+          <Button variant="outline" onClick={() => setIsImportModalOpen(true)} className="flex items-center gap-2">
+            <FileSpreadsheet className="h-4 w-4" />
+            Importar Excel
           </Button>
           <Button onClick={() => handleOpenProductModal(null)} className="flex items-center gap-2">
             <Plus className="h-4 w-4" />
@@ -733,6 +827,138 @@ export default function ProductsPage() {
                 </Button>
               </div>
             </form>
+          </Card>
+        </div>
+      )}
+
+      {/* IMPORT EXCEL MODAL */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
+          <Card className="w-full max-w-3xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
+            <button
+              onClick={() => { setIsImportModalOpen(false); setImportRows([]); setImportColumns([]); setImportResults(null); }}
+              className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Importar productos desde Excel</h2>
+            <p className="text-sm text-gray-500 mb-6">Subí un archivo .xlsx o .xls con los productos a importar.</p>
+
+            {importRows.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl">
+                <FileSpreadsheet className="h-12 w-12 text-gray-400 mb-4" />
+                <p className="text-sm text-gray-500 mb-4">Seleccioná un archivo Excel para comenzar</p>
+                <label className="cursor-pointer">
+                  <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFile} />
+                  <span className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg text-sm transition-colors">
+                    <Upload className="h-4 w-4" />
+                    Seleccionar archivo
+                  </span>
+                </label>
+              </div>
+            ) : importResults ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 text-sm">
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-medium">
+                    {importResults.filter(r => r.status === 'created').length} creados
+                  </span>
+                  <span className="px-2.5 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium">
+                    {importResults.filter(r => r.status === 'updated').length} actualizados
+                  </span>
+                  <span className="px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 font-medium">
+                    {importResults.filter(r => r.status === 'skipped').length} omitidos
+                  </span>
+                </div>
+                <div className="max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 dark:bg-gray-800 text-xs text-gray-500 uppercase">
+                        <th className="py-2 px-4 text-left">Fila</th>
+                        <th className="py-2 px-4 text-left">Producto</th>
+                        <th className="py-2 px-4 text-left">Resultado</th>
+                        <th className="py-2 px-4 text-left">Error</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                      {importResults.map(r => (
+                        <tr key={r.row} className="text-xs">
+                          <td className="py-2 px-4 text-gray-500">{r.row}</td>
+                          <td className="py-2 px-4 text-gray-900 dark:text-gray-100">{r.name || '—'}</td>
+                          <td className="py-2 px-4">
+                            <span className={`font-medium ${
+                              r.status === 'created' ? 'text-emerald-600' :
+                              r.status === 'updated' ? 'text-blue-600' :
+                              'text-red-600'
+                            }`}>
+                              {r.status === 'created' ? 'Creado' : r.status === 'updated' ? 'Actualizado' : 'Omitido'}
+                            </span>
+                          </td>
+                          <td className="py-2 px-4 text-red-500">{r.error || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex justify-end">
+                  <Button onClick={() => { setIsImportModalOpen(false); setImportRows([]); setImportColumns([]); setImportResults(null); }}>
+                    Cerrar
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between text-sm text-gray-500">
+                  <span>{importRows.length} producto(s) detectados</span>
+                  <label className="cursor-pointer text-cyan-500 hover:text-cyan-400 font-medium flex items-center gap-1">
+                    <Upload className="h-3.5 w-3.5" />
+                    <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFile} />
+                    Cambiar archivo
+                  </label>
+                </div>
+                <div className="max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 dark:bg-gray-800 text-xs text-gray-500 uppercase">
+                        <th className="py-2 px-4 text-left">#</th>
+                        {importColumns.map(col => (
+                          <th key={col} className="py-2 px-4 text-left">{col}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                      {importRows.slice(0, 50).map((row, i) => (
+                        <tr key={i} className="text-xs hover:bg-gray-50 dark:hover:bg-gray-800/30">
+                          <td className="py-2 px-4 text-gray-400">{i + 1}</td>
+                          {importColumns.map(col => (
+                            <td key={col} className="py-2 px-4 text-gray-900 dark:text-gray-100 max-w-[200px] truncate">
+                              {String(row[col] ?? '')}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {importRows.length > 50 && (
+                    <p className="text-xs text-center text-gray-500 py-2 border-t border-gray-100 dark:border-gray-800">
+                      Mostrando 50 de {importRows.length} filas
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">
+                  <Button variant="outline" onClick={() => { setIsImportModalOpen(false); setImportRows([]); setImportColumns([]); setImportResults(null); }}>
+                    Cancelar
+                  </Button>
+                  <Button onClick={handleImport} disabled={importing}>
+                    {importing ? (
+                      <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Importando...</>
+                    ) : (
+                      <>Importar {importRows.length} producto(s)</>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
           </Card>
         </div>
       )}

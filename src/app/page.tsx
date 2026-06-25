@@ -248,7 +248,7 @@ export default function LandingPage() {
           </div>
           <div className="grid md:grid-cols-3 gap-8">
             {[
-              { step: '01', title: 'Importá tu catálogo', desc: 'Subí tu lista de productos desde Excel o conectá con tu tienda existente.' },
+              { step: '01', title: 'Importá tu catálogo', desc: 'Subí tu lista de productos desde Excel.' },
               { step: '02', title: 'Escaneá productos', desc: 'Usá tu teléfono para escanear códigos de barras y registrar movimientos.' },
               { step: '03', title: 'Sincronizá todo', desc: 'El stock se actualiza automáticamente en todos tus canales de venta.' },
             ].map(s => (
