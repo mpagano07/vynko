@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
-import { createClient } from '@supabase/supabase-js';
-import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
 
 const publicPaths = ['/login', '/auth', '/onboarding', '/accept-invite'];
 const unprotectedPaths = ['/billing'];
@@ -56,24 +54,25 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-  const admin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false, autoRefreshToken: false } }
-  );
+  const { data: { session } } = await supabase.auth.getSession();
+  const accessToken = session?.access_token;
 
-  const { data: tenant } = await admin
-    .from('tenants')
-    .select('subscription_status, subscription_plan, created_at, subscription_current_period_end')
-    .eq('id', profile.tenant_id)
-    .single();
-
-  const result = checkSubscriptionBlocked(tenant as any);
-
-  if (result.blocked) {
-    const url = new URL('/billing', request.url);
-    url.searchParams.set('blocked', result.reason);
-    return NextResponse.redirect(url);
+  if (accessToken) {
+    try {
+      const checkRes = await fetch(new URL('/api/check-access', request.url), {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (checkRes.ok) {
+        const result = await checkRes.json();
+        if (result.blocked) {
+          const url = new URL('/billing', request.url);
+          url.searchParams.set('blocked', result.reason || 'payment_past_due');
+          return NextResponse.redirect(url);
+        }
+      }
+    } catch {
+      // Fall through — allow access if check fails
+    }
   }
 
   response.headers.set('x-tenant-id', profile.tenant_id);
