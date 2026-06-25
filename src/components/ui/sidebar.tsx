@@ -194,9 +194,12 @@ function TrialCounter({ tenant }: { tenant: any }) {
   if (plan !== 'starter') return null;
 
   const TRIAL_DAYS = 30;
-  const trialEndsAt = new Date(new Date(tenant.created_at).getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
   const now = new Date();
-  const daysLeft = Math.ceil((trialEndsAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const created = new Date(tenant.created_at);
+  const createdDay = new Date(created.getFullYear(), created.getMonth(), created.getDate());
+  const daysElapsed = Math.floor((todayStart.getTime() - createdDay.getTime()) / (1000 * 60 * 60 * 24));
+  const daysLeft = Math.max(0, TRIAL_DAYS - daysElapsed);
 
   if (daysLeft < 0) return null;
 
