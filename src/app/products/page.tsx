@@ -29,6 +29,7 @@ import {
   Upload,
   FileSpreadsheet,
   Download,
+  Percent,
 } from 'lucide-react';
 
 export default function ProductsPage() {
@@ -78,6 +79,14 @@ export default function ProductsPage() {
   const [importColumns, setImportColumns] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
   const [importResults, setImportResults] = useState<{ row: number; status: string; name?: string; error?: string }[] | null>(null);
+
+  // Price Adjustment State
+  const [isPriceAdjustModalOpen, setIsPriceAdjustModalOpen] = useState(false);
+  const [priceAdjustPercentage, setPriceAdjustPercentage] = useState('');
+  const [priceAdjusting, setPriceAdjusting] = useState(false);
+  const [priceAdjustResult, setPriceAdjustResult] = useState<{
+    percentage: number; total: number; updated: number; sample?: any[]; errors?: any[];
+  } | null>(null);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -157,6 +166,35 @@ export default function ProductsPage() {
       toast.error(err.message);
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handlePriceAdjust = async () => {
+    const pct = parseFloat(priceAdjustPercentage);
+    if (isNaN(pct) || pct <= 0) { toast.error('Ingresá un porcentaje válido'); return; }
+    setPriceAdjusting(true);
+    setPriceAdjustResult(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/products/adjust-prices', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ percentage: pct }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al ajustar precios');
+
+      setPriceAdjustResult(data);
+      toast.success(`Precios actualizados: ${data.updated} de ${data.total} productos`);
+      mutateProducts();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setPriceAdjusting(false);
     }
   };
 
@@ -391,6 +429,10 @@ export default function ProductsPage() {
           <Button variant="outline" onClick={() => setIsCategoryModalOpen(true)} className="flex items-center gap-2">
             <FolderKanban className="h-4 w-4" />
             Categorías
+          </Button>
+          <Button variant="outline" onClick={() => { setIsPriceAdjustModalOpen(true); setPriceAdjustResult(null); setPriceAdjustPercentage(''); }} className="flex items-center gap-2">
+            <Percent className="h-4 w-4" />
+            Ajustar precios
           </Button>
           <Button variant="outline" onClick={() => setIsImportModalOpen(true)} className="flex items-center gap-2">
             <FileSpreadsheet className="h-4 w-4" />
@@ -954,6 +996,90 @@ export default function ProductsPage() {
                       <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Importando...</>
                     ) : (
                       <>Importar {importRows.length} producto(s)</>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* PRICE ADJUST MODAL */}
+      {isPriceAdjustModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
+          <Card className="w-full max-w-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative">
+            <button
+              onClick={() => { setIsPriceAdjustModalOpen(false); setPriceAdjustResult(null); }}
+              className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Ajustar precios</h2>
+            <p className="text-sm text-gray-500 mb-6">Aumentá el precio y costo de todos los productos por porcentaje.</p>
+
+            {priceAdjustResult ? (
+              <div className="space-y-4">
+                <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/30">
+                  <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+                    {priceAdjustResult.updated} de {priceAdjustResult.total} productos actualizados
+                  </p>
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+                    Aumento del {priceAdjustResult.percentage}% aplicado
+                  </p>
+                </div>
+                {priceAdjustResult.errors && priceAdjustResult.errors.length > 0 && (
+                  <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/30">
+                    <p className="text-xs font-semibold text-red-700 dark:text-red-400">{priceAdjustResult.errors.length} error(es)</p>
+                  </div>
+                )}
+                {priceAdjustResult.sample && priceAdjustResult.sample.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 mb-2">Ejemplo de precios actualizados:</p>
+                    <div className="space-y-1">
+                      {priceAdjustResult.sample.map((p: any) => (
+                        <div key={p.id} className="flex justify-between text-xs text-gray-600 dark:text-gray-400">
+                          <span className="truncate max-w-[180px]">{p.name}</span>
+                          <span>${(p.old_price_cents / 100).toFixed(2)} → ${(p.new_price_cents / 100).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <Button onClick={() => { setIsPriceAdjustModalOpen(false); setPriceAdjustResult(null); }} className="w-full">
+                  Cerrar
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1.5 text-gray-300">Porcentaje de aumento (%)</label>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      step="0.1"
+                      min="0.1"
+                      placeholder="Ej: 2.1"
+                      value={priceAdjustPercentage}
+                      onChange={(e) => setPriceAdjustPercentage(e.target.value)}
+                      className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500 pr-8"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">%</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1.5">
+                    Se aplicará a precio de venta y costo de todos los productos.
+                  </p>
+                </div>
+                <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">
+                  <Button variant="outline" onClick={() => { setIsPriceAdjustModalOpen(false); setPriceAdjustResult(null); }}>
+                    Cancelar
+                  </Button>
+                  <Button onClick={handlePriceAdjust} disabled={priceAdjusting || !priceAdjustPercentage}>
+                    {priceAdjusting ? (
+                      <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Aplicando...</>
+                    ) : (
+                      <>Aplicar aumento</>
                     )}
                   </Button>
                 </div>
