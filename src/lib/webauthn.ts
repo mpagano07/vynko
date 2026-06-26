@@ -221,15 +221,17 @@ function parseCOSEFromAuthData(authData: Uint8Array): { x: Uint8Array; y: Uint8A
   let x: Uint8Array | null = null;
   let y: Uint8Array | null = null;
 
+  const pos = { value: offset };
+
   for (let i = 0; i < mapEntries; i++) {
-    const key = readCBORInteger(authData, { value: offset });
+    const key = readCBORInteger(authData, pos);
 
     if (key === -2) {
-      x = readCBORByteString(authData, { value: offset });
+      x = readCBORByteString(authData, pos);
     } else if (key === -3) {
-      y = readCBORByteString(authData, { value: offset });
+      y = readCBORByteString(authData, pos);
     } else {
-      skipCBORValue(authData, { value: offset });
+      skipCBORValue(authData, pos);
     }
   }
 
