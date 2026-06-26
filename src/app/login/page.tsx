@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,22 +9,16 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff } from 'lucide-react';
 import BiometricLogin from '@/components/auth/BiometricLogin';
-import FingerprintSetup from '@/components/auth/FingerprintSetup';
-import { getStoredCredential } from '@/lib/webauthn';
 
 export const dynamic = 'force-dynamic';
 
 function LoginContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(false);
-  const [showBiometricSetup, setShowBiometricSetup] = useState(false);
-
-  const redirectTo = searchParams?.get('redirect') || '/dashboard';
 
   useEffect(() => {
     const saved = localStorage.getItem('stockpilot_remember');
@@ -68,13 +62,7 @@ function LoginContent() {
       }
 
       toast.success('Sesión iniciada correctamente');
-
-      if (getStoredCredential()) {
-        router.push(redirectTo);
-        router.refresh();
-      } else {
-        setShowBiometricSetup(true);
-      }
+      router.replace('/dashboard');
     } catch (error: unknown) {
       const maybeError = error as { message?: string };
       toast.error(maybeError?.message || 'Error al iniciar sesión');
@@ -270,19 +258,6 @@ function LoginContent() {
           </Button>
 
           <BiometricLogin />
-
-          {showBiometricSetup && (
-            <FingerprintSetup
-              onComplete={() => {
-                router.push(redirectTo);
-                router.refresh();
-              }}
-              onSkip={() => {
-                router.push(redirectTo);
-                router.refresh();
-              }}
-            />
-          )}
 
           <p className="text-sm text-gray-500 text-center mt-8">
             ¿No tienes cuenta?{' '}
