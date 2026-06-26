@@ -9,6 +9,8 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff } from 'lucide-react';
 import BiometricLogin from '@/components/auth/BiometricLogin';
+import FingerprintSetup from '@/components/auth/FingerprintSetup';
+import { getStoredCredential } from '@/lib/webauthn';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +21,12 @@ function LoginContent() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(false);
+  const [showBiometricSetup, setShowBiometricSetup] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    setIsMobile(/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
+  }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem('stockpilot_remember');
@@ -62,7 +70,12 @@ function LoginContent() {
       }
 
       toast.success('Sesión iniciada correctamente');
-      router.replace('/dashboard');
+
+      if (isMobile && !getStoredCredential()) {
+        setShowBiometricSetup(true);
+      } else {
+        router.replace('/dashboard');
+      }
     } catch (error: unknown) {
       const maybeError = error as { message?: string };
       toast.error(maybeError?.message || 'Error al iniciar sesión');
@@ -258,6 +271,17 @@ function LoginContent() {
           </Button>
 
           <BiometricLogin />
+
+          {showBiometricSetup && (
+            <FingerprintSetup
+              onComplete={() => {
+                router.replace('/dashboard');
+              }}
+              onSkip={() => {
+                router.replace('/dashboard');
+              }}
+            />
+          )}
 
           <p className="text-sm text-gray-500 text-center mt-8">
             ¿No tienes cuenta?{' '}
