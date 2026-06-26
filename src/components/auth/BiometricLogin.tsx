@@ -10,6 +10,7 @@ import {
   getStoredRefreshToken,
   clearStoredCredential,
   clearStoredRefreshToken,
+  storeRefreshToken,
   authenticateBiometric,
 } from '@/lib/webauthn';
 import toast from 'react-hot-toast';
@@ -26,25 +27,54 @@ export default function BiometricLogin() {
     isPlatformAuthenticatorAvailable().then(setAvailable);
   }, []);
 
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.refresh_token && getStoredCredential()) {
+        storeRefreshToken(session.refresh_token);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
   if (!available || !getStoredCredential()) return null;
 
   const handleBiometricLogin = async () => {
     setLoading(true);
     try {
-      const valid = await authenticateBiometric();
-      if (!valid) throw new Error('Verificación biométrica fallida');
+      await authenticateBiometric();
 
-      const refreshToken = getStoredRefreshToken();
-      if (!refreshToken) {
-        clearStoredCredential();
-        throw new Error('No hay sesión guardada');
+      let session = null;
+
+      const { data: existing } = await supabase.auth.getSession();
+      if (existing?.session) {
+        session = existing.session;
       }
 
-      const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
-      if (error || !data.session) {
+      if (!session) {
+        const { data, error } = await supabase.auth.refreshSession();
+        if (!error && data?.session) {
+          session = data.session;
+        }
+      }
+
+      if (!session) {
+        const refreshToken = getStoredRefreshToken();
+        if (refreshToken) {
+          const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken } as unknown as undefined);
+          if (!error && data?.session) {
+            session = data.session;
+          }
+        }
+      }
+
+      if (!session) {
         clearStoredCredential();
         clearStoredRefreshToken();
-        throw error ?? new Error('Error al restaurar sesión');
+        throw new Error('Sesión expirada. Iniciá sesión con email.');
+      }
+
+      if (session.refresh_token) {
+        storeRefreshToken(session.refresh_token);
       }
 
       toast.success('Sesión iniciada con huella');
