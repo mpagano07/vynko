@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Settings, User, Building2, Loader2, Save, KeyRound, Users, Mail, X, Shield, ShieldCheck } from 'lucide-react';
+import BiometricSettings from '@/components/auth/BiometricSettings';
 import toast from 'react-hot-toast';
 
 export default function SettingsPage() {
@@ -385,6 +386,7 @@ export default function SettingsPage() {
           </Button>
         </form>
       </Card>
+      <BiometricSettings />
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
           <Users className="h-5 w-5 text-green-500" />
