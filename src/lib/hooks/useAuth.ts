@@ -100,7 +100,7 @@ export function useAuth() {
   }, [loadProfileAndTenant]);
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
     setUser(null);
     setProfile(null);
     setTenant(null);
