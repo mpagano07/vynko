@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff } from 'lucide-react';
+import BiometricLogin from '@/components/auth/BiometricLogin';
+import FingerprintSetup from '@/components/auth/FingerprintSetup';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +21,7 @@ function LoginContent() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(false);
+  const [showBiometricSetup, setShowBiometricSetup] = useState(false);
 
   const redirectTo = searchParams?.get('redirect') || '/dashboard';
 
@@ -64,8 +67,7 @@ function LoginContent() {
       }
 
       toast.success('Sesión iniciada correctamente');
-      router.push(redirectTo);
-      router.refresh();
+      setShowBiometricSetup(true);
     } catch (error: unknown) {
       const maybeError = error as { message?: string };
       toast.error(maybeError?.message || 'Error al iniciar sesión');
@@ -259,6 +261,21 @@ function LoginContent() {
             </svg>
             Google
           </Button>
+
+          <BiometricLogin />
+
+          {showBiometricSetup && (
+            <FingerprintSetup
+              onComplete={() => {
+                router.push(redirectTo);
+                router.refresh();
+              }}
+              onSkip={() => {
+                router.push(redirectTo);
+                router.refresh();
+              }}
+            />
+          )}
 
           <p className="text-sm text-gray-500 text-center mt-8">
             ¿No tienes cuenta?{' '}
