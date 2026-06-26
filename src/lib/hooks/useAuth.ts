@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { storeRefreshToken } from '@/lib/webauthn';
 import type { User } from '@supabase/supabase-js';
 
 interface UserProfile {
@@ -76,6 +77,10 @@ export function useAuth() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
+
+        if (session?.refresh_token) {
+          storeRefreshToken(session.refresh_token);
+        }
 
         if (session?.user) {
           setUser(session.user);

@@ -8,7 +8,6 @@ import {
   isPlatformAuthenticatorAvailable,
   getStoredCredential,
   getStoredRefreshToken,
-  clearStoredCredential,
   clearStoredRefreshToken,
   storeRefreshToken,
   authenticateBiometric,
@@ -25,15 +24,6 @@ export default function BiometricLogin() {
     const stored = getStoredCredential();
     if (!stored) return;
     isPlatformAuthenticatorAvailable().then(setAvailable);
-  }, []);
-
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.refresh_token && getStoredCredential()) {
-        storeRefreshToken(session.refresh_token);
-      }
-    });
-    return () => subscription.unsubscribe();
   }, []);
 
   if (!available || !getStoredCredential()) return null;
@@ -68,9 +58,8 @@ export default function BiometricLogin() {
       }
 
       if (!session) {
-        clearStoredCredential();
         clearStoredRefreshToken();
-        throw new Error('Sesión expirada. Iniciá sesión con email.');
+        throw new Error('No se pudo restaurar la sesión. Iniciá sesión con email.');
       }
 
       if (session.refresh_token) {
