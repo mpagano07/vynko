@@ -24,14 +24,16 @@ export default function BillingPage() {
 }
 
 function BillingContent() {
-  const { role } = useAuth();
+  const { role, loading: authLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const blockedReason = searchParams?.get('blocked');
 
   useEffect(() => {
-    if (role && role === 'member') router.replace('/dashboard');
-  }, [role, router]);
+    if (!authLoading && role === 'member') router.replace('/dashboard');
+  }, [authLoading, role, router]);
+
+  if (authLoading || role === 'member') return null;
 
   const [subscription, setSubscription] = useState<{
     plan: string;

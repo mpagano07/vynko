@@ -12,7 +12,7 @@ import BiometricSettings from '@/components/auth/BiometricSettings';
 import toast from 'react-hot-toast';
 
 export default function SettingsPage() {
-  const { user, profile, tenant, role } = useAuth();
+  const { user, profile, tenant, role, loading: authLoading } = useAuth();
   const router = useRouter();
 
   const [profileForm, setProfileForm] = useState({ full_name: '' });
@@ -44,10 +44,12 @@ export default function SettingsPage() {
   const isOwner = currentUserCollab?.role === 'owner';
 
   useEffect(() => {
-    if (role && role === 'member') {
+    if (!authLoading && role === 'member') {
       router.replace('/dashboard');
     }
-  }, [role, router]);
+  }, [authLoading, role, router]);
+
+  if (authLoading || role === 'member') return null;
 
   useEffect(() => {
     async function fetchCollaborators() {

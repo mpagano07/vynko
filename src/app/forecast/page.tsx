@@ -31,11 +31,13 @@ export default function ForecastPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (role && role === 'member') { router.replace('/dashboard'); return; }
+    if (!authLoading && role === 'member') { router.replace('/dashboard'); return; }
     if (!authLoading && tenant && (tenant.subscription_plan === 'free' || tenant.subscription_plan === 'starter')) {
       router.replace('/dashboard');
     }
   }, [role, router, tenant, authLoading]);
+
+  if (authLoading || role === 'member') return null;
 
   const [data, setData] = useState<{
     predictions: Prediction[];
