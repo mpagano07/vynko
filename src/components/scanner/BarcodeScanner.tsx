@@ -26,6 +26,9 @@ HINTS.set(DecodeHintType.POSSIBLE_FORMATS, [
   BarcodeFormat.RSS_14,
   BarcodeFormat.RSS_EXPANDED,
   BarcodeFormat.CODABAR,
+  BarcodeFormat.QR_CODE,
+  BarcodeFormat.DATA_MATRIX,
+  BarcodeFormat.AZTEC,
 ]);
 
 export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerProps) {

@@ -28,6 +28,7 @@ const navItems: NavItem[] = [
   { name: 'Proveedores', href: '/providers', requiredPlan: ALL_PLANS },
   { name: 'Clientes', href: '/customers', requiredPlan: ALL_PLANS },
   { name: 'Pronóstico', href: '/forecast', requiredPlan: ['business', 'enterprise'], requiredRole: ['owner', 'manager'] },
+  { name: 'Códigos QR', href: '/codigos', requiredPlan: ALL_PLANS },
   { name: 'Antipérdidas', href: '/loss-prevention', requiredPlan: ALL_PLANS },
   { name: 'Visión Góndolas', href: '/shelf-vision', requiredPlan: ['business', 'enterprise'] },
   { name: 'Escáner', href: '/scanning', requiredPlan: ALL_PLANS },

@@ -27,7 +27,7 @@ export async function GET(
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    const { data, error } = await supabaseAdmin
+    let { data, error } = await supabaseAdmin
       .from('products')
       .select('*')
       .eq('tenant_id', tenantId)
@@ -36,6 +36,20 @@ export async function GET(
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    if (!data) {
+      const result = await supabaseAdmin
+        .from('products')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .eq('id', code)
+        .maybeSingle();
+      data = result.data;
+      error = result.error;
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
     }
 
     if (!data) {
