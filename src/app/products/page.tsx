@@ -80,6 +80,9 @@ export default function ProductsPage() {
   const [importing, setImporting] = useState(false);
   const [importResults, setImportResults] = useState<{ row: number; status: string; name?: string; error?: string }[] | null>(null);
 
+  // Export State
+  const [exporting, setExporting] = useState(false);
+
   // Price Adjustment State
   const [isPriceAdjustModalOpen, setIsPriceAdjustModalOpen] = useState(false);
   const [priceAdjustPercentage, setPriceAdjustPercentage] = useState('');
@@ -166,6 +169,46 @@ export default function ProductsPage() {
       toast.error(err.message);
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleExport = async () => {
+    if (filteredProducts.length === 0) {
+      toast.error('No hay productos para exportar');
+      return;
+    }
+
+    setExporting(true);
+    try {
+      const XLSX = await import('xlsx');
+
+      const data = filteredProducts.map((p) => {
+        const cat = categories.find((c) => c.id === p.category_id);
+        return {
+          'Nombre': p.name,
+          'Categoría': cat?.name || '',
+          'SKU': p.sku || '',
+          'Código de Barras': p.barcode || '',
+          'Costo': p.cost ?? 0,
+          'Precio Venta': p.price ?? 0,
+          'Stock': p.stock ?? 0,
+          'Stock Mínimo': p.min_stock ?? 0,
+          'Stock Máximo': p.max_stock ?? 0,
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Productos');
+
+      const now = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(wb, `productos_${now}.xlsx`);
+
+      toast.success(`${data.length} producto(s) exportados`);
+    } catch {
+      toast.error('Error al exportar');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -437,6 +480,14 @@ export default function ProductsPage() {
           <Button variant="outline" size="sm" onClick={() => setIsImportModalOpen(true)} className="flex items-center gap-1.5">
             <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
             <span className="hidden md:inline">Importar</span>
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting} className="flex items-center gap-1.5">
+            {exporting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+            ) : (
+              <Download className="h-3.5 w-3.5 shrink-0" />
+            )}
+            <span className="hidden md:inline">{exporting ? 'Exportando...' : 'Exportar'}</span>
           </Button>
           <Button size="sm" onClick={() => handleOpenProductModal(null)} className="flex items-center gap-1.5">
             <Plus className="h-3.5 w-3.5 shrink-0" />
