@@ -7,7 +7,8 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Settings, User, Building2, Loader2, Save, KeyRound, Users, Mail, X, Shield, ShieldCheck } from 'lucide-react';
+import { Settings, User, Building2, Loader2, Save, KeyRound, Users, Mail, X, Shield, ShieldCheck, FileText, MapPin } from 'lucide-react';
+import { Select } from '@/components/ui/select';
 import BiometricSettings from '@/components/auth/BiometricSettings';
 import toast from 'react-hot-toast';
 
@@ -19,7 +20,22 @@ export default function SettingsPage() {
   const [profileSynced, setProfileSynced] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
 
-  const [tenantForm, setTenantForm] = useState({ name: '', description: '' });
+  const [tenantForm, setTenantForm] = useState({
+    name: '',
+    description: '',
+    razon_social: '',
+    cuit: '',
+    punto_venta: 1,
+    iva_condition: 'responsable_inscripto',
+    ingresos_brutos: '',
+    inicio_actividades: '',
+    business_address: '',
+    business_city: '',
+    business_province: '',
+    business_zip: '',
+    business_phone: '',
+    business_email: '',
+  });
   const [tenantSynced, setTenantSynced] = useState(false);
   const [savingTenant, setSavingTenant] = useState(false);
 
@@ -49,7 +65,34 @@ export default function SettingsPage() {
     }
   }, [authLoading, role, router]);
 
-  if (authLoading || role === 'member') return null;
+  useEffect(() => {
+    if (profile && !profileSynced) {
+      setProfileForm({ full_name: profile.full_name || '' });
+      setProfileSynced(true);
+    }
+  }, [profile, profileSynced]);
+
+  useEffect(() => {
+    if (tenant && !tenantSynced) {
+      setTenantForm({
+        name: tenant.name || '',
+        description: tenant.description || '',
+        razon_social: tenant.razon_social || '',
+        cuit: tenant.cuit || '',
+        punto_venta: tenant.punto_venta || 1,
+        iva_condition: tenant.iva_condition || 'responsable_inscripto',
+        ingresos_brutos: tenant.ingresos_brutos || '',
+        inicio_actividades: tenant.inicio_actividades || '',
+        business_address: tenant.business_address || '',
+        business_city: tenant.business_city || '',
+        business_province: tenant.business_province || '',
+        business_zip: tenant.business_zip || '',
+        business_phone: tenant.business_phone || '',
+        business_email: tenant.business_email || '',
+      });
+      setTenantSynced(true);
+    }
+  }, [tenant, tenantSynced]);
 
   useEffect(() => {
     async function fetchCollaborators() {
@@ -110,7 +153,7 @@ export default function SettingsPage() {
     } finally {
       setInviting(false);
     }
-  }, [inviteEmail, inviteRole]);
+  }, [inviteEmail, inviteRole, inviteName]);
 
   const handleRemove = useCallback(async (id: string) => {
     setRemovingId(id);
@@ -137,16 +180,6 @@ export default function SettingsPage() {
       setRemovingId(null);
     }
   }, []);
-
-  if (profile && !profileSynced) {
-    setProfileForm({ full_name: profile.full_name || '' });
-    setProfileSynced(true);
-  }
-
-  if (tenant && !tenantSynced) {
-    setTenantForm({ name: tenant.name || '', description: tenant.description || '' });
-    setTenantSynced(true);
-  }
 
   const handleSaveProfile = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -197,6 +230,18 @@ export default function SettingsPage() {
         body: JSON.stringify({
           name: tenantForm.name.trim(),
           description: tenantForm.description,
+          razon_social: tenantForm.razon_social.trim() || null,
+          cuit: tenantForm.cuit.trim() || null,
+          punto_venta: Number(tenantForm.punto_venta) || 1,
+          iva_condition: tenantForm.iva_condition,
+          ingresos_brutos: tenantForm.ingresos_brutos.trim() || null,
+          inicio_actividades: tenantForm.inicio_actividades || null,
+          business_address: tenantForm.business_address.trim() || null,
+          business_city: tenantForm.business_city.trim() || null,
+          business_province: tenantForm.business_province,
+          business_zip: tenantForm.business_zip.trim() || null,
+          business_phone: tenantForm.business_phone.trim() || null,
+          business_email: tenantForm.business_email.trim() || null,
         }),
       });
 
@@ -241,6 +286,8 @@ export default function SettingsPage() {
     }
   }, [passwordForm]);
 
+  if (authLoading || role === 'member') return null;
+
   return (
     <div className="space-y-6">
       <div>
@@ -254,141 +301,329 @@ export default function SettingsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <User className="h-5 w-5 text-blue-500" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Perfil</h2>
-          </div>
-
-          <form onSubmit={handleSaveProfile} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                Email
-              </label>
-              <Input
-                type="email"
-                value={user?.email || ''}
-                disabled
-                className="bg-gray-50 dark:bg-gray-900/50"
-              />
-              <p className="text-xs text-gray-400 mt-1">El email no se puede modificar</p>
+        <div className="space-y-6">
+          <Card className="p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <User className="h-5 w-5 text-blue-500" />
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Perfil</h2>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                Nombre completo
-              </label>
-              <Input
-                type="text"
-                required
-                placeholder="Tu nombre"
-                value={profileForm.full_name}
-                onChange={(e) => setProfileForm({ ...profileForm, full_name: e.target.value })}
-              />
+            <form onSubmit={handleSaveProfile} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  Email
+                </label>
+                <Input
+                  type="email"
+                  value={user?.email || ''}
+                  disabled
+                  className="bg-gray-50 dark:bg-gray-900/50"
+                />
+                <p className="text-xs text-gray-400 mt-1">El email no se puede modificar</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  Nombre completo
+                </label>
+                <Input
+                  type="text"
+                  required
+                  placeholder="Tu nombre"
+                  value={profileForm.full_name}
+                  onChange={(e) => setProfileForm({ ...profileForm, full_name: e.target.value })}
+                />
+              </div>
+
+              <Button type="submit" disabled={savingProfile}>
+                {savingProfile ? (
+                  <><Loader2 className="h-4 w-4 animate-spin mr-1" />Guardando...</>
+                ) : (
+                  <><Save className="h-4 w-4 mr-1" />Guardar cambios</>
+                )}
+              </Button>
+            </form>
+          </Card>
+
+          <Card className="p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <KeyRound className="h-5 w-5 text-amber-500" />
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Cambiar contraseña</h2>
             </div>
 
-            <Button type="submit" disabled={savingProfile}>
-              {savingProfile ? (
-                <><Loader2 className="h-4 w-4 animate-spin mr-1" />Guardando...</>
-              ) : (
-                <><Save className="h-4 w-4 mr-1" />Guardar cambios</>
-              )}
-            </Button>
-          </form>
-        </Card>
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  Nueva contraseña
+                </label>
+                <Input
+                  type="password"
+                  required
+                  minLength={6}
+                  placeholder="Mínimo 6 caracteres"
+                  value={passwordForm.newPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                />
+              </div>
 
-        <Card className="p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Building2 className="h-5 w-5 text-indigo-500" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Empresa</h2>
-            {tenant && (
-              <span className="ml-auto text-xs text-gray-400 font-mono">{tenant.slug}</span>
-            )}
-          </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  Confirmar contraseña
+                </label>
+                <Input
+                  type="password"
+                  required
+                  minLength={6}
+                  placeholder="Repite la contraseña"
+                  value={passwordForm.confirmPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                />
+              </div>
 
-          <form onSubmit={handleSaveTenant} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                Nombre de la empresa
-              </label>
-              <Input
-                type="text"
-                required
-                placeholder="Nombre de tu empresa"
-                value={tenantForm.name}
-                onChange={(e) => setTenantForm({ ...tenantForm, name: e.target.value })}
-              />
-            </div>
+              <Button type="submit" disabled={savingPassword}>
+                {savingPassword ? (
+                  <><Loader2 className="h-4 w-4 animate-spin mr-1" />Actualizando...</>
+                ) : (
+                  <><KeyRound className="h-4 w-4 mr-1" />Actualizar contraseña</>
+                )}
+              </Button>
+            </form>
+          </Card>
 
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                Descripción
-              </label>
-              <textarea
-                className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
-                rows={3}
-                placeholder="Breve descripción de tu negocio"
-                value={tenantForm.description}
-                onChange={(e) => setTenantForm({ ...tenantForm, description: e.target.value })}
-              />
-            </div>
-
-            <Button type="submit" disabled={savingTenant}>
-              {savingTenant ? (
-                <><Loader2 className="h-4 w-4 animate-spin mr-1" />Guardando...</>
-              ) : (
-                <><Save className="h-4 w-4 mr-1" />Guardar cambios</>
-              )}
-            </Button>
-          </form>
-        </Card>
-      </div>
-
-      <Card className="p-6 max-w-lg">
-        <div className="flex items-center gap-2 mb-4">
-          <KeyRound className="h-5 w-5 text-amber-500" />
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Cambiar contraseña</h2>
+          <BiometricSettings />
         </div>
 
-        <form onSubmit={handleChangePassword} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-              Nueva contraseña
-            </label>
-            <Input
-              type="password"
-              required
-              minLength={6}
-              placeholder="Mínimo 6 caracteres"
-              value={passwordForm.newPassword}
-              onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-            />
-          </div>
+        <div className="space-y-6">
+          <Card className="p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Building2 className="h-5 w-5 text-indigo-500" />
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Empresa</h2>
+              {tenant && (
+                <span className="ml-auto text-xs text-gray-400 font-mono">{tenant.slug}</span>
+              )}
+            </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-              Confirmar contraseña
-            </label>
-            <Input
-              type="password"
-              required
-              minLength={6}
-              placeholder="Repite la contraseña"
-              value={passwordForm.confirmPassword}
-              onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-            />
-          </div>
+            <form onSubmit={handleSaveTenant} className="space-y-4">
+              <div className="border-b border-gray-100 dark:border-gray-800 pb-4 mb-4">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Información General</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Nombre de la empresa
+                    </label>
+                    <Input
+                      type="text"
+                      required
+                      placeholder="Nombre de tu empresa"
+                      value={tenantForm.name}
+                      onChange={(e) => setTenantForm({ ...tenantForm, name: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Teléfono
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder="11-1234-5678"
+                      value={tenantForm.business_phone}
+                      onChange={(e) => setTenantForm({ ...tenantForm, business_phone: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    Descripción
+                  </label>
+                  <textarea
+                    className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                    rows={2}
+                    placeholder="Breve descripción de tu negocio"
+                    value={tenantForm.description}
+                    onChange={(e) => setTenantForm({ ...tenantForm, description: e.target.value })}
+                  />
+                </div>
+              </div>
 
-          <Button type="submit" disabled={savingPassword}>
-            {savingPassword ? (
-              <><Loader2 className="h-4 w-4 animate-spin mr-1" />Actualizando...</>
-            ) : (
-              <><KeyRound className="h-4 w-4 mr-1" />Actualizar contraseña</>
-            )}
-          </Button>
-        </form>
-      </Card>
-      <BiometricSettings />
+              <div className="border-b border-gray-100 dark:border-gray-800 pb-4 mb-4">
+                <h3 className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                  <FileText className="h-3.5 w-3.5" />
+                  Datos de Facturación
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Razón Social
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder="Razón social (si difiere del nombre)"
+                      value={tenantForm.razon_social}
+                      onChange={(e) => setTenantForm({ ...tenantForm, razon_social: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      CUIT
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder="XX-XXXXXXXX-X"
+                      value={tenantForm.cuit}
+                      onChange={(e) => setTenantForm({ ...tenantForm, cuit: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Condición frente al IVA
+                    </label>
+                    <Select
+                      value={tenantForm.iva_condition}
+                      onChange={(e) => setTenantForm({ ...tenantForm, iva_condition: e.target.value })}
+                    >
+                      <option value="responsable_inscripto">Responsable Inscripto</option>
+                      <option value="monotributista">Monotributista</option>
+                      <option value="consumidor_final">Consumidor Final</option>
+                      <option value="sujeto_exento">Sujeto Exento</option>
+                      <option value="responsable_no_inscripto">Responsable No Inscripto</option>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Punto de Venta (AFIP)
+                    </label>
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder="1"
+                      value={tenantForm.punto_venta}
+                      onChange={(e) => setTenantForm({ ...tenantForm, punto_venta: parseInt(e.target.value) || 1 })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Ingresos Brutos
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder="N° de ingresos brutos"
+                      value={tenantForm.ingresos_brutos}
+                      onChange={(e) => setTenantForm({ ...tenantForm, ingresos_brutos: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Inicio de Actividades
+                    </label>
+                    <Input
+                      type="date"
+                      value={tenantForm.inicio_actividades}
+                      onChange={(e) => setTenantForm({ ...tenantForm, inicio_actividades: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-b border-gray-100 dark:border-gray-800 pb-4 mb-4">
+                <h3 className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                  <MapPin className="h-3.5 w-3.5" />
+                  Domicilio Fiscal
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="md:col-span-3">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Dirección
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder="Calle y número"
+                      value={tenantForm.business_address}
+                      onChange={(e) => setTenantForm({ ...tenantForm, business_address: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Ciudad
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder="Ciudad"
+                      value={tenantForm.business_city}
+                      onChange={(e) => setTenantForm({ ...tenantForm, business_city: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Provincia
+                    </label>
+                    <Select
+                      value={tenantForm.business_province}
+                      onChange={(e) => setTenantForm({ ...tenantForm, business_province: e.target.value })}
+                    >
+                      <option value="">Seleccionar...</option>
+                      <option value="Buenos Aires">Buenos Aires</option>
+                      <option value="CABA">CABA</option>
+                      <option value="Catamarca">Catamarca</option>
+                      <option value="Chaco">Chaco</option>
+                      <option value="Chubut">Chubut</option>
+                      <option value="Córdoba">Córdoba</option>
+                      <option value="Corrientes">Corrientes</option>
+                      <option value="Entre Ríos">Entre Ríos</option>
+                      <option value="Formosa">Formosa</option>
+                      <option value="Jujuy">Jujuy</option>
+                      <option value="La Pampa">La Pampa</option>
+                      <option value="La Rioja">La Rioja</option>
+                      <option value="Mendoza">Mendoza</option>
+                      <option value="Misiones">Misiones</option>
+                      <option value="Neuquén">Neuquén</option>
+                      <option value="Río Negro">Río Negro</option>
+                      <option value="Salta">Salta</option>
+                      <option value="San Juan">San Juan</option>
+                      <option value="San Luis">San Luis</option>
+                      <option value="Santa Cruz">Santa Cruz</option>
+                      <option value="Santa Fe">Santa Fe</option>
+                      <option value="Santiago del Estero">Santiago del Estero</option>
+                      <option value="Tierra del Fuego">Tierra del Fuego</option>
+                      <option value="Tucumán">Tucumán</option>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Código Postal
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder="CP"
+                      value={tenantForm.business_zip}
+                      onChange={(e) => setTenantForm({ ...tenantForm, business_zip: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  Email de contacto
+                </label>
+                <Input
+                  type="email"
+                  placeholder="empresa@ejemplo.com"
+                  value={tenantForm.business_email}
+                  onChange={(e) => setTenantForm({ ...tenantForm, business_email: e.target.value })}
+                />
+              </div>
+
+              <Button type="submit" disabled={savingTenant}>
+                {savingTenant ? (
+                  <><Loader2 className="h-4 w-4 animate-spin mr-1" />Guardando...</>
+                ) : (
+                  <><Save className="h-4 w-4 mr-1" />Guardar cambios</>
+                )}
+              </Button>
+            </form>
+          </Card>
+        </div>
+      </div>
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
           <Users className="h-5 w-5 text-green-500" />

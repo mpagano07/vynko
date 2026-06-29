@@ -23,6 +23,7 @@ const ALL_PLANS = ['starter', 'business', 'enterprise'];
 const navItems: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', requiredPlan: ALL_PLANS },
   { name: 'Ventas', href: '/sales', requiredPlan: ALL_PLANS },
+  { name: 'Facturación', href: '/facturacion', requiredPlan: ALL_PLANS },
   { name: 'Productos', href: '/products', requiredPlan: ALL_PLANS },
   { name: 'Proveedores', href: '/providers', requiredPlan: ALL_PLANS },
   { name: 'Clientes', href: '/customers', requiredPlan: ALL_PLANS },

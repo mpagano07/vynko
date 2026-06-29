@@ -26,19 +26,23 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json();
-    const { name, description } = body;
+    const allowedFields = [
+      'name', 'description', 'razon_social', 'cuit', 'punto_venta',
+      'iva_condition', 'ingresos_brutos', 'inicio_actividades',
+      'business_address', 'business_city', 'business_province',
+      'business_zip', 'business_phone', 'business_email',
+    ];
 
     const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
-    if (name !== undefined) {
-      if (typeof name !== 'string' || !name.trim()) {
-        return NextResponse.json({ error: 'Invalid company name' }, { status: 400 });
+    for (const field of allowedFields) {
+      if (body[field] !== undefined) {
+        updateData[field] = body[field];
       }
-      updateData.name = name.trim();
     }
 
-    if (description !== undefined) {
-      updateData.description = description;
+    if (updateData.name !== undefined && (!updateData.name || !String(updateData.name).trim())) {
+      return NextResponse.json({ error: 'Invalid company name' }, { status: 400 });
     }
 
     const { data, error } = await supabaseAdmin

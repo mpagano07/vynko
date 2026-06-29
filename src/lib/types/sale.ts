@@ -30,4 +30,8 @@ export interface Customer {
   phone?: string;
   address?: string;
   notes?: string;
+  cuit?: string;
+  iva_condition?: string;
+  document_type?: string;
+  document_number?: string;
 }

@@ -21,6 +21,18 @@ interface TenantInfo {
   subscription_status?: string;
   subscription_current_period_end?: string;
   created_at?: string;
+  razon_social?: string;
+  cuit?: string;
+  punto_venta?: number;
+  iva_condition?: string;
+  ingresos_brutos?: string;
+  inicio_actividades?: string;
+  business_address?: string;
+  business_city?: string;
+  business_province?: string;
+  business_zip?: string;
+  business_phone?: string;
+  business_email?: string;
 }
 
 export function useAuth() {
