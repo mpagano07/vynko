@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library';
+import { BrowserMultiFormatReader, DecodeHintType } from '@zxing/library';
 import { cn } from '@/lib/utils/cn';
 
 interface BarcodeScannerProps {
@@ -15,21 +15,6 @@ const SCAN_INTERVAL_MS = 400;
 
 const HINTS = new Map();
 HINTS.set(DecodeHintType.TRY_HARDER, true);
-HINTS.set(DecodeHintType.POSSIBLE_FORMATS, [
-  BarcodeFormat.EAN_13,
-  BarcodeFormat.EAN_8,
-  BarcodeFormat.UPC_A,
-  BarcodeFormat.UPC_E,
-  BarcodeFormat.CODE_128,
-  BarcodeFormat.CODE_39,
-  BarcodeFormat.ITF,
-  BarcodeFormat.RSS_14,
-  BarcodeFormat.RSS_EXPANDED,
-  BarcodeFormat.CODABAR,
-  BarcodeFormat.QR_CODE,
-  BarcodeFormat.DATA_MATRIX,
-  BarcodeFormat.AZTEC,
-]);
 
 export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
