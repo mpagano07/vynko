@@ -32,21 +32,31 @@ export default function BiometricLogin() {
   if (!available || !getStoredCredential()) return null;
 
   async function exchangeRefreshToken(token: string) {
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: SUPABASE_ANON_KEY!,
-      },
-      body: JSON.stringify({ refresh_token: token }),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const { data: sessionData, error } = await supabase.auth.setSession({
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
-    } as any);
-    return error ? null : sessionData.session;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_ANON_KEY!,
+        },
+        body: JSON.stringify({ refresh_token: token }),
+        signal: controller.signal,
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      const { data: sessionData, error } = await supabase.auth.setSession({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+      } as any);
+      return error ? null : sessionData.session;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   const handleBiometricLogin = async () => {
