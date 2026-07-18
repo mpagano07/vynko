@@ -9,7 +9,7 @@ import { useProducts } from '@/lib/hooks/useProducts';
 import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Package, AlertOctagon, TrendingUp, Users, ArrowRight, CheckCircle2, BarChart3 } from 'lucide-react';
+import { AlertOctagon, TrendingUp, ArrowRight, CheckCircle2, BarChart3 } from 'lucide-react';
 import Link from 'next/link';
 import {
   BarChart,
@@ -35,6 +35,7 @@ export default function DashboardPage() {
   const [salesLoading, setSalesLoading] = useState(true);
   const [salesChartData, setSalesChartData] = useState<{ date: string; day: string; total: number }[]>([]);
   const [chartLoading, setChartLoading] = useState(true);
+  const [monthlyData, setMonthlyData] = useState<{ total: number; saleCount: number } | null>(null);
 
   useEffect(() => {
     if (!tenant?.id) return;
@@ -45,9 +46,10 @@ export default function DashboardPage() {
         const headers: Record<string, string> = {};
         if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
 
-        const [salesRes, summaryRes] = await Promise.all([
+        const [salesRes, summaryRes, monthlyRes] = await Promise.all([
           fetch('/api/sales', { headers }),
           fetch('/api/sales/summary', { headers }),
+          fetch('/api/sales/monthly', { headers }),
         ]);
 
         if (salesRes.ok) {
@@ -62,6 +64,11 @@ export default function DashboardPage() {
         if (summaryRes.ok) {
           const summary = await summaryRes.json();
           setSalesChartData(summary);
+        }
+
+        if (monthlyRes.ok) {
+          const monthly = await monthlyRes.json();
+          setMonthlyData(monthly);
         }
       } catch (err) {
         console.error('Error fetching sales:', err);
@@ -107,7 +114,7 @@ export default function DashboardPage() {
       {/* Welcome Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 dark:text-gray-100 tracking-tight">
+          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">
             ¡Hola, {profile?.full_name || 'Usuario'}!
           </h1>
           {tenant && (
@@ -153,73 +160,45 @@ export default function DashboardPage() {
           </div>
         </Card>
 
-        <Card className="p-6 flex items-start justify-between">
-          <div>
-            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Total productos</h3>
-            <p className="text-3xl font-extrabold mt-2 text-gray-900 dark:text-white">{totalProducts}</p>
-            <p className="text-xs text-gray-500 mt-2">Variantes registradas</p>
-          </div>
-          <div className="p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400">
-            <Package className="h-6 w-6" />
-          </div>
+        <Card className="p-6">
+          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Estado de tu negocio hoy</h3>
+          {(!salesData || salesData.saleCount === 0) ? (
+            <div className="flex items-start gap-3">
+              <span className="text-lg mt-0.5">🔴</span>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">No registraste ventas hoy.</p>
+            </div>
+          ) : criticalCount > 0 ? (
+            <div className="flex items-start gap-3">
+              <span className="text-lg mt-0.5">🟡</span>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                Tenés {criticalCount} producto{criticalCount !== 1 ? 's' : ''} con stock crítico.
+              </p>
+            </div>
+          ) : (
+            <div className="flex items-start gap-3">
+              <span className="text-lg mt-0.5">🟢</span>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">Todo funcionando correctamente.</p>
+            </div>
+          )}
         </Card>
 
         <Card className="p-6 flex items-start justify-between">
           <div>
-            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Colaboradores</h3>
-            <p className="text-3xl font-extrabold mt-2 text-gray-900 dark:text-white">1</p>
-            <p className="text-xs text-gray-500 mt-2">Usuarios activos</p>
+            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Ingresos del mes</h3>
+            <p className="text-3xl font-extrabold mt-2 text-gray-900 dark:text-white">
+              ${monthlyData ? monthlyData.total.toFixed(2) : '0.00'}
+            </p>
+            <p className="text-xs text-gray-500 mt-2">
+              {monthlyData ? `${monthlyData.saleCount} venta(s)` : 'Sin ventas'}
+            </p>
           </div>
-          <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400">
-            <Users className="h-6 w-6" />
+          <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400">
+            <TrendingUp className="h-6 w-6" />
           </div>
         </Card>
       </div>
 
-      {/* Sales Chart */}
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-indigo-500" />
-            Ventas de los últimos 7 días
-          </h2>
-        </div>
-        {chartLoading ? (
-          <div className="h-52 bg-gray-100 dark:bg-gray-800 animate-pulse rounded-lg" />
-        ) : salesChartData.length === 0 || salesChartData.every(d => d.total === 0) ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center bg-gray-50/50 dark:bg-gray-900/50 rounded-lg border border-dashed border-gray-200 dark:border-gray-800">
-            <BarChart3 className="h-10 w-10 text-gray-300 dark:text-gray-600 mb-2" />
-            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Sin ventas aún</p>
-            <p className="text-xs text-gray-500 mt-0.5">Las ventas registradas aparecerán aquí.</p>
-          </div>
-        ) : (
-          <div className="h-52">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={salesChartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="day" tick={{ fontSize: 12 }} stroke="#9ca3af" />
-                <YAxis tick={{ fontSize: 12 }} stroke="#9ca3af" />
-                <Tooltip
-                  formatter={(value) => [`$${Number(value).toFixed(2)}`, 'Total']}
-                  labelFormatter={(label, payload) => {
-                    const item = (payload as any[])?.[0]?.payload;
-                    return item?.date || label;
-                  }}
-                  contentStyle={{
-                    backgroundColor: '#fff',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                  }}
-                />
-                <Bar dataKey="total" fill="#6366f1" radius={[6, 6, 0, 0]} maxBarSize={40} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </Card>
-
-      {/* Main Grid Content */}
+      {/* Alertas + Primeros Pasos */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column - Critical Stock items */}
         <Card className="lg:col-span-2 p-6">
@@ -276,52 +255,46 @@ export default function DashboardPage() {
         </Card>
 
         {/* Right Column - Checklist Actions */}
-        <Card className="p-6">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Primeros Pasos</h2>
-          <div className="space-y-4">
-            <div className="flex gap-3">
-              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 flex items-center justify-center font-bold text-xs">✓</span>
-              <div>
-                <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Crear Empresa</h4>
-                <p className="text-xs text-gray-500 mt-0.5">Completaste el onboarding de tu negocio.</p>
+        {(!salesData || salesData.saleCount === 0) && (
+          <Card className="p-6">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Primeros Pasos</h2>
+            <div className="space-y-4">
+              <div className="flex gap-3">
+                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 flex items-center justify-center font-bold text-xs">✓</span>
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Crear Empresa</h4>
+                  <p className="text-xs text-gray-500 mt-0.5">Completaste el onboarding de tu negocio.</p>
+                </div>
               </div>
-            </div>
 
-            <div className="flex gap-3">
-              <span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs ${
-                totalProducts > 0 
-                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
-                  : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500'
-              }`}>
-                {totalProducts > 0 ? '✓' : '2'}
-              </span>
-              <div>
-                <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Registrar Productos</h4>
-                <p className="text-xs text-gray-500 mt-0.5">Agrega tus productos al catálogo de inventario.</p>
-                {totalProducts === 0 && (
-                  <Button
-                    size="sm"
-                    className="mt-2 text-xs h-7 px-3"
-                    onClick={() => router.push('/products')}
-                  >
-                    Agregar producto
-                  </Button>
-                )}
+              <div className="flex gap-3">
+                <span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs ${
+                  totalProducts > 0 
+                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
+                    : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500'
+                }`}>
+                  {totalProducts > 0 ? '✓' : '2'}
+                </span>
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Registrar Productos</h4>
+                  <p className="text-xs text-gray-500 mt-0.5">Agrega tus productos al catálogo de inventario.</p>
+                  {totalProducts === 0 && (
+                    <Button
+                      size="sm"
+                      className="mt-2 text-xs h-7 px-3"
+                      onClick={() => router.push('/products')}
+                    >
+                      Agregar producto
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
 
-            <div className="flex gap-3">
-              <span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs ${
-                salesData && salesData.saleCount > 0
-                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                  : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500'
-              }`}>
-                {salesData && salesData.saleCount > 0 ? '✓' : '3'}
-              </span>
-              <div>
-                <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Registrar tu primera venta</h4>
-                <p className="text-xs text-gray-500 mt-0.5">Comienza a operar vendiendo tus productos registrados.</p>
-                {(!salesData || salesData.saleCount === 0) && (
+              <div className="flex gap-3">
+                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 flex items-center justify-center font-bold text-xs">3</span>
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Registrar tu primera venta</h4>
+                  <p className="text-xs text-gray-500 mt-0.5">Comienza a operar vendiendo tus productos registrados.</p>
                   <Button
                     size="sm"
                     className="mt-2 text-xs h-7 px-3"
@@ -329,12 +302,55 @@ export default function DashboardPage() {
                   >
                     Registrar venta
                   </Button>
-                )}
+                </div>
               </div>
             </div>
-          </div>
-        </Card>
+          </Card>
+        )}
       </div>
+
+      {/* Sales Chart */}
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-indigo-500" />
+            Ventas de los últimos 7 días
+          </h2>
+        </div>
+        {chartLoading ? (
+          <div className="h-36 bg-gray-100 dark:bg-gray-800 animate-pulse rounded-lg" />
+        ) : salesChartData.length === 0 || salesChartData.every(d => d.total === 0) ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center bg-gray-50/50 dark:bg-gray-900/50 rounded-lg border border-dashed border-gray-200 dark:border-gray-800">
+            <BarChart3 className="h-10 w-10 text-gray-300 dark:text-gray-600 mb-2" />
+            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Sin ventas aún</p>
+            <p className="text-xs text-gray-500 mt-0.5">Las ventas registradas aparecerán aquí.</p>
+          </div>
+        ) : (
+          <div className="h-36">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={salesChartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="day" tick={{ fontSize: 12 }} stroke="#9ca3af" />
+                <YAxis tick={{ fontSize: 12 }} stroke="#9ca3af" />
+                <Tooltip
+                  formatter={(value) => [`$${Number(value).toFixed(2)}`, 'Total']}
+                  labelFormatter={(label, payload) => {
+                    const item = (payload as any[])?.[0]?.payload;
+                    return item?.date || label;
+                  }}
+                  contentStyle={{
+                    backgroundColor: '#fff',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                  }}
+                />
+                <Bar dataKey="total" fill="#6366f1" radius={[6, 6, 0, 0]} maxBarSize={40} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

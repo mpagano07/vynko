@@ -1,12 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
 import { cn } from '@/lib/utils/cn';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, LogOut, Clock, AlertTriangle } from 'lucide-react';
+import { X, LogOut, Clock, AlertTriangle, ChevronDown, Settings } from 'lucide-react';
 import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
 
 interface NavItem {
@@ -27,17 +28,21 @@ const navItems: NavItem[] = [
   { name: 'Proveedores', href: '/providers', requiredPlan: ALL_PLANS },
   { name: 'Clientes', href: '/customers', requiredPlan: ALL_PLANS },
   { name: 'Pronóstico', href: '/forecast', requiredPlan: ['business', 'enterprise'], requiredRole: ['owner', 'manager'] },
-  { name: 'Códigos QR', href: '/codigos', requiredPlan: ALL_PLANS },
-  { name: 'Antipérdidas', href: '/loss-prevention', requiredPlan: ALL_PLANS },
-  { name: 'Visión Góndolas', href: '/shelf-vision', requiredPlan: ['business', 'enterprise'] },
-  { name: 'Escáner', href: '/scanning', requiredPlan: ALL_PLANS },
   { name: 'Historial', href: '/activity-logs', requiredPlan: ALL_PLANS, requiredRole: ['owner', 'manager'] },
   { name: 'Planes', href: '/billing', requiredPlan: ALL_PLANS, requiredRole: ['owner', 'manager'] },
   { name: 'Configuración', href: '/settings', requiredPlan: ALL_PLANS, requiredRole: ['owner', 'manager'] },
 ];
 
+const operacionesItems: NavItem[] = [
+  { name: 'QR', href: '/codigos', requiredPlan: ALL_PLANS },
+  { name: 'Escáner', href: '/scanning', requiredPlan: ALL_PLANS },
+  { name: 'Antipérdidas', href: '/loss-prevention', requiredPlan: ALL_PLANS },
+  { name: 'Visión Góndolas', href: '/shelf-vision', requiredPlan: ['business', 'enterprise'] },
+];
+
 function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked }: { onNavClick?: () => void; tenantPlan?: string; userRole?: string | null; isBlocked?: boolean }) {
   const pathname = usePathname();
+  const [operacionesOpen, setOperacionesOpen] = useState(false);
 
   const effectivePlan = !tenantPlan || tenantPlan === 'free' ? 'starter' : tenantPlan;
 
@@ -46,6 +51,13 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked }: { onNavClic
     if (item.requiredRole && !item.requiredRole.includes(userRole || '')) return false;
     return true;
   });
+
+  const visibleOperaciones = operacionesItems.filter((item) => {
+    if (item.requiredPlan && !item.requiredPlan.includes(effectivePlan)) return false;
+    return true;
+  });
+
+  const isOperacionesActive = visibleOperaciones.some((item) => pathname === item.href);
 
   return (
     <>
@@ -75,6 +87,59 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked }: { onNavClic
           <span>{item.name}</span>
         </Link>
       ))}
+      {visibleOperaciones.length > 0 && (
+        <div>
+          <button
+            onClick={() => setOperacionesOpen(!operacionesOpen)}
+            className={cn(
+              'flex items-center justify-between w-full rounded-md px-3 py-2 text-sm font-medium transition-colors',
+              isOperacionesActive || operacionesOpen
+                ? 'bg-gray-800 text-white'
+                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+            )}
+          >
+            <span className="flex items-center gap-2">
+              <Settings className="h-4 w-4" />
+              Operaciones
+            </span>
+            <ChevronDown
+              className={cn(
+                'h-4 w-4 transition-transform duration-200',
+                operacionesOpen && 'rotate-180'
+              )}
+            />
+          </button>
+          <AnimatePresence>
+            {operacionesOpen && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="ml-4 mt-1 space-y-1 border-l border-gray-700 pl-3">
+                  {visibleOperaciones.map((item) => (
+                    <Link
+                      key={item.name}
+                      href={item.href}
+                      onClick={onNavClick}
+                      className={cn(
+                        'block rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                        pathname === item.href
+                          ? 'bg-gray-800 text-white'
+                          : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                      )}
+                    >
+                      {item.name}
+                    </Link>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
     </>
   );
 }
