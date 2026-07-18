@@ -15,22 +15,46 @@ export async function GET() {
   const tenantId = tu[0].tenant_id;
 
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
 
-  const { data: sales, error } = await supabaseAdmin
-    .from('sales')
-    .select('total_cents, status')
-    .eq('tenant_id', tenantId)
-    .gte('created_at', monthStart.toISOString())
-    .eq('status', 'completed');
+  const [thisMonthRes, prevMonthRes] = await Promise.all([
+    supabaseAdmin
+      .from('sales')
+      .select('total_cents')
+      .eq('tenant_id', tenantId)
+      .gte('created_at', thisMonthStart.toISOString())
+      .eq('status', 'completed'),
+    supabaseAdmin
+      .from('sales')
+      .select('total_cents')
+      .eq('tenant_id', tenantId)
+      .gte('created_at', prevMonthStart.toISOString())
+      .lte('created_at', prevMonthEnd.toISOString())
+      .eq('status', 'completed'),
+  ]);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const thisMonthSales = thisMonthRes.data ?? [];
+  const prevMonthSales = prevMonthRes.data ?? [];
 
-  const totalCents = (sales ?? []).reduce((sum, s) => sum + ((s.total_cents as number) || 0), 0);
-  const saleCount = (sales ?? []).length;
+  const thisTotal = thisMonthSales.reduce((sum, s) => sum + ((s.total_cents as number) || 0), 0) / 100;
+  const prevTotal = prevMonthSales.reduce((sum, s) => sum + ((s.total_cents as number) || 0), 0) / 100;
+  const thisCount = thisMonthSales.length;
+  const prevCount = prevMonthSales.length;
+
+  const variationPercent = prevTotal > 0
+    ? Math.round(((thisTotal - prevTotal) / prevTotal) * 100)
+    : null;
+
+  const avgTicket = thisCount > 0 ? thisTotal / thisCount : 0;
 
   return NextResponse.json({
-    total: totalCents / 100,
-    saleCount,
+    total: thisTotal,
+    saleCount: thisCount,
+    prevTotal,
+    prevSaleCount: prevCount,
+    variationPercent,
+    avgTicket,
   });
 }

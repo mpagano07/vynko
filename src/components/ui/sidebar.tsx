@@ -16,28 +16,54 @@ interface NavItem {
   icon?: React.ReactNode;
   requiredPlan?: string[];
   requiredRole?: string[];
+  badge?: string;
+}
+
+interface NavGroup {
+  label: string;
+  items: NavItem[];
 }
 
 const ALL_PLANS = ['starter', 'business', 'enterprise'];
 
-const navItems: NavItem[] = [
-  { name: 'Dashboard', href: '/dashboard', requiredPlan: ALL_PLANS },
-  { name: 'Ventas', href: '/sales', requiredPlan: ALL_PLANS },
-  { name: 'Facturación', href: '/facturacion', requiredPlan: ALL_PLANS },
-  { name: 'Productos', href: '/products', requiredPlan: ALL_PLANS },
-  { name: 'Proveedores', href: '/providers', requiredPlan: ALL_PLANS },
-  { name: 'Clientes', href: '/customers', requiredPlan: ALL_PLANS },
-  { name: 'Pronóstico', href: '/forecast', requiredPlan: ['business', 'enterprise'], requiredRole: ['owner', 'manager'] },
-  { name: 'Historial', href: '/activity-logs', requiredPlan: ALL_PLANS, requiredRole: ['owner', 'manager'] },
-  { name: 'Planes', href: '/billing', requiredPlan: ALL_PLANS, requiredRole: ['owner', 'manager'] },
-  { name: 'Configuración', href: '/settings', requiredPlan: ALL_PLANS, requiredRole: ['owner', 'manager'] },
+const navGroups: NavGroup[] = [
+  {
+    label: 'Principal',
+    items: [
+      { name: 'Dashboard', href: '/dashboard', requiredPlan: ALL_PLANS },
+      { name: 'Ventas', href: '/sales', requiredPlan: ALL_PLANS },
+    ],
+  },
+  {
+    label: 'Gestión',
+    items: [
+      { name: 'Productos', href: '/products', requiredPlan: ALL_PLANS },
+      { name: 'Proveedores', href: '/providers', requiredPlan: ALL_PLANS },
+      { name: 'Clientes', href: '/customers', requiredPlan: ALL_PLANS },
+      { name: 'Facturación', href: '/facturacion', requiredPlan: ALL_PLANS },
+    ],
+  },
+  {
+    label: 'Análisis',
+    items: [
+      { name: 'Pronóstico', href: '/forecast', requiredPlan: ['business', 'enterprise'], requiredRole: ['owner', 'manager'] },
+      { name: 'Historial', href: '/activity-logs', requiredPlan: ALL_PLANS, requiredRole: ['owner', 'manager'] },
+    ],
+  },
+  {
+    label: 'Sistema',
+    items: [
+      { name: 'Planes', href: '/billing', requiredPlan: ALL_PLANS, requiredRole: ['owner', 'manager'] },
+      { name: 'Configuración', href: '/settings', requiredPlan: ALL_PLANS, requiredRole: ['owner', 'manager'] },
+    ],
+  },
 ];
 
 const operacionesItems: NavItem[] = [
   { name: 'QR', href: '/codigos', requiredPlan: ALL_PLANS },
   { name: 'Escáner', href: '/scanning', requiredPlan: ALL_PLANS },
   { name: 'Antipérdidas', href: '/loss-prevention', requiredPlan: ALL_PLANS },
-  { name: 'Visión Góndolas', href: '/shelf-vision', requiredPlan: ['business', 'enterprise'] },
+  { name: 'Visión Góndolas', href: '/shelf-vision', requiredPlan: ['business', 'enterprise'], badge: 'Próximamente' },
 ];
 
 function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked }: { onNavClick?: () => void; tenantPlan?: string; userRole?: string | null; isBlocked?: boolean }) {
@@ -46,17 +72,13 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked }: { onNavClic
 
   const effectivePlan = !tenantPlan || tenantPlan === 'free' ? 'starter' : tenantPlan;
 
-  const visibleItems = navItems.filter((item) => {
+  const filterItem = (item: NavItem) => {
     if (item.requiredPlan && !item.requiredPlan.includes(effectivePlan)) return false;
     if (item.requiredRole && !item.requiredRole.includes(userRole || '')) return false;
     return true;
-  });
+  };
 
-  const visibleOperaciones = operacionesItems.filter((item) => {
-    if (item.requiredPlan && !item.requiredPlan.includes(effectivePlan)) return false;
-    return true;
-  });
-
+  const visibleOperaciones = operacionesItems.filter(filterItem);
   const isOperacionesActive = visibleOperaciones.some((item) => pathname === item.href);
 
   return (
@@ -72,23 +94,44 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked }: { onNavClic
           </p>
         </div>
       )}
-      {visibleItems.map((item) => (
-        <Link
-          key={item.name}
-          href={item.href}
-          onClick={onNavClick}
-          className={cn(
-            'flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors',
-            pathname === item.href
-              ? 'bg-gray-800 text-white'
-              : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-          )}
-        >
-          <span>{item.name}</span>
-        </Link>
-      ))}
+
+      {navGroups.map((group) => {
+        const visible = group.items.filter(filterItem);
+        if (visible.length === 0) return null;
+        return (
+          <div key={group.label} className="mb-1">
+            <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-widest">
+              {group.label}
+            </p>
+            {visible.map((item) => (
+              <Link
+                key={item.name}
+                href={item.href}
+                onClick={onNavClick}
+                className={cn(
+                  'flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                  pathname === item.href
+                    ? 'bg-gray-800 text-white'
+                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                )}
+              >
+                <span>{item.name}</span>
+                {item.badge && (
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-800/40">
+                    {item.badge}
+                  </span>
+                )}
+              </Link>
+            ))}
+          </div>
+        );
+      })}
+
       {visibleOperaciones.length > 0 && (
-        <div>
+        <div className="mb-1">
+          <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-widest">
+            Operaciones
+          </p>
           <button
             onClick={() => setOperacionesOpen(!operacionesOpen)}
             className={cn(
@@ -100,7 +143,7 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked }: { onNavClic
           >
             <span className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
-              Operaciones
+              Herramientas
             </span>
             <ChevronDown
               className={cn(
@@ -125,13 +168,18 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked }: { onNavClic
                       href={item.href}
                       onClick={onNavClick}
                       className={cn(
-                        'block rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                        'flex items-center justify-between rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
                         pathname === item.href
                           ? 'bg-gray-800 text-white'
                           : 'text-gray-400 hover:bg-gray-800 hover:text-white'
                       )}
                     >
-                      {item.name}
+                      <span>{item.name}</span>
+                      {item.badge && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-800/40">
+                          {item.badge}
+                        </span>
+                      )}
                     </Link>
                   ))}
                 </div>
@@ -240,7 +288,7 @@ export function Sidebar() {
 
       {/* Desktop sidebar */}
       <aside className="hidden md:flex flex-col w-64 h-screen bg-gray-900 text-white p-4 border-r border-gray-800">
-        <div className="mb-8">
+        <div className="mb-4">
           <h1 className="text-2xl font-bold text-blue-400">Vynko</h1>
           {tenant && (
             <div className="flex items-center gap-2 mt-2 px-2 py-1.5 rounded-lg bg-gray-800/60 border border-gray-700/50">
@@ -251,7 +299,7 @@ export function Sidebar() {
             </div>
           )}
         </div>
-        <nav className="flex-1 space-y-2 overflow-y-auto mt-4">
+        <nav className="flex-1 overflow-y-auto">
           <SidebarNav tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} />
         </nav>
         <TrialCounter tenant={tenant} />
