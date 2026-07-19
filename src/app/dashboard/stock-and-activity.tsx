@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, startTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
@@ -80,13 +80,16 @@ export default function StockAndActivity({
 
         if (activityRes.ok) {
           const d = await activityRes.json();
-          setRecentActivity(d.data || []);
+          startTransition(() => setRecentActivity(d.data || []));
         }
-        if (stockRes.ok) setStockAnalysis(await stockRes.json());
+        if (stockRes.ok) {
+          const sr = await stockRes.json();
+          startTransition(() => setStockAnalysis(sr));
+        }
       } catch (err) {
         console.error(err);
       } finally {
-        if (!cancelled) setActivityLoading(false);
+        if (!cancelled) startTransition(() => setActivityLoading(false));
       }
     })();
     return () => { cancelled = true; };

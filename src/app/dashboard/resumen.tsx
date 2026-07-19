@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, startTransition } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 
@@ -36,11 +36,14 @@ export default function DashboardResumen({ tenantId }: { tenantId: string }) {
       try {
         const headers = await getHeaders();
         const res = await fetch('/api/dashboard/summary', { headers });
-        if (!cancelled && res.ok) setData(await res.json());
+        if (!cancelled && res.ok) {
+          const d = await res.json();
+          startTransition(() => setData(d));
+        }
       } catch (err) {
         console.error(err);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) startTransition(() => setLoading(false));
       }
     })();
     return () => { cancelled = true; };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, startTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
@@ -70,17 +70,25 @@ export default function DashboardPage() {
 
         if (salesRes.ok) {
           const sales: Record<string, unknown>[] = await salesRes.json();
-          setSalesData({
-            todayTotal: sales.reduce((sum, s) => sum + ((s.total_cents as number) || 0), 0),
-            saleCount: sales.length,
+          startTransition(() => {
+            setSalesData({
+              todayTotal: sales.reduce((sum, s) => sum + ((s.total_cents as number) || 0), 0),
+              saleCount: sales.length,
+            });
           });
         }
-        if (monthlyRes.ok) setMonthlyData(await monthlyRes.json());
-        if (criticalRes.ok) setCriticalProducts(await criticalRes.json());
+        if (monthlyRes.ok) {
+          const md = await monthlyRes.json();
+          startTransition(() => setMonthlyData(md));
+        }
+        if (criticalRes.ok) {
+          const cp = await criticalRes.json();
+          startTransition(() => setCriticalProducts(cp));
+        }
       } catch (err) {
         console.error(err);
       } finally {
-        if (!cancelled) setProductsLoading(false);
+        if (!cancelled) startTransition(() => setProductsLoading(false));
       }
     })();
     return () => { cancelled = true; };
@@ -146,13 +154,13 @@ export default function DashboardPage() {
               Nueva venta
             </Button>
           </Link>
-          <Link href="/products">
+          <Link href="/products" className="hidden sm:inline-flex">
             <Button size="sm" variant="outline" className="gap-1.5 h-8 px-3 text-sm font-medium">
               <Package className="h-3.5 w-3.5" />
               Nuevo producto
             </Button>
           </Link>
-          <Link href="/providers">
+          <Link href="/providers" className="hidden sm:inline-flex">
             <Button size="sm" variant="outline" className="gap-1.5 h-8 px-3 text-sm font-medium">
               <ShoppingCart className="h-3.5 w-3.5" />
               Nueva compra
