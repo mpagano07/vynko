@@ -17,9 +17,26 @@ async function getAuthenticatedUser(): Promise<{ tenantId: string; userId: strin
   return { tenantId: tu[0].tenant_id as string, userId: user.id };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const auth = await getAuthenticatedUser();
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+
+  const { searchParams } = new URL(request.url);
+  const todayOnly = searchParams.get('today') === 'true';
+
+  if (todayOnly) {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const { data: sales, error } = await supabaseAdmin
+      .from('sales')
+      .select('id, total_cents, created_at')
+      .eq('tenant_id', auth.tenantId)
+      .gte('created_at', todayStart.toISOString())
+      .order('created_at', { ascending: false });
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(sales ?? []);
+  }
 
   const { data: sales, error } = await supabaseAdmin
     .from('sales')

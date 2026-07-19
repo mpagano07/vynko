@@ -2,7 +2,6 @@ import './globals.css';
 import React from 'react';
 import { ClientLayoutWrapper } from '@/components/layout/ClientLayoutWrapper';
 
-import { Toaster } from 'react-hot-toast';
 import type { Metadata, Viewport } from 'next';
 
 export const metadata: Metadata = {
@@ -32,7 +31,6 @@ export default function RootLayout({
     <html lang="es">
       <head />
       <body className="min-h-screen bg-gray-50 antialiased dark:bg-gray-950 font-sans">
-        <Toaster position="top-right" />
         <ClientLayoutWrapper>
           {children}
         </ClientLayoutWrapper>

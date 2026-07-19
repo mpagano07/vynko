@@ -1,12 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
 import { cn } from '@/lib/utils/cn';
-import { motion, AnimatePresence } from 'framer-motion';
 import { X, LogOut, Clock, AlertTriangle, ChevronDown, Settings } from 'lucide-react';
 import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
 
@@ -69,6 +68,7 @@ const operacionesItems: NavItem[] = [
 function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked }: { onNavClick?: () => void; tenantPlan?: string; userRole?: string | null; isBlocked?: boolean }) {
   const pathname = usePathname();
   const [operacionesOpen, setOperacionesOpen] = useState(false);
+  const operacionesRef = useRef<HTMLDivElement>(null);
 
   const effectivePlan = !tenantPlan || tenantPlan === 'free' ? 'starter' : tenantPlan;
 
@@ -152,40 +152,37 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked }: { onNavClic
               )}
             />
           </button>
-          <AnimatePresence>
-            {operacionesOpen && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden"
-              >
-                <div className="ml-4 mt-1 space-y-1 border-l border-gray-700 pl-3">
-                  {visibleOperaciones.map((item) => (
-                    <Link
-                      key={item.name}
-                      href={item.href}
-                      onClick={onNavClick}
-                      className={cn(
-                        'flex items-center justify-between rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-                        pathname === item.href
-                          ? 'bg-gray-800 text-white'
-                          : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-                      )}
-                    >
-                      <span>{item.name}</span>
-                      {item.badge && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-800/40">
-                          {item.badge}
-                        </span>
-                      )}
-                    </Link>
-                  ))}
-                </div>
-              </motion.div>
+          <div
+            ref={operacionesRef}
+            className={cn(
+              'overflow-hidden transition-all duration-200',
+              operacionesOpen ? 'opacity-100' : 'opacity-0'
             )}
-          </AnimatePresence>
+            style={{ maxHeight: operacionesOpen ? `${operacionesRef.current?.scrollHeight ?? 200}px` : '0px' }}
+          >
+            <div className="ml-4 mt-1 space-y-1 border-l border-gray-700 pl-3">
+              {visibleOperaciones.map((item) => (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  onClick={onNavClick}
+                  className={cn(
+                    'flex items-center justify-between rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                    pathname === item.href
+                      ? 'bg-gray-800 text-white'
+                      : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                  )}
+                >
+                  <span>{item.name}</span>
+                  {item.badge && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-800/40">
+                      {item.badge}
+                    </span>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </>
@@ -240,51 +237,42 @@ export function Sidebar() {
   return (
     <>
       {/* Mobile overlay backdrop */}
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            onClick={close}
-            className="fixed inset-0 bg-black/50 z-40 md:hidden"
-          />
+      <div
+        onClick={close}
+        className={cn(
+          'fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity duration-200',
+          isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
         )}
-      </AnimatePresence>
+      />
 
       {/* Mobile drawer */}
-      <AnimatePresence>
-        {isOpen && (
-          <motion.aside
-            initial={{ x: '-100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '-100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed inset-y-0 left-0 z-50 flex flex-col w-64 bg-gray-900 text-white p-4 border-r border-gray-800 md:hidden"
-          >
-            <div className="flex items-center justify-between mb-8">
-              <h1 className="text-2xl font-bold text-blue-400">Vynko</h1>
-              <button onClick={close} className="p-1 rounded-md hover:bg-gray-800 text-gray-400">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            {tenant && (
-              <div className="flex items-center gap-2 -mt-6 mb-4 px-2 py-1.5 rounded-lg bg-gray-800/60 border border-gray-700/50">
-                <div className="w-6 h-6 rounded-md bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-                  <span className="text-xs font-bold text-blue-400">{(tenant.name || 'T')[0].toUpperCase()}</span>
-                </div>
-                <p className="text-sm font-semibold text-gray-200 truncate">{tenant.name}</p>
-              </div>
-            )}
-            <nav className="flex-1 space-y-2 overflow-y-auto">
-              <SidebarNav onNavClick={close} tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} />
-            </nav>
-            <TrialCounter tenant={tenant} />
-            {userSection}
-          </motion.aside>
+      <aside
+        className={cn(
+          'fixed inset-y-0 left-0 z-50 flex flex-col w-64 bg-gray-900 text-white p-4 border-r border-gray-800 md:hidden',
+          'transition-transform duration-200 ease-out',
+          isOpen ? 'translate-x-0' : '-translate-x-full'
         )}
-      </AnimatePresence>
+      >
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-2xl font-bold text-blue-400">Vynko</h1>
+          <button onClick={close} className="p-1 rounded-md hover:bg-gray-800 text-gray-400">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        {tenant && (
+          <div className="flex items-center gap-2 -mt-6 mb-4 px-2 py-1.5 rounded-lg bg-gray-800/60 border border-gray-700/50">
+            <div className="w-6 h-6 rounded-md bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+              <span className="text-xs font-bold text-blue-400">{(tenant.name || 'T')[0].toUpperCase()}</span>
+            </div>
+            <p className="text-sm font-semibold text-gray-200 truncate">{tenant.name}</p>
+          </div>
+        )}
+        <nav className="flex-1 space-y-2 overflow-y-auto">
+          <SidebarNav onNavClick={close} tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} />
+        </nav>
+        <TrialCounter tenant={tenant} />
+        {userSection}
+      </aside>
 
       {/* Desktop sidebar */}
       <aside className="hidden md:flex flex-col w-64 h-screen bg-gray-900 text-white p-4 border-r border-gray-800">
