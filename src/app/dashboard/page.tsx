@@ -61,7 +61,7 @@ export default function DashboardPage() {
       try {
         const headers = await getHeaders();
         const [salesRes, monthlyRes, criticalRes] = await Promise.all([
-          fetch('/api/sales?today=true', { headers }),
+          fetch(`/api/sales?today=true&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, { headers }),
           fetch('/api/sales/monthly', { headers }),
           fetch('/api/products/critical', { headers }),
         ]);

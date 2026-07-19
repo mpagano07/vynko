@@ -25,8 +25,10 @@ export async function GET(request: Request) {
   const todayOnly = searchParams.get('today') === 'true';
 
   if (todayOnly) {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const tz = searchParams.get('tz') || 'UTC';
+    const now = new Date();
+    const todayStartStr = now.toLocaleDateString('en-CA', { timeZone: tz }) + 'T00:00:00.000Z';
+    const todayStart = new Date(todayStartStr);
     const { data: sales, error } = await supabaseAdmin
       .from('sales')
       .select('id, total_cents, created_at')
