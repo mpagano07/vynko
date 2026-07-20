@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -34,6 +35,9 @@ interface ProductOption {
 export default function ProvidersPage() {
   const { tenant } = useAuth();
   const tenantId = tenant?.id ?? null;
+  const searchParams = useSearchParams();
+  const prefillProductId = searchParams.get('productId');
+  const prefillQty = Number(searchParams.get('qty')) || 1;
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
@@ -86,9 +90,25 @@ export default function ProvidersPage() {
       ]);
 
       if (cancelled) return;
-      if (supRes.ok) setSuppliers(await supRes.json());
-      if (prodRes.ok) setProducts(await prodRes.json());
-      if (ordRes.ok) setOrders(await ordRes.json());
+      const [suppliersData, productsData, ordersData] = await Promise.all([
+        supRes.ok ? supRes.json() : [],
+        prodRes.ok ? prodRes.json() : [],
+        ordRes.ok ? ordRes.json() : [],
+      ]);
+
+      if (!cancelled) {
+        setSuppliers(suppliersData);
+        setProducts(productsData);
+        setOrders(ordersData);
+
+        if (prefillProductId && productsData.length > 0) {
+          const product = productsData.find((p: ProductOption) => p.id === prefillProductId);
+          if (product) {
+            setPoItems([{ product_id: prefillProductId, quantity: prefillQty, unit_cost: product.cost || 0 }]);
+            setIsPoModalOpen(true);
+          }
+        }
+      }
     })().catch(console.error).finally(() => {
       if (!cancelled) setLoading(false);
     });

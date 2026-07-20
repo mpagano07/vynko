@@ -19,16 +19,24 @@ export async function GET() {
   const auth = await getAuth();
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now);
+  thirtyDaysAgo.setDate(now.getDate() - 30);
+  const sixtyDaysAgo = new Date(now);
+  sixtyDaysAgo.setDate(now.getDate() - 60);
 
-  const [productsData, saleItemsData, salesData] = await Promise.all([
+  const [productsData, saleItemsData, salesData, priorSaleItemsData, priorSalesData] = await Promise.all([
     supabaseAdmin.from('products').select('id, name, stock, min_stock, max_stock, price_cents, cost, category_id').eq('tenant_id', auth.tenantId),
     supabaseAdmin.from('sale_items').select(`
       product_id, quantity,
       sales!inner(tenant_id, created_at)
     `).eq('sales.tenant_id', auth.tenantId).gte('sales.created_at', thirtyDaysAgo.toISOString()),
     supabaseAdmin.from('sales').select('created_at, total_cents').eq('tenant_id', auth.tenantId).gte('created_at', thirtyDaysAgo.toISOString()),
+    supabaseAdmin.from('sale_items').select(`
+      product_id, quantity,
+      sales!inner(tenant_id, created_at)
+    `).eq('sales.tenant_id', auth.tenantId).gte('sales.created_at', sixtyDaysAgo.toISOString()).lt('sales.created_at', thirtyDaysAgo.toISOString()),
+    supabaseAdmin.from('sales').select('created_at, total_cents').eq('tenant_id', auth.tenantId).gte('sales.created_at', sixtyDaysAgo.toISOString()).lt('sales.created_at', thirtyDaysAgo.toISOString()),
   ]);
 
   const productMap = new Map((productsData.data || []).map((p: any) => [p.id, p]));
@@ -83,6 +91,34 @@ export async function GET() {
   const topProducts = predictions.slice(0, 5) as any[];
   const needsReorder = predictions.filter((p: any) => p.needsReorder) as any[];
 
+  // Prior period (30-60 days ago) computation
+  const priorDailySales = new Map<string, number>();
+  for (const item of (priorSaleItemsData.data || []) as any[]) {
+    const pid = item.product_id;
+    if (!pid) continue;
+    priorDailySales.set(pid, (priorDailySales.get(pid) || 0) + (item.quantity || 0));
+  }
+  const priorTotalSales = (priorSalesData.data || []).reduce((sum: number, s: any) => sum + ((s.total_cents || 0) / 100), 0);
+  const priorTransactions = (priorSalesData.data || []).length;
+  const priorProductsWithSales = priorDailySales.size;
+
+  // Prior period reorder count (recompute with same logic)
+  const priorNeedsReorderCount = Array.from(priorDailySales.entries()).filter(([productId, totalQty]) => {
+    const product = productMap.get(productId) as any;
+    if (!product) return false;
+    const avgDaily = totalQty / 30;
+    const projectedMonthly = Math.round(avgDaily * 30);
+    const stock = product.stock ?? 0;
+    const minStock = product.min_stock ?? 0;
+    return stock <= projectedMonthly * 0.5 || stock <= minStock;
+  }).length;
+
+  function trendPct(current: number, prior: number): number | null {
+    if (prior === 0 && current === 0) return null;
+    if (prior === 0) return 100;
+    return Math.round(((current - prior) / prior) * 100);
+  }
+
   let aiAnalysis = null;
   const apiKey = process.env.GOOGLE_AI_API_KEY;
   if (apiKey && apiKey !== 'YOUR_GOOGLE_AI_API_KEY') {
@@ -118,6 +154,12 @@ Dame un análisis breve (3-4 oraciones) en español destacando tendencias y reco
       totalSales30,
       totalTransactions30: totalTransactions,
       needsReorderCount: needsReorder.length,
+    },
+    trends: {
+      totalSales: trendPct(totalSales30, priorTotalSales),
+      transactions: trendPct(totalTransactions, priorTransactions),
+      productsWithSales: trendPct(predictions.length, priorProductsWithSales),
+      needsReorder: trendPct(needsReorder.length, priorNeedsReorderCount),
     },
     aiAnalysis,
   });
