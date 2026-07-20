@@ -36,8 +36,8 @@ export default function ProvidersPage() {
   const { tenant } = useAuth();
   const tenantId = tenant?.id ?? null;
   const searchParams = useSearchParams();
-  const prefillProductId = searchParams.get('productId');
-  const prefillQty = Number(searchParams.get('qty')) || 1;
+  const prefillProductId = searchParams?.get('productId') ?? null;
+  const prefillQty = Number(searchParams?.get('qty')) || 1;
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
