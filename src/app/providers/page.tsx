@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -35,9 +34,6 @@ interface ProductOption {
 export default function ProvidersPage() {
   const { tenant } = useAuth();
   const tenantId = tenant?.id ?? null;
-  const searchParams = useSearchParams();
-  const prefillProductId = searchParams?.get('productId') ?? null;
-  const prefillQty = Number(searchParams?.get('qty')) || 1;
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
@@ -101,10 +97,13 @@ export default function ProvidersPage() {
         setProducts(productsData);
         setOrders(ordersData);
 
-        if (prefillProductId && productsData.length > 0) {
-          const product = productsData.find((p: ProductOption) => p.id === prefillProductId);
+        const params = new URLSearchParams(window.location.search);
+        const pid = params.get('productId');
+        const qty = Number(params.get('qty')) || 1;
+        if (pid && productsData.length > 0) {
+          const product = productsData.find((p: ProductOption) => p.id === pid);
           if (product) {
-            setPoItems([{ product_id: prefillProductId, quantity: prefillQty, unit_cost: product.cost || 0 }]);
+            setPoItems([{ product_id: pid, quantity: qty, unit_cost: product.cost || 0 }]);
             setIsPoModalOpen(true);
           }
         }
