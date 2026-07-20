@@ -701,7 +701,7 @@ export default function ProductsPage() {
                   ) : (
                     <Button
                       key={p}
-                      variant={currentPage === p ? 'default' : 'outline'}
+                      variant={currentPage === p ? 'primary' : 'outline'}
                       size="sm"
                       onClick={() => setCurrentPage(p)}
                       className="min-w-[28px] px-1"

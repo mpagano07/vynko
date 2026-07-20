@@ -517,7 +517,7 @@ export default function ForecastPage() {
                   ) : (
                     <Button
                       key={p}
-                      variant={page === p ? 'default' : 'outline'}
+                      variant={page === p ? 'primary' : 'outline'}
                       size="sm"
                       onClick={() => setPage(p)}
                       className="min-w-[28px] px-1"
