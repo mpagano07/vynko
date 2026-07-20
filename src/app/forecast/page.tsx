@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Loader2, TrendingUp, TrendingDown, AlertTriangle, Package, DollarSign, BarChart3, Sparkles, Lightbulb, ShieldCheck, Filter, ExternalLink } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -46,6 +47,8 @@ export default function ForecastPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterTab, setFilterTab] = useState<'todos' | 'riesgo' | 'alta' | 'sin'>('todos');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   useEffect(() => {
     (async () => {
@@ -132,6 +135,12 @@ export default function ForecastPage() {
     if (filterTab === 'sin') return p.totalSoldLast30 === 0 || p.activeDays <= 3;
     return true;
   });
+
+  const isPaginated = filterTab === 'todos' && filteredPredictions.length > PAGE_SIZE;
+  const totalPages = isPaginated ? Math.ceil(filteredPredictions.length / PAGE_SIZE) : 1;
+  const displayedPredictions = isPaginated
+    ? filteredPredictions.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+    : filteredPredictions;
 
   function TrendBadge({ value }: { value: number | null }) {
     if (value === null) return null;
@@ -414,7 +423,7 @@ export default function ForecastPage() {
             ] as const).map((tab) => (
               <button
                 key={tab.key}
-                onClick={() => setFilterTab(tab.key)}
+                onClick={() => { setFilterTab(tab.key); setPage(1); }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                   filterTab === tab.key
                     ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'
@@ -444,7 +453,7 @@ export default function ForecastPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
-                {filteredPredictions.map((p) => (
+                {displayedPredictions.map((p) => (
                   <tr key={p.productId} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
                     <td className="py-3 px-6 font-medium text-gray-900 dark:text-gray-100">{p.productName}</td>
                     <td className="py-3 px-6 text-center">
@@ -479,6 +488,53 @@ export default function ForecastPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        {isPaginated && totalPages > 1 && (
+          <div className="px-6 py-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between">
+            <p className="text-xs text-gray-500">
+              Mostrando {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filteredPredictions.length)} de {filteredPredictions.length}
+            </p>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page === 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Anterior
+              </Button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
+                .reduce<(number | '...')[]>((acc, p, i, arr) => {
+                  if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push('...');
+                  acc.push(p);
+                  return acc;
+                }, [])
+                .map((p, i) =>
+                  p === '...' ? (
+                    <span key={`dots-${i}`} className="px-1 text-gray-400 text-xs">…</span>
+                  ) : (
+                    <Button
+                      key={p}
+                      variant={page === p ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setPage(p)}
+                      className="min-w-[28px] px-1"
+                    >
+                      {p}
+                    </Button>
+                  )
+                )}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page === totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Siguiente
+              </Button>
+            </div>
           </div>
         )}
       </Card>

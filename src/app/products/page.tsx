@@ -679,7 +679,7 @@ export default function ProductsPage() {
             <span className="text-xs text-gray-500">
               Página <strong>{currentPage}</strong> de <strong>{totalPages}</strong>
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <Button
                 variant="outline"
                 size="sm"
@@ -688,6 +688,28 @@ export default function ProductsPage() {
               >
                 Anterior
               </Button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                .reduce<(number | '...')[]>((acc, p, i, arr) => {
+                  if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push('...');
+                  acc.push(p);
+                  return acc;
+                }, [])
+                .map((p, i) =>
+                  p === '...' ? (
+                    <span key={`dots-${i}`} className="px-1 text-gray-400 text-xs">…</span>
+                  ) : (
+                    <Button
+                      key={p}
+                      variant={currentPage === p ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setCurrentPage(p)}
+                      className="min-w-[28px] px-1"
+                    >
+                      {p}
+                    </Button>
+                  )
+                )}
               <Button
                 variant="outline"
                 size="sm"
