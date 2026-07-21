@@ -1,6 +1,7 @@
 import './globals.css';
 import React from 'react';
 import { ClientLayoutWrapper } from '@/components/layout/ClientLayoutWrapper';
+import { AuthProvider } from '@/lib/contexts/auth-context';
 
 import type { Metadata, Viewport } from 'next';
 
@@ -31,9 +32,11 @@ export default function RootLayout({
     <html lang="es">
       <head />
       <body className="min-h-screen bg-gray-50 antialiased dark:bg-gray-950 font-sans">
-        <ClientLayoutWrapper>
-          {children}
-        </ClientLayoutWrapper>
+        <AuthProvider>
+          <ClientLayoutWrapper>
+            {children}
+          </ClientLayoutWrapper>
+        </AuthProvider>
       </body>
     </html>
   );

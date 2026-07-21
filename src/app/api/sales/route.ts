@@ -3,22 +3,32 @@ import { createServerSupabaseClient } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
 
-async function getAuthenticatedUser(): Promise<{ tenantId: string; userId: string } | null> {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
+async function getAuthenticatedUser(request?: Request): Promise<{ tenantId: string; userId: string } | null> {
+  let userId: string | null = null;
+  const authHeader = request?.headers.get('authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.replace('Bearer ', '');
+    const { data: userData } = await supabaseAdmin.auth.getUser(token);
+    userId = userData?.user?.id || null;
+  }
+  if (!userId) {
+    const supabase = await createServerSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    userId = user?.id || null;
+  }
+  if (!userId) return null;
 
   const { data: tu } = await supabaseAdmin
     .from('tenant_users')
     .select('tenant_id')
-    .eq('user_id', user.id);
+    .eq('user_id', userId);
 
   if (!tu || tu.length === 0) return null;
-  return { tenantId: tu[0].tenant_id as string, userId: user.id };
+  return { tenantId: tu[0].tenant_id as string, userId };
 }
 
 export async function GET(request: Request) {
-  const auth = await getAuthenticatedUser();
+  const auth = await getAuthenticatedUser(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
@@ -75,7 +85,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const auth = await getAuthenticatedUser();
+  const auth = await getAuthenticatedUser(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   try {

@@ -107,6 +107,7 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked }: { onNavClic
               <Link
                 key={item.name}
                 href={item.href}
+                prefetch={false}
                 onClick={onNavClick}
                 className={cn(
                   'flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors',
@@ -165,6 +166,7 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked }: { onNavClic
                 <Link
                   key={item.name}
                   href={item.href}
+                  prefetch={false}
                   onClick={onNavClick}
                   className={cn(
                     'flex items-center justify-between rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
@@ -201,7 +203,7 @@ export function Sidebar() {
 
   if (loading) {
     return (
-      <aside className="flex flex-col w-64 h-screen bg-gray-900 text-white p-4">
+      <aside className="hidden md:flex flex-col w-64 h-screen bg-gray-900 text-white p-4 border-r border-gray-800">
         <div className="mb-8 text-2xl font-bold text-blue-400">Vynko</div>
         <div className="animate-pulse space-y-4">
           <div className="h-8 bg-gray-700 rounded" />
@@ -255,7 +257,7 @@ export function Sidebar() {
       >
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-2xl font-bold text-blue-400">Vynko</h1>
-          <button onClick={close} className="p-1 rounded-md hover:bg-gray-800 text-gray-400">
+          <button onClick={close} aria-label="Cerrar menú" className="p-1 rounded-md hover:bg-gray-800 text-gray-400">
             <X className="h-5 w-5" />
           </button>
         </div>

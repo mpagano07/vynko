@@ -74,8 +74,8 @@ export default function SalesChart() {
           Sin ventas en este período.
         </div>
       ) : (
-        <div className="h-24">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="h-24 w-full">
+          <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={96}>
             <BarChart data={data} margin={{ top: 4, right: 12, left: -10, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
               <XAxis dataKey="day" tick={{ fontSize: 10 }} stroke="#d1d5db" axisLine={false} tickLine={false} />

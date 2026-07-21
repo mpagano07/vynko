@@ -29,6 +29,7 @@ export function Header() {
       <div className="flex items-center space-x-2">
         <button
           onClick={toggleSidebar}
+          aria-label="Abrir menú de navegación"
           className="md:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
         >
           <Menu className="h-5 w-5 text-gray-500 dark:text-gray-400" />
@@ -40,6 +41,7 @@ export function Header() {
           <div className="relative">
             <button
               onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+              aria-label="Menú de usuario"
               className="flex items-center space-x-2 rounded-lg p-2 hover:bg-gray-100 dark:hover:bg-gray-800"
             >
               <div className="w-8 h-8 bg-blue-500 dark:bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold">

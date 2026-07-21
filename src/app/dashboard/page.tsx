@@ -26,14 +26,6 @@ interface MonthlyData {
   avgTicket: number;
 }
 
-function timeAgo(dateStr: string): string {
-  const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (diff < 60) return 'ahora';
-  if (diff < 3600) return `hace ${Math.floor(diff / 60)}m`;
-  if (diff < 86400) return `hace ${Math.floor(diff / 3600)}h`;
-  return `hace ${Math.floor(diff / 86400)}d`;
-}
-
 export default function DashboardPage() {
   const router = useRouter();
   const { profile, tenant, loading: authLoading, isAuthenticated } = useAuth();
@@ -98,21 +90,9 @@ export default function DashboardPage() {
     if (!authLoading && !isAuthenticated) router.push('/login');
   }, [authLoading, isAuthenticated, router]);
 
-  if (authLoading || productsLoading) {
-    return (
-      <div className="space-y-6 max-w-5xl">
-        <div className="h-7 bg-gray-200 dark:bg-gray-800 rounded w-48 animate-pulse" />
-        <div className="h-10 bg-gray-200 dark:bg-gray-800 rounded w-full animate-pulse" />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => (
-            <Card key={i} className="h-24 bg-gray-100 dark:bg-gray-800 animate-pulse" />
-          ))}
-        </div>
-      </div>
-    );
-  }
+  if (!isAuthenticated && !authLoading) return null;
 
-  if (!isAuthenticated) return null;
+  const isLoading = authLoading || productsLoading;
 
   const criticalCount = criticalProducts.length;
   const todaySalesCount = salesData?.saleCount ?? 0;
@@ -121,7 +101,11 @@ export default function DashboardPage() {
   let statusMessage = '';
   let statusIcon = '';
   let statusColor = '';
-  if (!hasSalesToday) {
+  if (isLoading) {
+    statusIcon = '⚪';
+    statusMessage = 'Cargando estado del negocio...';
+    statusColor = 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800';
+  } else if (!hasSalesToday) {
     statusIcon = '🔴';
     statusMessage = 'Hoy todavía no registraste ventas.';
     statusColor = 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/30';
@@ -138,7 +122,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6 max-w-5xl">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 min-h-[48px]">
         <div>
           <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
             Hola, {profile?.full_name?.split(' ')[0] || 'Usuario'} 👋
@@ -148,19 +132,19 @@ export default function DashboardPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/sales">
+          <Link href="/sales" prefetch={false}>
             <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5 h-8 px-3 text-sm font-medium">
               <Plus className="h-3.5 w-3.5" />
               Nueva venta
             </Button>
           </Link>
-          <Link href="/products" className="hidden sm:inline-flex">
+          <Link href="/products" prefetch={false} className="hidden sm:inline-flex">
             <Button size="sm" variant="outline" className="gap-1.5 h-8 px-3 text-sm font-medium">
               <Package className="h-3.5 w-3.5" />
               Nuevo producto
             </Button>
           </Link>
-          <Link href="/providers" className="hidden sm:inline-flex">
+          <Link href="/providers" prefetch={false} className="hidden sm:inline-flex">
             <Button size="sm" variant="outline" className="gap-1.5 h-8 px-3 text-sm font-medium">
               <ShoppingCart className="h-3.5 w-3.5" />
               Nueva compra
@@ -172,13 +156,14 @@ export default function DashboardPage() {
       {/* Status band */}
       <Link
         href={criticalCount > 0 ? '/products' : !hasSalesToday ? '/sales' : '#'}
+        prefetch={false}
         className={`flex items-center justify-between px-4 py-2.5 rounded-lg border text-sm transition-opacity hover:opacity-80 ${statusColor}`}
       >
         <div className="flex items-center gap-2">
           <span>{statusIcon}</span>
           <span className="font-medium text-gray-800 dark:text-gray-200">{statusMessage}</span>
         </div>
-        {(criticalCount > 0 || !hasSalesToday) && (
+        {!isLoading && (criticalCount > 0 || !hasSalesToday) && (
           <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400 whitespace-nowrap ml-4">
             Ver detalle →
           </span>
@@ -187,25 +172,31 @@ export default function DashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-2 mb-2">
+        <Card className="p-4 h-[104px] flex flex-col justify-between">
+          <div className="flex items-center gap-2">
             <div className="p-1 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">
               <TrendingUp className="h-3.5 w-3.5" />
             </div>
             <span className="text-xs text-gray-500 dark:text-gray-400">Ventas hoy</span>
           </div>
-          <p className="text-xl font-bold text-gray-900 dark:text-white">
-            ${salesData ? (salesData.todayTotal / 100).toFixed(2) : '0.00'}
-          </p>
-          <p className="text-[11px] text-gray-400 mt-0.5">
-            {hasSalesToday ? `${todaySalesCount} venta${todaySalesCount !== 1 ? 's' : ''}` : 'Sin ventas'}
-          </p>
+          {isLoading ? (
+            <div className="h-6 w-20 bg-gray-200 dark:bg-gray-800 animate-pulse rounded" />
+          ) : (
+            <>
+              <p className="text-xl font-bold text-gray-900 dark:text-white">
+                ${salesData ? (salesData.todayTotal / 100).toFixed(2) : '0.00'}
+              </p>
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                {hasSalesToday ? `${todaySalesCount} venta${todaySalesCount !== 1 ? 's' : ''}` : 'Sin ventas'}
+              </p>
+            </>
+          )}
         </Card>
 
-        <Card className="p-4">
-          <div className="flex items-center justify-between mb-2">
+        <Card className="p-4 h-[104px] flex flex-col justify-between">
+          <div className="flex items-center justify-between">
             <span className="text-xs text-gray-500 dark:text-gray-400">Ingresos del mes</span>
-            {monthlyData?.variationPercent !== null && monthlyData?.variationPercent !== undefined && (
+            {!isLoading && monthlyData?.variationPercent !== null && monthlyData?.variationPercent !== undefined && (
               <span className={`flex items-center gap-0.5 text-[11px] font-semibold ${
                 monthlyData.variationPercent > 0 ? 'text-emerald-600 dark:text-emerald-400'
                 : monthlyData.variationPercent < 0 ? 'text-rose-600 dark:text-rose-400'
@@ -218,34 +209,50 @@ export default function DashboardPage() {
               </span>
             )}
           </div>
-          <p className="text-xl font-bold text-gray-900 dark:text-white">
-            ${monthlyData ? monthlyData.total.toFixed(2) : '0.00'}
-          </p>
-          <p className="text-[11px] text-gray-400 mt-0.5">
-            Ticket promedio: ${monthlyData?.avgTicket?.toFixed(2) ?? '0.00'}
-          </p>
+          {isLoading ? (
+            <div className="h-6 w-24 bg-gray-200 dark:bg-gray-800 animate-pulse rounded" />
+          ) : (
+            <>
+              <p className="text-xl font-bold text-gray-900 dark:text-white">
+                ${monthlyData ? monthlyData.total.toFixed(2) : '0.00'}
+              </p>
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                Ticket promedio: ${monthlyData?.avgTicket?.toFixed(2) ?? '0.00'}
+              </p>
+            </>
+          )}
         </Card>
 
-        <Card className="p-4">
+        <Card className="p-4 h-[104px] flex flex-col justify-between">
           <span className="text-xs text-gray-500 dark:text-gray-400">Stock crítico</span>
-          <p className={`text-xl font-bold mt-2 ${criticalCount > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-gray-900 dark:text-white'}`}>
-            {criticalCount}
-          </p>
-          <p className="text-[11px] text-gray-400 mt-0.5">
-            {criticalCount > 0 ? 'productos por reponer' : 'todo en orden'}
-          </p>
+          {isLoading ? (
+            <div className="h-6 w-12 bg-gray-200 dark:bg-gray-800 animate-pulse rounded" />
+          ) : (
+            <>
+              <p className={`text-xl font-bold ${criticalCount > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-gray-900 dark:text-white'}`}>
+                {criticalCount}
+              </p>
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                {criticalCount > 0 ? 'productos por reponer' : 'todo en orden'}
+              </p>
+            </>
+          )}
         </Card>
 
-        <Card className="p-4">
+        <Card className="p-4 h-[104px] flex flex-col justify-between">
           <span className="text-xs text-gray-500 dark:text-gray-400">Estado</span>
-          <div className="mt-2">
-            <p className="text-sm font-medium text-gray-900 dark:text-white leading-snug">
-              {!hasSalesToday ? 'Sin ventas hoy' : criticalCount > 0 ? 'Stock bajo' : 'Todo OK'}
-            </p>
-            <p className="text-[11px] text-gray-400 mt-0.5">
-              {!hasSalesToday ? 'Registra tu primera venta' : criticalCount > 0 ? 'Reponé stock pronto' : 'Negocio funcionando'}
-            </p>
-          </div>
+          {isLoading ? (
+            <div className="h-6 w-16 bg-gray-200 dark:bg-gray-800 animate-pulse rounded" />
+          ) : (
+            <div>
+              <p className="text-sm font-medium text-gray-900 dark:text-white leading-snug">
+                {!hasSalesToday ? 'Sin ventas hoy' : criticalCount > 0 ? 'Stock bajo' : 'Todo OK'}
+              </p>
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                {!hasSalesToday ? 'Registra tu primera venta' : criticalCount > 0 ? 'Reponé stock pronto' : 'Negocio funcionando'}
+              </p>
+            </div>
+          )}
         </Card>
       </div>
 
