@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { BarcodeScanner } from '@/components/scanner/BarcodeScanner';
 import toast from 'react-hot-toast';
 import {
   ShoppingCart,
@@ -21,6 +22,10 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
+  Scan,
+  X,
 } from 'lucide-react';
 import type { Customer } from '@/lib/types/sale';
 
@@ -64,6 +69,18 @@ export default function SalesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSalesList, setShowSalesList] = useState(false);
   const [productSearch, setProductSearch] = useState('');
+  const [productPage, setProductPage] = useState(1);
+  const PRODUCTS_PER_PAGE = 12;
+  const [flyAnim, setFlyAnim] = useState<{
+    id: string;
+    name: string;
+    fromX: number;
+    fromY: number;
+    toX: number;
+    toY: number;
+  } | null>(null);
+  const cartRef = useRef<HTMLDivElement>(null);
+  const [showScanner, setShowScanner] = useState(false);
 
   useEffect(() => {
     if (!tenantId) return;
@@ -101,6 +118,12 @@ export default function SalesPage() {
       (p.sku && p.sku.toLowerCase().includes(productSearch.toLowerCase()))
   );
 
+  const totalProductPages = Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE);
+  const paginatedProducts = filteredProducts.slice(
+    (productPage - 1) * PRODUCTS_PER_PAGE,
+    productPage * PRODUCTS_PER_PAGE
+  );
+
   const addToCart = (product: ProductOption) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.product_id === product.id);
@@ -135,6 +158,51 @@ export default function SalesPage() {
         },
       ];
     });
+  };
+
+  const handleAddToCart = (product: ProductOption, e: React.MouseEvent<HTMLButtonElement>) => {
+    const btn = e.currentTarget;
+    const btnRect = btn.getBoundingClientRect();
+    const cartEl = cartRef.current;
+    const cartRect = cartEl?.getBoundingClientRect();
+
+    if (cartRect) {
+      setFlyAnim({
+        id: product.id,
+        name: product.name,
+        fromX: btnRect.left + btnRect.width / 2,
+        fromY: btnRect.top + btnRect.height / 2,
+        toX: cartRect.left + cartRect.width / 2,
+        toY: cartRect.top + cartRect.height / 2,
+      });
+      setTimeout(() => setFlyAnim(null), 600);
+    }
+
+    addToCart(product);
+  };
+
+  const handleScanBarcode = async (code: string) => {
+    try {
+      const res = await fetch(`/api/products/barcode/${encodeURIComponent(code)}`);
+      const data = await res.json();
+      if (data.product) {
+        const p = data.product;
+        const productOption: ProductOption = {
+          id: p.id,
+          name: p.name,
+          price: p.price,
+          stock: p.stock ?? 0,
+          barcode: p.barcode,
+          sku: p.sku,
+        };
+        addToCart(productOption);
+        toast.success(`"${p.name}" agregado al carrito`);
+      } else {
+        toast.error(`Código "${code}" no encontrado en productos`);
+      }
+    } catch {
+      toast.error('Error al buscar el producto escaneado');
+    }
   };
 
   const updateQuantity = (productId: string, delta: number) => {
@@ -222,7 +290,40 @@ export default function SalesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {flyAnim && (
+        <div
+          className="fixed z-[9999] pointer-events-none"
+          style={{
+            left: flyAnim.fromX,
+            top: flyAnim.fromY,
+            transform: 'translate(-50%, -50%)',
+            animation: 'flyToCart 0.55s cubic-bezier(0.2,1,0.3,1) forwards',
+            '--fly-dx': `${flyAnim.toX - flyAnim.fromX}px`,
+            '--fly-dy': `${flyAnim.toY - flyAnim.fromY}px`,
+          } as React.CSSProperties}
+        >
+          <div className="bg-indigo-600 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg whitespace-nowrap">
+            {flyAnim.name}
+          </div>
+        </div>
+      )}
+      <style>{`
+        @keyframes flyToCart {
+          0% {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+          }
+          70% {
+            opacity: 0.8;
+            transform: translate(calc(-50% + var(--fly-dx) * 0.85), calc(-50% + var(--fly-dy) * 0.85)) scale(0.5);
+          }
+          100% {
+            opacity: 0;
+            transform: translate(calc(-50% + var(--fly-dx)), calc(-50% + var(--fly-dy))) scale(0.15);
+          }
+        }
+      `}</style>
       <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
           <ShoppingCart className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
@@ -236,15 +337,25 @@ export default function SalesPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
           <Card className="p-4 border border-gray-100 dark:border-gray-800">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-              <Input
-                type="text"
-                placeholder="Buscar producto por nombre, SKU o código de barras..."
-                value={productSearch}
-                onChange={(e) => setProductSearch(e.target.value)}
-                className="pl-9"
-              />
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Input
+                  type="text"
+                  placeholder="Buscar producto por nombre, SKU o código de barras..."
+                  value={productSearch}
+                  onChange={(e) => { setProductSearch(e.target.value); setProductPage(1); }}
+                  className="pl-9"
+                />
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => setShowScanner(true)}
+                className="flex items-center gap-1.5 shrink-0"
+              >
+                <Scan className="h-4 w-4" />
+                Scanner
+              </Button>
             </div>
           </Card>
 
@@ -258,21 +369,37 @@ export default function SalesPage() {
               <p className="text-gray-500">No se encontraron productos</p>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {filteredProducts.map((product) => (
-                <button
-                  key={product.id}
-                  onClick={() => addToCart(product)}
-                  disabled={product.stock <= 0}
-                  className={`text-left p-4 rounded-lg border transition-all ${
-                    product.stock <= 0
-                      ? 'border-gray-200 dark:border-gray-700 opacity-50 cursor-not-allowed'
-                      : 'border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-600 hover:shadow-sm bg-white dark:bg-gray-900'
-                  }`}
-                >
-                  <div className="font-semibold text-gray-900 dark:text-gray-100 text-sm">
-                    {product.name}
-                  </div>
+            <>
+              <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 px-1">
+                <span>
+                  Mostrando {((productPage - 1) * PRODUCTS_PER_PAGE) + 1}–{Math.min(productPage * PRODUCTS_PER_PAGE, filteredProducts.length)} de {filteredProducts.length} productos
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {paginatedProducts.map((product) => {
+                const inCart = cart.some((item) => item.product_id === product.id);
+                return (
+                  <button
+                    key={product.id}
+                    onClick={(e) => handleAddToCart(product, e)}
+                    disabled={product.stock <= 0}
+                    className={`relative text-left p-4 rounded-lg border transition-all ${
+                      product.stock <= 0
+                        ? 'border-gray-200 dark:border-gray-700 opacity-50 cursor-not-allowed'
+                        : inCart
+                          ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20 shadow-sm'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-600 hover:shadow-sm bg-white dark:bg-gray-900'
+                    }`}
+                  >
+                    {inCart && (
+                      <div className="absolute top-2 right-2 flex items-center gap-1 bg-green-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                        <Check className="h-2.5 w-2.5" />
+                        Agregado
+                      </div>
+                    )}
+                    <div className="font-semibold text-gray-900 dark:text-gray-100 text-sm">
+                      {product.name}
+                    </div>
                   <div className="flex items-center justify-between mt-1">
                     <span className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
                       ${product.price}
@@ -287,34 +414,85 @@ export default function SalesPage() {
                     </div>
                   )}
                 </button>
-              ))}
-            </div>
+              );
+              })}
+              </div>
+              {totalProductPages > 1 && (
+                <div className="flex items-center justify-between pt-2">
+                  <button
+                    onClick={() => setProductPage((p) => Math.max(1, p - 1))}
+                    disabled={productPage === 1}
+                    className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Anterior
+                  </button>
+                  <span className="text-xs text-gray-400">
+                    Página {productPage} de {totalProductPages}
+                  </span>
+                  <button
+                    onClick={() => setProductPage((p) => Math.min(totalProductPages, p + 1))}
+                    disabled={productPage === totalProductPages}
+                    className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Siguiente
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
 
         <div className="space-y-4">
-          <Card className="p-4 border border-gray-100 dark:border-gray-800">
+          <Card ref={cartRef} className="p-4 border border-gray-100 dark:border-gray-800">
             <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 mb-4">
               <Receipt className="h-5 w-5 text-indigo-600" />
               Carrito
               {cart.length > 0 && (
-                <span className="ml-auto text-sm font-normal text-gray-500">
-                  {cart.length} items
+                <span className="ml-auto text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/40 px-2 py-0.5 rounded-full">
+                  {cart.length} productos
                 </span>
               )}
             </h2>
 
+            <div className="mb-4">
+              <div className="flex items-center gap-2">
+                <User className="h-4 w-4 text-gray-400" />
+                <Select
+                  value={selectedCustomerId}
+                  onChange={(e) => setSelectedCustomerId(e.target.value)}
+                  className="flex-1"
+                >
+                  <option value="">Cliente general (mostrador)</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            </div>
+
             {cart.length === 0 ? (
-              <div className="text-center py-8 text-gray-400 text-sm">
-                <ShoppingCart className="h-10 w-10 mx-auto mb-2 opacity-50" />
-                Carrito vacío
+              <div className="text-center py-10 text-gray-400 text-sm">
+                <ShoppingCart className="h-12 w-12 mx-auto mb-3 text-indigo-300 dark:text-indigo-600" />
+                <p className="font-medium text-gray-500 dark:text-gray-400">
+                  Buscá un producto
+                </p>
+                <p className="text-gray-400 dark:text-gray-500">
+                  o escaneá un código
+                </p>
+                <p className="text-gray-400 dark:text-gray-500">
+                  para comenzar una venta.
+                </p>
               </div>
             ) : (
               <div className="space-y-2 max-h-80 overflow-y-auto">
                 {cart.map((item) => (
                   <div
                     key={item.product_id}
-                    className="flex items-center justify-between p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50"
+                    className="flex items-center justify-between p-2 rounded-lg bg-gray-100 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700"
                   >
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
@@ -327,7 +505,7 @@ export default function SalesPage() {
                     <div className="flex items-center gap-1 ml-2">
                       <button
                         onClick={() => updateQuantity(item.product_id, -1)}
-                        className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700"
+                        className="p-2 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700"
                       >
                         <Minus className="h-3 w-3" />
                       </button>
@@ -336,13 +514,13 @@ export default function SalesPage() {
                       </span>
                       <button
                         onClick={() => updateQuantity(item.product_id, 1)}
-                        className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700"
+                        className="p-2 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700"
                       >
                         <Plus className="h-3 w-3" />
                       </button>
                       <button
                         onClick={() => removeFromCart(item.product_id)}
-                        className="p-1 rounded text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 ml-1"
+                        className="p-2 rounded text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 ml-1"
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>
@@ -355,22 +533,6 @@ export default function SalesPage() {
             {cart.length > 0 && (
               <>
                 <div className="border-t border-gray-100 dark:border-gray-800 mt-4 pt-4 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-gray-400" />
-                    <Select
-                      value={selectedCustomerId}
-                      onChange={(e) => setSelectedCustomerId(e.target.value)}
-                      className="flex-1"
-                    >
-                      <option value="">Cliente general (mostrador)</option>
-                      {customers.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-
                   <textarea
                     className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                     rows={2}
@@ -399,7 +561,7 @@ export default function SalesPage() {
                     ) : (
                       <>
                         <Check className="h-4 w-4" />
-                        Cobrar ${total.toFixed(2)}
+                        Finalizar venta
                       </>
                     )}
                   </Button>
@@ -481,6 +643,35 @@ export default function SalesPage() {
           </div>
         )}
       </Card>
+
+      {showScanner && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-800">
+              <h3 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <Scan className="h-5 w-5 text-indigo-600" />
+                Escanear producto
+              </h3>
+              <button
+                onClick={() => setShowScanner(false)}
+                className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4">
+              <BarcodeScanner
+                onResult={handleScanBarcode}
+                onError={(err) => toast.error(err)}
+                className="aspect-[4/3] w-full"
+              />
+              <p className="text-xs text-gray-400 text-center mt-3">
+                Apunta la cámara al código de barras del producto
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
