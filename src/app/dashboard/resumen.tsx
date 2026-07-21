@@ -62,7 +62,7 @@ export default function DashboardResumen({ tenantId }: { tenantId: string }) {
         ) : (
           <>
             <div>
-              <p className="text-[11px] text-gray-400">Producto más vendido</p>
+              <p className="text-[11px] text-gray-400">Producto más vendido (90 días)</p>
               <p className="text-xs font-semibold text-gray-900 dark:text-white mt-0.5">
                 {data?.topProduct?.name ?? '—'}
               </p>
@@ -74,7 +74,7 @@ export default function DashboardResumen({ tenantId }: { tenantId: string }) {
               </p>
             </div>
             <div>
-              <p className="text-[11px] text-gray-400">Última compra registrada</p>
+              <p className="text-[11px] text-gray-400">Última venta registrada</p>
               <p className="text-xs font-semibold text-gray-900 dark:text-white mt-0.5">
                 {data?.lastPurchase?.date ? timeAgo(data.lastPurchase.date) : 'Sin compras'}
               </p>

@@ -30,7 +30,7 @@ export async function GET(request: Request) {
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-    const [recentSalesRes, customersRes, purchaseRes, suppliersRes] = await Promise.all([
+    const [recentSalesRes, customersRes, lastSaleRes, suppliersRes] = await Promise.all([
       supabaseAdmin
         .from('sales')
         .select('id')
@@ -47,8 +47,8 @@ export async function GET(request: Request) {
         .order('created_at', { ascending: false })
         .limit(200),
       supabaseAdmin
-        .from('purchase_orders')
-        .select('id, supplier_id, created_at')
+        .from('sales')
+        .select('created_at')
         .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false })
         .limit(1),
@@ -99,8 +99,8 @@ export async function GET(request: Request) {
     }
 
     let lastPurchase: { date: string | null } | null = null;
-    if (purchaseRes.data && purchaseRes.data.length > 0) {
-      lastPurchase = { date: purchaseRes.data[0].created_at as string };
+    if (lastSaleRes.data && lastSaleRes.data.length > 0) {
+      lastPurchase = { date: lastSaleRes.data[0].created_at as string };
     }
 
     let topSupplier: { name: string } | null = null;
