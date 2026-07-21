@@ -30,6 +30,7 @@ import {
   FileSpreadsheet,
   Download,
   Percent,
+  HelpCircle,
 } from 'lucide-react';
 
 export default function ProductsPage() {
@@ -79,6 +80,7 @@ export default function ProductsPage() {
   const [importColumns, setImportColumns] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
   const [importResults, setImportResults] = useState<{ row: number; status: string; name?: string; error?: string }[] | null>(null);
+  const [showColumnInfo, setShowColumnInfo] = useState(false);
 
   // Export State
   const [exporting, setExporting] = useState(false);
@@ -627,6 +629,11 @@ export default function ProductsPage() {
                         <div className="text-sm font-semibold text-green-600 dark:text-green-400 mt-0.5">
                           ${product.price}
                         </div>
+                        {product.cost != null && product.cost > 0 && product.price > 0 && (
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            Margen: <span className="font-medium text-emerald-600 dark:text-emerald-400">+{(((product.price - product.cost) / product.cost) * 100).toFixed(0)}%</span>
+                          </div>
+                        )}
                       </td>
                       <td className="py-4 px-6 text-center">
                         <div className="flex items-center justify-center gap-2">
@@ -642,8 +649,7 @@ export default function ProductsPage() {
                             {product.stock ?? 0}
                           </span>
                           <div className="text-left text-[10px] text-gray-400">
-                            <div>Min: {product.min_stock ?? 0}</div>
-                            <div>Max: {product.max_stock ?? 0}</div>
+                            <div>Ideal: {product.min_stock ?? 0} - {product.max_stock ?? 0}</div>
                           </div>
                         </div>
                       </td>
@@ -753,64 +759,6 @@ export default function ProductsPage() {
                   />
                 </div>
 
-                {/* Image Upload */}
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                    Imagen del Producto
-                  </label>
-                  <div className="flex items-center gap-4">
-                    <div
-                      className="relative w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center overflow-hidden bg-gray-50 dark:bg-gray-800 cursor-pointer hover:border-indigo-400 transition-colors"
-                      onClick={() => document.getElementById('product-image-input')?.click()}
-                    >
-                      {imagePreview ? (
-                        <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-                      ) : (
-                        <ImageIcon className="h-6 w-6 text-gray-400" />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <input
-                        id="product-image-input"
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,image/gif"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            setImageFile(file);
-                            setImagePreview(URL.createObjectURL(file));
-                          }
-                        }}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => document.getElementById('product-image-input')?.click()}
-                      >
-                        <Upload className="h-3.5 w-3.5 mr-1.5" />
-                        {imagePreview ? 'Cambiar imagen' : 'Subir imagen'}
-                      </Button>
-                      <p className="text-[10px] text-gray-400 mt-1">JPG, PNG, WebP o GIF. Máx 5MB.</p>
-                    </div>
-                    {imagePreview && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setImageFile(null);
-                          setImagePreview(null);
-                          setProductForm({ ...productForm, image_url: '' });
-                        }}
-                        className="p-1 text-gray-400 hover:text-red-500 rounded"
-                        title="Eliminar imagen"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                     Categoría
@@ -828,31 +776,32 @@ export default function ProductsPage() {
                   </Select>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                    Código de Barras / GTIN
-                  </label>
-                  <Input
-                    type="text"
-                    placeholder="Ej. 7791234567890"
-                    value={productForm.barcode}
-                    onChange={(e) => setProductForm({ ...productForm, barcode: e.target.value })}
-                  />
+                <div className="grid grid-cols-2 gap-4 sm:col-span-2">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Código de Barras / GTIN
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder="Ej. 7791234567890"
+                      value={productForm.barcode}
+                      onChange={(e) => setProductForm({ ...productForm, barcode: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      SKU
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder="Ej. REF-COCA-1.5"
+                      value={productForm.sku}
+                      onChange={(e) => setProductForm({ ...productForm, sku: e.target.value })}
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                    Código Interno / SKU
-                  </label>
-                  <Input
-                    type="text"
-                    placeholder="Ej. REF-COCA-1.5"
-                    value={productForm.sku}
-                    onChange={(e) => setProductForm({ ...productForm, sku: e.target.value })}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2 sm:col-span-2">
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                       Costo ($)
@@ -867,7 +816,7 @@ export default function ProductsPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                      Precio ($) *
+                      Precio ($)
                     </label>
                     <Input
                       type="number"
@@ -876,6 +825,21 @@ export default function ProductsPage() {
                       placeholder="0.00"
                       value={productForm.price || ''}
                       onChange={(e) => setProductForm({ ...productForm, price: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Margen
+                    </label>
+                    <Input
+                      type="text"
+                      readOnly
+                      className="bg-gray-50 dark:bg-gray-800 cursor-not-allowed text-emerald-600 dark:text-emerald-400 font-medium"
+                      value={
+                        productForm.cost > 0 && productForm.price > 0
+                          ? `+${(((productForm.price - productForm.cost) / productForm.cost) * 100).toFixed(0)}%`
+                          : '—'
+                      }
                     />
                   </div>
                 </div>
@@ -952,14 +916,40 @@ export default function ProductsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
           <Card className="w-full max-w-3xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
             <button
-              onClick={() => { setIsImportModalOpen(false); setImportRows([]); setImportColumns([]); setImportResults(null); }}
+              onClick={() => { setIsImportModalOpen(false); setImportRows([]); setImportColumns([]); setImportResults(null); setShowColumnInfo(false); }}
               className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700"
             >
               <X className="h-5 w-5" />
             </button>
 
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Importar productos desde Excel</h2>
-            <p className="text-sm text-gray-500 mb-6">Subí un archivo .xlsx o .xls con los productos a importar.</p>
+            <div className="flex items-center gap-3 mb-4">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Importar productos desde Excel</h2>
+              <button
+                onClick={() => setShowColumnInfo(!showColumnInfo)}
+                className="p-1.5 rounded-full text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                title="Ver columnas aceptadas"
+              >
+                <HelpCircle className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">Subí un archivo .xlsx o .xls con los productos a importar.</p>
+
+            {showColumnInfo && (
+              <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-6 text-xs text-gray-600 dark:text-gray-400 space-y-1.5">
+                <p className="font-semibold text-gray-700 dark:text-gray-300 mb-2">Columnas del archivo:</p>
+                <div><span className="font-medium text-gray-900 dark:text-gray-100">Nombre *</span> — obligatorio. Ej: <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">Coca Cola 1.5L</code></div>
+                <div><span className="font-medium text-gray-900 dark:text-gray-100">Precio</span> — precio de venta. Ej: <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">1500</code></div>
+                <div><span className="font-medium text-gray-900 dark:text-gray-100">Costo</span> — costo del producto. Ej: <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">800</code></div>
+                <div><span className="font-medium text-gray-900 dark:text-gray-100">SKU</span> — código interno. Ej: <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">REF-COCA-1.5</code></div>
+                <div><span className="font-medium text-gray-900 dark:text-gray-100">Código de barras</span> — GTIN / EAN. Ej: <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">7791234567890</code></div>
+                <div><span className="font-medium text-gray-900 dark:text-gray-100">Stock</span> — cantidad inicial. Ej: <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">50</code></div>
+                <div><span className="font-medium text-gray-900 dark:text-gray-100">Stock mínimo</span> — nivel crítico. Ej: <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">10</code></div>
+                <div><span className="font-medium text-gray-900 dark:text-gray-100">Stock máximo</span> — nivel sugerido. Ej: <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">100</code></div>
+                <div><span className="font-medium text-gray-900 dark:text-gray-100">Categoría</span> — se crea si no existe. Ej: <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">Bebidas</code></div>
+                <div><span className="font-medium text-gray-900 dark:text-gray-100">Descripción</span> — detalle del producto. Ej: <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">Gaseosa sabor cola</code></div>
+                <p className="text-[10px] text-gray-400 dark:text-gray-500 pt-1">Las columnas son opcionales excepto <strong>Nombre</strong>. Podés usar nombres en español o inglés.</p>
+              </div>
+            )}
 
             {importRows.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl">
@@ -1017,7 +1007,7 @@ export default function ProductsPage() {
                   </table>
                 </div>
                 <div className="flex justify-end">
-                  <Button onClick={() => { setIsImportModalOpen(false); setImportRows([]); setImportColumns([]); setImportResults(null); }}>
+                  <Button onClick={() => { setIsImportModalOpen(false); setImportRows([]); setImportColumns([]); setImportResults(null); setShowColumnInfo(false); }}>
                     Cerrar
                   </Button>
                 </div>
@@ -1062,7 +1052,7 @@ export default function ProductsPage() {
                   )}
                 </div>
                 <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">
-                  <Button variant="outline" onClick={() => { setIsImportModalOpen(false); setImportRows([]); setImportColumns([]); setImportResults(null); }}>
+                  <Button variant="outline" onClick={() => { setIsImportModalOpen(false); setImportRows([]); setImportColumns([]); setImportResults(null); setShowColumnInfo(false); }}>
                     Cancelar
                   </Button>
                   <Button onClick={handleImport} disabled={importing}>

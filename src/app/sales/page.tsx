@@ -62,6 +62,9 @@ export default function SalesPage() {
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [sales, setSales] = useState<SaleRecord[]>([]);
+  const [salesTotal, setSalesTotal] = useState(0);
+  const [salesPage, setSalesPage] = useState(1);
+  const SALES_PER_PAGE = 15;
   const [loadingData, setLoadingData] = useState(true);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
@@ -82,6 +85,28 @@ export default function SalesPage() {
   const cartRef = useRef<HTMLDivElement>(null);
   const [showScanner, setShowScanner] = useState(false);
 
+  const fetchSales = async (page: number, headers: Record<string, string>) => {
+    const res = await fetch(`/api/sales?days=15&page=${page}&limit=${SALES_PER_PAGE}`, { headers });
+    if (res.ok) {
+      const d = await res.json();
+      setSales(d.data ?? []);
+      setSalesTotal(d.total ?? 0);
+    }
+  };
+
+  useEffect(() => {
+    if (!tenantId || loadingData) return;
+    let cancelled = false;
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = {};
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+      await fetchSales(salesPage, headers);
+      if (cancelled) return;
+    })();
+    return () => { cancelled = true; };
+  }, [salesPage, tenantId, loadingData]);
+
   useEffect(() => {
     if (!tenantId) return;
     let cancelled = false;
@@ -92,16 +117,16 @@ export default function SalesPage() {
         ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
       };
 
-      const [prodRes, custRes, salesRes] = await Promise.all([
+      const [prodRes, custRes] = await Promise.all([
         fetch('/api/products', { headers }),
         fetch('/api/customers', { headers }),
-        fetch('/api/sales', { headers }),
       ]);
 
       if (cancelled) return;
       if (prodRes.ok) setProducts(await prodRes.json());
       if (custRes.ok) setCustomers(await custRes.json());
-      if (salesRes.ok) setSales(await salesRes.json());
+
+      await fetchSales(salesPage, headers);
     })().catch((err) => {
       console.error('Error loading data:', err);
     }).finally(() => {
@@ -266,14 +291,14 @@ export default function SalesPage() {
       const h2 = {
         ...(s2?.access_token ? { Authorization: `Bearer ${s2.access_token}` } : {}),
       };
-      const [pRes, cRes, sRes] = await Promise.all([
+      const [pRes, cRes] = await Promise.all([
         fetch('/api/products', { headers: h2 }),
         fetch('/api/customers', { headers: h2 }),
-        fetch('/api/sales', { headers: h2 }),
       ]);
       if (pRes.ok) setProducts(await pRes.json());
       if (cRes.ok) setCustomers(await cRes.json());
-      if (sRes.ok) setSales(await sRes.json());
+      setSalesPage(1);
+      await fetchSales(1, h2);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al registrar la venta');
     } finally {
@@ -581,6 +606,7 @@ export default function SalesPage() {
             <Receipt className="h-5 w-5 text-indigo-600" />
             Últimas Ventas
           </h2>
+          <span className="text-xs text-gray-400 dark:text-gray-500 ml-2">Últimos 15 días</span>
           {showSalesList ? (
             <ChevronUp className="h-5 w-5 text-gray-400" />
           ) : (
@@ -599,6 +625,7 @@ export default function SalesPage() {
                 No hay ventas registradas
               </div>
             ) : (
+              <>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
@@ -639,6 +666,35 @@ export default function SalesPage() {
                   </tbody>
                 </table>
               </div>
+              {Math.ceil(salesTotal / SALES_PER_PAGE) > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800">
+                  <span className="text-xs text-gray-400">
+                    Mostrando {((salesPage - 1) * SALES_PER_PAGE) + 1}–{Math.min(salesPage * SALES_PER_PAGE, salesTotal)} de {salesTotal} ventas
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSalesPage((p) => Math.max(1, p - 1))}
+                      disabled={salesPage === 1}
+                      className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Anterior
+                    </button>
+                    <span className="text-xs text-gray-400">
+                      Página {salesPage} de {Math.ceil(salesTotal / SALES_PER_PAGE)}
+                    </span>
+                    <button
+                      onClick={() => setSalesPage((p) => Math.min(Math.ceil(salesTotal / SALES_PER_PAGE), p + 1))}
+                      disabled={salesPage >= Math.ceil(salesTotal / SALES_PER_PAGE)}
+                      className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Siguiente
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+              </>
             )}
           </div>
         )}

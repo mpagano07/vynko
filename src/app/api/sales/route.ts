@@ -50,7 +50,14 @@ export async function GET(request: Request) {
     return NextResponse.json(sales ?? []);
   }
 
-  const { data: sales, error } = await supabaseAdmin
+  const days = searchParams.get('days') ? parseInt(searchParams.get('days')!, 10) : null;
+  const hasPagination = searchParams.has('page') || searchParams.has('limit') || days !== null;
+  const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '15', 10)));
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+
+  let query = supabaseAdmin
     .from('sales')
     .select(`
       *,
@@ -59,9 +66,22 @@ export async function GET(request: Request) {
         product:products(name)
       ),
       customer:customers(name)
-    `)
-    .eq('tenant_id', auth.tenantId)
-    .order('created_at', { ascending: false });
+    `, hasPagination ? { count: 'exact' } : undefined)
+    .eq('tenant_id', auth.tenantId);
+
+  if (days && days > 0) {
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+    query = query.gte('created_at', since.toISOString());
+  }
+
+  query = query.order('created_at', { ascending: false });
+
+  if (hasPagination) {
+    query = query.range(from, to);
+  }
+
+  const { data: sales, error, count } = await query;
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -81,6 +101,9 @@ export async function GET(request: Request) {
     };
   });
 
+  if (hasPagination) {
+    return NextResponse.json({ data: result, total: count ?? 0, page, limit });
+  }
   return NextResponse.json(result);
 }
 
