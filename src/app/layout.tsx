@@ -5,6 +5,8 @@ import { AuthProvider } from '@/lib/contexts/auth-context';
 
 import type { Metadata, Viewport } from 'next';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'Vynko',
   description: 'Plataforma SaaS B2B de gestión de stock y ventas con IA',

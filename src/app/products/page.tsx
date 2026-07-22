@@ -484,7 +484,7 @@ export default function ProductsPage() {
             <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
             <span className="hidden md:inline">Importar</span>
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting} className="flex items-center gap-1.5">
+          <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting} className="flex items-center gap-1.5" title="Exporta solo los productos actualmente filtrados">
             {exporting ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
             ) : (
