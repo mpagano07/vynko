@@ -39,7 +39,7 @@ const navGroups: NavGroup[] = [
       { name: 'Productos', href: '/products', requiredPlan: ALL_PLANS },
       { name: 'Proveedores', href: '/providers', requiredPlan: ALL_PLANS },
       { name: 'Clientes', href: '/customers', requiredPlan: ALL_PLANS },
-      { name: 'Facturación', href: '/facturacion', requiredPlan: ALL_PLANS },
+      { name: 'Documentos', href: '/documentos', requiredPlan: ALL_PLANS },
     ],
   },
   {

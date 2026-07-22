@@ -490,7 +490,7 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                      Punto de Venta (AFIP)
+                      Punto de Venta
                     </label>
                     <Input
                       type="number"

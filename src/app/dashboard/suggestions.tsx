@@ -10,7 +10,7 @@ const SUGGESTIONS = [
   { text: 'Activá códigos QR para que tus productos se escaneen al instante.', cta: 'Activar', href: '/codigos' },
   { text: 'Registrá una compra para mantener el stock siempre actualizado.', cta: 'Registrar', href: '/providers' },
   { text: 'Creá categorías para encontrar tus productos más rápido.', cta: 'Crear', href: '/products' },
-  { text: 'Configurá los impuestos para facturar correctamente.', cta: 'Configurar', href: '/facturacion' },
+  { text: 'Gestioná tus documentos comerciales.', cta: 'Ver', href: '/documentos' },
 ];
 
 export default function Suggestions() {
