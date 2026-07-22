@@ -115,7 +115,7 @@ function BillingContent() {
 
   const currentPlanId = subscription?.plan || 'starter';
 
-  const TRIAL_DAYS = 30;
+  const TRIAL_DAYS = 45;
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const daysUntilRenewal = subscription?.currentPeriodEnd
@@ -155,7 +155,7 @@ function BillingContent() {
             </p>
             <p className="text-sm text-red-600 dark:text-red-400 mt-1">
               {autoBlockedReason === 'trial_expired'
-                ? 'Los 30 días de prueba gratuita terminaron. Seleccioná uno de los planes para seguir usando todas las funcionalidades de Vynko.'
+                ? 'Los 45 días de prueba gratuita terminaron. Seleccioná uno de los planes para seguir usando todas las funcionalidades de Vynko.'
                 : 'No se pudo procesar el pago de tu suscripción. Seleccioná un plan o actualizá tu método de pago para recuperar el acceso.'}
             </p>
           </div>
@@ -283,7 +283,7 @@ function BillingContent() {
             <Card key={id} className={`p-6 relative flex flex-col ${isCurrent ? 'ring-2 ring-indigo-500' : ''} ${isPopular && !isCurrent ? 'border-indigo-200 dark:border-indigo-800' : ''}`}>
               {id === 'starter' && !isCurrent && (
                 <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-[10px] font-semibold bg-indigo-600 text-white px-3 py-0.5 rounded-full">
-                  30 días gratis
+                  45 días gratis
                 </span>
               )}
               {isCurrent && (

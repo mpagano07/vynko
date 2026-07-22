@@ -1,4 +1,4 @@
-const TRIAL_DAYS = 30;
+const TRIAL_DAYS = 45;
 
 export interface TenantSubscription {
   subscription_status?: string | null;
@@ -46,7 +46,7 @@ export function checkSubscriptionBlocked(tenant: TenantSubscription | null): Che
         return {
           blocked: true,
           reason: 'trial_expired',
-          message: 'Tu período de prueba de 30 días finalizó. Seleccioná un plan para seguir usando Vynko.',
+          message: 'Tu período de prueba de 45 días finalizó. Seleccioná un plan para seguir usando Vynko.',
         };
       }
     }

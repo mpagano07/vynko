@@ -23,7 +23,7 @@ export async function GET() {
   const plan = (tenant?.subscription_plan as keyof typeof PLANS) || 'starter';
   const planConfig = PLANS[plan] || PLANS.starter;
 
-  const TRIAL_DAYS = 30;
+  const TRIAL_DAYS = 45;
   const trialEndsAt = tenant?.created_at
     ? new Date(new Date(tenant.created_at).getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString()
     : null;

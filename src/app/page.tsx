@@ -139,7 +139,7 @@ export default function LandingPage() {
                   {waitlistLoading ? 'Enviando...' : waitlistDone ? '¡Registrado!' : 'Comenzar gratis'}
                 </button>
               </form>
-              <p className="mt-3 text-xs text-gray-600">Sin compromiso. 30 días de prueba gratuita.</p>
+              <p className="mt-3 text-xs text-gray-600">Sin compromiso. 45 días de prueba gratuita.</p>
             </div>
 
             {/* Dashboard Preview */}
@@ -309,7 +309,7 @@ export default function LandingPage() {
                 >
                   {isPopular && (
                     <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 bg-cyan-500 text-black text-xs font-bold rounded-full">
-                      30 días de prueba gratis
+                      45 días de prueba gratis
                     </div>
                   )}
                   <h3 className="text-lg font-bold mb-2">{plan.name}</h3>

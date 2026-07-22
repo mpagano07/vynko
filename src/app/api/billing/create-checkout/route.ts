@@ -42,7 +42,7 @@ export async function POST(request: Request) {
       frequency_type: 'months',
       transaction_amount: planConfig.price,
       currency_id: 'ARS',
-      trial_period_days: 30,
+      trial_period_days: 45,
     } as any,
   });
 

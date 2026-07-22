@@ -304,7 +304,7 @@ function TrialCounter({ tenant }: { tenant: any }) {
   const plan = tenant.subscription_plan || 'starter';
   if (plan !== 'starter') return null;
 
-  const TRIAL_DAYS = 30;
+  const TRIAL_DAYS = 45;
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const created = new Date(tenant.created_at);
