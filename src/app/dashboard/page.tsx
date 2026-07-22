@@ -10,6 +10,7 @@ import {
   TrendingUp, Plus, ShoppingCart, Package,
   ArrowUpRight, ArrowDownRight, Minus,
 } from 'lucide-react';
+import { formatARS } from '@/lib/utils/currency';
 import Link from 'next/link';
 import dynamicImport from 'next/dynamic';
 
@@ -184,7 +185,7 @@ export default function DashboardPage() {
           ) : (
             <>
               <p className="text-xl font-bold text-gray-900 dark:text-white">
-                ${salesData ? (salesData.todayTotal / 100).toFixed(2) : '0.00'}
+                {salesData ? formatARS(salesData.todayTotal / 100) : '0.00'}
               </p>
               <p className="text-[11px] text-gray-400 mt-0.5">
                 {hasSalesToday ? `${todaySalesCount} venta${todaySalesCount !== 1 ? 's' : ''}` : 'Sin ventas'}
@@ -214,10 +215,10 @@ export default function DashboardPage() {
           ) : (
             <>
               <p className="text-xl font-bold text-gray-900 dark:text-white">
-                ${monthlyData ? monthlyData.total.toFixed(2) : '0.00'}
+                {monthlyData ? formatARS(monthlyData.total) : '0.00'}
               </p>
               <p className="text-[11px] text-gray-400 mt-0.5">
-                Ticket promedio: ${monthlyData?.avgTicket?.toFixed(2) ?? '0.00'}
+                Ticket promedio: {monthlyData?.avgTicket != null ? formatARS(monthlyData.avgTicket) : '0.00'}
               </p>
             </>
           )}

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { formatARS } from '@/lib/utils/currency';
 
 async function getAuth() {
   const supabase = await createServerSupabaseClient();
@@ -133,7 +134,7 @@ ${topProducts.map((p: any) => `- ${p.productName}: ${p.avgDailySales}/día, ${p.
 Productos que necesitan reposición:
 ${needsReorder.map((p: any) => `- ${p.productName}: stock ${p.currentStock}, venta diaria ${p.avgDailySales}, sugerido: ${p.suggestedOrder}`).join('\n')}
 
-Ventas totales últimos 30 días: $${totalSales30.toFixed(2)} (${totalTransactions} transacciones)
+Ventas totales últimos 30 días: ${formatARS(totalSales30)} (${totalTransactions} transacciones)
 
 Dame un análisis breve (3-4 oraciones) en español destacando tendencias y recomendaciones.`;
 

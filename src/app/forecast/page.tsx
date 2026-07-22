@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useRouter } from 'next/navigation';
+import { formatARS } from '@/lib/utils/currency';
 
 interface Prediction {
   productId: string;
@@ -177,7 +178,7 @@ export default function ForecastPage() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Ventas 30 días</p>
-              <p className="text-2xl font-bold mt-1 text-gray-900 dark:text-white">${data.summary.totalSales30.toFixed(2)}</p>
+              <p className="text-2xl font-bold mt-1 text-gray-900 dark:text-white">{formatARS(data.summary.totalSales30)}</p>
               <div className="flex items-center gap-2 mt-1">
                 <p className="text-xs text-gray-500">{data.summary.totalTransactions30} transacciones</p>
                 <TrendBadge value={data.trends?.totalSales ?? null} />
@@ -334,7 +335,7 @@ export default function ForecastPage() {
                 <div className="flex items-center gap-2.5">
                   <span className="text-base">💰</span>
                   <span className="text-gray-700 dark:text-gray-300">
-                    Inversión recomendada: <strong className="text-gray-900 dark:text-white">${totalReorderCost.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</strong>
+                    Inversión recomendada: <strong className="text-gray-900 dark:text-white">{formatARS(totalReorderCost)}</strong>
                   </span>
                 </div>
               )}
@@ -388,7 +389,7 @@ export default function ForecastPage() {
                     </td>
                     <td className="py-3 px-6 text-center font-semibold text-indigo-600">{p.suggestedOrder} u.</td>
                     <td className="py-3 px-6 text-center font-semibold text-gray-900 dark:text-white">
-                      ${p.cost > 0 ? (p.suggestedOrder * p.cost).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+                      {p.cost > 0 ? formatARS(p.suggestedOrder * p.cost) : '—'}
                     </td>
                     <td className="py-3 px-6 text-center">
                       <a

@@ -14,6 +14,7 @@ import {
   ShieldAlert, Package, TrendingDown, AlertTriangle,
   Loader2, Search, X, CalendarDays, ClipboardList, BarChart3
 } from 'lucide-react';
+import { formatARS } from '@/lib/utils/currency';
 
 const reasonOptions = [
   { value: 'damaged', label: 'Dañado', color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30' },
@@ -151,7 +152,7 @@ export default function LossPreventionPage() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Valor estimado perdido</p>
-              <p className="text-2xl font-bold mt-1 text-gray-900 dark:text-white">${totalValue.toFixed(2)}</p>
+              <p className="text-2xl font-bold mt-1 text-gray-900 dark:text-white">{formatARS(totalValue)}</p>
               <p className="text-xs text-gray-500 mt-1">Basado en costo</p>
             </div>
             <div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-500"><AlertTriangle className="h-5 w-5" /></div>

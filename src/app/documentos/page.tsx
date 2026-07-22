@@ -20,6 +20,7 @@ import {
   ChevronUp,
   Printer,
 } from 'lucide-react';
+import { formatARS } from '@/lib/utils/currency';
 import type {
   CommercialDocument,
   DocumentType,
@@ -365,8 +366,8 @@ export default function DocumentosPage() {
       <tr>
         <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.description}</td>
         <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: center;">${item.quantity}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">$${(item.unit_price_cents / 100).toFixed(2)}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">$${(item.subtotal_cents / 100).toFixed(2)}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${formatARS(item.unit_price_cents / 100)}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${formatARS(item.subtotal_cents / 100)}</td>
       </tr>
     `).join('') || '';
 
@@ -451,7 +452,7 @@ export default function DocumentosPage() {
         <div class="total-section">
           <div class="total-box">
             <div class="total-label">TOTAL</div>
-            <div class="total-amount">$${(doc.total_cents / 100).toFixed(2)}</div>
+            <div class="total-amount">${formatARS(doc.total_cents / 100)}</div>
           </div>
         </div>
 
@@ -619,7 +620,7 @@ export default function DocumentosPage() {
                     <option value="">+ Agregar producto...</option>
                     {products.map(p => (
                       <option key={p.id} value={p.id}>
-                        {p.name} - ${(p.price || 0).toFixed(2)}
+                        {p.name} - {formatARS(p.price || 0)}
                       </option>
                     ))}
                   </Select>
@@ -670,7 +671,7 @@ export default function DocumentosPage() {
                       </div>
                     </div>
                     <div className="text-right text-sm font-medium text-gray-900 dark:text-gray-100 w-24">
-                      ${((item.unit_price_cents * item.quantity) / 100).toFixed(2)}
+                      {formatARS((item.unit_price_cents * item.quantity) / 100)}
                     </div>
                     <button
                       type="button"
@@ -686,7 +687,7 @@ export default function DocumentosPage() {
                   <div className="text-right">
                     <span className="text-sm text-gray-500">Total: </span>
                     <span className="text-lg font-bold text-green-600 dark:text-green-400">
-                      ${(formData.items.reduce((sum, item) => sum + item.unit_price_cents * item.quantity, 0) / 100).toFixed(2)}
+                      {formatARS(formData.items.reduce((sum, item) => sum + item.unit_price_cents * item.quantity, 0) / 100)}
                     </span>
                   </div>
                 </div>
@@ -806,7 +807,7 @@ export default function DocumentosPage() {
                         {doc.customer_name}
                       </td>
                       <td className="py-3 px-4 text-right font-semibold text-green-600 dark:text-green-400">
-                        ${(doc.total_cents / 100).toFixed(2)}
+                        {formatARS(doc.total_cents / 100)}
                       </td>
                       <td className="py-3 px-4">{statusBadge(doc.status)}</td>
                       <td className="py-3 px-4 text-right text-xs text-gray-500 whitespace-nowrap">
@@ -889,7 +890,7 @@ export default function DocumentosPage() {
                                 <div className="text-right">
                                   {statusBadge(doc.status)}
                                   <p className="text-xl font-bold text-green-600 dark:text-green-400 mt-2">
-                                    ${(doc.total_cents / 100).toFixed(2)}
+                                    {formatARS(doc.total_cents / 100)}
                                   </p>
                                 </div>
                               </div>
@@ -928,8 +929,8 @@ export default function DocumentosPage() {
                                           <tr key={item.id} className="border-t border-gray-100 dark:border-gray-800">
                                             <td className="py-1.5 text-gray-900 dark:text-gray-100">{item.description}</td>
                                             <td className="py-1.5 text-right text-gray-600 dark:text-gray-400">{item.quantity}</td>
-                                            <td className="py-1.5 text-right text-gray-600 dark:text-gray-400">${(item.unit_price_cents / 100).toFixed(2)}</td>
-                                            <td className="py-1.5 text-right font-medium text-gray-900 dark:text-gray-100">${(item.subtotal_cents / 100).toFixed(2)}</td>
+                                            <td className="py-1.5 text-right text-gray-600 dark:text-gray-400">{formatARS(item.unit_price_cents / 100)}</td>
+                                            <td className="py-1.5 text-right font-medium text-gray-900 dark:text-gray-100">{formatARS(item.subtotal_cents / 100)}</td>
                                           </tr>
                                         ))}
                                       </tbody>

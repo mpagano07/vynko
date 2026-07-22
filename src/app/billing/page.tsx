@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { PLANS } from '@/lib/plans';
+import { formatARS } from '@/lib/utils/currency';
 import { CreditCard, CheckCircle2, Loader2, Zap, ArrowRight, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -295,7 +296,7 @@ function BillingContent() {
               <div className="mt-2 mb-4">
                 {plan.price > 0 ? (
                   <>
-                    <span className="text-3xl font-extrabold text-gray-900 dark:text-white">${plan.price.toLocaleString('es-AR')}</span>
+                    <span className="text-3xl font-extrabold text-gray-900 dark:text-white">{formatARS(plan.price)}</span>
                     <span className="text-sm text-gray-500">/mes</span>
                   </>
                 ) : (

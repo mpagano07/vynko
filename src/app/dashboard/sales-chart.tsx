@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
+import { formatARS } from '@/lib/utils/currency';
 
 const PERIODS = [
   { label: '7d', days: 7 },
@@ -81,7 +82,7 @@ export default function SalesChart() {
               <XAxis dataKey="day" tick={{ fontSize: 10 }} stroke="#d1d5db" axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10 }} stroke="#d1d5db" axisLine={false} tickLine={false} />
               <Tooltip
-                formatter={(value) => [`$${Number(value).toFixed(2)}`, 'Total']}
+                formatter={(value: any) => [formatARS(Number(value) || 0), 'Total']}
                 contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '11px' }}
               />
               <Bar dataKey="total" fill="#6366f1" radius={[3, 3, 0, 0]} maxBarSize={32} />

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Package, Scan, Plus, Loader2, CheckCircle2 } from 'lucide-react';
+import { formatARS } from '@/lib/utils/currency';
 import toast from 'react-hot-toast';
 
 interface ScannedProduct {
@@ -165,7 +166,7 @@ export default function ScanningPage() {
                 </div>
                 <div>
                   <span className="text-gray-500">Precio</span>
-                  <p className="font-semibold text-lg text-green-600">${product.price}</p>
+                  <p className="font-semibold text-lg text-green-600">{formatARS(product.price)}</p>
                 </div>
               </div>
 

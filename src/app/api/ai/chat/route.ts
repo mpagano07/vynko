@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { formatARS } from '@/lib/utils/currency';
 
 async function getAuth() {
   const supabase = await createServerSupabaseClient();
@@ -69,10 +70,10 @@ Contexto actual del negocio:
 - Total de productos: ${context.productCount}
 - Categorías: ${context.categoryCount}
 - Productos con stock crítico: ${context.lowStockCount}
-- Ventas recientes (últimas 10): ${context.recentSales.map(s => `$${s.total.toFixed(2)}`).join(', ')}
+- Ventas recientes (últimas 10): ${context.recentSales.map(s => formatARS(s.total)).join(', ')}
 
 Productos en inventario:
-${context.products.slice(0, 30).map(p => `- ${p.name}: ${p.stock} unidades (mín: ${p.min_stock}, máx: ${p.max_stock}, precio: $${p.price.toFixed(2)}, costo: $${p.cost.toFixed(2)})`).join('\n')}
+${context.products.slice(0, 30).map(p => `- ${p.name}: ${p.stock} unidades (mín: ${p.min_stock}, máx: ${p.max_stock}, precio: ${formatARS(p.price)}, costo: ${formatARS(p.cost)})`).join('\n')}
 
 Podés ayudar con:
 - Consultas sobre stock de productos específicos

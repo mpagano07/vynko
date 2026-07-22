@@ -24,6 +24,7 @@ import {
   FileText,
 } from 'lucide-react';
 import type { Supplier, PurchaseOrder } from '@/lib/types/supplier';
+import { formatARS } from '@/lib/utils/currency';
 
 interface ProductOption {
   id: string;
@@ -483,7 +484,7 @@ export default function ProvidersPage() {
                           </span>
                         </td>
                         <td className="py-3 px-4 text-right font-semibold text-gray-900 dark:text-gray-100">
-                          ${(order.total_cents / 100).toFixed(2)}
+                          {formatARS(order.total_cents / 100)}
                         </td>
                         <td className="py-3 px-4 text-right text-xs text-gray-500">
                           {new Date(order.created_at!).toLocaleDateString('es-ES', {
@@ -740,7 +741,7 @@ export default function ProvidersPage() {
                               {product?.name || item.product_id}
                             </p>
                             <p className="text-xs text-gray-500">
-                              ${item.unit_cost.toFixed(2)} x {item.quantity} = ${(item.quantity * item.unit_cost).toFixed(2)}
+                              {formatARS(item.unit_cost)} x {item.quantity} = {formatARS(item.quantity * item.unit_cost)}
                             </p>
                           </div>
                           <button
@@ -772,7 +773,7 @@ export default function ProvidersPage() {
               <div className="flex items-center justify-between text-lg font-bold text-gray-900 dark:text-gray-100 pt-2">
                 <span>Total Estimado</span>
                 <span className="text-2xl text-indigo-600 dark:text-indigo-400">
-                  ${(poTotalCents / 100).toFixed(2)}
+                  {formatARS(poTotalCents / 100)}
                 </span>
               </div>
 

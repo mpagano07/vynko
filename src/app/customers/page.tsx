@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { Search, Plus, Edit, Trash2, Users, X, Loader2, ShoppingBag, DollarSign, CalendarDays } from 'lucide-react';
+import { formatARS } from '@/lib/utils/currency';
 import toast from 'react-hot-toast';
 
 interface Customer {
@@ -234,7 +235,7 @@ export default function CustomersPage() {
               <>
                 <div className="flex gap-4 mb-4 text-sm">
                   <span className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400"><ShoppingBag className="h-4 w-4" /> {historyData.visitCount} compra(s)</span>
-                  <span className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400"><DollarSign className="h-4 w-4" /> Total: ${historyData.totalSpent.toFixed(2)}</span>
+                  <span className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400"><DollarSign className="h-4 w-4" /> Total: {formatARS(historyData.totalSpent)}</span>
                 </div>
                 <div className="overflow-y-auto flex-1 space-y-3">
                   {historyData.sales.length === 0 ? (
@@ -243,7 +244,7 @@ export default function CustomersPage() {
                     <div key={s.id} className="p-4 border border-gray-100 dark:border-gray-800 rounded-lg">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-mono text-gray-400">#{s.id.slice(0, 8)}</span>
-                        <span className="text-sm font-semibold text-green-600 dark:text-green-400">${s.total?.toFixed(2)}</span>
+                        <span className="text-sm font-semibold text-green-600 dark:text-green-400">{s.total != null ? formatARS(s.total) : ''}</span>
                       </div>
                       <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
                         <CalendarDays className="h-3 w-3" />
@@ -253,7 +254,7 @@ export default function CustomersPage() {
                         {s.items?.map((i: any) => (
                           <div key={i.id} className="flex justify-between text-xs text-gray-700 dark:text-gray-300">
                             <span>{i.product_name} × {i.quantity}</span>
-                            <span>${i.subtotal?.toFixed(2)}</span>
+                            <span>{i.subtotal != null ? formatARS(i.subtotal) : ''}</span>
                           </div>
                         ))}
                       </div>

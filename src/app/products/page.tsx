@@ -32,6 +32,7 @@ import {
   Percent,
   HelpCircle,
 } from 'lucide-react';
+import { formatARS } from '@/lib/utils/currency';
 
 export default function ProductsPage() {
   const { tenant } = useAuth();
@@ -624,10 +625,10 @@ export default function ProductsPage() {
                       </td>
                       <td className="py-4 px-6">
                         <div className="text-xs text-gray-500">
-                          Costo: <span className="font-medium text-gray-700 dark:text-gray-300">${product.cost || 0}</span>
+                          Costo: <span className="font-medium text-gray-700 dark:text-gray-300">{formatARS(product.cost || 0)}</span>
                         </div>
                         <div className="text-sm font-semibold text-green-600 dark:text-green-400 mt-0.5">
-                          ${product.price}
+                          {formatARS(product.price)}
                         </div>
                         {product.cost != null && product.cost > 0 && product.price > 0 && (
                           <div className="text-xs text-gray-500 mt-0.5">
@@ -1105,7 +1106,7 @@ export default function ProductsPage() {
                       {priceAdjustResult.sample.map((p: any) => (
                         <div key={p.id} className="flex justify-between text-xs text-gray-600 dark:text-gray-400">
                           <span className="truncate max-w-[180px]">{p.name}</span>
-                          <span>${(p.old_price_cents / 100).toFixed(2)} → ${(p.new_price_cents / 100).toFixed(2)}</span>
+                          <span>{formatARS(p.old_price_cents / 100)} → {formatARS(p.new_price_cents / 100)}</span>
                         </div>
                       ))}
                     </div>

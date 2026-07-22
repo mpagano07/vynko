@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { PLANS } from '@/lib/plans';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { formatARS } from '@/lib/utils/currency';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
 } from 'recharts';
@@ -313,7 +314,7 @@ export default function LandingPage() {
                   )}
                   <h3 className="text-lg font-bold mb-2">{plan.name}</h3>
                   <div className="mb-6">
-                    <span className="text-4xl font-extrabold">${plan.price.toLocaleString('es-AR')}</span>
+                    <span className="text-4xl font-extrabold">{formatARS(plan.price)}</span>
                     <span className="text-sm text-gray-500 ml-1">/mes</span>
                   </div>
                   <ul className="space-y-3 mb-8">

@@ -27,6 +27,7 @@ import {
   Scan,
   X,
 } from 'lucide-react';
+import { formatARS } from '@/lib/utils/currency';
 import type { Customer } from '@/lib/types/sale';
 
 interface CartItem {
@@ -427,7 +428,7 @@ export default function SalesPage() {
                     </div>
                   <div className="flex items-center justify-between mt-1">
                     <span className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
-                      ${product.price}
+                      {formatARS(product.price)}
                     </span>
                     <span className={`text-xs ${product.stock <= (product.stock > 5 ? 5 : 0) ? 'text-red-500' : 'text-gray-400'}`}>
                       Stock: {product.stock}
@@ -524,7 +525,7 @@ export default function SalesPage() {
                         {item.name}
                       </p>
                       <p className="text-xs text-gray-500">
-                        ${item.price} x {item.quantity}
+                        {formatARS(item.price)} x {item.quantity}
                       </p>
                     </div>
                     <div className="flex items-center gap-1 ml-2">
@@ -569,7 +570,7 @@ export default function SalesPage() {
                   <div className="flex items-center justify-between text-lg font-bold text-gray-900 dark:text-gray-100">
                     <span>Total</span>
                     <span className="text-2xl text-indigo-600 dark:text-indigo-400">
-                      ${total.toFixed(2)}
+                      {formatARS(total)}
                     </span>
                   </div>
 
@@ -650,7 +651,7 @@ export default function SalesPage() {
                           {sale.items?.length || 0} item(s)
                         </td>
                         <td className="py-3 px-4 text-right font-semibold text-green-600 dark:text-green-400">
-                          ${(sale.total_cents / 100).toFixed(2)}
+                          {formatARS(sale.total_cents / 100)}
                         </td>
                         <td className="py-3 px-4 text-right text-xs text-gray-500">
                           {new Date(sale.created_at).toLocaleDateString('es-ES', {
