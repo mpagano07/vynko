@@ -17,11 +17,14 @@ async function getAuthenticatedUser(): Promise<{ tenantId: string; userId: strin
   return { tenantId: tu[0].tenant_id as string, userId: user.id };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const auth = await getAuthenticatedUser();
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-  const { data: orders, error } = await supabaseAdmin
+  const { searchParams } = new URL(request.url);
+  const supplierId = searchParams.get('supplier_id');
+
+  let query = supabaseAdmin
     .from('purchase_orders')
     .select(`
       *,
@@ -31,10 +34,15 @@ export async function GET() {
         product:products(name)
       )
     `)
-    .eq('tenant_id', auth.tenantId)
-    .order('created_at', { ascending: false });
+    .eq('tenant_id', auth.tenantId);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (supplierId) {
+    query = query.eq('supplier_id', supplierId);
+  }
+
+  query = query.order('created_at', { ascending: false });
+
+  const { data: orders, error } = await query;
 
   const result = (orders ?? []).map((o: Record<string, unknown>) => {
     const supplier = o.supplier as Record<string, unknown> | undefined;

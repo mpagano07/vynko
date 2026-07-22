@@ -13,6 +13,7 @@ export interface CommercialDocument {
   document_type: DocumentType;
   document_number: number;
   sale_id?: string;
+  purchase_order_id?: string;
   customer_id?: string;
   customer_name: string;
   supplier_name?: string;
@@ -50,6 +51,7 @@ export interface CommercialDocumentSequence {
 export interface CreateDocumentRequest {
   document_type: DocumentType;
   sale_id?: string;
+  purchase_order_id?: string;
   customer_id?: string;
   customer_name: string;
   supplier_name?: string;
@@ -65,8 +67,8 @@ export interface CreateDocumentRequest {
 }
 
 export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
-  remito_salida: 'Remito de Salida',
   remito_ingreso: 'Remito de Ingreso',
+  remito_salida: 'Remito de Salida',
   presupuesto: 'Presupuesto',
   orden_compra: 'Orden de Compra',
   orden_venta: 'Orden de Venta',

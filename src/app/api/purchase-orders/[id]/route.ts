@@ -32,7 +32,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
     if (status) {
-      const validStatuses = ['draft', 'pending', 'received', 'cancelled'];
+      const validStatuses = ['draft', 'sent', 'partial', 'received', 'cancelled'];
       if (!validStatuses.includes(status)) {
         return NextResponse.json({ error: 'Estado inválido' }, { status: 400 });
       }

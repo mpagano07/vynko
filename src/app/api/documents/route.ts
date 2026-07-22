@@ -21,16 +21,22 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const documentType = searchParams.get('type') as DocumentType | null;
+  const purchaseOrderId = searchParams.get('purchase_order_id');
 
   let query = supabaseAdmin
     .from('commercial_documents')
     .select('*, items:commercial_document_items(*)')
-    .eq('tenant_id', auth.tenantId)
-    .order('created_at', { ascending: false });
+    .eq('tenant_id', auth.tenantId);
 
   if (documentType) {
     query = query.eq('document_type', documentType);
   }
+
+  if (purchaseOrderId) {
+    query = query.eq('purchase_order_id', purchaseOrderId);
+  }
+
+  query = query.order('created_at', { ascending: false });
 
   const { data: documents, error } = await query;
 
@@ -47,6 +53,7 @@ export async function POST(request: Request) {
     const {
       document_type,
       sale_id,
+      purchase_order_id,
       customer_id,
       customer_name,
       supplier_name,
@@ -54,7 +61,7 @@ export async function POST(request: Request) {
       valid_until,
       delivery_date,
       items,
-    } = body as CreateDocumentRequest & { sale_id?: string };
+    } = body as CreateDocumentRequest & { sale_id?: string; purchase_order_id?: string };
 
     if (!document_type || !customer_name || !items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: 'Faltan datos requeridos (tipo documento, cliente, items)' }, { status: 400 });
@@ -94,6 +101,7 @@ export async function POST(request: Request) {
         document_type,
         document_number: nextNumber,
         sale_id: sale_id || null,
+        purchase_order_id: purchase_order_id || null,
         customer_id: customer_id || null,
         customer_name,
         supplier_name: supplier_name || null,

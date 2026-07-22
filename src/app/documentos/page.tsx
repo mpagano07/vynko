@@ -19,6 +19,9 @@ import {
   ChevronDown,
   ChevronUp,
   Printer,
+  Package,
+  X,
+  Truck,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import type {
@@ -33,6 +36,10 @@ import {
   DOCUMENT_STATUS_COLORS,
   VALID_STATUSES_PER_TYPE,
 } from '@/lib/types/document';
+import type { PurchaseOrder } from '@/lib/types/supplier';
+import type { Customer } from '@/lib/types/sale';
+import type { Product } from '@/lib/types/product';
+import type { Supplier } from '@/lib/types/supplier';
 
 const DOCUMENT_TYPE_COLORS: Record<DocumentType, { border: string; bg: string; text: string }> = {
   presupuesto: { border: 'border-l-purple-500', bg: 'bg-purple-50 dark:bg-purple-950/20', text: 'text-purple-700 dark:text-purple-400' },
@@ -41,9 +48,14 @@ const DOCUMENT_TYPE_COLORS: Record<DocumentType, { border: string; bg: string; t
   remito_salida: { border: 'border-l-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-950/20', text: 'text-indigo-700 dark:text-indigo-400' },
   remito_ingreso: { border: 'border-l-teal-500', bg: 'bg-teal-50 dark:bg-teal-950/20', text: 'text-teal-700 dark:text-teal-400' },
 };
-import type { Customer } from '@/lib/types/sale';
-import type { Product } from '@/lib/types/product';
-import type { Supplier } from '@/lib/types/supplier';
+
+const PO_STATUS_LABELS: Record<string, string> = {
+  draft: 'Borrador',
+  sent: 'Enviado',
+  partial: 'Recibido Parcial',
+  received: 'Recibido',
+  cancelled: 'Cancelado',
+};
 
 interface DocumentItem {
   product_id?: string;
@@ -59,11 +71,12 @@ export default function DocumentosPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [typeFilter, setTypeFilter] = useState<DocumentType>('remito_salida');
+  const [typeFilter, setTypeFilter] = useState<DocumentType>('remito_ingreso');
   const [creating, setCreating] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
@@ -77,6 +90,8 @@ export default function DocumentosPage() {
     onConfirm: () => void;
   }>({ open: false, title: '', message: '', variant: 'default', confirmLabel: 'Confirmar', onConfirm: () => {} });
 
+  const today = new Date().toISOString().split('T')[0];
+
   const [formData, setFormData] = useState<CreateDocumentRequest>({
     document_type: 'remito_salida',
     customer_id: '',
@@ -84,9 +99,27 @@ export default function DocumentosPage() {
     supplier_name: '',
     notes: '',
     valid_until: '',
-    delivery_date: '',
+    delivery_date: today,
     items: [],
   });
+
+  // PO create modal state
+  const [isPoModalOpen, setIsPoModalOpen] = useState(false);
+  const [poSupplierId, setPoSupplierId] = useState('');
+  const [poExpectedDate, setPoExpectedDate] = useState(today);
+  const [poNotes, setPoNotes] = useState('');
+  const [poItems, setPoItems] = useState<{ product_id: string; quantity: number; unit_cost: number }[]>([]);
+  const [isSubmittingPo, setIsSubmittingPo] = useState(false);
+  const [poStatus, setPoStatus] = useState<'draft' | 'sent'>('draft');
+
+  // Receive modal state
+  const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false);
+  const [receiveOrderId, setReceiveOrderId] = useState<string | null>(null);
+  const [receiveDate, setReceiveDate] = useState(new Date().toISOString().split('T')[0]);
+  const [receiveWarehouse, setReceiveWarehouse] = useState('');
+  const [receiveNotes, setReceiveNotes] = useState('');
+  const [receiveItems, setReceiveItems] = useState<{ product_id: string; product_name: string; quantity_ordered: number; already_received: number; quantity_received: number }[]>([]);
+  const [isSubmittingReceive, setIsSubmittingReceive] = useState(false);
 
   useEffect(() => {
     if (!tenant?.id) return;
@@ -98,11 +131,12 @@ export default function DocumentosPage() {
         ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
       };
 
-      const [docsRes, custRes, prodRes, suppRes] = await Promise.all([
+      const [docsRes, custRes, prodRes, suppRes, poRes] = await Promise.all([
         fetch('/api/documents', { headers }),
         fetch('/api/customers', { headers }),
         fetch('/api/products', { headers }),
         fetch('/api/suppliers', { headers }),
+        fetch('/api/purchase-orders', { headers }),
       ]);
 
       if (cancelled) return;
@@ -113,12 +147,38 @@ export default function DocumentosPage() {
         setProducts(allProducts.filter(p => p.is_active !== false));
       }
       if (suppRes.ok) setSuppliers(await suppRes.json());
+      if (poRes.ok) setPurchaseOrders(await poRes.json());
     })().finally(() => {
       if (!cancelled) setLoading(false);
     });
 
     return () => { cancelled = true; };
   }, [tenant?.id]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const selectedId = params.get('selected');
+    const docType = params.get('type') as DocumentType | null;
+
+    if (docType && Object.keys(DOCUMENT_TYPE_LABELS).includes(docType)) {
+      setTypeFilter(docType);
+    }
+
+    if (selectedId) {
+      setExpandedRows(prev => {
+        const next = new Set(prev);
+        next.add(selectedId);
+        return next;
+      });
+    }
+
+    if (selectedId || docType) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('selected');
+      url.searchParams.delete('type');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, []);
 
   const filteredDocuments = useMemo(() => {
     return documents.filter(doc => {
@@ -132,12 +192,28 @@ export default function DocumentosPage() {
     });
   }, [documents, typeFilter, search, statusFilter]);
 
-  const totalPages = Math.ceil(filteredDocuments.length / itemsPerPage);
+  const filteredOrders = useMemo(() => {
+    return purchaseOrders.filter(order => {
+      const matchesSearch = !search ||
+        order.supplier_name?.toLowerCase().includes(search.toLowerCase()) ||
+        order.id.toLowerCase().includes(search.toLowerCase());
+      const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [purchaseOrders, search, statusFilter]);
+
+  const isPoTab = typeFilter === 'orden_compra';
+  const currentItems = isPoTab ? filteredOrders : filteredDocuments;
+  const totalPages = Math.ceil(currentItems.length / itemsPerPage);
 
   const paginatedDocuments = useMemo(() => {
+    if (isPoTab) {
+      const start = (currentPage - 1) * itemsPerPage;
+      return filteredOrders.slice(start, start + itemsPerPage);
+    }
     const start = (currentPage - 1) * itemsPerPage;
     return filteredDocuments.slice(start, start + itemsPerPage);
-  }, [filteredDocuments, currentPage]);
+  }, [filteredDocuments, filteredOrders, currentPage, isPoTab]);
 
   const handleCustomerSelect = (custId: string) => {
     const customer = customers.find(c => c.id === custId);
@@ -300,9 +376,17 @@ export default function DocumentosPage() {
       supplier_name: '',
       notes: '',
       valid_until: '',
-      delivery_date: '',
+      delivery_date: today,
       items: [],
     });
+  };
+
+  const resetPoForm = () => {
+    setPoSupplierId('');
+    setPoExpectedDate(today);
+    setPoNotes('');
+    setPoItems([]);
+    setPoStatus('draft');
   };
 
   const addItem = () => {
@@ -350,6 +434,193 @@ export default function DocumentosPage() {
       ...prev,
       items: prev.items.filter((_, i) => i !== index),
     }));
+  };
+
+  // PO functions
+  const addPoItemFromProduct = (productId: string) => {
+    const product = products.find((p) => p.id === productId);
+    if (!product) return;
+    setPoItems((prev) => [...prev, { product_id: productId, quantity: 1, unit_cost: product.cost || 0 }]);
+  };
+
+  const updatePoItem = (index: number, field: 'quantity' | 'unit_cost', value: number) => {
+    setPoItems((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
+    );
+  };
+
+  const removePoItem = (index: number) => {
+    setPoItems((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const poTotalCents = poItems.reduce(
+    (sum, item) => sum + item.quantity * Math.round(item.unit_cost * 100),
+    0
+  );
+
+  const handleCreatePo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!poSupplierId) {
+      toast.error('Selecciona un proveedor');
+      return;
+    }
+    if (poItems.length === 0) {
+      toast.error('Agrega al menos un producto al pedido');
+      return;
+    }
+
+    setIsSubmittingPo(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+
+      const res = await fetch('/api/purchase-orders', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          supplier_id: poSupplierId,
+          expected_date: poExpectedDate || null,
+          notes: poNotes || null,
+          status: poStatus,
+          items: poItems.map((i) => ({
+            product_id: i.product_id,
+            quantity: i.quantity,
+            unit_cost: i.unit_cost,
+          })),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al crear el pedido');
+
+      toast.success('Pedido creado exitosamente');
+      setIsPoModalOpen(false);
+      resetPoForm();
+
+      const { data: { session: s2 } } = await supabase.auth.getSession();
+      const h2 = {
+        ...(s2?.access_token ? { Authorization: `Bearer ${s2.access_token}` } : {}),
+      };
+      const poRes = await fetch('/api/purchase-orders', { headers: h2 });
+      if (poRes.ok) setPurchaseOrders(await poRes.json());
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error al crear pedido');
+    } finally {
+      setIsSubmittingPo(false);
+    }
+  };
+
+  const handleReceiveOrder = (id: string) => {
+    const order = purchaseOrders.find(o => o.id === id);
+    if (!order) return;
+    setReceiveOrderId(id);
+    setReceiveDate(new Date().toISOString().split('T')[0]);
+    setReceiveWarehouse('');
+    setReceiveNotes('');
+    setReceiveItems(
+      order.items.map(item => {
+        const alreadyReceived = item.quantity_received || 0;
+        const pending = Math.max(0, item.quantity_ordered - alreadyReceived);
+        return {
+          product_id: item.product_id,
+          product_name: item.product_name || 'Producto',
+          quantity_ordered: item.quantity_ordered,
+          already_received: alreadyReceived,
+          quantity_received: pending,
+        };
+      })
+    );
+    setIsReceiveModalOpen(true);
+  };
+
+  const handleCancelOrder = (id: string) => {
+    setConfirmModal({
+      open: true,
+      title: 'Cancelar pedido',
+      message: '¿Cancelar este pedido?',
+      variant: 'danger',
+      confirmLabel: 'Cancelar pedido',
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, open: false }));
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+          };
+          if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+
+          const res = await fetch(`/api/purchase-orders/${id}`, {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ status: 'cancelled' }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Error al cancelar pedido');
+          toast.success('Pedido cancelado');
+
+          const { data: { session: s2 } } = await supabase.auth.getSession();
+          const h2 = {
+            ...(s2?.access_token ? { Authorization: `Bearer ${s2.access_token}` } : {}),
+          };
+      const poRes = await fetch('/api/purchase-orders', { headers: h2 });
+      if (poRes.ok) setPurchaseOrders(await poRes.json());
+
+      const docsRes = await fetch('/api/documents', { headers: h2 });
+      if (docsRes.ok) setDocuments(await docsRes.json());
+        } catch (err: unknown) {
+          toast.error(err instanceof Error ? err.message : 'Error al cancelar pedido');
+        }
+      },
+    });
+  };
+
+  const handleConfirmReceive = async () => {
+    if (!receiveOrderId) return;
+    setIsSubmittingReceive(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+
+      const res = await fetch(`/api/purchase-orders/${receiveOrderId}/receive`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          received_date: receiveDate,
+          warehouse: receiveWarehouse || undefined,
+          notes: receiveNotes || undefined,
+          items: receiveItems.map(i => ({
+            product_id: i.product_id,
+            quantity_received: i.quantity_received,
+          })),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al recibir pedido');
+
+      const remitoNum = String(data.document_number).padStart(5, '0');
+      if (data.po_status === 'received') {
+        toast.success(`Pedido completado — Remito #${remitoNum} generado`);
+      } else {
+        toast.success(`Recepción parcial — Remito #${remitoNum} generado`);
+      }
+      setIsReceiveModalOpen(false);
+
+      const { data: { session: s2 } } = await supabase.auth.getSession();
+      const h2 = {
+        ...(s2?.access_token ? { Authorization: `Bearer ${s2.access_token}` } : {}),
+      };
+      const poRes = await fetch('/api/purchase-orders', { headers: h2 });
+      if (poRes.ok) setPurchaseOrders(await poRes.json());
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error al recibir pedido');
+    } finally {
+      setIsSubmittingReceive(false);
+    }
   };
 
   const printDocument = (doc: CommercialDocument) => {
@@ -492,11 +763,36 @@ export default function DocumentosPage() {
     </span>
   );
 
+  const poStatusBadge = (status: string) => (
+    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+      status === 'draft'
+        ? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+        : status === 'sent'
+        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+        : status === 'partial'
+        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+        : status === 'received'
+        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+        : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+    }`}>
+      {PO_STATUS_LABELS[status]}
+    </span>
+  );
+
   const getDocumentTypeLabel = (type: DocumentType) => DOCUMENT_TYPE_LABELS[type];
 
   const getNextStatuses = (doc: DocumentType, currentStatus: DocumentStatus): DocumentStatus[] => {
     const valid = VALID_STATUSES_PER_TYPE[doc];
     return valid.filter(s => s !== currentStatus);
+  };
+
+  const handleNewDocument = () => {
+    if (typeFilter === 'orden_compra') {
+      setIsPoModalOpen(true);
+    } else {
+      setShowCreateForm(true);
+      resetForm();
+    }
   };
 
   return (
@@ -511,213 +807,11 @@ export default function DocumentosPage() {
             Gestión de remitos, presupuestos y órdenes
           </p>
         </div>
-        <Button onClick={() => { setShowCreateForm(!showCreateForm); resetForm(); }} className="flex items-center gap-2">
+        <Button onClick={handleNewDocument} className="flex items-center gap-2">
           <Plus className="h-4 w-4" />
-          {showCreateForm ? 'Cancelar' : 'Nuevo Documento'}
+          Nuevo Documento
         </Button>
       </div>
-
-      {showCreateForm && (
-        <Card className="p-6 border border-gray-100 dark:border-gray-800">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-            <FileText className="h-5 w-5 text-indigo-600" />
-            Nuevo {getDocumentTypeLabel(typeFilter)}
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          </div>
-
-          <div className="border-t border-gray-100 dark:border-gray-800 pt-4 mb-4">
-            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
-              {(typeFilter === 'remito_ingreso' || typeFilter === 'orden_compra') ? 'Datos del Proveedor' : 'Datos del Cliente'}
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  {(typeFilter === 'remito_ingreso' || typeFilter === 'orden_compra') ? 'Proveedor existente' : 'Cliente existente'}
-                </label>
-                {(typeFilter === 'remito_ingreso' || typeFilter === 'orden_compra') ? (
-                  <Select value={formData.supplier_name || ''} onChange={e => {
-                    const supplier = suppliers.find(s => s.name === e.target.value);
-                    setFormData(prev => ({
-                      ...prev,
-                      supplier_name: supplier?.name || e.target.value,
-                      customer_name: supplier?.name || e.target.value,
-                    }));
-                  }}>
-                    <option value="">Seleccionar proveedor...</option>
-                    {suppliers.map(s => (
-                      <option key={s.id} value={s.name}>{s.name}</option>
-                    ))}
-                  </Select>
-                ) : (
-                  <Select value={formData.customer_id || ''} onChange={e => handleCustomerSelect(e.target.value)}>
-                    <option value="">Seleccionar cliente...</option>
-                    {customers.map(c => (
-                      <option key={c.id} value={c.id}>{c.name} {c.cuit ? `- ${c.cuit}` : ''}</option>
-                    ))}
-                  </Select>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre *</label>
-                <Input
-                  value={(typeFilter === 'remito_ingreso' || typeFilter === 'orden_compra') ? (formData.supplier_name || '') : formData.customer_name}
-                  onChange={e => setFormData(prev => ({
-                    ...prev,
-                    customer_name: e.target.value,
-                    supplier_name: (typeFilter === 'remito_ingreso' || typeFilter === 'orden_compra') ? e.target.value : prev.supplier_name,
-                  }))}
-                  placeholder={(typeFilter === 'remito_ingreso' || typeFilter === 'orden_compra') ? 'Nombre del proveedor' : 'Razón social o nombre'}
-                />
-              </div>
-            </div>
-          </div>
-
-          {(typeFilter === 'presupuesto' || typeFilter === 'remito_salida' || typeFilter === 'remito_ingreso') && (
-            <div className="border-t border-gray-100 dark:border-gray-800 pt-4 mb-4">
-              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Fechas</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {typeFilter === 'presupuesto' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Válido hasta</label>
-                    <Input
-                      type="date"
-                      value={formData.valid_until || ''}
-                      onChange={e => setFormData(prev => ({ ...prev, valid_until: e.target.value }))}
-                    />
-                  </div>
-                )}
-                {(typeFilter === 'remito_salida' || typeFilter === 'remito_ingreso') && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Fecha de entrega</label>
-                    <Input
-                      type="date"
-                      value={formData.delivery_date || ''}
-                      onChange={e => setFormData(prev => ({ ...prev, delivery_date: e.target.value }))}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="border-t border-gray-100 dark:border-gray-800 pt-4 mb-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Items</h3>
-              <div className="flex items-center gap-2">
-                {products.length > 0 && (
-                  <Select
-                    value=""
-                    onChange={e => {
-                      if (e.target.value) {
-                        addItemFromProduct(e.target.value);
-                        e.target.value = '';
-                      }
-                    }}
-                    className="text-xs"
-                  >
-                    <option value="">+ Agregar producto...</option>
-                    {products.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} - {formatARS(p.price || 0)}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-                <Button type="button" variant="outline" size="sm" onClick={addItem}>
-                  <Plus className="h-3.5 w-3.5 mr-1" /> Agregar item
-                </Button>
-              </div>
-            </div>
-
-            {formData.items.length === 0 ? (
-              <p className="text-sm text-gray-400 py-4 text-center">
-                {formData.sale_id ? 'La venta seleccionada no tiene items' : 'Agregá items haciendo clic en "Agregar item" o seleccionando un producto'}
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {formData.items.map((item, i) => (
-                  <div key={i} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-4 gap-2">
-                      <div className="sm:col-span-2">
-                        <Input
-                          placeholder="Descripción del producto"
-                          value={item.description}
-                          onChange={e => updateItem(i, 'description', e.target.value)}
-                          className="text-sm"
-                        />
-                      </div>
-                      <div>
-                        <Input
-                          type="number"
-                          min="1"
-                          placeholder="Cant."
-                          value={item.quantity}
-                          onChange={e => updateItem(i, 'quantity', e.target.value)}
-                          className="text-sm"
-                        />
-                      </div>
-                      <div>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          placeholder="Precio unitario"
-                          value={(item.unit_price_cents / 100).toFixed(2)}
-                          onChange={e => updateItem(i, 'unit_price_cents', e.target.value)}
-                          className="text-sm"
-                        />
-                      </div>
-                    </div>
-                    <div className="text-right text-sm font-medium text-gray-900 dark:text-gray-100 w-24">
-                      {formatARS((item.unit_price_cents * item.quantity) / 100)}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeItem(i)}
-                      className="text-red-500 hover:text-red-700 p-1"
-                      title="Eliminar item"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-                <div className="flex justify-end pt-2">
-                  <div className="text-right">
-                    <span className="text-sm text-gray-500">Total: </span>
-                    <span className="text-lg font-bold text-green-600 dark:text-green-400">
-                      {formatARS(formData.items.reduce((sum, item) => sum + item.unit_price_cents * item.quantity, 0) / 100)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="border-t border-gray-100 dark:border-gray-800 pt-4 mb-4">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notas (opcional)</label>
-            <textarea
-              value={formData.notes || ''}
-              onChange={e => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-              placeholder="Observaciones adicionales..."
-              className="w-full rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              rows={3}
-            />
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
-            <Button variant="outline" onClick={() => { setShowCreateForm(false); resetForm(); }}>Cancelar</Button>
-            <Button onClick={createDocument} disabled={creating} className="flex items-center gap-2">
-              {creating ? (
-                <><Loader2 className="h-4 w-4 animate-spin" /> Creando...</>
-              ) : (
-                <><Check className="h-4 w-4" /> Crear {getDocumentTypeLabel(typeFilter)}</>
-              )}
-            </Button>
-          </div>
-        </Card>
-      )}
 
       <Card className="border border-gray-100 dark:border-gray-800">
         <div className="p-4 border-b border-gray-100 dark:border-gray-800">
@@ -727,7 +821,7 @@ export default function DocumentosPage() {
               {Object.entries(DOCUMENT_TYPE_LABELS).map(([key, label]) => (
                 <button
                   key={key}
-                  onClick={() => { setTypeFilter(key as DocumentType); setCurrentPage(1); }}
+                  onClick={() => { setTypeFilter(key as DocumentType); setCurrentPage(1); setShowCreateForm(false); }}
                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                     typeFilter === key
                       ? 'bg-indigo-600 text-white'
@@ -751,9 +845,14 @@ export default function DocumentosPage() {
               </div>
               <Select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="w-36">
                 <option value="all">Todos</option>
-                {VALID_STATUSES_PER_TYPE[typeFilter].map(status => (
-                  <option key={status} value={status}>{DOCUMENT_STATUS_LABELS[status]}</option>
-                ))}
+                {isPoTab
+                  ? ['draft', 'sent', 'partial', 'received', 'cancelled'].map(s => (
+                      <option key={s} value={s}>{PO_STATUS_LABELS[s]}</option>
+                    ))
+                  : VALID_STATUSES_PER_TYPE[typeFilter].map(status => (
+                      <option key={status} value={status}>{DOCUMENT_STATUS_LABELS[status]}</option>
+                    ))
+                }
               </Select>
             </div>
           </div>
@@ -763,13 +862,211 @@ export default function DocumentosPage() {
           <div className="flex items-center justify-center py-16">
             <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
           </div>
-        ) : filteredDocuments.length === 0 ? (
+        ) : currentItems.length === 0 ? (
           <div className="text-center py-16">
             <FileText className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
-            <p className="text-gray-500">No se encontraron {getDocumentTypeLabel(typeFilter).toLowerCase()}s</p>
-            <Button onClick={() => { setShowCreateForm(true); resetForm(); }} className="mt-4" variant="outline" size="sm">
-              <Plus className="h-4 w-4 mr-1" /> Crear primer {getDocumentTypeLabel(typeFilter).toLowerCase()}
+            <p className="text-gray-500">
+              {isPoTab ? 'No hay pedidos de compra' : `No se encontraron ${getDocumentTypeLabel(typeFilter).toLowerCase()}s`}
+            </p>
+            <Button onClick={handleNewDocument} className="mt-4" variant="outline" size="sm">
+              <Plus className="h-4 w-4 mr-1" />
+              {isPoTab ? 'Crear primer pedido' : `Crear primer ${getDocumentTypeLabel(typeFilter).toLowerCase()}`}
             </Button>
+          </div>
+        ) : isPoTab ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  <th className="py-3 px-4 w-8"></th>
+                  <th className="py-3 px-4">Folio</th>
+                  <th className="py-3 px-4">Proveedor</th>
+                  <th className="py-3 px-4">Estado</th>
+                  <th className="py-3 px-4 text-right">Total</th>
+                  <th className="py-3 px-4">Recibido</th>
+                  <th className="py-3 px-4 text-right">Fecha</th>
+                  <th className="py-3 px-4 text-center">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
+                {(paginatedDocuments as PurchaseOrder[]).map(order => (
+                  <React.Fragment key={order.id}>
+                    <tr
+                      className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20 cursor-pointer"
+                      onClick={() => toggleRow(order.id)}
+                    >
+                      <td className="py-3 px-4">
+                        {expandedRows.has(order.id) ? (
+                          <ChevronUp className="h-4 w-4 text-gray-400" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 text-gray-400" />
+                        )}
+                      </td>
+                      <td className="py-3 px-4 font-mono text-xs text-gray-500">
+                        #{order.id.slice(0, 8)}
+                      </td>
+                      <td className="py-3 px-4 text-gray-900 dark:text-gray-100 max-w-[200px] truncate">
+                        {order.supplier_name || '—'}
+                      </td>
+                      <td className="py-3 px-4">{poStatusBadge(order.status)}</td>
+                      <td className="py-3 px-4 text-right font-semibold text-green-600 dark:text-green-400">
+                        {formatARS(order.total_cents / 100)}
+                      </td>
+                      <td className="py-3 px-4">
+                        {order.items && order.items.length > 0 ? (
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                              <div className="h-full bg-green-500 rounded-full transition-all duration-300"
+                                style={{
+                                  width: `${Math.min(100, Math.round(
+                                    order.items.reduce((s, i) => s + (i.quantity_received || 0), 0)
+                                    / Math.max(1, order.items.reduce((s, i) => s + i.quantity_ordered, 0))
+                                    * 100
+                                  ))}%`
+                                }}
+                              />
+                            </div>
+                            <span className="text-xs font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap min-w-[48px] text-right">
+                              {order.items.reduce((s, i) => s + (i.quantity_received || 0), 0)}
+                              /{order.items.reduce((s, i) => s + i.quantity_ordered, 0)}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-right text-xs text-gray-500 whitespace-nowrap">
+                        {order.created_at ? new Date(order.created_at).toLocaleDateString('es-ES', {
+                          day: '2-digit', month: '2-digit', year: 'numeric',
+                        }) : '—'}
+                      </td>
+                      <td className="py-3 px-4 text-center" onClick={e => e.stopPropagation()}>
+                        {(order.status === 'draft' || order.status === 'sent' || order.status === 'partial') && (
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => handleReceiveOrder(order.id)}
+                              className="px-2 py-1 text-xs font-medium text-green-700 bg-green-100 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50 rounded"
+                            >
+                              Recibir
+                            </button>
+                            {order.status !== 'partial' && (
+                              <button
+                                onClick={() => handleCancelOrder(order.id)}
+                                className="px-2 py-1 text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50 rounded"
+                              >
+                                Cancelar
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        {order.status === 'received' && (
+                          <span className="text-xs text-gray-400">Completado</span>
+                        )}
+                        {order.status === 'cancelled' && (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </td>
+                    </tr>
+                    {expandedRows.has(order.id) && (
+                      <tr>
+                        <td colSpan={8} className="p-0">
+                          <div className="border-l-4 border-l-blue-500 bg-blue-50 dark:bg-blue-950/20 mx-4 my-2 rounded-lg overflow-hidden">
+                            <div className="px-6 py-4">
+                              <div className="flex items-start justify-between mb-4">
+                                <div>
+                                  <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                                    Orden de Compra #{order.id.slice(0, 8)}
+                                  </h3>
+                                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{order.supplier_name || '—'}</p>
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    {order.created_at ? new Date(order.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  {poStatusBadge(order.status)}
+                                  <p className="text-xl font-bold text-green-600 dark:text-green-400 mt-2">
+                                    {formatARS(order.total_cents / 100)}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                                <div className="space-y-1">
+                                  <p className="text-sm">
+                                    <span className="text-gray-500">Proveedor:</span>{' '}
+                                    <span className="text-gray-900 dark:text-gray-100">{order.supplier_name || '—'}</span>
+                                  </p>
+                                  {order.expected_date && (
+                                    <p className="text-sm">
+                                      <span className="text-gray-500">Fecha esperada:</span>{' '}
+                                      <span className="text-gray-900 dark:text-gray-100">
+                                        {new Date(order.expected_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                      </span>
+                                    </p>
+                                  )}
+                                  {order.received_date && (
+                                    <p className="text-sm">
+                                      <span className="text-gray-500">Recibido el:</span>{' '}
+                                      <span className="text-gray-900 dark:text-gray-100">
+                                        {new Date(order.received_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                      </span>
+                                    </p>
+                                  )}
+                                  {order.notes && <p className="text-sm"><span className="text-gray-500">Notas:</span> <span className="text-gray-900 dark:text-gray-100">{order.notes}</span></p>}
+                                </div>
+                                <div>
+                                  {order.items && order.items.length > 0 ? (
+                                    <table className="w-full text-sm">
+                                      <thead>
+                                        <tr className="text-xs text-gray-500 border-b border-gray-200 dark:border-gray-700">
+                                          <th className="text-left py-1.5">Descripción</th>
+                                          <th className="text-right py-1.5">Cant.</th>
+                                          <th className="text-right py-1.5">P. Unit.</th>
+                                          <th className="text-right py-1.5">Subtotal</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {order.items.map((item) => (
+                                          <tr key={item.id} className="border-t border-gray-100 dark:border-gray-800">
+                                            <td className="py-1.5 text-gray-900 dark:text-gray-100">{item.product_name || 'Producto'}</td>
+                                            <td className="py-1.5 text-right text-gray-600 dark:text-gray-400">{item.quantity_ordered}</td>
+                                            <td className="py-1.5 text-right text-gray-600 dark:text-gray-400">{formatARS(item.unit_cost_cents / 100)}</td>
+                                            <td className="py-1.5 text-right font-medium text-gray-900 dark:text-gray-100">{formatARS((item.unit_cost_cents * item.quantity_ordered) / 100)}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  ) : (
+                                    <p className="text-sm text-gray-400">Sin items</p>
+                                  )}
+                                </div>
+                              </div>
+
+                              {(order.status === 'draft' || order.status === 'sent' || order.status === 'partial') && (
+                                <div className="flex gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
+                                  <Button variant="outline" size="sm" onClick={() => handleReceiveOrder(order.id)}
+                                    className="text-green-600 border-green-200 hover:bg-green-50 dark:border-green-800 dark:hover:bg-green-900/20"
+                                  >
+                                    Recibir
+                                  </Button>
+                                  {order.status !== 'partial' && (
+                                    <Button variant="outline" size="sm" onClick={() => handleCancelOrder(order.id)}
+                                      className="text-red-600 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20"
+                                    >
+                                      Cancelar
+                                    </Button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -778,7 +1075,7 @@ export default function DocumentosPage() {
                 <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   <th className="py-3 px-4 w-8"></th>
                   <th className="py-3 px-4">Nro.</th>
-                  <th className="py-3 px-4">{(typeFilter === 'remito_ingreso' || typeFilter === 'orden_compra') ? 'Proveedor' : 'Cliente'}</th>
+                  <th className="py-3 px-4">{(typeFilter === 'remito_ingreso') ? 'Proveedor' : 'Cliente'}</th>
                   <th className="py-3 px-4 text-right">Total</th>
                   <th className="py-3 px-4">Estado</th>
                   <th className="py-3 px-4 text-right">Fecha</th>
@@ -787,7 +1084,7 @@ export default function DocumentosPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
-                {paginatedDocuments.map(doc => (
+                {(paginatedDocuments as CommercialDocument[]).map(doc => (
                   <React.Fragment key={doc.id}>
                     <tr
                       className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20 cursor-pointer"
@@ -897,6 +1194,14 @@ export default function DocumentosPage() {
 
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
                                 <div className="space-y-1">
+                                  {doc.purchase_order_id && (
+                                    <p className="text-sm">
+                                      <span className="text-gray-500">Origen:</span>{' '}
+                                      <span className="text-gray-900 dark:text-gray-100">
+                                        Pedido de Compra #{doc.purchase_order_id.slice(0, 8)}
+                                      </span>
+                                    </p>
+                                  )}
                                   {doc.supplier_name && <p className="text-sm"><span className="text-gray-500">Proveedor:</span> <span className="text-gray-900 dark:text-gray-100">{doc.supplier_name}</span></p>}
                                   {doc.valid_until && (
                                     <p className="text-sm">
@@ -1022,6 +1327,526 @@ export default function DocumentosPage() {
           </div>
         )}
       </Card>
+
+      {/* Document Create Modal */}
+      {showCreateForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
+          <Card className="w-full max-w-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
+            <button
+              onClick={() => { setShowCreateForm(false); resetForm(); }}
+              className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <FileText className="h-5 w-5 text-indigo-600" />
+              Nuevo {getDocumentTypeLabel(typeFilter)}
+            </h2>
+
+            <form onSubmit={(e) => { e.preventDefault(); createDocument(); }} className="space-y-4 overflow-y-auto pr-1 flex-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              </div>
+
+              <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                  {(typeFilter === 'remito_ingreso') ? 'Datos del Proveedor' : 'Datos del Cliente'}
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      {typeFilter === 'remito_ingreso' ? 'Proveedor existente' : 'Cliente existente'}
+                    </label>
+                    {typeFilter === 'remito_ingreso' ? (
+                      <Select value={formData.supplier_name || ''} onChange={e => {
+                        const supplier = suppliers.find(s => s.name === e.target.value);
+                        setFormData(prev => ({
+                          ...prev,
+                          supplier_name: supplier?.name || e.target.value,
+                          customer_name: supplier?.name || e.target.value,
+                        }));
+                      }}>
+                        <option value="">Seleccionar proveedor...</option>
+                        {suppliers.map(s => (
+                          <option key={s.id} value={s.name}>{s.name}</option>
+                        ))}
+                      </Select>
+                    ) : (
+                      <Select value={formData.customer_id || ''} onChange={e => handleCustomerSelect(e.target.value)}>
+                        <option value="">Seleccionar cliente...</option>
+                        {customers.map(c => (
+                          <option key={c.id} value={c.id}>{c.name} {c.cuit ? `- ${c.cuit}` : ''}</option>
+                        ))}
+                      </Select>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre *</label>
+                    <Input
+                      value={typeFilter === 'remito_ingreso' ? (formData.supplier_name || '') : formData.customer_name}
+                      onChange={e => setFormData(prev => ({
+                        ...prev,
+                        customer_name: e.target.value,
+                        supplier_name: typeFilter === 'remito_ingreso' ? e.target.value : prev.supplier_name,
+                      }))}
+                      placeholder={typeFilter === 'remito_ingreso' ? 'Nombre del proveedor' : 'Razón social o nombre'}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {(typeFilter === 'presupuesto' || typeFilter === 'remito_salida' || typeFilter === 'remito_ingreso') && (
+                <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
+                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Fechas</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {typeFilter === 'presupuesto' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Válido hasta</label>
+                        <Input
+                          type="date"
+                          value={formData.valid_until || ''}
+                          onChange={e => setFormData(prev => ({ ...prev, valid_until: e.target.value }))}
+                        />
+                      </div>
+                    )}
+                    {(typeFilter === 'remito_salida' || typeFilter === 'remito_ingreso') && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Fecha de entrega</label>
+                        <Input
+                          type="date"
+                          value={formData.delivery_date || ''}
+                          onChange={e => setFormData(prev => ({ ...prev, delivery_date: e.target.value }))}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Items</h3>
+                  <div className="flex items-center gap-2">
+                    {products.length > 0 && (
+                      <Select
+                        value=""
+                        onChange={e => {
+                          if (e.target.value) {
+                            addItemFromProduct(e.target.value);
+                            e.target.value = '';
+                          }
+                        }}
+                        className="text-xs"
+                      >
+                        <option value="">+ Agregar producto...</option>
+                        {products.map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} - {formatARS(p.price || 0)}
+                          </option>
+                        ))}
+                      </Select>
+                    )}
+                    <Button type="button" variant="outline" size="sm" onClick={addItem}>
+                      <Plus className="h-3.5 w-3.5 mr-1" /> Agregar item
+                    </Button>
+                  </div>
+                </div>
+
+                {formData.items.length === 0 ? (
+                  <p className="text-sm text-gray-400 py-4 text-center">
+                    {formData.sale_id ? 'La venta seleccionada no tiene items' : 'Agregá items haciendo clic en "Agregar item" o seleccionando un producto'}
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {formData.items.map((item, i) => (
+                      <div key={i} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                        <div className="flex-1 grid grid-cols-1 sm:grid-cols-4 gap-2">
+                          <div className="sm:col-span-2">
+                            <Input
+                              placeholder="Descripción del producto"
+                              value={item.description}
+                              onChange={e => updateItem(i, 'description', e.target.value)}
+                              className="text-sm"
+                            />
+                          </div>
+                          <div>
+                            <Input
+                              type="number"
+                              min="1"
+                              placeholder="Cant."
+                              value={item.quantity}
+                              onChange={e => updateItem(i, 'quantity', e.target.value)}
+                              className="text-sm"
+                            />
+                          </div>
+                          <div>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              placeholder="Precio unitario"
+                              value={(item.unit_price_cents / 100).toFixed(2)}
+                              onChange={e => updateItem(i, 'unit_price_cents', e.target.value)}
+                              className="text-sm"
+                            />
+                          </div>
+                        </div>
+                        <div className="text-right text-sm font-medium text-gray-900 dark:text-gray-100 w-24">
+                          {formatARS((item.unit_price_cents * item.quantity) / 100)}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeItem(i)}
+                          className="text-red-500 hover:text-red-700 p-1"
+                          title="Eliminar item"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <div className="flex justify-end pt-2">
+                      <div className="text-right">
+                        <span className="text-sm text-gray-500">Total: </span>
+                        <span className="text-lg font-bold text-green-600 dark:text-green-400">
+                          {formatARS(formData.items.reduce((sum, item) => sum + item.unit_price_cents * item.quantity, 0) / 100)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notas (opcional)</label>
+                <textarea
+                  value={formData.notes || ''}
+                  onChange={e => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Observaciones adicionales..."
+                  className="w-full rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  rows={3}
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
+                <Button type="button" variant="outline" onClick={() => { setShowCreateForm(false); resetForm(); }}>Cancelar</Button>
+                <Button type="submit" disabled={creating} className="flex items-center gap-2">
+                  {creating ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Creando...</>
+                  ) : (
+                    <><Check className="h-4 w-4" /> Crear {getDocumentTypeLabel(typeFilter)}</>
+                  )}
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* Purchase Order Create Modal */}
+      {isPoModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
+          <Card className="w-full max-w-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
+            <button
+              onClick={() => { setIsPoModalOpen(false); resetPoForm(); }}
+              className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+              Nuevo Pedido de Compra
+            </h2>
+
+            <form onSubmit={handleCreatePo} className="space-y-4 overflow-y-auto pr-1 flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    Proveedor *
+                  </label>
+                  <Select value={poSupplierId} onChange={(e) => setPoSupplierId(e.target.value)} required>
+                    <option value="">Seleccionar proveedor...</option>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    Fecha Esperada
+                  </label>
+                  <Input
+                    type="date"
+                    value={poExpectedDate}
+                    onChange={(e) => setPoExpectedDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    Estado
+                  </label>
+                  <Select value={poStatus} onChange={(e) => setPoStatus(e.target.value as 'draft' | 'sent')}>
+                    <option value="draft">Borrador</option>
+                    <option value="sent">Enviado</option>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Productos</h3>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value=""
+                      onChange={e => {
+                        if (e.target.value) {
+                          addPoItemFromProduct(e.target.value);
+                        }
+                      }}
+                      className="text-xs"
+                    >
+                      <option value="">+ Agregar producto...</option>
+                      {products.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} - {formatARS(p.cost || 0)}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                </div>
+
+                {poItems.length === 0 ? (
+                  <p className="text-sm text-gray-400 py-4 text-center">
+                    Agregá productos seleccionando del menú superior
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {poItems.map((item, index) => {
+                      const product = products.find((p) => p.id === item.product_id);
+                      return (
+                        <div key={index} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                              {product?.name || item.product_id}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => updatePoItem(index, 'quantity', Math.max(1, item.quantity - 1))}
+                              className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                            >
+                              −
+                            </button>
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => updatePoItem(index, 'quantity', Math.max(1, Number(e.target.value) || 1))}
+                              className="w-14 text-center text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 py-1"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => updatePoItem(index, 'quantity', item.quantity + 1)}
+                              className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                            >
+                              +
+                            </button>
+                          </div>
+                          <div className="w-24">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.unit_cost}
+                              onChange={(e) => updatePoItem(index, 'unit_cost', Math.max(0, Number(e.target.value) || 0))}
+                              className="w-full text-right text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 py-1 px-2"
+                            />
+                          </div>
+                          <div className="text-right text-sm font-medium text-gray-900 dark:text-gray-100 w-24">
+                            {formatARS(item.quantity * item.unit_cost)}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removePoItem(index)}
+                            className="text-red-500 hover:text-red-700 p-1"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                    <div className="flex justify-end pt-2">
+                      <div className="text-right">
+                        <span className="text-sm text-gray-500">Total: </span>
+                        <span className="text-lg font-bold text-green-600 dark:text-green-400">
+                          {formatARS(poTotalCents / 100)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  Notas del pedido
+                </label>
+                <textarea
+                  className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                  rows={2}
+                  placeholder="Condiciones de pago, instrucciones de entrega..."
+                  value={poNotes}
+                  onChange={(e) => setPoNotes(e.target.value)}
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-lg font-bold text-gray-900 dark:text-gray-100 pt-2">
+                <span>Total Estimado</span>
+                <span className="text-2xl text-indigo-600 dark:text-indigo-400">
+                  {formatARS(poTotalCents / 100)}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
+                <Button type="button" variant="outline" onClick={() => { setIsPoModalOpen(false); resetPoForm(); }}>
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={isSubmittingPo}>
+                  {isSubmittingPo ? (
+                    <><Loader2 className="h-4 w-4 animate-spin mr-2" />Creando...</>
+                  ) : (
+                    <><Check className="h-4 w-4 mr-2" />Crear Pedido</>
+                  )}
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* Receive Modal */}
+      {isReceiveModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
+          <Card className="w-full max-w-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
+            <button
+              onClick={() => setIsReceiveModalOpen(false)}
+              className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <Package className="h-5 w-5 text-teal-600" />
+              Recibir Pedido
+            </h2>
+
+            <div className="space-y-4 overflow-y-auto pr-1 flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    Proveedor
+                  </label>
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 py-2">
+                    {receiveOrderId ? purchaseOrders.find(o => o.id === receiveOrderId)?.supplier_name || '—' : '—'}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    Fecha de Recepción
+                  </label>
+                  <Input
+                    type="date"
+                    value={receiveDate}
+                    onChange={(e) => setReceiveDate(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  Depósito
+                </label>
+                <Input
+                  type="text"
+                  placeholder="Depósito o ubicación"
+                  value={receiveWarehouse}
+                  onChange={(e) => setReceiveWarehouse(e.target.value)}
+                />
+              </div>
+
+              <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
+                <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-3">Productos</h3>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {receiveItems.map((item, index) => { return (
+                    <div key={item.product_id} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                          {item.product_name}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Pedido: {item.quantity_ordered} u.
+                          {item.already_received > 0 && (
+                            <> | Recibidas: {item.already_received} u.</>
+                          )}
+                          {item.quantity_ordered - item.already_received > 0 && (
+                            <> | Pendientes: {item.quantity_ordered - item.already_received} u.</>
+                          )}
+                        </p>
+                      </div>
+                      <div className="w-28">
+                        <label className="block text-xs text-gray-500 mb-0.5">Recibir ahora</label>
+                        <Input
+                          type="number"
+                          min="0"
+                          max={item.quantity_ordered - item.already_received}
+                          value={item.quantity_received}
+                          onChange={(e) => {
+                            const max = item.quantity_ordered - item.already_received;
+                            const val = Math.min(Math.max(Number(e.target.value) || 0, 0), max);
+                            setReceiveItems(prev =>
+                              prev.map((ri, idx) =>
+                                idx === index ? { ...ri, quantity_received: val } : ri
+                              )
+                            );
+                          }}
+                        />
+                      </div>
+                    </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  Observaciones
+                </label>
+                <textarea
+                  className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                  rows={2}
+                  placeholder="Observaciones de la recepción..."
+                  value={receiveNotes}
+                  onChange={(e) => setReceiveNotes(e.target.value)}
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
+                <Button type="button" variant="outline" onClick={() => setIsReceiveModalOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleConfirmReceive} disabled={isSubmittingReceive}>
+                  {isSubmittingReceive ? (
+                    <><Loader2 className="h-4 w-4 animate-spin mr-2" />Procesando...</>
+                  ) : (
+                    <><Check className="h-4 w-4 mr-2" />Confirmar Recepción</>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
 
       <ConfirmModal
         open={confirmModal.open}

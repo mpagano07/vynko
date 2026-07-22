@@ -16,7 +16,7 @@ export interface PurchaseOrder {
   tenant_id: string;
   supplier_id: string;
   supplier_name?: string;
-  status: 'draft' | 'pending' | 'received' | 'cancelled';
+  status: 'draft' | 'sent' | 'partial' | 'received' | 'cancelled';
   total_cents: number;
   expected_date?: string;
   received_date?: string;
