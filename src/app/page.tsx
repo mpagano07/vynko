@@ -28,6 +28,8 @@ export default function LandingPage() {
   const [waitlistLoading, setWaitlistLoading] = useState(false);
   const [waitlistDone, setWaitlistDone] = useState(false);
 
+  const [modal, setModal] = useState<'privacidad' | 'terminos' | null>(null);
+
   const handleWaitlist = async (e: React.FormEvent) => {
     e.preventDefault();
     setEmailError('');
@@ -372,13 +374,48 @@ export default function LandingPage() {
               <span className="text-sm font-bold text-white">Vynko</span>
             </div>
             <div className="flex items-center gap-6 text-sm text-gray-500">
-              <Link href="#" className="hover:text-gray-300 transition-colors">Privacidad</Link>
-              <Link href="#" className="hover:text-gray-300 transition-colors">Términos</Link>
+              <button onClick={() => setModal('privacidad')} className="hover:text-gray-300 transition-colors">Privacidad</button>
+              <button onClick={() => setModal('terminos')} className="hover:text-gray-300 transition-colors">Términos</button>
               <span>© 2026 Vynko</span>
             </div>
           </div>
         </div>
       </footer>
+
+      {/* Modal */}
+      {modal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setModal(null)} />
+          <div className="relative bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto shadow-2xl">
+            <div className="sticky top-0 bg-gray-900/95 backdrop-blur-sm border-b border-gray-800 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+              <h2 className="text-lg font-bold text-white">
+                {modal === 'privacidad' ? 'Política de Privacidad' : 'Términos y Condiciones'}
+              </h2>
+              <button onClick={() => setModal(null)} className="text-gray-500 hover:text-white transition-colors p-1">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="px-6 py-5 text-sm text-gray-400 space-y-4">
+              {modal === 'privacidad' ? (
+                <>
+                  <p>En Vynko nos tomamos tu privacidad en serio. Recopilamos la información necesaria para operar la plataforma: datos de cuenta, perfil de negocio, productos, ventas y uso del servicio.</p>
+                  <p>No vendemos tu información a terceros. Compartimos datos solo con proveedores esenciales (hosting, pagos) y cuando la ley lo requiere.</p>
+                  <p>Usamos cifrado SSL/TLS y autenticación segura. Podés acceder, corregir o eliminar tus datos desde la configuración de tu cuenta en cualquier momento.</p>
+                  <p className="text-gray-500">Consultas: <span className="text-cyan-400">privacidad@vynko.app</span></p>
+                </>
+              ) : (
+                <>
+                  <p>Al usar Vynko aceptás estos términos. El servicio incluye gestión de stock, escaneo de productos, alertas y reportes.</p>
+                  <p>Sos responsable de mantener la confidencialidad de tu cuenta. Ofrecemos planes gratuitos y pagos procesados por Mercado Pago. Podés cancelar cuando quieras.</p>
+                  <p>No está permitido usar la plataforma para actividades ilegales. Nos reservamos el derecho de suspender cuentas que violen estas reglas.</p>
+                  <p>Podemos modificar estos términos; te notificaremos por correo. El uso continuado implica aceptación de los cambios.</p>
+                  <p className="text-gray-500">Consultas: <span className="text-cyan-400">legal@vynko.app</span></p>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
