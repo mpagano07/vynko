@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useProducts } from '@/lib/hooks/useProducts';
 import { useCategories } from '@/lib/hooks/useCategories';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -31,12 +31,17 @@ import {
   Download,
   Percent,
   HelpCircle,
+  ArrowRightLeft,
+  ChevronDown,
+  Settings2,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
+import { TransferInbox } from '@/components/transfers/TransferInbox';
 
 export default function ProductsPage() {
-  const { tenant } = useAuth();
+  const { tenant, tenants } = useAuth();
   const tenantId = tenant?.id ?? null;
+  const multiBranch = (tenants?.length || 0) > 1;
   const { products, isLoading: productsLoading, mutate: mutateProducts } = useProducts(tenantId);
   const { categories, isLoading: categoriesLoading, mutate: mutateCategories } = useCategories(tenantId);
 
@@ -85,6 +90,14 @@ export default function ProductsPage() {
 
   // Export State
   const [exporting, setExporting] = useState(false);
+
+  // Transfer State
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [transfersTrigger, setTransfersTrigger] = useState(0);
+
+  // Actions Dropdown State
+  const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
+  const actionsMenuRef = useRef<HTMLDivElement>(null);
 
   // Price Adjustment State
   const [isPriceAdjustModalOpen, setIsPriceAdjustModalOpen] = useState(false);
@@ -251,6 +264,17 @@ export default function ProductsPage() {
       setProductForm((prev) => ({ ...prev, barcode }));
       setIsProductModalOpen(true);
     }
+  }, []);
+
+  // Close actions menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(e.target as Node)) {
+        setIsActionsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
   const [confirmAction, setConfirmAction] = useState<{
     type: 'delete-product' | 'delete-category';
@@ -471,34 +495,85 @@ export default function ProductsPage() {
             Administra tus productos, códigos de barras y niveles de stock crítico.
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => setIsCategoryModalOpen(true)} className="flex items-center gap-1.5">
-            <FolderKanban className="h-3.5 w-3.5 shrink-0" />
-            <span className="hidden md:inline">Categorías</span>
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => { setIsPriceAdjustModalOpen(true); setPriceAdjustResult(null); setPriceAdjustPercentage(''); }} className="flex items-center gap-1.5">
-            <Percent className="h-3.5 w-3.5 shrink-0" />
-            <span className="hidden md:inline">Ajustar</span>
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setIsImportModalOpen(true)} className="flex items-center gap-1.5">
-            <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
-            <span className="hidden md:inline">Importar</span>
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting} className="flex items-center gap-1.5" title="Exporta solo los productos actualmente filtrados">
-            {exporting ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-            ) : (
-              <Download className="h-3.5 w-3.5 shrink-0" />
+        <div className="flex items-center gap-2">
+          {/* Actions Dropdown */}
+          <div className="relative" ref={actionsMenuRef}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsActionsMenuOpen((prev) => !prev)}
+              className="flex items-center gap-1.5"
+            >
+              <Settings2 className="h-3.5 w-3.5 shrink-0" />
+              <span>Gestionar</span>
+              <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${isActionsMenuOpen ? 'rotate-180' : ''}`} />
+            </Button>
+
+            {isActionsMenuOpen && (
+              <div className="absolute right-0 mt-1.5 w-52 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl z-50 overflow-hidden">
+                <div className="py-1">
+                  <button
+                    onClick={() => { setIsCategoryModalOpen(true); setIsActionsMenuOpen(false); }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    <FolderKanban className="h-4 w-4 text-indigo-500 shrink-0" />
+                    Categorías
+                  </button>
+                  <button
+                    onClick={() => { setIsPriceAdjustModalOpen(true); setPriceAdjustResult(null); setPriceAdjustPercentage(''); setIsActionsMenuOpen(false); }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    <Percent className="h-4 w-4 text-amber-500 shrink-0" />
+                    Ajustar precios
+                  </button>
+                  <button
+                    onClick={() => { setIsImportModalOpen(true); setIsActionsMenuOpen(false); }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    <FileSpreadsheet className="h-4 w-4 text-emerald-500 shrink-0" />
+                    Importar
+                  </button>
+                  <button
+                    onClick={() => { handleExport(); setIsActionsMenuOpen(false); }}
+                    disabled={exporting}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
+                  >
+                    {exporting ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-blue-500 shrink-0" />
+                    ) : (
+                      <Download className="h-4 w-4 text-blue-500 shrink-0" />
+                    )}
+                    {exporting ? 'Exportando...' : 'Exportar'}
+                  </button>
+                  {multiBranch && (
+                    <>
+                      <div className="border-t border-gray-100 dark:border-gray-800 my-1" />
+                      <button
+                        onClick={() => { setIsTransferModalOpen(true); setIsActionsMenuOpen(false); }}
+                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                      >
+                        <ArrowRightLeft className="h-4 w-4 text-purple-500 shrink-0" />
+                        Transferencias
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
             )}
-            <span className="hidden md:inline">{exporting ? 'Exportando...' : 'Exportar'}</span>
-          </Button>
+          </div>
+
+          {/* New Product Button */}
           <Button size="sm" onClick={() => handleOpenProductModal(null)} className="flex items-center gap-1.5">
             <Plus className="h-3.5 w-3.5 shrink-0" />
-            <span className="hidden md:inline">Nuevo</span>
-            <span className="md:hidden">Nuevo</span>
+            Nuevo
           </Button>
         </div>
       </div>
+
+      {/* Transfer Inbox — active transfers for multi-branch */}
+      {multiBranch && tenantId && (
+        <TransferInbox currentTenantId={tenantId} trigger={transfersTrigger} onAction={() => mutateProducts()} />
+      )}
 
       {/* Filters Card */}
       <Card className="p-4 border border-gray-100 dark:border-gray-800">
@@ -1275,6 +1350,277 @@ export default function ProductsPage() {
           'Eliminar categoría'
         }
       />
+
+      {isTransferModalOpen && (
+        <NewTransferModal
+          tenants={tenants || []}
+          currentTenantId={tenant?.id}
+          onClose={() => setIsTransferModalOpen(false)}
+          onSuccess={() => {
+            setIsTransferModalOpen(false);
+            setTransfersTrigger(prev => prev + 1);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function NewTransferModal({
+  tenants,
+  currentTenantId,
+  onClose,
+  onSuccess,
+}: {
+  tenants: { id: string; name: string }[];
+  currentTenantId?: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [fromTenantId, setFromTenantId] = useState(currentTenantId || '');
+  const [toTenantId, setToTenantId] = useState('');
+  const [notes, setNotes] = useState('');
+  const [items, setItems] = useState<{ product_id: string; product_name: string; quantity: number }[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const [allProducts, setAllProducts] = useState<Record<string, any>[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+
+  const otherTenants = tenants.filter((t) => t.id !== fromTenantId);
+
+  useEffect(() => {
+    if (!fromTenantId) {
+      setAllProducts([]);
+      return;
+    }
+    const loadProducts = async () => {
+      setLoadingProducts(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch('/api/products', {
+          headers: {
+            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+            'x-active-tenant-id': fromTenantId,
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setAllProducts(data || []);
+        }
+      } catch (err) {
+        console.error('Error loading products for transfer:', err);
+      } finally {
+        setLoadingProducts(false);
+      }
+    };
+    loadProducts();
+  }, [fromTenantId]);
+
+  const searchResults = React.useMemo(() => {
+    if (!searchTerm.trim()) return [];
+    const term = searchTerm.toLowerCase();
+    const alreadyAdded = new Set(items.map(i => i.product_id));
+    return allProducts.filter(p => {
+      if (alreadyAdded.has(p.id)) return false;
+      return (
+        p.name?.toLowerCase().includes(term) ||
+        p.sku?.toLowerCase().includes(term) ||
+        p.barcode?.toLowerCase().includes(term)
+      );
+    }).slice(0, 8);
+  }, [searchTerm, allProducts, items]);
+
+  const addItem = (product: Record<string, unknown>) => {
+    setItems(prev => [...prev, { product_id: product.id as string, product_name: product.name as string, quantity: 1 }]);
+    setSearchTerm('');
+  };
+
+  const updateQuantity = (productId: string, qty: number) => {
+    setItems(prev => prev.map(i => i.product_id === productId ? { ...i, quantity: Math.max(1, qty) } : i));
+  };
+
+  const removeItem = (productId: string) => {
+    setItems(prev => prev.filter(i => i.product_id !== productId));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fromTenantId || !toTenantId) {
+      toast.error('Seleccioná origen y destino');
+      return;
+    }
+    if (items.length === 0) {
+      toast.error('Agregá al menos un producto');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/stock-transfers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({
+          from_tenant_id: fromTenantId,
+          to_tenant_id: toTenantId,
+          notes: notes || undefined,
+          items: items.map(i => ({ product_id: i.product_id, quantity: i.quantity })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al crear transferencia');
+      toast.success('Transferencia creada correctamente');
+      onSuccess();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error al crear transferencia');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
+      <Card className="w-full max-w-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
+        <button
+          onClick={onClose}
+          className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700"
+        >
+          <X className="h-5 w-5" />
+        </button>
+
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+          <ArrowRightLeft className="h-5 w-5 text-indigo-500" />
+          Nueva transferencia
+        </h2>
+
+        <form onSubmit={handleSubmit} className="space-y-5 overflow-y-auto pr-1 flex-1">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                Origen
+              </label>
+              <Select value={fromTenantId} onChange={(e) => {
+                setFromTenantId(e.target.value);
+                if (e.target.value === toTenantId) setToTenantId('');
+              }}>
+                <option value="">Seleccionar origen...</option>
+                {tenants.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                Destino
+              </label>
+              <Select value={toTenantId} onChange={(e) => setToTenantId(e.target.value)}>
+                <option value="">Seleccionar destino...</option>
+                {otherTenants.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </Select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+              Productos
+            </label>
+            <div className="relative mb-3">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+              <Input
+                type="text"
+                placeholder={loadingProducts ? "Cargando catálogo de la sucursal..." : "Buscar productos por nombre, SKU o código de barras..."}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                disabled={loadingProducts || !fromTenantId}
+                className="pl-9"
+              />
+              {loadingProducts && (
+                <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin text-gray-400" />
+              )}
+            </div>
+
+            {searchResults.length > 0 && (
+              <div className="mb-3 border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-800 max-h-48 overflow-y-auto">
+                {searchResults.map((p) => (
+                  <button
+                    key={p.id as string}
+                    type="button"
+                    onClick={() => addItem(p)}
+                    className="flex items-center justify-between w-full px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50 text-left"
+                  >
+                    <span className="font-medium text-gray-900 dark:text-gray-100">{p.name as string}</span>
+                    <span className="text-xs text-indigo-500 font-medium">Agregar</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {items.length > 0 ? (
+              <div className="border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-800">
+                {items.map((item) => (
+                  <div key={item.product_id} className="flex items-center justify-between px-3 py-2">
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate flex-1">
+                      {item.product_name}
+                    </span>
+                    <div className="flex items-center gap-2 ml-3">
+                      <Input
+                        type="number"
+                        min="1"
+                        value={item.quantity}
+                        onChange={(e) => updateQuantity(item.product_id, parseInt(e.target.value) || 1)}
+                        className="w-20 text-center text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeItem(item.product_id)}
+                        className="p-1 text-gray-400 hover:text-red-500"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400 italic">
+                Buscá y agregá productos a la transferencia
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+              Notas (opcional)
+            </label>
+            <textarea
+              className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+              rows={2}
+              placeholder="Motivo o comentarios sobre la transferencia..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? (
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Creando...</>
+              ) : (
+                'Enviar transferencia'
+              )}
+            </Button>
+          </div>
+        </form>
+      </Card>
     </div>
   );
 }

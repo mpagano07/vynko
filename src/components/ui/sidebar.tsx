@@ -17,6 +17,7 @@ interface NavItem {
   icon?: React.ReactNode;
   requiredPlan?: string[];
   requiredRole?: string[];
+  requiredMultiBranch?: boolean;
   badge?: string;
 }
 
@@ -42,6 +43,7 @@ const navGroups: NavGroup[] = [
       { name: 'Proveedores', href: '/providers', requiredPlan: ALL_PLANS },
       { name: 'Clientes', href: '/customers', requiredPlan: ALL_PLANS },
       { name: 'Documentos', href: '/documentos', requiredPlan: ALL_PLANS },
+
     ],
   },
   {
@@ -67,7 +69,7 @@ const operacionesItems: NavItem[] = [
   { name: 'Visión Góndolas', href: '/shelf-vision', requiredPlan: ['business', 'enterprise'], badge: 'Próximamente' },
 ];
 
-function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked }: { onNavClick?: () => void; tenantPlan?: string; userRole?: string | null; isBlocked?: boolean }) {
+function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch }: { onNavClick?: () => void; tenantPlan?: string; userRole?: string | null; isBlocked?: boolean; multiBranch?: boolean }) {
   const pathname = usePathname();
   const [operacionesOpen, setOperacionesOpen] = useState(false);
   const operacionesRef = useRef<HTMLDivElement>(null);
@@ -77,6 +79,7 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked }: { onNavClic
   const filterItem = (item: NavItem) => {
     if (item.requiredPlan && !item.requiredPlan.includes(effectivePlan)) return false;
     if (item.requiredRole && !item.requiredRole.includes(userRole || '')) return false;
+    if (item.requiredMultiBranch && !multiBranch) return false;
     return true;
   };
 
@@ -477,7 +480,7 @@ export function Sidebar() {
           </div>
         )}
         <nav className="flex-1 space-y-2 overflow-y-auto">
-          <SidebarNav onNavClick={close} tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} />
+          <SidebarNav onNavClick={close} tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} />
         </nav>
         <TrialCounter tenant={tenant} />
         {userSection}
@@ -494,7 +497,7 @@ export function Sidebar() {
           )}
         </div>
         <nav className="flex-1 overflow-y-auto">
-          <SidebarNav tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} />
+          <SidebarNav tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} />
         </nav>
         <TrialCounter tenant={tenant} />
         {userSection}
