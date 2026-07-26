@@ -77,8 +77,12 @@ function LoginContent() {
         router.replace('/dashboard');
       }
     } catch (error: unknown) {
-      const maybeError = error as { message?: string };
-      toast.error(maybeError?.message || 'Error al iniciar sesión');
+      const authError = error as { message?: string; code?: string };
+      if (authError?.code === 'invalid_credentials') {
+        toast.error('Email o contraseña incorrectos');
+      } else {
+        toast.error(authError?.message || 'Error al iniciar sesión');
+      }
     } finally {
       setLoading(false);
     }
@@ -134,7 +138,7 @@ function LoginContent() {
                 </svg>
               </div>
               <div>
-                <h3 className="text-white font-medium">Pronóstico con IA</h3>
+                <h3 className="text-white font-medium">Pronóstico</h3>
                 <p className="text-gray-500 text-sm">Predicciones de demanda y alertas de reposición</p>
               </div>
             </div>

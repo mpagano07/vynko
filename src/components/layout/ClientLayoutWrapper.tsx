@@ -43,7 +43,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
   }, [loading, isPublicRoute, isBillingRoute, tenant, router]);
 
   if (isPublicRoute) {
-    return <>{children}</>;
+    return <><LazyToaster />{children}</>;
   }
 
   return (
