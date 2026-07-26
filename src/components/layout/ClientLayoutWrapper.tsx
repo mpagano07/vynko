@@ -42,6 +42,41 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
     }
   }, [loading, isPublicRoute, isBillingRoute, tenant, router]);
 
+  // Handle ChunkLoadError and network fetch failures on dynamic scripts
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      const message = event.message || '';
+      if (
+        message.includes('ChunkLoadError') || 
+        message.includes('Loading chunk') ||
+        message.includes('Failed to fetch dynamically imported module') ||
+        message.includes('Script error.')
+      ) {
+        console.warn('Dynamic script load error detected. Reloading page to apply updates...', message);
+        window.location.reload();
+      }
+    };
+
+    const handleElementError = (event: Event) => {
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === 'SCRIPT' || target.tagName === 'LINK')) {
+        const src = (target as HTMLScriptElement).src || (target as HTMLLinkElement).href || '';
+        if (src.includes('/_next/static/')) {
+          console.warn('Failed to load asset from Next.js static build. Reloading page to apply updates...', src);
+          window.location.reload();
+        }
+      }
+    };
+
+    window.addEventListener('error', handleError);
+    window.addEventListener('error', handleElementError, true);
+
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('error', handleElementError, true);
+    };
+  }, []);
+
   if (isPublicRoute) {
     return <><LazyToaster />{children}</>;
   }
