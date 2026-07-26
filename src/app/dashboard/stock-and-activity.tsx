@@ -48,9 +48,11 @@ interface CriticalProduct {
 export default function StockAndActivity({
   criticalProducts,
   tenantId,
+  allTenants,
 }: {
   criticalProducts: CriticalProduct[];
   tenantId: string;
+  allTenants?: boolean;
 }) {
   const router = useRouter();
   const [recentActivity, setRecentActivity] = useState<ActivityLog[]>([]);
@@ -67,7 +69,7 @@ export default function StockAndActivity({
   }, []);
 
   useEffect(() => {
-    if (!tenantId) return;
+    if (!tenantId && !allTenants) return;
     let cancelled = false;
 
     (async () => {

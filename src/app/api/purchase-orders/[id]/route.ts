@@ -1,25 +1,11 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
 
-async function getAuthenticatedUser(): Promise<{ tenantId: string; userId: string } | null> {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data: tu } = await supabaseAdmin
-    .from('tenant_users')
-    .select('tenant_id')
-    .eq('user_id', user.id);
-
-  if (!tu || tu.length === 0) return null;
-  return { tenantId: tu[0].tenant_id as string, userId: user.id };
-}
-
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const auth = await getAuthenticatedUser();
+  const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   try {
@@ -56,7 +42,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (status === 'received') {
       const { data: items } = await supabaseAdmin
         .from('purchase_order_items')
-        .select('*, product:products(id, name, stock)')
+        .select('*, product:products(id, name)')
         .eq('purchase_order_id', id);
 
       const supplierName = (order as any)?.provider_id || 'proveedor';
@@ -69,12 +55,23 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         const productName = product?.name as string || 'Producto';
 
         if (product && qty > 0) {
-          const currentStock = Number((product as Record<string, unknown>).stock) || 0;
+          const { data: stockRow } = await supabaseAdmin
+            .from('product_stock')
+            .select('stock')
+            .eq('product_id', productId)
+            .eq('tenant_id', auth.tenantId)
+            .maybeSingle();
+
+          const currentStock = (stockRow as any)?.stock ?? 0;
 
           await supabaseAdmin
-            .from('products')
-            .update({ stock: currentStock + qty, updated_at: new Date().toISOString() })
-            .eq('id', productId);
+            .from('product_stock')
+            .upsert({
+              product_id: productId,
+              tenant_id: auth.tenantId,
+              stock: currentStock + qty,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'product_id,tenant_id' });
 
           await supabaseAdmin
             .from('stock_history')

@@ -1,19 +1,7 @@
 import { NextResponse } from 'next/server';
+import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { createServerSupabaseClient } from '@/lib/supabase';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-
-async function getAuth() {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data: tu } = await supabaseAdmin
-    .from('tenant_users')
-    .select('tenant_id')
-    .eq('user_id', user.id);
-  if (!tu || tu.length === 0) return null;
-  return { userId: user.id, tenantId: tu[0].tenant_id as string };
-}
 
 async function fetchImageAsBase64(imageUrl: string): Promise<{ data: string; mimeType: string } | null> {
   try {
@@ -28,7 +16,7 @@ async function fetchImageAsBase64(imageUrl: string): Promise<{ data: string; mim
 }
 
 export async function POST(request: Request) {
-  const auth = await getAuth();
+  const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const apiKey = process.env.GOOGLE_AI_API_KEY;
@@ -46,12 +34,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No se pudo descargar la imagen' }, { status: 400 });
   }
 
-  const [productsData, categoriesData] = await Promise.all([
-    supabaseAdmin.from('products').select('name, stock, min_stock, sku, price_cents, cost').eq('tenant_id', auth.tenantId),
-    supabaseAdmin.from('categories').select('id, name').eq('tenant_id', auth.tenantId),
+  const [productsData, stockData, categoriesData] = await Promise.all([
+    supabaseAdmin.from('products').select('id, name, sku, price_cents, cost'),
+    supabaseAdmin.from('product_stock').select('product_id, stock, min_stock').eq('tenant_id', auth.tenantId),
+    supabaseAdmin.from('categories').select('id, name'),
   ]);
 
-  const productNames = (productsData.data || []).map((p: any) => p.name).join(', ');
+  const stockMap = new Map((stockData.data || []).map((s: any) => [s.product_id, s]));
+  const productsWithStock = (productsData.data || []).map((p: any) => {
+    const s = stockMap.get(p.id) || { stock: 0, min_stock: 0 };
+    return { ...p, stock: s.stock, min_stock: s.min_stock };
+  });
+
+  const productNames = productsWithStock.map((p: any) => p.name).join(', ');
   const categoryNames = (categoriesData.data || []).map((c: any) => c.name).join(', ');
 
   const genAI = new GoogleGenerativeAI(apiKey);
@@ -88,11 +83,10 @@ Si no se ve una góndola o productos en la imagen, devolvé un JSON con descript
       parsed = { description: reply, estimatedStock: [], observations: [], suggestedActions: [] };
     }
 
-    // Compare with actual inventory
     const matched: any[] = [];
-    if (parsed.estimatedStock && productsData.data) {
+    if (parsed.estimatedStock && productsWithStock.length) {
       for (const est of parsed.estimatedStock) {
-        const actual = (productsData.data as any[]).find(
+        const actual = productsWithStock.find(
           (p) => p.name.toLowerCase().includes(est.productName.toLowerCase()) ||
                  est.productName.toLowerCase().includes(p.name.toLowerCase())
         );
@@ -107,7 +101,7 @@ Si no se ve una góndola o productos en la imagen, devolvé un JSON con descript
     return NextResponse.json({
       analysis: parsed,
       matchedProducts: matched,
-      productCount: productsData.data?.length || 0,
+      productCount: productsWithStock.length,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Error al analizar imagen';

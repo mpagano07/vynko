@@ -1,28 +1,14 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-
-async function getAuthenticatedTenant(): Promise<string | null> {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data: tu } = await supabaseAdmin
-    .from('tenant_users')
-    .select('tenant_id')
-    .eq('user_id', user.id);
-
-  if (!tu || tu.length === 0) return null;
-  return (tu as any)[0].tenant_id;
-}
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const tenantId = await getAuthenticatedTenant();
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const auth = await getAuth(request);
+  if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   try {
     const body = await request.json();
@@ -36,7 +22,6 @@ export async function PATCH(
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
-      .eq('tenant_id', tenantId)
       .select()
       .single();
 
@@ -55,14 +40,13 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const tenantId = await getAuthenticatedTenant();
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const auth = await getAuth(request);
+  if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const { error } = await supabaseAdmin
     .from('categories')
     .delete()
-    .eq('id', id)
-    .eq('tenant_id', tenantId);
+    .eq('id', id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });

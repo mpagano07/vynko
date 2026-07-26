@@ -1,67 +1,40 @@
 import { NextResponse } from 'next/server';
+import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { createServerSupabaseClient } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   try {
-    let userId: string | null = null;
-    const authHeader = request.headers.get('authorization');
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.replace('Bearer ', '');
-      const { data: userData } = await supabaseAdmin.auth.getUser(token);
-      userId = userData?.user?.id || null;
-    }
-    if (!userId) {
-      const supabase = await createServerSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      userId = user?.id || null;
-    }
-    if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-
-    const { data: tu } = await supabaseAdmin
-      .from('tenant_users')
-      .select('tenant_id')
-      .eq('user_id', userId);
-    if (!tu || tu.length === 0) return NextResponse.json({ error: 'No tenant' }, { status: 401 });
-    const tenantId = tu[0].tenant_id;
+    const auth = await getAuth(request);
+    if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    const tenantId = auth.tenantId;
 
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
+    const allTenantsBool = auth.allTenants;
+
+    function qFilter(q: any) {
+      return allTenantsBool ? q : q.eq('tenant_id', tenantId);
+    }
+
     const [recentSalesRes, customersRes, lastSaleRes, suppliersRes] = await Promise.all([
-      supabaseAdmin
-        .from('sales')
-        .select('id')
-        .eq('tenant_id', tenantId)
-        .gte('created_at', ninetyDaysAgo.toISOString())
-        .order('created_at', { ascending: false })
-        .limit(200),
-      supabaseAdmin
-        .from('sales')
-        .select('customer_id, total_cents')
-        .eq('tenant_id', tenantId)
-        .not('customer_id', 'is', null)
-        .gte('created_at', ninetyDaysAgo.toISOString())
-        .order('created_at', { ascending: false })
-        .limit(200),
-      supabaseAdmin
-        .from('sales')
-        .select('created_at')
-        .eq('tenant_id', tenantId)
-        .order('created_at', { ascending: false })
-        .limit(1),
-      supabaseAdmin
-        .from('purchase_orders')
-        .select('supplier_id')
-        .eq('tenant_id', tenantId)
-        .not('supplier_id', 'is', null)
-        .order('created_at', { ascending: false })
-        .limit(100),
+      qFilter(
+        supabaseAdmin.from('sales').select('id').gte('created_at', ninetyDaysAgo.toISOString()).order('created_at', { ascending: false }).limit(200)
+      ),
+      qFilter(
+        supabaseAdmin.from('sales').select('customer_id, total_cents').not('customer_id', 'is', null).gte('created_at', ninetyDaysAgo.toISOString()).order('created_at', { ascending: false }).limit(200)
+      ),
+      qFilter(
+        supabaseAdmin.from('sales').select('created_at').order('created_at', { ascending: false }).limit(1)
+      ),
+      qFilter(
+        supabaseAdmin.from('purchase_orders').select('supplier_id').not('supplier_id', 'is', null).order('created_at', { ascending: false }).limit(100)
+      ),
     ]);
 
-    const saleIds = (recentSalesRes.data ?? []).map(s => s.id as string);
+    const saleIds = ((recentSalesRes.data ?? []) as { id: string }[]).map(s => s.id);
 
     let topProduct: { name: string; qty: number } | null = null;
     if (saleIds.length > 0) {

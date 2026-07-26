@@ -1,20 +1,19 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 export async function PATCH(request: Request) {
   try {
-    const supabase = await createServerSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
+    const auth = await getAuth(request);
+    if (!auth) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
     const { data: tu } = await supabaseAdmin
       .from('tenant_users')
-      .select('tenant_id, role')
-      .eq('user_id', user.id);
+      .select('role')
+      .eq('user_id', auth.userId)
+      .eq('tenant_id', auth.tenantId);
 
     const membership = tu?.[0];
     if (!membership) {
@@ -27,7 +26,7 @@ export async function PATCH(request: Request) {
 
     const body = await request.json();
     const allowedFields = [
-      'name', 'description', 'razon_social', 'cuit', 'punto_venta',
+      'name', 'company_name', 'description', 'razon_social', 'cuit', 'punto_venta',
       'iva_condition', 'ingresos_brutos', 'inicio_actividades',
       'business_address', 'business_city', 'business_province',
       'business_zip', 'business_phone', 'business_email',
@@ -42,13 +41,13 @@ export async function PATCH(request: Request) {
     }
 
     if (updateData.name !== undefined && (!updateData.name || !String(updateData.name).trim())) {
-      return NextResponse.json({ error: 'Invalid company name' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid name' }, { status: 400 });
     }
 
     const { data, error } = await supabaseAdmin
       .from('tenants')
       .update(updateData)
-      .eq('id', membership.tenant_id)
+      .eq('id', auth.tenantId)
       .select()
       .single();
 

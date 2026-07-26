@@ -1,26 +1,13 @@
 import { NextResponse } from 'next/server';
+import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { createServerSupabaseClient } from '@/lib/supabase';
-
-
-async function getAuth() {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data: tu } = await supabaseAdmin
-    .from('tenant_users')
-    .select('tenant_id')
-    .eq('user_id', user.id);
-  if (!tu || tu.length === 0) return null;
-  return { userId: user.id, tenantId: tu[0].tenant_id as string };
-}
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const auth = await getAuth();
+  const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const body = await request.json();
@@ -40,24 +27,32 @@ export async function POST(
 
   const { data: product, error: prodError } = await supabaseAdmin
     .from('products')
-    .select('id, name, stock, tenant_id')
+    .select('id, name')
     .eq('id', id)
-    .eq('tenant_id', auth.tenantId)
     .single();
 
   if (prodError || !product) {
     return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 });
   }
 
-  const newStock = (product.stock ?? 0) + quantity;
+  const { data: stockRow } = await supabaseAdmin
+    .from('product_stock')
+    .select('stock')
+    .eq('product_id', id)
+    .eq('tenant_id', auth.tenantId)
+    .maybeSingle();
+
+  const currentStock = (stockRow as any)?.stock ?? 0;
+  const newStock = currentStock + quantity;
   if (newStock < 0) {
     return NextResponse.json({ error: 'El stock no puede ser negativo' }, { status: 400 });
   }
 
   const { error: updateError } = await supabaseAdmin
-    .from('products')
+    .from('product_stock')
     .update({ stock: newStock, updated_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('product_id', id)
+    .eq('tenant_id', auth.tenantId);
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
@@ -81,7 +76,7 @@ export async function POST(
   return NextResponse.json({
     success: true,
     warning: historyWarning,
-    previousStock: product.stock,
+    previousStock: currentStock,
     newStock,
     adjustment: quantity,
     reason,

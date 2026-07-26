@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   TrendingUp, Plus, ShoppingCart, Package,
-  ArrowUpRight, ArrowDownRight, Minus,
+  ArrowUpRight, ArrowDownRight, Minus, Building2,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import Link from 'next/link';
@@ -27,56 +27,131 @@ interface MonthlyData {
   avgTicket: number;
 }
 
+interface PerTenantData {
+  todayTotal: number;
+  saleCount: number;
+  total: number;
+  saleCountMonth: number;
+  prevTotal: number;
+  variationPercent: number | null;
+  avgTicket: number;
+  criticalCount: number;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
-  const { profile, tenant, loading: authLoading, isAuthenticated } = useAuth();
+  const { profile, tenant, tenants, allTenants, loading: authLoading, isAuthenticated } = useAuth();
   const [criticalProducts, setCriticalProducts] = useState<{ id: string; name: string; stock: number; min_stock: number }[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [salesData, setSalesData] = useState<{ todayTotal: number; saleCount: number } | null>(null);
   const [monthlyData, setMonthlyData] = useState<MonthlyData | null>(null);
+  const [perTenant, setPerTenant] = useState<Record<string, PerTenantData>>({});
 
   useEffect(() => {
-    if (!authLoading && isAuthenticated && !tenant) router.replace('/onboarding');
-  }, [authLoading, isAuthenticated, tenant, router]);
+    if (!authLoading && isAuthenticated && !tenant && !allTenants) router.replace('/onboarding');
+  }, [authLoading, isAuthenticated, tenant, allTenants, router]);
 
-  const getHeaders = useCallback(async () => {
+  const fetchWithTenant = useCallback(async (url: string, tenantId: string) => {
     const { data: { session } } = await supabase.auth.getSession();
     const headers: Record<string, string> = {};
     if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-    return headers;
+    headers['x-active-tenant-id'] = tenantId;
+    const res = await fetch(url, { headers });
+    return res.ok ? res.json() : null;
   }, []);
 
   useEffect(() => {
-    if (!tenant?.id) return;
+    if (!tenant?.id && !allTenants) return;
     let cancelled = false;
 
     (async () => {
       try {
-        const headers = await getHeaders();
-        const [salesRes, monthlyRes, criticalRes] = await Promise.all([
-          fetch(`/api/sales?today=true&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, { headers }),
-          fetch('/api/sales/monthly', { headers }),
-          fetch('/api/products/critical', { headers }),
-        ]);
+        if (allTenants && tenants.length > 0) {
+          const results: Record<string, PerTenantData> = {};
+          let allSalesTotal = 0;
+          let allSalesCount = 0;
+          let allMonthTotal = 0;
+          let allMonthCount = 0;
+          let allPrevTotal = 0;
+          let allCritical: { id: string; name: string; stock: number; min_stock: number }[] = [];
 
-        if (cancelled) return;
+          for (const t of tenants) {
+            const [sales, monthly, critical] = await Promise.all([
+              fetchWithTenant(`/api/sales?today=true&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, t.id),
+              fetchWithTenant('/api/sales/monthly', t.id),
+              fetchWithTenant('/api/products/critical', t.id),
+            ]);
 
-        if (salesRes.ok) {
-          const sales: Record<string, unknown>[] = await salesRes.json();
-          startTransition(() => {
-            setSalesData({
-              todayTotal: sales.reduce((sum, s) => sum + ((s.total_cents as number) || 0), 0),
-              saleCount: sales.length,
+            const todayTotal = (sales as any[] || []).reduce((sum: number, s: any) => sum + ((s.total_cents as number) || 0), 0);
+            const saleCount = (sales as any[] || []).length;
+            const md = monthly as MonthlyData | null;
+            const cp = (critical as any[] || []);
+
+            allSalesTotal += todayTotal;
+            allSalesCount += saleCount;
+            allMonthTotal += md?.total || 0;
+            allMonthCount += md?.saleCount || 0;
+            allPrevTotal += md?.prevTotal || 0;
+            allCritical = [...allCritical, ...cp];
+
+            results[t.id] = {
+              todayTotal,
+              saleCount,
+              total: md?.total || 0,
+              saleCountMonth: md?.saleCount || 0,
+              prevTotal: md?.prevTotal || 0,
+              variationPercent: md?.variationPercent || null,
+              avgTicket: md?.avgTicket || 0,
+              criticalCount: cp.length,
+            };
+          }
+
+          if (!cancelled) {
+            startTransition(() => {
+              setPerTenant(results);
+              setSalesData({ todayTotal: allSalesTotal, saleCount: allSalesCount });
+              setMonthlyData({
+                total: allMonthTotal,
+                saleCount: allMonthCount,
+                prevTotal: allPrevTotal,
+                variationPercent: allPrevTotal > 0 ? Math.round(((allMonthTotal - allPrevTotal) / allPrevTotal) * 100) : null,
+                avgTicket: allMonthCount > 0 ? allMonthTotal / allMonthCount : 0,
+              });
+              setCriticalProducts(allCritical);
+              setProductsLoading(false);
             });
-          });
-        }
-        if (monthlyRes.ok) {
-          const md = await monthlyRes.json();
-          startTransition(() => setMonthlyData(md));
-        }
-        if (criticalRes.ok) {
-          const cp = await criticalRes.json();
-          startTransition(() => setCriticalProducts(cp));
+          }
+        } else if (tenant?.id) {
+          const { data: { session } } = await supabase.auth.getSession();
+          const headers: Record<string, string> = {};
+          if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+
+          const [salesRes, monthlyRes, criticalRes] = await Promise.all([
+            fetch(`/api/sales?today=true&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, { headers }),
+            fetch('/api/sales/monthly', { headers }),
+            fetch('/api/products/critical', { headers }),
+          ]);
+
+          if (cancelled) return;
+
+          if (salesRes.ok) {
+            const sales: Record<string, unknown>[] = await salesRes.json();
+            startTransition(() => {
+              setSalesData({
+                todayTotal: sales.reduce((sum, s) => sum + ((s.total_cents as number) || 0), 0),
+                saleCount: sales.length,
+              });
+            });
+          }
+          if (monthlyRes.ok) {
+            const md = await monthlyRes.json();
+            startTransition(() => setMonthlyData(md));
+          }
+          if (criticalRes.ok) {
+            const cp = await criticalRes.json();
+            startTransition(() => setCriticalProducts(cp));
+          }
+          if (!cancelled) startTransition(() => setProductsLoading(false));
         }
       } catch (err) {
         console.error(err);
@@ -85,7 +160,7 @@ export default function DashboardPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [tenant?.id, getHeaders]);
+  }, [tenant?.id, allTenants, tenants, fetchWithTenant]);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) router.push('/login');
@@ -100,36 +175,32 @@ export default function DashboardPage() {
   const hasSalesToday = todaySalesCount > 0;
 
   let statusMessage = '';
-  let statusIcon = '';
   let statusColor = '';
   if (isLoading) {
-    statusIcon = '⚪';
     statusMessage = 'Cargando estado del negocio...';
     statusColor = 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800';
   } else if (!hasSalesToday) {
-    statusIcon = '🔴';
     statusMessage = 'Hoy todavía no registraste ventas.';
     statusColor = 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/30';
   } else if (criticalCount > 0) {
-    statusIcon = '🟡';
     statusMessage = `Tenés ${criticalCount} producto${criticalCount !== 1 ? 's' : ''} con stock crítico.`;
     statusColor = 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/30';
   } else {
-    statusIcon = '🟢';
     statusMessage = 'Todo está funcionando correctamente.';
     statusColor = 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/30';
   }
 
+  const tenantName = allTenants ? 'Todas las sucursales' : tenant?.name;
+
   return (
     <div className="space-y-6 max-w-5xl">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 min-h-[48px]">
         <div>
           <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
             Hola, {profile?.full_name?.split(' ')[0] || 'Usuario'} 👋
           </h1>
-          {tenant && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{tenant.name}</p>
+          {tenantName && (
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{tenantName}</p>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -154,14 +225,13 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Status band */}
       <Link
         href={criticalCount > 0 ? '/products' : !hasSalesToday ? '/sales' : '#'}
         prefetch={false}
         className={`flex items-center justify-between px-4 py-2.5 rounded-lg border text-sm transition-opacity hover:opacity-80 ${statusColor}`}
       >
         <div className="flex items-center gap-2">
-          <span>{statusIcon}</span>
+          <span className="text-lg">{statusMessage.includes('rojo') ? '🔴' : statusMessage.includes('crítico') ? '🟡' : statusMessage.includes('Cargando') ? '⚪' : '🟢'}</span>
           <span className="font-medium text-gray-800 dark:text-gray-200">{statusMessage}</span>
         </div>
         {!isLoading && (criticalCount > 0 || !hasSalesToday) && (
@@ -171,7 +241,6 @@ export default function DashboardPage() {
         )}
       </Link>
 
-      {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="p-4 h-[104px] flex flex-col justify-between">
           <div className="flex items-center gap-2">
@@ -257,10 +326,47 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Alertas de stock + Actividad */}
-      <StockAndActivity criticalProducts={criticalProducts} tenantId={tenant?.id ?? ''} />
+      {allTenants && Object.keys(perTenant).length > 0 && (
+        <Card className="p-4">
+          <h2 className="text-sm font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+            <Building2 className="h-4 w-4 text-gray-400" />
+            Desglose por sucursal
+          </h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-left py-2 pr-3 text-xs font-medium text-gray-500 dark:text-gray-400">Sucursal</th>
+                  <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 dark:text-gray-400">Ventas hoy</th>
+                  <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 dark:text-gray-400">Ingresos del mes</th>
+                  <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 dark:text-gray-400">Stock crítico</th>
+                  <th className="text-right py-2 pl-3 text-xs font-medium text-gray-500 dark:text-gray-400">Ticket prom.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tenants.map((t) => {
+                  const d = perTenant[t.id];
+                  if (!d) return null;
+                  return (
+                    <tr key={t.id} className="border-b border-gray-100 dark:border-gray-800 last:border-0">
+                      <td className="py-2.5 pr-3 font-medium text-gray-900 dark:text-white">{t.name}</td>
+                      <td className="text-right py-2.5 px-3 text-gray-700 dark:text-gray-300">{formatARS(d.todayTotal / 100)}</td>
+                      <td className="text-right py-2.5 px-3 text-gray-700 dark:text-gray-300">{formatARS(d.total)}</td>
+                      <td className="text-right py-2.5 px-3">
+                        <span className={d.criticalCount > 0 ? 'text-rose-500 font-medium' : 'text-gray-500'}>{d.criticalCount}</span>
+                      </td>
+                      <td className="text-right py-2.5 pl-3 text-gray-700 dark:text-gray-300">{formatARS(d.avgTicket)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
-      {/* Gráfico + Resumen rápido */}
+      <StockAndActivity criticalProducts={criticalProducts} tenantId={tenant?.id ?? ''} allTenants={allTenants} />
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2">
           <Card className="p-4">
@@ -268,10 +374,9 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        <DashboardResumen tenantId={tenant?.id ?? ''} />
+        <DashboardResumen tenantId={tenant?.id ?? ''} allTenants={allTenants} />
       </div>
 
-      {/* Sugerencia */}
       <Suggestions />
     </div>
   );

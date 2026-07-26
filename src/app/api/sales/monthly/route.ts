@@ -1,50 +1,25 @@
 import { NextResponse } from 'next/server';
+import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { createServerSupabaseClient } from '@/lib/supabase';
 
 export async function GET(request: Request) {
   try {
-    let userId: string | null = null;
-    const authHeader = request.headers.get('authorization');
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.replace('Bearer ', '');
-      const { data: userData } = await supabaseAdmin.auth.getUser(token);
-      userId = userData?.user?.id || null;
-    }
-    if (!userId) {
-      const supabase = await createServerSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      userId = user?.id || null;
-    }
-    if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-
-    const { data: tu } = await supabaseAdmin
-      .from('tenant_users')
-      .select('tenant_id')
-      .eq('user_id', userId);
-    if (!tu || tu.length === 0) return NextResponse.json({ error: 'No tenant' }, { status: 401 });
-    const tenantId = tu[0].tenant_id;
+    const auth = await getAuth(request);
+    if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    const tenantId = auth.tenantId;
 
     const now = new Date();
     const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
 
-    const [thisMonthRes, prevMonthRes] = await Promise.all([
-      supabaseAdmin
-        .from('sales')
-        .select('total_cents')
-        .eq('tenant_id', tenantId)
-        .gte('created_at', thisMonthStart.toISOString())
-        .eq('status', 'completed'),
-      supabaseAdmin
-        .from('sales')
-        .select('total_cents')
-        .eq('tenant_id', tenantId)
-        .gte('created_at', prevMonthStart.toISOString())
-        .lte('created_at', prevMonthEnd.toISOString())
-        .eq('status', 'completed'),
-    ]);
+    let tmQuery = supabaseAdmin.from('sales').select('total_cents').gte('created_at', thisMonthStart.toISOString()).eq('status', 'completed');
+    let pmQuery = supabaseAdmin.from('sales').select('total_cents').gte('created_at', prevMonthStart.toISOString()).lte('created_at', prevMonthEnd.toISOString()).eq('status', 'completed');
+    if (!auth.allTenants) {
+      tmQuery = tmQuery.eq('tenant_id', tenantId);
+      pmQuery = pmQuery.eq('tenant_id', tenantId);
+    }
+    const [thisMonthRes, prevMonthRes] = await Promise.all([tmQuery, pmQuery]);
 
     const thisMonthSales = thisMonthRes.data ?? [];
     const prevMonthSales = prevMonthRes.data ?? [];

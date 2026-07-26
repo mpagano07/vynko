@@ -1,21 +1,14 @@
 import { NextResponse } from 'next/server';
+import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { createServerSupabaseClient } from '@/lib/supabase';
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-
-  const { data: tu } = await supabaseAdmin
-    .from('tenant_users')
-    .select('tenant_id')
-    .eq('user_id', user.id);
-  if (!tu || tu.length === 0) return NextResponse.json({ error: 'No tenant' }, { status: 401 });
+  const auth = await getAuth(request);
+  if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const { data: sales, error } = await supabaseAdmin
     .from('sales')
@@ -26,7 +19,7 @@ export async function GET(
         product:products(name)
       )
     `)
-    .eq('tenant_id', tu[0].tenant_id)
+    .eq('tenant_id', auth.tenantId)
     .eq('customer_id', id)
     .order('created_at', { ascending: false });
 

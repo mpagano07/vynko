@@ -1,25 +1,11 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
 
-async function getAuthenticatedTenant(): Promise<{ tenantId: string; userId: string } | null> {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data: tu } = await supabaseAdmin
-    .from('tenant_users')
-    .select('tenant_id')
-    .eq('user_id', user.id);
-
-  if (!tu || tu.length === 0) return null;
-  return { tenantId: tu[0].tenant_id as string, userId: user.id };
-}
-
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const auth = await getAuthenticatedTenant();
+  const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   try {
@@ -35,7 +21,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .from('suppliers')
       .update(updateData)
       .eq('id', id)
-      .eq('tenant_id', auth.tenantId)
       .select()
       .single();
 
@@ -50,8 +35,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         address: body.address !== undefined ? body.address : undefined,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', id)
-      .eq('tenant_id', auth.tenantId);
+      .eq('id', id);
 
     await createActivityLog({
       tenantId: auth.tenantId,
@@ -70,14 +54,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const auth = await getAuthenticatedTenant();
+  const auth = await getAuth(_request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const { data: deleted } = await supabaseAdmin
     .from('suppliers')
     .delete()
     .eq('id', id)
-    .eq('tenant_id', auth.tenantId)
     .select('name')
     .single();
 
@@ -86,8 +69,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   await supabaseAdmin
     .from('providers')
     .delete()
-    .eq('id', id)
-    .eq('tenant_id', auth.tenantId);
+    .eq('id', id);
 
   await createActivityLog({
     tenantId: auth.tenantId,

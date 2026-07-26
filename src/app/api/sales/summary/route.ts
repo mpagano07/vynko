@@ -1,29 +1,12 @@
 import { NextResponse } from 'next/server';
+import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { createServerSupabaseClient } from '@/lib/supabase';
 
 export async function GET(request: Request) {
   try {
-    let userId: string | null = null;
-    const authHeader = request.headers.get('authorization');
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.replace('Bearer ', '');
-      const { data: userData } = await supabaseAdmin.auth.getUser(token);
-      userId = userData?.user?.id || null;
-    }
-    if (!userId) {
-      const supabase = await createServerSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      userId = user?.id || null;
-    }
-    if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-
-    const { data: tu } = await supabaseAdmin
-      .from('tenant_users')
-      .select('tenant_id')
-      .eq('user_id', userId);
-    if (!tu || tu.length === 0) return NextResponse.json({ error: 'No tenant' }, { status: 401 });
-    const tenantId = tu[0].tenant_id;
+    const auth = await getAuth(request);
+    if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    const tenantId = auth.tenantId;
 
     const { searchParams } = new URL(request.url);
     const daysParam = Number(searchParams.get('days')) || 7;
@@ -33,12 +16,13 @@ export async function GET(request: Request) {
     since.setDate(since.getDate() - (days - 1));
     since.setHours(0, 0, 0, 0);
 
-    const { data: sales, error } = await supabaseAdmin
+    let sQuery = supabaseAdmin
       .from('sales')
       .select('created_at, total_cents')
-      .eq('tenant_id', tenantId)
       .gte('created_at', since.toISOString())
       .order('created_at', { ascending: true });
+    if (!auth.allTenants) sQuery = sQuery.eq('tenant_id', tenantId);
+    const { data: sales, error } = await sQuery;
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

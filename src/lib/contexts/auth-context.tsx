@@ -17,6 +17,7 @@ export interface TenantInfo {
   name: string;
   slug: string;
   description?: string;
+  company_name?: string;
   subscription_plan?: string;
   subscription_status?: string;
   subscription_current_period_end?: string;
@@ -35,15 +36,55 @@ export interface TenantInfo {
   business_email?: string;
 }
 
+const ACTIVE_TENANT_KEY = 'vynko_active_tenant_id';
+
+function getStoredActiveTenantId(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const val = localStorage.getItem(ACTIVE_TENANT_KEY);
+    return val === '__all__' ? null : val;
+  } catch {
+    return null;
+  }
+}
+
+export function isAllTenantsMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem(ACTIVE_TENANT_KEY) === '__all__';
+  } catch {
+    return false;
+  }
+}
+
+function setStoredActiveTenantId(id: string) {
+  try {
+    localStorage.setItem(ACTIVE_TENANT_KEY, id);
+  } catch {
+    // ignore
+  }
+}
+
+function clearStoredActiveTenantId() {
+  try {
+    localStorage.removeItem(ACTIVE_TENANT_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 interface AuthContextValue {
   user: User | null;
   profile: UserProfile | null;
   tenant: TenantInfo | null;
+  tenants: TenantInfo[];
   role: string | null;
   loading: boolean;
   logout: () => Promise<void>;
   isAuthenticated: boolean;
+  allTenants: boolean;
   loadProfileAndTenant: () => Promise<void>;
+  switchTenant: (tenantId: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -52,7 +93,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [tenant, setTenant] = useState<TenantInfo | null>(null);
+  const [tenants, setTenants] = useState<TenantInfo[]>([]);
   const [role, setRole] = useState<string | null>(null);
+  const [allTenants, setAllTenants] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const activeFetchRef = useRef<Promise<void> | null>(null);
@@ -67,25 +110,74 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!session?.user) {
           setProfile(null);
           setTenant(null);
+          setTenants([]);
           setRole(null);
           lastFetchedUserIdRef.current = null;
           return;
         }
 
+        const storedId = localStorage.getItem('vynko_active_tenant_id');
+        const isAll = storedId === '__all__';
+        const activeTenantId = !isAll ? getStoredActiveTenantId() : null;
+
+        const headers: Record<string, string> = {
+          Authorization: `Bearer ${session.access_token}`,
+          'x-refresh-token': session.refresh_token ?? '',
+        };
+        if (isAll) {
+          headers['x-active-tenant-id'] = '__all__';
+        } else if (activeTenantId) {
+          headers['x-active-tenant-id'] = activeTenantId;
+        }
+
         const response = await fetch('/api/session', {
           credentials: 'include',
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-            'x-refresh-token': session.refresh_token ?? '',
-          },
+          headers,
         });
 
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Failed to fetch session');
 
+        const tenantsList: TenantInfo[] = data.tenants || [];
+
+        let bestStatus = 'free';
+        let bestPlan = 'starter';
+        let bestPeriodEnd: string | null = null;
+        let bestCreatedAt: string | null = null;
+        const planRank: Record<string, number> = { enterprise: 4, business: 3, starter: 2, free: 1 };
+        const statusRank: Record<string, number> = { active: 5, incomplete: 4, past_due: 3, canceled: 2, free: 1 };
+        for (const t of tenantsList) {
+          const s = t.subscription_status || 'free';
+          const p = t.subscription_plan || 'free';
+          const curRank = (statusRank[s] || 0) + (planRank[p] || 0);
+          const bestRank = (statusRank[bestStatus] || 0) + (planRank[bestPlan] || 0);
+          if (curRank > bestRank) {
+            bestStatus = s;
+            bestPlan = p;
+            bestPeriodEnd = t.subscription_current_period_end || null;
+            bestCreatedAt = t.created_at || null;
+          }
+        }
+
+        let currentTenant = data.tenant as TenantInfo | null;
+        if (currentTenant) {
+          currentTenant = {
+            ...currentTenant,
+            subscription_status: bestStatus,
+            subscription_plan: bestPlan,
+            subscription_current_period_end: bestPeriodEnd || currentTenant.subscription_current_period_end,
+            created_at: bestCreatedAt || currentTenant.created_at,
+          };
+        }
+
         setProfile(data.profile);
-        setTenant(data.tenant);
+        setTenant(isAll ? null : currentTenant);
+        setTenants(tenantsList);
         setRole(data.role);
+        setAllTenants(isAll);
+        if (!isAll && data.tenant?.id) {
+          setStoredActiveTenantId(data.tenant.id);
+        }
         lastFetchedUserIdRef.current = session.user.id;
       } catch (err) {
         console.error('Error loading profile/tenant:', err);
@@ -97,6 +189,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     activeFetchRef.current = promise;
     return promise;
   }, []);
+
+  const switchTenant = useCallback(async (tenantId: string) => {
+    setStoredActiveTenantId(tenantId);
+    await loadProfileAndTenant();
+  }, [loadProfileAndTenant]);
 
   useEffect(() => {
     let mounted = true;
@@ -115,6 +212,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(null);
           setProfile(null);
           setTenant(null);
+          setTenants([]);
           setRole(null);
         }
       } catch (err) {
@@ -143,6 +241,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(null);
           setProfile(null);
           setTenant(null);
+          setTenants([]);
           setRole(null);
           lastFetchedUserIdRef.current = null;
         }
@@ -164,7 +263,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setProfile(null);
     setTenant(null);
+    setTenants([]);
     setRole(null);
+    clearStoredActiveTenantId();
     lastFetchedUserIdRef.current = null;
   };
 
@@ -172,11 +273,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     profile,
     tenant,
+    tenants,
     role,
     loading,
     logout,
     isAuthenticated: !!user,
+    allTenants,
     loadProfileAndTenant,
+    switchTenant,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

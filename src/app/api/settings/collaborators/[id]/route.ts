@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 export async function DELETE(
@@ -9,25 +9,25 @@ export async function DELETE(
   try {
     const { id } = await params;
 
-    const supabase = await createServerSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    const auth = await getAuth(_request);
+    if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-    const { data: ownerTu } = await supabaseAdmin
+    const { data: ownerTus } = await supabaseAdmin
       .from('tenant_users')
-      .select('tenant_id, role')
-      .eq('user_id', user.id);
+      .select('tenant_id')
+      .eq('user_id', auth.userId)
+      .eq('role', 'owner');
 
-    const ownership = ownerTu?.[0];
-    if (!ownership || ownership.role !== 'owner') {
-      return NextResponse.json({ error: 'Only the owner can remove collaborators' }, { status: 403 });
+    const ownerTenantIds = (ownerTus || []).map(t => t.tenant_id as string);
+    if (ownerTenantIds.length === 0) {
+      return NextResponse.json({ error: 'Only owners can remove collaborators' }, { status: 403 });
     }
 
     const { data: target } = await supabaseAdmin
       .from('tenant_users')
       .select('role, user_id')
       .eq('id', id)
-      .eq('tenant_id', ownership.tenant_id)
+      .in('tenant_id', ownerTenantIds)
       .single();
 
     if (!target) {
@@ -41,8 +41,9 @@ export async function DELETE(
     const { error } = await supabaseAdmin
       .from('tenant_users')
       .delete()
-      .eq('id', id)
-      .eq('tenant_id', ownership.tenant_id);
+      .eq('user_id', target.user_id as string)
+      .in('tenant_id', ownerTenantIds)
+      .neq('role', 'owner');
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });

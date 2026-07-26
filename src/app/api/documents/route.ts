@@ -1,22 +1,10 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import type { CreateDocumentRequest, DocumentType } from '@/lib/types/document';
 
-async function getAuth() {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data: tu } = await supabaseAdmin
-    .from('tenant_users')
-    .select('tenant_id')
-    .eq('user_id', user.id);
-  if (!tu || tu.length === 0) return null;
-  return { tenantId: tu[0].tenant_id as string, userId: user.id };
-}
-
 export async function GET(request: Request) {
-  const auth = await getAuth();
+  const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
@@ -45,7 +33,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const auth = await getAuth();
+  const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
 
   try {

@@ -1,23 +1,11 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { getAuth } from '@/lib/api-auth';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { formatARS } from '@/lib/utils/currency';
 
-async function getAuth() {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data: tu } = await supabaseAdmin
-    .from('tenant_users')
-    .select('tenant_id')
-    .eq('user_id', user.id);
-  if (!tu || tu.length === 0) return null;
-  return { userId: user.id, tenantId: tu[0].tenant_id as string };
-}
-
-export async function GET() {
-  const auth = await getAuth();
+export async function GET(request: Request) {
+  const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const now = new Date();
@@ -26,8 +14,9 @@ export async function GET() {
   const sixtyDaysAgo = new Date(now);
   sixtyDaysAgo.setDate(now.getDate() - 60);
 
-  const [productsData, saleItemsData, salesData, priorSaleItemsData, priorSalesData] = await Promise.all([
-    supabaseAdmin.from('products').select('id, name, stock, min_stock, max_stock, price_cents, cost, category_id').eq('tenant_id', auth.tenantId),
+  const [productsData, stockData, saleItemsData, salesData, priorSaleItemsData, priorSalesData] = await Promise.all([
+    supabaseAdmin.from('products').select('id, name, price_cents, cost, category_id'),
+    supabaseAdmin.from('product_stock').select('product_id, stock, min_stock, max_stock').eq('tenant_id', auth.tenantId),
     supabaseAdmin.from('sale_items').select(`
       product_id, quantity,
       sales!inner(tenant_id, created_at)
@@ -40,7 +29,11 @@ export async function GET() {
     supabaseAdmin.from('sales').select('created_at, total_cents').eq('tenant_id', auth.tenantId).gte('sales.created_at', sixtyDaysAgo.toISOString()).lt('sales.created_at', thirtyDaysAgo.toISOString()),
   ]);
 
-  const productMap = new Map((productsData.data || []).map((p: any) => [p.id, p]));
+  const stockMap = new Map((stockData.data || []).map((s: any) => [s.product_id, s]));
+  const productMap = new Map((productsData.data || []).map((p: any) => {
+    const s = stockMap.get(p.id) || { stock: 0, min_stock: 0, max_stock: 0 };
+    return [p.id, { ...p, stock: s.stock, min_stock: s.min_stock, max_stock: s.max_stock }];
+  }));
   const dailySales = new Map<string, { totalQty: number; daysWithSales: Set<string> }>();
 
   for (const item of (saleItemsData.data || []) as any[]) {

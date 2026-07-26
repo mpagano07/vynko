@@ -1,19 +1,12 @@
 import { NextResponse } from 'next/server';
+import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { createServerSupabaseClient } from '@/lib/supabase';
 import { createActivityLog } from '@/lib/activity-log';
 
 export async function POST(request: Request) {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-
-  const { data: tu } = await supabaseAdmin
-    .from('tenant_users')
-    .select('tenant_id')
-    .eq('user_id', user.id);
-  if (!tu || tu.length === 0) return NextResponse.json({ error: 'No tenant' }, { status: 401 });
-  const tenantId = tu[0].tenant_id;
+  const auth = await getAuth(request);
+  if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const tenantId = auth.tenantId;
 
   const body = await request.json();
   const { percentage, product_ids } = body as { percentage: number; product_ids?: string[] };
@@ -26,8 +19,7 @@ export async function POST(request: Request) {
 
   let query = supabaseAdmin
     .from('products')
-    .select('id, name, price_cents, cost')
-    .eq('tenant_id', tenantId);
+    .select('id, name, price_cents, cost');
 
   if (product_ids && product_ids.length > 0) {
     query = query.in('id', product_ids);
@@ -61,8 +53,7 @@ export async function POST(request: Request) {
     const { error: updateError } = await supabaseAdmin
       .from('products')
       .update(updateData)
-      .eq('id', update.id)
-      .eq('tenant_id', tenantId);
+      .eq('id', update.id);
 
     if (updateError) {
       errors.push({ id: update.id, name: update.name, error: updateError.message });
@@ -71,7 +62,7 @@ export async function POST(request: Request) {
 
   await createActivityLog({
     tenantId,
-    userId: user.id,
+    userId: auth.userId,
     action: 'adjusted',
     entityType: 'product',
     details: { percentage, total: updates.length, updated: updates.length - errors.length },

@@ -1,6 +1,5 @@
 export interface Product {
   id: string;
-  tenant_id: string;
   category_id?: string;
   sku?: string;
   barcode?: string;
@@ -16,6 +15,17 @@ export interface Product {
   max_stock?: number;
   is_active?: boolean;
   attributes?: Record<string, any>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ProductStock {
+  id: string;
+  product_id: string;
+  tenant_id: string;
+  stock: number;
+  min_stock: number;
+  max_stock: number;
   created_at?: string;
   updated_at?: string;
 }

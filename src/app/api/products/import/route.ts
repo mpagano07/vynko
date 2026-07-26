@@ -1,21 +1,7 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
-
-async function getAuthenticatedTenant(): Promise<{ tenantId: string; userId: string } | null> {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data: tu } = await supabaseAdmin
-    .from('tenant_users')
-    .select('tenant_id')
-    .eq('user_id', user.id);
-
-  if (!tu || tu.length === 0) return null;
-  return { tenantId: tu[0].tenant_id, userId: user.id };
-}
 
 async function resolveCategory(tenantId: string, name: string): Promise<string | null> {
   if (!name?.trim()) return null;
@@ -39,10 +25,10 @@ async function resolveCategory(tenantId: string, name: string): Promise<string |
   return created.id;
 }
 
-const ALLOWED_FIELDS = ['sku', 'barcode', 'name', 'description', 'cost', 'stock', 'min_stock', 'max_stock', 'image_url', 'metadata'];
+const ALLOWED_FIELDS = ['sku', 'barcode', 'name', 'description', 'cost', 'image_url', 'metadata'];
 
 export async function POST(request: Request) {
-  const auth = await getAuthenticatedTenant();
+  const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const body = await request.json();
@@ -62,11 +48,15 @@ export async function POST(request: Request) {
         continue;
       }
 
-      const upsertData: Record<string, any> = { tenant_id: auth.tenantId };
+      const upsertData: Record<string, any> = {};
       if (row.price !== undefined) upsertData.price_cents = Math.round(Number(row.price) * 100);
       for (const key of ALLOWED_FIELDS) {
         if (row[key] !== undefined && row[key] !== null && row[key] !== '') upsertData[key] = row[key];
       }
+
+      const stock = Number(row.stock) || 0;
+      const min_stock = Number(row.min_stock) || 0;
+      const max_stock = Number(row.max_stock) || 0;
 
       if (row.category_name?.trim()) {
         const categoryId = await resolveCategory(auth.tenantId, row.category_name);
@@ -79,7 +69,6 @@ export async function POST(request: Request) {
         const { data: existing } = await supabaseAdmin
           .from('products')
           .select('id')
-          .eq('tenant_id', auth.tenantId)
           .eq('sku', row.sku)
           .maybeSingle();
         if (existing) existingId = existing.id;
@@ -89,7 +78,6 @@ export async function POST(request: Request) {
         const { data: existing } = await supabaseAdmin
           .from('products')
           .select('id')
-          .eq('tenant_id', auth.tenantId)
           .eq('barcode', row.barcode)
           .maybeSingle();
         if (existing) existingId = existing.id;
@@ -100,22 +88,30 @@ export async function POST(request: Request) {
         const { error } = await supabaseAdmin
           .from('products')
           .update(upsertData)
-          .eq('id', existingId)
-          .eq('tenant_id', auth.tenantId);
+          .eq('id', existingId);
 
         if (error) {
           results.push({ row: i + 1, status: 'skipped', name: row.name, error: error.message });
         } else {
+          await supabaseAdmin
+            .from('product_stock')
+            .upsert({ product_id: existingId, tenant_id: auth.tenantId, stock, min_stock, max_stock, updated_at: new Date().toISOString() },
+              { onConflict: 'product_id,tenant_id' });
           results.push({ row: i + 1, status: 'updated', name: row.name });
         }
       } else {
-        const { error } = await supabaseAdmin
+        const { data: created, error } = await supabaseAdmin
           .from('products')
-          .insert(upsertData);
+          .insert(upsertData)
+          .select('id')
+          .single();
 
         if (error) {
           results.push({ row: i + 1, status: 'skipped', name: row.name, error: error.message });
-        } else {
+        } else if (created) {
+          await supabaseAdmin
+            .from('product_stock')
+            .insert({ product_id: created.id, tenant_id: auth.tenantId, stock, min_stock, max_stock });
           results.push({ row: i + 1, status: 'created', name: row.name });
         }
       }

@@ -22,7 +22,7 @@ import type { Supplier, PurchaseOrder } from '@/lib/types/supplier';
 import type { CommercialDocument } from '@/lib/types/document';
 
 export default function ProvidersPage() {
-  const { tenant } = useAuth();
+  const { tenant, allTenants } = useAuth();
   const tenantId = tenant?.id ?? null;
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -50,7 +50,7 @@ export default function ProvidersPage() {
   const [loadingChain, setLoadingChain] = useState(false);
 
   useEffect(() => {
-    if (!tenantId) return;
+    if (!tenantId && !allTenants) return;
     let cancelled = false;
 
     (async () => {
@@ -67,7 +67,7 @@ export default function ProvidersPage() {
     });
 
     return () => { cancelled = true; };
-  }, [tenantId]);
+  }, [tenantId, allTenants]);
 
   const refreshSuppliers = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -187,7 +187,7 @@ export default function ProvidersPage() {
     }
   };
 
-  if (!tenantId) {
+  if (!tenantId && !allTenants) {
     return (
       <div className="flex items-center justify-center h-64">
         <p className="text-gray-500">Cargando...</p>

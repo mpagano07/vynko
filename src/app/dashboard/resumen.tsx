@@ -12,7 +12,7 @@ function timeAgo(dateStr: string): string {
   return `hace ${Math.floor(diff / 86400)}d`;
 }
 
-export default function DashboardResumen({ tenantId }: { tenantId: string }) {
+export default function DashboardResumen({ tenantId, allTenants }: { tenantId: string; allTenants?: boolean }) {
   const [data, setData] = useState<{
     topProduct: { name: string; qty: number } | null;
     topCustomer: { name: string; total: number } | null;
@@ -29,7 +29,7 @@ export default function DashboardResumen({ tenantId }: { tenantId: string }) {
   }, []);
 
   useEffect(() => {
-    if (!tenantId) return;
+    if (!tenantId && !allTenants) return;
     let cancelled = false;
 
     (async () => {
@@ -47,7 +47,7 @@ export default function DashboardResumen({ tenantId }: { tenantId: string }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [tenantId, getHeaders]);
+  }, [tenantId, allTenants, getHeaders]);
 
   return (
     <div>

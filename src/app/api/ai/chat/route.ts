@@ -1,36 +1,30 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { getAuth } from '@/lib/api-auth';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { formatARS } from '@/lib/utils/currency';
 
-async function getAuth() {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data: tu } = await supabaseAdmin
-    .from('tenant_users')
-    .select('tenant_id')
-    .eq('user_id', user.id);
-  if (!tu || tu.length === 0) return null;
-  return { userId: user.id, tenantId: tu[0].tenant_id as string };
-}
-
 async function getTenantContext(tenantId: string) {
-  const [products, categories, recentSales] = await Promise.all([
-    supabaseAdmin.from('products').select('name, stock, min_stock, max_stock, price_cents, cost').eq('tenant_id', tenantId),
-    supabaseAdmin.from('categories').select('name').eq('tenant_id', tenantId),
+  const [products, stockData, categories, recentSales] = await Promise.all([
+    supabaseAdmin.from('products').select('id, name, price_cents, cost'),
+    supabaseAdmin.from('product_stock').select('product_id, stock, min_stock, max_stock').eq('tenant_id', tenantId),
+    supabaseAdmin.from('categories').select('name'),
     supabaseAdmin.from('sales').select('total_cents, created_at').eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(10),
   ]);
 
-  const productList = (products.data || []).map((p: any) => ({
-    name: p.name,
-    stock: p.stock,
-    min_stock: p.min_stock,
-    max_stock: p.max_stock,
-    price: p.price_cents ? p.price_cents / 100 : 0,
-    cost: p.cost || 0,
-  }));
+  const stockMap = new Map((stockData.data || []).map((s: any) => [s.product_id, s]));
+
+  const productList = (products.data || []).map((p: any) => {
+    const s = stockMap.get(p.id) || { stock: 0, min_stock: 0, max_stock: 0 };
+    return {
+      name: p.name,
+      stock: s.stock,
+      min_stock: s.min_stock,
+      max_stock: s.max_stock,
+      price: p.price_cents ? p.price_cents / 100 : 0,
+      cost: p.cost || 0,
+    };
+  });
 
   return {
     productCount: productList.length,

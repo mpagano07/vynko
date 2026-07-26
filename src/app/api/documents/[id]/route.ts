@@ -1,25 +1,13 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import type { DocumentStatus } from '@/lib/types/document';
 
-async function getAuth() {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data: tu } = await supabaseAdmin
-    .from('tenant_users')
-    .select('tenant_id')
-    .eq('user_id', user.id);
-  if (!tu || tu.length === 0) return null;
-  return { tenantId: tu[0].tenant_id as string, userId: user.id };
-}
-
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await getAuth();
+  const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
 
   const { id } = await params;
@@ -39,7 +27,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await getAuth();
+  const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
 
   const { id } = await params;
@@ -73,10 +61,10 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await getAuth();
+  const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
 
   const { id } = await params;

@@ -1,29 +1,14 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
-async function getAuthenticatedTenant(): Promise<string | null> {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data: tu } = await supabaseAdmin
-    .from('tenant_users')
-    .select('tenant_id')
-    .eq('user_id', user.id);
-
-  if (!tu || tu.length === 0) return null;
-  return (tu as any)[0].tenant_id;
-}
-
-export async function GET() {
-  const tenantId = await getAuthenticatedTenant();
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+export async function GET(request: Request) {
+  const auth = await getAuth(request);
+  if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const { data, error } = await supabaseAdmin
     .from('categories')
     .select('*')
-    .eq('tenant_id', tenantId)
     .order('name', { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -31,8 +16,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const tenantId = await getAuthenticatedTenant();
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const auth = await getAuth(request);
+  if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   try {
     const body = await request.json();
@@ -47,7 +32,7 @@ export async function POST(request: Request) {
         description: body.description || null,
         icon: body.icon || null,
         color: body.color || null,
-        tenant_id: tenantId,
+        tenant_id: auth.tenantId,
       })
       .select()
       .single();

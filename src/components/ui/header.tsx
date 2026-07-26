@@ -5,13 +5,13 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
 import { cn } from '@/lib/utils/cn';
-import { Menu } from 'lucide-react';
+import { Menu, Building2 } from 'lucide-react';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
 
 export function Header() {
   const pathname = usePathname();
   const router = useRouter();
-  const { profile, user, logout, loading } = useAuth();
+  const { profile, tenant, user, logout, loading } = useAuth();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const { toggle: toggleSidebar } = useSidebar();
 
@@ -34,6 +34,12 @@ export function Header() {
         >
           <Menu className="h-5 w-5 text-gray-500 dark:text-gray-400" />
         </button>
+        {tenant && (
+          <div className="hidden sm:flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 ml-1">
+            <Building2 className="h-3.5 w-3.5" />
+            <span className="truncate max-w-[200px]">{tenant.name}</span>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center space-x-1">

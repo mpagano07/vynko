@@ -1,34 +1,10 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
 
-async function getAuthenticatedUser(request?: Request): Promise<{ tenantId: string; userId: string } | null> {
-  let userId: string | null = null;
-  const authHeader = request?.headers.get('authorization');
-  if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.replace('Bearer ', '');
-    const { data: userData } = await supabaseAdmin.auth.getUser(token);
-    userId = userData?.user?.id || null;
-  }
-  if (!userId) {
-    const supabase = await createServerSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    userId = user?.id || null;
-  }
-  if (!userId) return null;
-
-  const { data: tu } = await supabaseAdmin
-    .from('tenant_users')
-    .select('tenant_id')
-    .eq('user_id', userId);
-
-  if (!tu || tu.length === 0) return null;
-  return { tenantId: tu[0].tenant_id as string, userId };
-}
-
 export async function GET(request: Request) {
-  const auth = await getAuthenticatedUser(request);
+  const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
@@ -39,12 +15,13 @@ export async function GET(request: Request) {
     const now = new Date();
     const todayStartStr = now.toLocaleDateString('en-CA', { timeZone: tz }) + 'T00:00:00.000Z';
     const todayStart = new Date(todayStartStr);
-    const { data: sales, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('sales')
       .select('id, total_cents, created_at')
-      .eq('tenant_id', auth.tenantId)
       .gte('created_at', todayStart.toISOString())
       .order('created_at', { ascending: false });
+    if (!auth.allTenants) query = query.eq('tenant_id', auth.tenantId);
+    const { data: sales, error } = await query;
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json(sales ?? []);
@@ -108,7 +85,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const auth = await getAuthenticatedUser(request);
+  const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   try {
@@ -126,13 +103,20 @@ export async function POST(request: Request) {
     const productIds = items.map((i) => i.product_id);
     const { data: products, error: prodError } = await supabaseAdmin
       .from('products')
-      .select('id, name, price, price_cents, stock')
-      .in('id', productIds)
-      .eq('tenant_id', auth.tenantId);
+      .select('id, name, price, price_cents')
+      .in('id', productIds);
 
     if (prodError) return NextResponse.json({ error: prodError.message }, { status: 500 });
 
-    type ProductRow = { id: string; name: string; price: number; price_cents?: number; stock: number };
+    const { data: stockRows } = await supabaseAdmin
+      .from('product_stock')
+      .select('product_id, stock')
+      .in('product_id', productIds)
+      .eq('tenant_id', auth.tenantId);
+
+    const stockMap = new Map((stockRows ?? []).map((s: any) => [s.product_id, s.stock ?? 0]));
+
+    type ProductRow = { id: string; name: string; price: number; price_cents?: number };
     const productMap = new Map((products ?? []).map((p) => [p.id, p as unknown as ProductRow]));
 
     interface SaleItemData {
@@ -153,8 +137,9 @@ export async function POST(request: Request) {
         : (product.price_cents ?? Math.round(Number(product.price) * 100));
       const subtotal_cents = quantity * unit_price_cents;
 
-      if (quantity > (product.stock ?? 0)) {
-        throw new Error(`Stock insuficiente para "${product.name}" (disponible: ${product.stock})`);
+      const availableStock = stockMap.get(item.product_id) ?? 0;
+      if (quantity > availableStock) {
+        throw new Error(`Stock insuficiente para "${product.name}" (disponible: ${availableStock})`);
       }
 
       return { product_id: item.product_id, quantity, unit_price_cents, subtotal_cents, product_name: product.name };
@@ -195,13 +180,14 @@ export async function POST(request: Request) {
     }
 
     for (const item of saleItems) {
-      const product = productMap.get(item.product_id);
-      const newStock = (product?.stock ?? 0) - item.quantity;
+      const currentStock = stockMap.get(item.product_id) ?? 0;
+      const newStock = currentStock - item.quantity;
 
       await supabaseAdmin
-        .from('products')
-        .update({ stock: newStock })
-        .eq('id', item.product_id);
+        .from('product_stock')
+        .update({ stock: newStock, updated_at: new Date().toISOString() })
+        .eq('product_id', item.product_id)
+        .eq('tenant_id', auth.tenantId);
 
       await supabaseAdmin
         .from('stock_history')

@@ -6,7 +6,7 @@ export async function GET(request: Request) {
     const authHeader = request.headers.get('authorization');
 
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ user: null, profile: null, tenant: null });
+      return NextResponse.json({ user: null, profile: null, tenant: null, tenants: [] });
     }
 
     const token = authHeader.replace('Bearer ', '');
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     );
 
     if (userError || !userData?.user) {
-      return NextResponse.json({ user: null, profile: null, tenant: null });
+      return NextResponse.json({ user: null, profile: null, tenant: null, tenants: [] });
     }
 
     const user = userData.user;
@@ -32,25 +32,39 @@ export async function GET(request: Request) {
       .select('tenant_id, role')
       .eq('user_id', user.id);
 
-    const tenantUser = tenantUsers?.[0];
+    const activeTenantId = request.headers.get('x-active-tenant-id');
+
+    let tenants: any[] = [];
     let tenant = null;
     let role = null;
-    if (tenantUser?.tenant_id) {
-      role = tenantUser.role;
-      const { data: tenantData } = await supabaseAdmin
+
+    if (tenantUsers && tenantUsers.length > 0) {
+      const tenantIds = tenantUsers.map(tu => tu.tenant_id);
+
+      const { data: tenantsData } = await supabaseAdmin
         .from('tenants')
         .select('*')
-        .eq('id', tenantUser.tenant_id)
-        .maybeSingle();
+        .in('id', tenantIds);
 
-      tenant = tenantData;
+      tenants = tenantsData || [];
+
+      let targetId = tenantUsers[0].tenant_id;
+      if (activeTenantId === '__all__') {
+        // keep targetId as first tenant; no role change needed
+      } else if (activeTenantId && tenantIds.includes(activeTenantId)) {
+        targetId = activeTenantId;
+      }
+
+      const activeTU = tenantUsers.find(tu => tu.tenant_id === targetId);
+      role = activeTU?.role || null;
+      tenant = tenants.find(t => t.id === targetId) || tenants[0] || null;
     }
 
-    return NextResponse.json({ user, profile, tenant, role });
+    return NextResponse.json({ user, profile, tenant, role, tenants });
   } catch (error) {
     console.error('Error in GET /api/session:', error);
     return NextResponse.json(
-      { user: null, profile: null, tenant: null, error: 'Internal server error' },
+      { user: null, profile: null, tenant: null, tenants: [], error: 'Internal server error' },
       { status: 500 }
     );
   }

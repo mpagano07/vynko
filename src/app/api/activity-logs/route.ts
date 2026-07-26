@@ -1,31 +1,21 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   try {
-    let userId: string | null = null;
-    const authHeader = request.headers.get('authorization');
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.replace('Bearer ', '');
-      const { data: userData } = await supabaseAdmin.auth.getUser(token);
-      userId = userData?.user?.id || null;
-    }
-    if (!userId) {
-      const supabase = await createServerSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      userId = user?.id || null;
-    }
-    if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    const auth = await getAuth(request);
+    if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    const tenantId = auth.tenantId;
 
     const { data: tu } = await supabaseAdmin
       .from('tenant_users')
-      .select('tenant_id, role')
-      .eq('user_id', userId);
-    if (!tu || tu.length === 0) return NextResponse.json({ error: 'No tenant' }, { status: 401 });
-    const { tenant_id: tenantId, role } = tu[0];
+      .select('role')
+      .eq('user_id', auth.userId)
+      .eq('tenant_id', tenantId);
+    const role = tu?.[0]?.role;
     if (role !== 'owner' && role !== 'manager') {
       return NextResponse.json({ error: 'No tienes permisos' }, { status: 403 });
     }
@@ -38,9 +28,9 @@ export async function GET(request: Request) {
     let query = supabaseAdmin
       .from('activity_logs')
       .select('*', { count: 'exact' })
-      .eq('tenant_id', tenantId)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
+    if (!auth.allTenants) query = query.eq('tenant_id', tenantId);
 
     if (entityType) query = query.eq('entity_type', entityType);
 

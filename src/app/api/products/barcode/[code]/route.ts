@@ -1,65 +1,61 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
-async function getAuthenticatedTenant(): Promise<string | null> {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data: tu } = await supabaseAdmin
-    .from('tenant_users')
-    .select('tenant_id')
-    .eq('user_id', user.id);
-
-  if (!tu || tu.length === 0) return null;
-  return (tu as any)[0].tenant_id;
-}
-
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ code: string }> }
 ) {
   try {
     const { code } = await params;
-    const tenantId = await getAuthenticatedTenant();
-    if (!tenantId) {
+    const auth = await getAuth(request);
+    if (!auth) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    let { data, error } = await supabaseAdmin
-      .from('products')
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .eq('barcode', code)
-      .maybeSingle();
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    if (!data) {
-      const result = await supabaseAdmin
+    const lookupByBarcode = async () => {
+      return supabaseAdmin
         .from('products')
         .select('*')
-        .eq('tenant_id', tenantId)
+        .eq('barcode', code)
+        .maybeSingle();
+    };
+
+    const lookupById = async () => {
+      return supabaseAdmin
+        .from('products')
+        .select('*')
         .eq('id', code)
         .maybeSingle();
+    };
+
+    let { data, error } = await lookupByBarcode();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) {
+      const result = await lookupById();
       data = result.data;
       error = result.error;
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
-      }
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     if (!data) {
       return NextResponse.json({ product: null });
     }
 
+    const { data: stockData } = await supabaseAdmin
+      .from('product_stock')
+      .select('stock, min_stock, max_stock')
+      .eq('product_id', data.id)
+      .eq('tenant_id', auth.tenantId)
+      .maybeSingle();
+
     return NextResponse.json({
       product: {
         ...data,
         price: (data as any).price_cents != null ? (data as any).price_cents / 100 : 0,
+        stock: (stockData as any)?.stock ?? 0,
+        min_stock: (stockData as any)?.min_stock ?? 0,
+        max_stock: (stockData as any)?.max_stock ?? 0,
       },
     });
   } catch (err) {

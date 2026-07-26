@@ -1,44 +1,39 @@
 import { NextResponse } from 'next/server';
+import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { createServerSupabaseClient } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   try {
-    let userId: string | null = null;
-    const authHeader = request.headers.get('authorization');
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.replace('Bearer ', '');
-      const { data: userData } = await supabaseAdmin.auth.getUser(token);
-      userId = userData?.user?.id || null;
-    }
-    if (!userId) {
-      const supabase = await createServerSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      userId = user?.id || null;
-    }
-    if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    const auth = await getAuth(request);
+    if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    const tenantId = auth.tenantId;
 
-    const { data: tu } = await supabaseAdmin
-      .from('tenant_users')
-      .select('tenant_id')
-      .eq('user_id', userId);
-    if (!tu || tu.length === 0) return NextResponse.json({ error: 'No tenant' }, { status: 401 });
-    const tenantId = tu[0].tenant_id;
-
-    const { data: allProducts } = await supabaseAdmin
+    let productsQ = supabaseAdmin
       .from('products')
-      .select('id, name, sku, stock, min_stock')
-      .eq('tenant_id', tenantId);
+      .select(`
+        id, name, sku,
+        stock_data:product_stock(stock, min_stock)
+      `);
+    if (!auth.allTenants) productsQ = productsQ.eq('product_stock.tenant_id', tenantId);
+    const { data: allProducts } = await productsQ;
 
     const criticalProducts = (allProducts ?? [])
       .filter(p => {
-        const stock = (p.stock as number) ?? 0;
-        const minStock = (p.min_stock as number) ?? 0;
+        const s = (p as any).stock_data?.[0];
+        if (!s) return false;
+        const stock = (s?.stock as number) ?? 0;
+        const minStock = (s?.min_stock as number) ?? 0;
         return stock <= minStock;
       })
-      .slice(0, 15);
+      .slice(0, 15)
+      .map(p => ({
+        ...p,
+        stock: (p as any).stock_data?.[0]?.stock ?? 0,
+        min_stock: (p as any).stock_data?.[0]?.min_stock ?? 0,
+        stock_data: undefined,
+      }));
 
     if (!criticalProducts || criticalProducts.length === 0) {
       return NextResponse.json([]);
@@ -49,13 +44,14 @@ export async function GET(request: Request) {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const { data: recentSales } = await supabaseAdmin
+    let recentSalesQ = supabaseAdmin
       .from('sales')
       .select('id, created_at')
-      .eq('tenant_id', tenantId)
       .gte('created_at', thirtyDaysAgo.toISOString())
       .order('created_at', { ascending: false })
       .limit(100);
+    if (!auth.allTenants) recentSalesQ = recentSalesQ.eq('tenant_id', tenantId);
+    const { data: recentSales } = await recentSalesQ;
 
     const recentSaleIds = (recentSales ?? []).map(s => s.id);
     const saleDateMap: Record<string, string> = {};

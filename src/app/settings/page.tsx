@@ -13,7 +13,7 @@ import BiometricSettings from '@/components/auth/BiometricSettings';
 import toast from 'react-hot-toast';
 
 export default function SettingsPage() {
-  const { user, profile, tenant, role, loading: authLoading } = useAuth();
+  const { user, profile, tenant, tenants, role, loading: authLoading } = useAuth();
   const router = useRouter();
 
   const [profileForm, setProfileForm] = useState({ full_name: '' });
@@ -21,7 +21,7 @@ export default function SettingsPage() {
   const [savingProfile, setSavingProfile] = useState(false);
 
   const [tenantForm, setTenantForm] = useState({
-    name: '',
+    company_name: '',
     description: '',
     razon_social: '',
     cuit: '',
@@ -54,6 +54,13 @@ export default function SettingsPage() {
   const [inviteName, setInviteName] = useState('');
   const [inviting, setInviting] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [selectedTenantIds, setSelectedTenantIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (tenants.length > 0 && selectedTenantIds.length === 0) {
+      setSelectedTenantIds(tenants.map(t => t.id));
+    }
+  }, [tenants, selectedTenantIds.length]);
 
   const currentUserId = user?.id;
   const currentUserCollab = collaborators.find((c: any) => c.user_id === currentUserId);
@@ -75,7 +82,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (tenant && !tenantSynced) {
       setTenantForm({
-        name: tenant.name || '',
+        company_name: tenant.company_name || tenant.name || '',
         description: tenant.description || '',
         razon_social: tenant.razon_social || '',
         cuit: tenant.cuit || '',
@@ -121,6 +128,8 @@ export default function SettingsPage() {
     e.preventDefault();
     if (!inviteEmail.trim()) return;
 
+    const targetTenantIds = selectedTenantIds.length > 0 ? selectedTenantIds : tenants.map(t => t.id);
+
     setInviting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -130,7 +139,12 @@ export default function SettingsPage() {
           'Content-Type': 'application/json',
           ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
         },
-        body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole, full_name: inviteName.trim() }),
+        body: JSON.stringify({
+          email: inviteEmail.trim(),
+          role: inviteRole,
+          full_name: inviteName.trim() || null,
+          tenant_ids: targetTenantIds,
+        }),
       });
 
       const data = await res.json();
@@ -155,11 +169,11 @@ export default function SettingsPage() {
     }
   }, [inviteEmail, inviteRole, inviteName]);
 
-  const handleRemove = useCallback(async (id: string) => {
-    setRemovingId(id);
+  const handleRemove = useCallback(async (tenantUsersId: string, userId: string) => {
+    setRemovingId(tenantUsersId);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`/api/settings/collaborators/${id}`, {
+      const res = await fetch(`/api/settings/collaborators/${tenantUsersId}`, {
         method: 'DELETE',
         headers: session?.access_token
           ? { Authorization: `Bearer ${session.access_token}` }
@@ -173,7 +187,7 @@ export default function SettingsPage() {
       }
 
       toast.success('Colaborador removido');
-      setCollaborators((prev) => prev.filter((c: any) => c.id !== id));
+      setCollaborators((prev) => prev.filter((c: any) => c.user_id !== userId));
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al remover');
     } finally {
@@ -213,10 +227,6 @@ export default function SettingsPage() {
 
   const handleSaveTenant = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!tenantForm.name.trim()) {
-      toast.error('El nombre de la empresa es requerido');
-      return;
-    }
 
     setSavingTenant(true);
     try {
@@ -228,7 +238,7 @@ export default function SettingsPage() {
           ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
         },
         body: JSON.stringify({
-          name: tenantForm.name.trim(),
+          company_name: tenantForm.company_name.trim() || null,
           description: tenantForm.description,
           razon_social: tenantForm.razon_social.trim() || null,
           cuit: tenantForm.cuit.trim() || null,
@@ -413,10 +423,9 @@ export default function SettingsPage() {
                     </label>
                     <Input
                       type="text"
-                      required
                       placeholder="Nombre de tu empresa"
-                      value={tenantForm.name}
-                      onChange={(e) => setTenantForm({ ...tenantForm, name: e.target.value })}
+                      value={tenantForm.company_name}
+                      onChange={(e) => setTenantForm({ ...tenantForm, company_name: e.target.value })}
                     />
                   </div>
                   <div>
@@ -641,29 +650,38 @@ export default function SettingsPage() {
           <div className="space-y-3">
             {collaborators.map((c: any) => (
               <div
-                key={c.id}
+                key={c.user_id}
                 className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700"
               >
-                <div className="flex items-center gap-3 min-w-0">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="h-9 w-9 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-sm font-medium text-indigo-600 dark:text-indigo-300 flex-shrink-0">
                     {(c.full_name || c.email || '?').charAt(0).toUpperCase()}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                       {c.full_name || 'Sin nombre'}
                     </p>
                     <p className="text-xs text-gray-500 truncate">{c.email}</p>
+                    {c.tenants && c.tenants.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {c.tenants.map((t: any) => (
+                          <span key={t.id} className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
+                            {t.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex items-center gap-2 flex-shrink-0 ml-3">
                   {c.role === 'owner' ? (
                     <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-1 rounded-full">
                       <ShieldCheck className="h-3 w-3" />
                       Propietario
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-full">
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-full whitespace-nowrap">
                       <Shield className="h-3 w-3" />
                       {c.role === 'manager' ? 'Manager' : 'Miembro'}
                     </span>
@@ -673,11 +691,11 @@ export default function SettingsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleRemove(c.id)}
-                      disabled={removingId === c.id}
+                      onClick={() => handleRemove(c.tenant_users_ids?.[0], c.user_id)}
+                      disabled={removingId === c.tenant_users_ids?.[0]}
                       className="border-transparent text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
                     >
-                      {removingId === c.id ? (
+                      {removingId === c.tenant_users_ids?.[0] ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
                         <X className="h-4 w-4" />
@@ -728,8 +746,8 @@ export default function SettingsPage() {
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
               Invitar colaborador
             </p>
-            <div className="flex gap-2">
-              <div className="flex-1">
+            <div className="flex flex-wrap gap-2">
+              <div className="flex-1 min-w-[140px]">
                 <Input
                   type="text"
                   placeholder="Nombre"
@@ -737,7 +755,7 @@ export default function SettingsPage() {
                   onChange={(e) => setInviteName(e.target.value)}
                 />
               </div>
-              <div className="flex-1">
+              <div className="flex-1 min-w-[180px]">
                 <Input
                   type="email"
                   required
@@ -761,6 +779,36 @@ export default function SettingsPage() {
                   <Mail className="h-4 w-4" />
                 )}
               </Button>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-gray-500 mb-1.5">Sucursales asignadas</p>
+              <div className="flex flex-wrap gap-2">
+                {tenants.map((t) => {
+                  const checked = selectedTenantIds.includes(t.id);
+                  return (
+                    <label
+                      key={t.id}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs cursor-pointer transition-colors ${
+                        checked
+                          ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300'
+                          : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          setSelectedTenantIds((prev) =>
+                            checked ? prev.filter((id) => id !== t.id) : [...prev, t.id]
+                          );
+                        }}
+                        className="sr-only"
+                      />
+                      {checked ? '✓' : '○'} {t.name}
+                    </label>
+                  );
+                })}
+              </div>
             </div>
           </form>
         )}
