@@ -98,6 +98,11 @@ export default function ProductsPage() {
   // Actions Dropdown State
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    searchInputRef.current?.focus();
+  }, []);
 
   // Price Adjustment State
   const [isPriceAdjustModalOpen, setIsPriceAdjustModalOpen] = useState(false);
@@ -510,7 +515,7 @@ export default function ProductsPage() {
             </Button>
 
             {isActionsMenuOpen && (
-              <div className="absolute right-0 mt-1.5 w-52 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl z-50 overflow-hidden">
+              <div className="absolute left-0 sm:left-auto sm:right-0 mt-1.5 w-52 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl z-50 overflow-hidden">
                 <div className="py-1">
                   <button
                     onClick={() => { setIsCategoryModalOpen(true); setIsActionsMenuOpen(false); }}
@@ -581,6 +586,7 @@ export default function ProductsPage() {
           <div className="relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
             <Input
+              ref={searchInputRef}
               type="text"
               placeholder="Buscar por nombre, SKU o barras..."
               value={searchTerm}

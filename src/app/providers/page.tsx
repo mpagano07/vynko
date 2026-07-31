@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
@@ -42,6 +42,11 @@ export default function ProvidersPage() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [supplierIdToDelete, setSupplierIdToDelete] = useState<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    searchInputRef.current?.focus();
+  }, []);
 
   // Selected supplier document chain
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
@@ -217,6 +222,7 @@ export default function ProvidersPage() {
         <div className="relative">
           <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
           <Input
+            ref={searchInputRef}
             type="text"
             placeholder="Buscar proveedor por nombre, contacto o email..."
             value={searchTerm}

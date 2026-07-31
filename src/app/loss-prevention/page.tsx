@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useProducts } from '@/lib/hooks/useProducts';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -33,6 +33,11 @@ export default function LossPreventionPage() {
   const [loading, setLoading] = useState(true);
   const [history, setHistory] = useState<any[]>([]);
   const [search, setSearch] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    searchInputRef.current?.focus();
+  }, []);
   const [typeFilter, setTypeFilter] = useState('adjustment');
   const [showForm, setShowForm] = useState(false);
 
@@ -201,7 +206,7 @@ export default function LossPreventionPage() {
         <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-            <Input placeholder="Buscar por producto..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+            <Input ref={searchInputRef} placeholder="Buscar por producto..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
           </div>
           <div className="w-full sm:w-44">
             <Select value={typeFilter} onChange={(e) => {

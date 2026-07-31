@@ -28,6 +28,11 @@ export default function CodigosPage() {
   const [qrs, setQrs] = useState<Map<string, string>>(new Map());
   const [generating, setGenerating] = useState(true);
   const printRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    searchInputRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     if (!tenantId) return;
@@ -105,6 +110,7 @@ export default function CodigosPage() {
           <div className="relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
             <Input
+              ref={searchInputRef}
               type="text"
               placeholder="Buscar por nombre, SKU o código..."
               value={searchTerm}

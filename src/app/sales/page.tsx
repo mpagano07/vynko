@@ -84,7 +84,12 @@ export default function SalesPage() {
     toY: number;
   } | null>(null);
   const cartRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [showScanner, setShowScanner] = useState(false);
+
+  useEffect(() => {
+    searchInputRef.current?.focus();
+  }, []);
 
   const fetchSales = async (page: number, headers: Record<string, string>) => {
     const res = await fetch(`/api/sales?days=15&page=${page}&limit=${SALES_PER_PAGE}`, { headers });
@@ -367,6 +372,7 @@ export default function SalesPage() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
+                  ref={searchInputRef}
                   type="text"
                   placeholder="Buscar producto por nombre, SKU o código de barras..."
                   value={productSearch}

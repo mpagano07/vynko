@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
@@ -75,6 +75,7 @@ export default function DocumentosPage() {
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [search, setSearch] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<DocumentType>('remito_ingreso');
   const [creating, setCreating] = useState(false);
@@ -120,6 +121,10 @@ export default function DocumentosPage() {
   const [receiveNotes, setReceiveNotes] = useState('');
   const [receiveItems, setReceiveItems] = useState<{ product_id: string; product_name: string; quantity_ordered: number; already_received: number; quantity_received: number }[]>([]);
   const [isSubmittingReceive, setIsSubmittingReceive] = useState(false);
+
+  useEffect(() => {
+    searchInputRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     if (!tenant?.id) return;
@@ -836,6 +841,7 @@ export default function DocumentosPage() {
               <div className="relative">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                 <Input
+                  ref={searchInputRef}
                   type="text"
                   placeholder="Buscar..."
                   value={search}

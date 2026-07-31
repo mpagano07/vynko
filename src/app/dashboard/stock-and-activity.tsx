@@ -26,6 +26,7 @@ function actionInfo(action: string, entityType: string, details: Record<string, 
     case 'supplier': return { emoji: '🚚', label: 'Compra', detail: name || (action === 'created' ? 'Registrada' : 'Modificada') };
     case 'purchase_order': return { emoji: '🚚', label: 'Compra a proveedor', detail: name || (action === 'created' ? 'Registrada' : 'Modificada') };
     case 'import': return { emoji: '📥', label: 'Importación', detail: name || `Productos importados` };
+    case 'stock_transfer': return { emoji: '🔄', label: 'Transferencia', detail: (details.items_count as number) ? `${details.items_count} producto${(details.items_count as number) !== 1 ? 's' : ''}` : '' };
     default: return { emoji: '📋', label: entityType, detail: '' };
   }
 }
