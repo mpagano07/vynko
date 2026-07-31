@@ -110,7 +110,7 @@ export default function LandingPage() {
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-medium mb-6">
                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                Gestión de stock con IA
+                Gestión de stock
               </div>
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight tracking-tight">
                 Controlá tu{' '}
@@ -219,7 +219,7 @@ export default function LandingPage() {
                   'Escaneo móvil en tiempo real',
                   'Sincronización automática 2-way',
                   'Alertas inteligentes de bajo stock',
-                  'Pronósticos con IA',
+                  'Pronósticos',
                   'Acceso multi-dispositivo',
                 ].map(item => (
                   <li key={item} className="flex items-start gap-3 text-sm text-gray-300">
