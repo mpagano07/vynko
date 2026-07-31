@@ -1,6 +1,27 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { PLAN_LIMITS } from '@/lib/plans';
+import type { PlanId } from '@/lib/plans';
+
+async function enforceUserLimit(tid: string): Promise<string | null> {
+  const { data: tenantRow } = await supabaseAdmin
+    .from('tenants')
+    .select('subscription_plan')
+    .eq('id', tid)
+    .single();
+  const plan = (tenantRow?.subscription_plan as PlanId) || 'starter';
+  const maxUsers = PLAN_LIMITS[plan]?.users ?? 1;
+  if (maxUsers === Infinity) return null;
+  const { count } = await supabaseAdmin
+    .from('tenant_users')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tid);
+  if ((count ?? 0) >= maxUsers) {
+    return `Tu plan actual (${plan}) permite hasta ${maxUsers} usuario${maxUsers !== 1 ? 's' : ''}. Mejorá tu plan para agregar colaboradores.`;
+  }
+  return null;
+}
 
 export async function GET(request: Request) {
   try {
@@ -146,6 +167,10 @@ export async function POST(request: Request) {
           .maybeSingle();
 
         if (!existingMember) {
+          const limitError = await enforceUserLimit(tid);
+          if (limitError) {
+            return NextResponse.json({ error: limitError }, { status: 403 });
+          }
           const { error: insertError } = await supabaseAdmin
             .from('tenant_users')
             .insert({ tenant_id: tid, user_id: existingProfile.id, role: assignRole });
@@ -193,6 +218,10 @@ export async function POST(request: Request) {
           .maybeSingle();
 
         if (!existingMember) {
+          const limitError = await enforceUserLimit(tid);
+          if (limitError) {
+            return NextResponse.json({ error: limitError }, { status: 403 });
+          }
           await supabaseAdmin
             .from('tenant_users')
             .insert({ tenant_id: tid, user_id: authUser.id, role: assignRole });
@@ -217,9 +246,15 @@ export async function POST(request: Request) {
       }, { status: 201 });
     }
 
+    const inviteTenantId = ownerTenantIds[0];
+    const limitError = await enforceUserLimit(inviteTenantId);
+    if (limitError) {
+      return NextResponse.json({ error: limitError }, { status: 403 });
+    }
+
     const { error: inviteError } = await supabaseAdmin.from('invitations').upsert(
       {
-        tenant_id: ownerTenantIds[0],
+        tenant_id: inviteTenantId,
         email: email.toLowerCase(),
         role: assignRole,
         invited_by: auth.userId,

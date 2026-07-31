@@ -36,7 +36,7 @@ export async function POST(request: Request) {
 
   const [productsData, stockData, categoriesData] = await Promise.all([
     supabaseAdmin.from('products').select('id, name, sku, price_cents, cost'),
-    supabaseAdmin.from('product_stock').select('product_id, stock, min_stock').eq('tenant_id', auth.tenantId),
+    supabaseAdmin.from('product_stock').select('product_id, stock, min_stock').eq('tenant_id', auth.tenantId).eq('active', true),
     supabaseAdmin.from('categories').select('id, name'),
   ]);
 

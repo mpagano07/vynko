@@ -7,7 +7,7 @@ import { formatARS } from '@/lib/utils/currency';
 async function getTenantContext(tenantId: string) {
   const [products, stockData, categories, recentSales] = await Promise.all([
     supabaseAdmin.from('products').select('id, name, price_cents, cost'),
-    supabaseAdmin.from('product_stock').select('product_id, stock, min_stock, max_stock').eq('tenant_id', tenantId),
+    supabaseAdmin.from('product_stock').select('product_id, stock, min_stock, max_stock').eq('tenant_id', tenantId).eq('active', true),
     supabaseAdmin.from('categories').select('name'),
     supabaseAdmin.from('sales').select('total_cents, created_at').eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(10),
   ]);

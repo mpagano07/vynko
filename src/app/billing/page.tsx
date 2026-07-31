@@ -5,9 +5,10 @@ import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
-import { PLANS } from '@/lib/plans';
+import { PLANS, PLAN_ORDER } from '@/lib/plans';
+import type { PlanId } from '@/lib/plans';
 import { formatARS } from '@/lib/utils/currency';
-import { CreditCard, CheckCircle2, Loader2, Zap, ArrowRight, AlertTriangle } from 'lucide-react';
+import { CreditCard, CheckCircle2, XCircle, Loader2, Zap, ArrowRight, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -43,6 +44,8 @@ function BillingContent() {
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [pendingDowngrade, setPendingDowngrade] = useState<string | null>(null);
+  const [downgrading, setDowngrading] = useState(false);
 
   useEffect(() => {
     if (!authLoading && role === 'member') router.replace('/dashboard');
@@ -64,6 +67,14 @@ function BillingContent() {
   if (authLoading || role === 'member') return null;
 
   const handleSubscribe = async (planId: string) => {
+    const targetRank = PLAN_ORDER.indexOf(planId as PlanId);
+    const currentRank = PLAN_ORDER.indexOf((currentPlanId as PlanId) || 'starter');
+
+    if (targetRank < currentRank) {
+      setPendingDowngrade(planId);
+      return;
+    }
+
     setCheckoutLoading(planId);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -81,6 +92,39 @@ function BillingContent() {
       toast.error(err.message);
     } finally {
       setCheckoutLoading(null);
+    }
+  };
+
+  const handleDowngradeConfirm = async () => {
+    if (!pendingDowngrade) return;
+    setDowngrading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+
+      const res = await fetch('/api/billing/downgrade', {
+        method: 'POST', headers,
+        body: JSON.stringify({ plan: pendingDowngrade }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || 'Error'); return; }
+
+      setPendingDowngrade(null);
+
+      if (data.url) {
+        toast.success(`Tu plan es ${PLANS[pendingDowngrade as PlanId].name}. Completá el pago para activar tu suscripción.`);
+        window.location.href = data.url;
+        return;
+      }
+
+      toast.success(`Cambiaste al plan ${PLANS[pendingDowngrade as PlanId].name}`);
+      const statusRes = await fetch('/api/billing/status', { headers });
+      if (statusRes.ok) setSubscription(await statusRes.json());
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setDowngrading(false);
     }
   };
 
@@ -274,16 +318,17 @@ function BillingContent() {
       )}
 
       {/* Plans Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {Object.entries(PLANS).map(([id, plan]) => {
           const isCurrent = id === currentPlanId;
           const isPopular = id === 'starter';
+          const isDowngrade = PLAN_ORDER.indexOf(id as PlanId) < PLAN_ORDER.indexOf((currentPlanId as PlanId) || 'starter');
 
           return (
             <Card key={id} className={`p-6 relative flex flex-col ${isCurrent ? 'ring-2 ring-indigo-500' : ''} ${isPopular && !isCurrent ? 'border-indigo-200 dark:border-indigo-800' : ''}`}>
-              {id === 'starter' && !isCurrent && (
-                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-[10px] font-semibold bg-indigo-600 text-white px-3 py-0.5 rounded-full">
-                  45 días gratis
+              {plan.badge && !isCurrent && (
+                <span className={`absolute -top-2.5 left-1/2 -translate-x-1/2 text-[10px] font-semibold px-3 py-0.5 rounded-full ${plan.comingSoon ? 'bg-gray-500 text-white' : 'bg-indigo-600 text-white'}`}>
+                  {plan.badge}
                 </span>
               )}
               {isCurrent && (
@@ -294,7 +339,9 @@ function BillingContent() {
 
               <h3 className="text-lg font-bold text-gray-900 dark:text-white mt-1">{plan.name}</h3>
               <div className="mt-2 mb-4">
-                {plan.price > 0 ? (
+                {plan.comingSoon ? (
+                  <span className="text-xl font-semibold text-gray-500">Próximamente</span>
+                ) : plan.price > 0 ? (
                   <>
                     <span className="text-3xl font-extrabold text-gray-900 dark:text-white">{formatARS(plan.price)}</span>
                     <span className="text-sm text-gray-500">/mes</span>
@@ -306,14 +353,25 @@ function BillingContent() {
 
               <ul className="space-y-2 flex-1 mb-6">
                 {plan.features.map((f, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0 mt-0.5" />
-                    {f}
+                  <li key={i} className={`flex items-start gap-2 text-sm ${f.included ? 'text-gray-600 dark:text-gray-400' : 'text-gray-400 dark:text-gray-600'}`}>
+                    {f.included ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-gray-400 dark:text-gray-600 flex-shrink-0 mt-0.5" />
+                    )}
+                    <span>
+                      {f.label}
+                      {f.value && <span className="font-semibold text-gray-800 dark:text-gray-200"> {f.value}</span>}
+                    </span>
                   </li>
                 ))}
               </ul>
 
-              {!isCurrent && (
+              {plan.comingSoon ? (
+                <Button variant="outline" disabled className="w-full">
+                  Próximamente
+                </Button>
+              ) : !isCurrent && (
                 <Button
                   onClick={() => handleSubscribe(id)}
                   disabled={checkoutLoading === id}
@@ -323,7 +381,7 @@ function BillingContent() {
                   {checkoutLoading === id ? (
                     <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Procesando...</>
                   ) : (
-                    <>Suscribirse <ArrowRight className="h-4 w-4 ml-1" /></>
+                    <>{isDowngrade ? `Cambiar a ${plan.name}` : 'Suscribirse'} <ArrowRight className="h-4 w-4 ml-1" /></>
                   )}
                 </Button>
               )}
@@ -370,6 +428,18 @@ function BillingContent() {
         loading={cancelling}
         onConfirm={handleCancelConfirm}
         onCancel={() => setShowCancelModal(false)}
+      />
+
+      <ConfirmModal
+        open={!!pendingDowngrade}
+        title="¿Cambiar a Starter?"
+        message="Al pasar al plan Starter vas a perder los beneficios de Business: los productos por encima de los primeros 50 quedan desactivados (se recuperan si volvés a Business), se quita el acceso a las sucursales excepto la primera, se eliminan los colaboradores y se desactivan las funciones avanzadas (pronóstico, visión de góndolas, IA). Se cancelará tu suscripción actual y se iniciará el pago de $19.900/mes por el plan Starter. ¿Querés continuar?"
+        confirmLabel="Sí, cambiar a Starter"
+        cancelLabel="Volver"
+        variant="danger"
+        loading={downgrading}
+        onConfirm={handleDowngradeConfirm}
+        onCancel={() => setPendingDowngrade(null)}
       />
     </div>
   );

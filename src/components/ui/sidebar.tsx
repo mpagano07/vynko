@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils/cn';
 import { X, LogOut, Clock, AlertTriangle, ChevronDown, ChevronUp, Settings, Check, Plus, Loader2, Pencil } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
+import { PLAN_LIMITS } from '@/lib/plans';
+import type { PlanId } from '@/lib/plans';
 import toast from 'react-hot-toast';
 
 interface NavItem {
@@ -209,11 +211,9 @@ export function Sidebar() {
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
 
-  const planLimits: Record<string, number> = { starter: 1, business: 5, enterprise: 99 };
   const currentPlan = tenant?.subscription_plan || 'starter';
-  const maxBranches = planLimits[currentPlan] ?? 1;
+  const maxBranches = PLAN_LIMITS[currentPlan as PlanId]?.branches ?? 1;
   const canAddBranch = tenants.length < maxBranches;
-
   const handleRename = async (tenantId: string) => {
     if (!renameValue.trim()) return;
     try {

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { PLAN_LIMITS } from '@/lib/plans';
+import type { PlanId } from '@/lib/plans';
 
 const slugify = (value: string) =>
   value
@@ -54,8 +56,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const planLimits: Record<string, number> = { starter: 1, business: 5, enterprise: 99 };
-    const maxBranches = planLimits[inheritPlan] ?? 1;
+    const maxBranches = PLAN_LIMITS[inheritPlan as PlanId]?.branches ?? 1;
     if (auth.tenantIds.length >= maxBranches) {
       return NextResponse.json(
         { error: `Tu plan actual (${inheritPlan}) permite hasta ${maxBranches} sucursal${maxBranches !== 1 ? 'es' : ''}.` },

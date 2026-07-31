@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -65,6 +66,7 @@ export default function SettingsPage() {
   const currentUserId = user?.id;
   const currentUserCollab = collaborators.find((c: any) => c.user_id === currentUserId);
   const isOwner = currentUserCollab?.role === 'owner';
+  const canInvite = tenant?.subscription_plan === 'business' || tenant?.subscription_plan === 'enterprise';
 
   useEffect(() => {
     if (!authLoading && role === 'member') {
@@ -741,7 +743,14 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {isOwner && (
+        {isOwner && !canInvite && (
+          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-500">
+            Tu plan actual (Starter) incluye 1 usuario.{' '}
+            <Link href="/billing" className="text-indigo-500 hover:underline">Mejorá tu plan para invitar colaboradores</Link>.
+          </div>
+        )}
+
+        {isOwner && canInvite && (
           <form onSubmit={handleInvite} className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 space-y-3">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
               Invitar colaborador

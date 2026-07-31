@@ -304,39 +304,65 @@ export default function LandingPage() {
                 <div
                   key={id}
                   className={`relative rounded-2xl p-8 ${
-                    isPopular
-                      ? 'bg-gray-900 border-2 border-cyan-500/40 shadow-xl shadow-cyan-500/5'
-                      : 'bg-gray-950 border border-gray-800'
+                    plan.comingSoon
+                      ? 'bg-gray-950 border border-dashed border-gray-700'
+                      : isPopular
+                        ? 'bg-gray-900 border-2 border-cyan-500/40 shadow-xl shadow-cyan-500/5'
+                        : 'bg-gray-950 border border-gray-800'
                   }`}
                 >
-                  {isPopular && (
-                    <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 bg-cyan-500 text-black text-xs font-bold rounded-full">
-                      45 días de prueba gratis
+                  {plan.badge && (
+                    <div
+                      className={`absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 text-xs font-bold rounded-full whitespace-nowrap ${
+                        plan.comingSoon ? 'bg-gray-700 text-gray-300' : 'bg-cyan-500 text-black'
+                      }`}
+                    >
+                      {plan.badge}
                     </div>
                   )}
                   <h3 className="text-lg font-bold mb-2">{plan.name}</h3>
                   <div className="mb-6">
-                    <span className="text-4xl font-extrabold">{formatARS(plan.price)}</span>
-                    <span className="text-sm text-gray-500 ml-1">/mes</span>
+                    {plan.comingSoon ? (
+                      <span className="text-2xl font-semibold text-gray-500">Próximamente</span>
+                    ) : (
+                      <>
+                        <span className="text-4xl font-extrabold">{formatARS(plan.price)}</span>
+                        <span className="text-sm text-gray-500 ml-1">/mes</span>
+                      </>
+                    )}
                   </div>
                   <ul className="space-y-3 mb-8">
                     {plan.features.map((f, i) => (
-                      <li key={i} className="flex items-start gap-3 text-sm text-gray-400">
-                        <span className="text-cyan-400 mt-0.5">✓</span>
-                        {f}
+                      <li
+                        key={i}
+                        className={`flex items-start gap-3 text-sm ${f.included ? 'text-gray-400' : 'text-gray-600'}`}
+                      >
+                        <span className={`mt-0.5 ${f.included ? 'text-cyan-400' : 'text-gray-700'}`}>
+                          {f.included ? '✓' : '✗'}
+                        </span>
+                        <span>
+                          {f.label}
+                          {f.value && <span className="text-gray-200 font-medium"> {f.value}</span>}
+                        </span>
                       </li>
                     ))}
                   </ul>
-                  <Link
-                    href="/auth/signup"
-                    className={`block text-center w-full py-3 rounded-lg font-semibold text-sm transition-colors ${
-                      isPopular
-                        ? 'bg-cyan-500 hover:bg-cyan-400 text-black'
-                        : 'bg-gray-800 hover:bg-gray-700 text-white border border-gray-700'
-                    }`}
-                  >
-                    {id === 'enterprise' ? 'Contactar' : 'Comenzar gratis'}
-                  </Link>
+                  {plan.comingSoon ? (
+                    <span className="block text-center w-full py-3 rounded-lg font-semibold text-sm bg-gray-800 text-gray-500 border border-gray-700 cursor-not-allowed">
+                      Próximamente
+                    </span>
+                  ) : (
+                    <Link
+                      href="/auth/signup"
+                      className={`block text-center w-full py-3 rounded-lg font-semibold text-sm transition-colors ${
+                        isPopular
+                          ? 'bg-cyan-500 hover:bg-cyan-400 text-black'
+                          : 'bg-gray-800 hover:bg-gray-700 text-white border border-gray-700'
+                      }`}
+                    >
+                      Comenzar gratis
+                    </Link>
+                  )}
                 </div>
               );
             })}

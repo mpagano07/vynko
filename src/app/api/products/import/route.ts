@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
+import { PLAN_LIMITS } from '@/lib/plans';
+import type { PlanId } from '@/lib/plans';
 
 async function resolveCategory(tenantId: string, name: string): Promise<string | null> {
   if (!name?.trim()) return null;
@@ -36,6 +38,24 @@ export async function POST(request: Request) {
 
   if (!Array.isArray(products) || products.length === 0) {
     return NextResponse.json({ error: 'No products provided' }, { status: 400 });
+  }
+
+  const { data: tenantRow } = await supabaseAdmin
+    .from('tenants')
+    .select('subscription_plan')
+    .eq('id', auth.tenantId)
+    .single();
+
+  const plan = (tenantRow?.subscription_plan as PlanId) || 'starter';
+  const maxProducts = PLAN_LIMITS[plan]?.products ?? 50;
+  let productCount: number | null = null;
+  if (maxProducts !== Infinity) {
+    const { count } = await supabaseAdmin
+      .from('product_stock')
+      .select('product_id', { count: 'exact', head: true })
+      .eq('tenant_id', auth.tenantId)
+      .eq('active', true);
+    productCount = count ?? 0;
   }
 
   const results: { row: number; status: 'created' | 'updated' | 'skipped'; name?: string; error?: string }[] = [];
@@ -95,11 +115,19 @@ export async function POST(request: Request) {
         } else {
           await supabaseAdmin
             .from('product_stock')
-            .upsert({ product_id: existingId, tenant_id: auth.tenantId, stock, min_stock, max_stock, updated_at: new Date().toISOString() },
+            .upsert({ product_id: existingId, tenant_id: auth.tenantId, stock, min_stock, max_stock, active: true, updated_at: new Date().toISOString() },
               { onConflict: 'product_id,tenant_id' });
           results.push({ row: i + 1, status: 'updated', name: row.name });
         }
       } else {
+        if (productCount !== null) {
+          if (productCount >= maxProducts) {
+            results.push({ row: i + 1, status: 'skipped', name: row.name, error: 'Límite de productos alcanzado para tu plan' });
+            continue;
+          }
+          productCount++;
+        }
+
         const { data: created, error } = await supabaseAdmin
           .from('products')
           .insert(upsertData)

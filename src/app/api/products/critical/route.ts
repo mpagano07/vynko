@@ -17,6 +17,7 @@ export async function GET(request: Request) {
         stock_data:product_stock(stock, min_stock)
       `);
     if (!auth.allTenants) productsQuery = productsQuery.eq('product_stock.tenant_id', tenantId);
+    productsQuery = productsQuery.eq('product_stock.active', true);
     const { data: products, error } = await productsQuery;
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

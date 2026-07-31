@@ -24,21 +24,49 @@ export async function POST(request: Request) {
       }
 
       if (status === 'authorized') {
+        const reason = preapproval.reason || '';
+        let planToSet: 'starter' | 'business' | null = null;
+        if (reason.includes('Business')) planToSet = 'business';
+        else if (reason.includes('Starter')) planToSet = 'starter';
+
+        const updateData: Record<string, unknown> = {
+          subscription_status: 'active',
+          mercadopago_preapproval_id: id,
+        };
+        if (planToSet) updateData.subscription_plan = planToSet;
+
         await supabaseAdmin
           .from('tenants')
-          .update({
-            subscription_status: 'active',
-            mercadopago_preapproval_id: id,
-          })
+          .update(updateData)
           .eq('id', externalRef);
+
+        if (planToSet === 'business') {
+          await supabaseAdmin
+            .from('product_stock')
+            .update({ active: true })
+            .eq('tenant_id', externalRef);
+        }
       } else if (status === 'cancelled') {
+        const { data: tenantRow } = await supabaseAdmin
+          .from('tenants')
+          .select('subscription_plan, mercadopago_preapproval_id')
+          .eq('id', externalRef)
+          .single();
+
+        const currentPlan = tenantRow?.subscription_plan;
+        const planToSet = currentPlan === 'business' || currentPlan === 'enterprise' ? 'free' : currentPlan;
+
+        const updateData: Record<string, unknown> = {
+          subscription_status: 'canceled',
+          subscription_plan: planToSet,
+        };
+        if ((tenantRow?.mercadopago_preapproval_id ?? null) === id) {
+          updateData.mercadopago_preapproval_id = null;
+        }
+
         await supabaseAdmin
           .from('tenants')
-          .update({
-            subscription_status: 'canceled',
-            subscription_plan: 'free',
-            mercadopago_preapproval_id: null,
-          })
+          .update(updateData)
           .eq('id', externalRef);
       } else if (status === 'pending') {
       }

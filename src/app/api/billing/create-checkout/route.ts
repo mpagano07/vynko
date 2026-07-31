@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   const { plan } = await request.json();
   const planConfig = PLANS[plan as keyof typeof PLANS];
 
-  if (!planConfig) {
+  if (!planConfig || planConfig.comingSoon) {
     return NextResponse.json({ error: 'Plan inválido o no disponible' }, { status: 400 });
   }
 

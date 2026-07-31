@@ -16,7 +16,7 @@ export async function GET(request: Request) {
 
   const [productsData, stockData, saleItemsData, salesData, priorSaleItemsData, priorSalesData] = await Promise.all([
     supabaseAdmin.from('products').select('id, name, price_cents, cost, category_id'),
-    supabaseAdmin.from('product_stock').select('product_id, stock, min_stock, max_stock').eq('tenant_id', auth.tenantId),
+    supabaseAdmin.from('product_stock').select('product_id, stock, min_stock, max_stock').eq('tenant_id', auth.tenantId).eq('active', true),
     supabaseAdmin.from('sale_items').select(`
       product_id, quantity,
       sales!inner(tenant_id, created_at)

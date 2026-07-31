@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { PLAN_LIMITS } from '@/lib/plans';
+import type { PlanId } from '@/lib/plans';
 
 async function getAuthenticatedUser(request: Request) {
   const authHeader = request.headers.get('authorization');
@@ -58,6 +60,36 @@ export async function POST(request: Request) {
 
     let accepted = 0;
     for (const inv of invitations) {
+      const { data: existingMember } = await supabaseAdmin
+        .from('tenant_users')
+        .select('id')
+        .eq('tenant_id', inv.tenant_id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (!existingMember) {
+        const { data: tenantRow } = await supabaseAdmin
+          .from('tenants')
+          .select('subscription_plan')
+          .eq('id', inv.tenant_id)
+          .single();
+        const plan = (tenantRow?.subscription_plan as PlanId) || 'starter';
+        const maxUsers = PLAN_LIMITS[plan]?.users ?? 1;
+        if (maxUsers !== Infinity) {
+          const { count } = await supabaseAdmin
+            .from('tenant_users')
+            .select('id', { count: 'exact', head: true })
+            .eq('tenant_id', inv.tenant_id);
+          if ((count ?? 0) >= maxUsers) {
+            await supabaseAdmin
+              .from('invitations')
+              .update({ accepted_at: new Date().toISOString() })
+              .eq('id', inv.id);
+            continue;
+          }
+        }
+      }
+
       const { error: upsertError } = await supabaseAdmin.from('profiles').upsert(
         { id: user.id, email: user.email, tenant_id: inv.tenant_id },
         { onConflict: 'id' }

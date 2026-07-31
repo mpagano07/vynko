@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
+import { PLAN_LIMITS } from '@/lib/plans';
+import type { PlanId } from '@/lib/plans';
 
 export async function GET(request: Request) {
   const auth = await getAuth(request);
@@ -20,6 +22,7 @@ export async function GET(request: Request) {
   if (!auth.allTenants) {
     q = q.eq('product_stock.tenant_id', auth.tenantId);
   }
+  q = q.eq('product_stock.active', true);
   const { data, error } = await q;
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -38,6 +41,28 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+
+  const { data: tenantRow } = await supabaseAdmin
+    .from('tenants')
+    .select('subscription_plan')
+    .eq('id', auth.tenantId)
+    .single();
+
+  const plan = (tenantRow?.subscription_plan as PlanId) || 'starter';
+  const maxProducts = PLAN_LIMITS[plan]?.products ?? 50;
+  if (maxProducts !== Infinity) {
+    const { count } = await supabaseAdmin
+      .from('product_stock')
+      .select('product_id', { count: 'exact', head: true })
+      .eq('tenant_id', auth.tenantId)
+      .eq('active', true);
+    if ((count ?? 0) >= maxProducts) {
+      return NextResponse.json(
+        { error: `Tu plan actual (${plan}) permite hasta ${maxProducts} productos. Mejorá tu plan para seguir agregando.` },
+        { status: 403 }
+      );
+    }
+  }
 
   const body = await request.json();
   const allowedFields = ['category_id', 'sku', 'barcode', 'name', 'description', 'cost', 'image_url', 'metadata'];

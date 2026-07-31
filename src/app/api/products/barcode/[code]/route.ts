@@ -44,10 +44,14 @@ export async function GET(
 
     const { data: stockData } = await supabaseAdmin
       .from('product_stock')
-      .select('stock, min_stock, max_stock')
+      .select('stock, min_stock, max_stock, active')
       .eq('product_id', data.id)
       .eq('tenant_id', auth.tenantId)
       .maybeSingle();
+
+    if (stockData && stockData.active === false) {
+      return NextResponse.json({ product: null });
+    }
 
     return NextResponse.json({
       product: {

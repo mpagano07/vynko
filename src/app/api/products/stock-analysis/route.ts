@@ -17,6 +17,7 @@ export async function GET(request: Request) {
         stock_data:product_stock(stock, min_stock)
       `);
     if (!auth.allTenants) productsQ = productsQ.eq('product_stock.tenant_id', tenantId);
+    productsQ = productsQ.eq('product_stock.active', true);
     const { data: allProducts } = await productsQ;
 
     const criticalProducts = (allProducts ?? [])
