@@ -13,7 +13,10 @@ import {
   Truck,
   CheckCircle2,
   Package,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
+import { formatARS } from '@/lib/utils/currency';
 
 interface ActivityLog {
   id: string;
@@ -25,9 +28,18 @@ interface ActivityLog {
   created_at: string;
 }
 
+interface SaleDetail {
+  id: string;
+  total_cents: number;
+  customer_name?: string;
+  created_at: string;
+  items: { id: string; product_name?: string; quantity: number; unit_price_cents: number; subtotal_cents: number }[];
+}
+
 interface TransferItem {
   id: string;
   product_id: string;
+  product_name?: string;
   quantity: number;
 }
 
@@ -69,6 +81,35 @@ const ACTION_LABELS: Record<string, string> = {
   sent: 'envió',
 };
 
+const DETAIL_LABELS: Record<string, string> = {
+  name: 'Nombre',
+  folio: 'Folio',
+  sku: 'SKU',
+  products: 'Productos',
+  items_count: 'Items',
+  total_cents: 'Total',
+  from_tenant_id: 'Sucursal origen',
+  to_tenant_id: 'Sucursal destino',
+  status: 'Estado',
+  quantity: 'Cantidad',
+  reason: 'Motivo',
+};
+
+function formatDetailValue(key: string, value: unknown): string {
+  if (value === null || value === undefined || value === '') return '';
+  if (key === 'total_cents' && typeof value === 'number') return formatARS(value / 100);
+  if (key === 'from_tenant_id' || key === 'to_tenant_id') return `#${String(value).slice(0, 8)}`;
+  if (key === 'status' && typeof value === 'string') {
+    const statusLabels: Record<string, string> = {
+      pending: 'Pendiente',
+      in_transit: 'En tránsito',
+      received: 'Recibida',
+    };
+    return statusLabels[value] || value;
+  }
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : JSON.stringify(value);
+}
+
 function buildDescription(log: ActivityLog): string {
   const action = ACTION_LABELS[log.action] || log.action;
   const entity = ENTITY_LABELS[log.entity_type] || log.entity_type;
@@ -105,6 +146,16 @@ function TransfersHistoryTab() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const limit = 20;
+  const [expandedTransfers, setExpandedTransfers] = useState<Set<string>>(new Set());
+
+  const toggleTransfer = (id: string) => {
+    setExpandedTransfers((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const fetchTransfers = useCallback(async () => {
     setLoading(true);
@@ -155,6 +206,7 @@ function TransfersHistoryTab() {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              <th className="py-4 px-6 w-8"></th>
               <th className="py-4 px-6">Ruta</th>
               <th className="py-4 px-6">Productos</th>
               <th className="py-4 px-6">Estado</th>
@@ -165,7 +217,16 @@ function TransfersHistoryTab() {
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
             {paginated.map(t => (
-              <tr key={t.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
+              <React.Fragment key={t.id}>
+              <tr className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20 cursor-pointer" onClick={() => toggleTransfer(t.id)}>
+                {/* Expand toggle */}
+                <td className="py-4 px-6">
+                  {expandedTransfers.has(t.id) ? (
+                    <ChevronUp className="h-4 w-4 text-gray-400" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-gray-400" />
+                  )}
+                </td>
                 {/* Route */}
                 <td className="py-4 px-6">
                   <div className="flex items-center gap-2">
@@ -234,6 +295,85 @@ function TransfersHistoryTab() {
                   )}
                 </td>
               </tr>
+              {expandedTransfers.has(t.id) && (
+                <tr>
+                  <td colSpan={7} className="p-0">
+                    <div className="border-l-4 border-l-blue-500 bg-blue-50 dark:bg-blue-950/20 mx-4 my-2 rounded-lg overflow-hidden">
+                      <div className="px-6 py-4">
+                        <div className="flex items-start justify-between mb-4">
+                          <div>
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                              Transferencia #{t.id.slice(0, 8)}
+                            </h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 flex items-center gap-2">
+                              {t.from_tenant_name}
+                              <ArrowRightLeft className="h-3.5 w-3.5 text-gray-400" />
+                              {t.to_tenant_name}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {new Date(t.created_at).toLocaleDateString('es-AR', {
+                                day: '2-digit',
+                                month: 'long',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <TransferStatusBadge status={t.status} />
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                              {t.items.reduce((acc, i) => acc + i.quantity, 0)} unidades
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="space-y-1">
+                            <p className="text-sm">
+                              <span className="text-gray-500">Creada por:</span>{' '}
+                              <span className="text-gray-900 dark:text-gray-100">{t.created_by_name}</span>
+                            </p>
+                            <p className="text-sm">
+                              <span className="text-gray-500">Cantidad de productos:</span>{' '}
+                              <span className="text-gray-900 dark:text-gray-100">{t.items.length}</span>
+                            </p>
+                            {t.notes && (
+                              <p className="text-sm">
+                                <span className="text-gray-500">Notas:</span>{' '}
+                                <span className="text-gray-900 dark:text-gray-100">{t.notes}</span>
+                              </p>
+                            )}
+                          </div>
+                          <div>
+                            {t.items.length > 0 ? (
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="text-xs text-gray-500 border-b border-gray-200 dark:border-gray-700">
+                                    <th className="text-left py-1.5">Descripción</th>
+                                    <th className="text-right py-1.5">Cant.</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {t.items.map((item) => (
+                                    <tr key={item.id} className="border-t border-gray-100 dark:border-gray-800">
+                                      <td className="py-1.5 text-gray-900 dark:text-gray-100">{item.product_name || 'Producto'}</td>
+                                      <td className="py-1.5 text-right text-gray-600 dark:text-gray-400">{item.quantity}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            ) : (
+                              <p className="text-sm text-gray-400">Sin items</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>
@@ -274,7 +414,30 @@ export default function ActivityLogsPage() {
   const [entityFilter, setEntityFilter] = useState('');
   const [page, setPage] = useState(0);
   const [activeTab, setActiveTab] = useState<Tab>('activity');
+  const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
+  const [saleDetails, setSaleDetails] = useState<Record<string, SaleDetail>>({});
   const limit = 50;
+
+  const toggleLog = (log: ActivityLog) => {
+    const isOpen = expandedLogs.has(log.id);
+    const next = new Set(expandedLogs);
+    if (isOpen) next.delete(log.id);
+    else next.add(log.id);
+    setExpandedLogs(next);
+
+    if (!isOpen && log.entity_type === 'sale' && log.entity_id && !saleDetails[log.id]) {
+      (async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const headers: Record<string, string> = {};
+        if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+        const res = await fetch(`/api/sales/${log.entity_id}`, { headers });
+        if (res.ok) {
+          const data: SaleDetail = await res.json();
+          setSaleDetails((prev) => ({ ...prev, [log.id]: data }));
+        }
+      })();
+    }
+  };
 
   const fetchLogs = useCallback(async () => {
     const {
@@ -394,6 +557,7 @@ export default function ActivityLogsPage() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      <th className="py-4 px-6 w-8"></th>
                       <th className="py-4 px-6">Usuario</th>
                       <th className="py-4 px-6">Acción</th>
                       <th className="py-4 px-6">Detalle</th>
@@ -402,7 +566,15 @@ export default function ActivityLogsPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
                     {logs.map(log => (
-                      <tr key={log.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
+                      <React.Fragment key={log.id}>
+                      <tr className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20 cursor-pointer" onClick={() => toggleLog(log)}>
+                        <td className="py-4 px-6">
+                          {expandedLogs.has(log.id) ? (
+                            <ChevronUp className="h-4 w-4 text-gray-400" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 text-gray-400" />
+                          )}
+                        </td>
                         <td className="py-4 px-6">
                           <span className="font-medium text-gray-900 dark:text-gray-100">
                             {log.user_name || 'Usuario'}
@@ -426,6 +598,97 @@ export default function ActivityLogsPage() {
                           })}
                         </td>
                       </tr>
+                      {expandedLogs.has(log.id) && (
+                        <tr>
+                          <td colSpan={5} className="p-0">
+                            <div className="border-l-4 border-l-indigo-500 bg-indigo-50 dark:bg-indigo-950/20 mx-4 my-2 rounded-lg overflow-hidden">
+                              <div className="px-6 py-4">
+                                <div className="flex items-start justify-between mb-4">
+                                  <div>
+                                    <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 capitalize">
+                                      {ENTITY_LABELS[log.entity_type] || log.entity_type}
+                                    </h3>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                      {buildDescription(log)}
+                                    </p>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      {new Date(log.created_at).toLocaleDateString('es-ES', {
+                                        day: '2-digit',
+                                        month: 'long',
+                                        year: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                      })}
+                                    </p>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 capitalize">
+                                      {ACTION_LABELS[log.action] || log.action}
+                                    </span>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                                      {log.user_name || 'Usuario'}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {log.entity_type === 'sale' ? (
+                                  <div>
+                                    {saleDetails[log.id] ? (
+                                      <table className="w-full text-sm">
+                                        <thead>
+                                          <tr className="text-xs text-gray-500 border-b border-gray-200 dark:border-gray-700">
+                                            <th className="text-left py-1.5">Descripción</th>
+                                            <th className="text-right py-1.5">Cant.</th>
+                                            <th className="text-right py-1.5">P. Unit.</th>
+                                            <th className="text-right py-1.5">Subtotal</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {saleDetails[log.id].items.map((item) => (
+                                            <tr key={item.id} className="border-t border-gray-100 dark:border-gray-800">
+                                              <td className="py-1.5 text-gray-900 dark:text-gray-100">{item.product_name || 'Producto'}</td>
+                                              <td className="py-1.5 text-right text-gray-600 dark:text-gray-400">{item.quantity}</td>
+                                              <td className="py-1.5 text-right text-gray-600 dark:text-gray-400">{formatARS(item.unit_price_cents / 100)}</td>
+                                              <td className="py-1.5 text-right font-medium text-gray-900 dark:text-gray-100">{formatARS(item.subtotal_cents / 100)}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                        <tfoot>
+                                          <tr className="border-t border-gray-200 dark:border-gray-700">
+                                            <td colSpan={3} className="py-2 text-right text-sm text-gray-500 font-medium">Total</td>
+                                            <td className="py-2 text-right text-sm font-bold text-gray-900 dark:text-gray-100">
+                                              {formatARS(saleDetails[log.id].total_cents / 100)}
+                                            </td>
+                                          </tr>
+                                        </tfoot>
+                                      </table>
+                                    ) : (
+                                      <div className="flex items-center gap-2 text-sm text-gray-400">
+                                        <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />
+                                        Cargando detalle de la venta...
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : log.details && Object.keys(log.details).length > 0 ? (
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 pt-3 border-t border-gray-200 dark:border-gray-700">
+                                    {Object.entries(log.details).map(([key, value]) => {
+                                      const formatted = formatDetailValue(key, value);
+                                      if (!formatted) return null;
+                                      return (
+                                        <p key={key} className="text-sm">
+                                          <span className="text-gray-500">{DETAIL_LABELS[key] || key}:</span>{' '}
+                                          <span className="text-gray-900 dark:text-gray-100">{formatted}</span>
+                                        </p>
+                                      );
+                                    })}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>

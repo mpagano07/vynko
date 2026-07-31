@@ -14,7 +14,10 @@ export async function GET(request: Request) {
     .from('stock_transfers')
     .select(`
       *,
-      items:stock_transfer_items(*)
+      items:stock_transfer_items(
+        *,
+        product:products(name)
+      )
     `);
 
   if (auth.allTenants) {
@@ -62,7 +65,10 @@ export async function GET(request: Request) {
     from_tenant_name: tenantMap.get(t.from_tenant_id) || 'Desconocido',
     to_tenant_name: tenantMap.get(t.to_tenant_id) || 'Desconocido',
     created_by_name: userMap.get(t.created_by) || 'Usuario',
-    items: (t.items || []).map((item: Record<string, unknown>) => ({ ...item })),
+    items: (t.items || []).map((item: Record<string, unknown>) => {
+      const product = item.product as Record<string, unknown> | undefined;
+      return { ...item, product_name: product?.name ?? null };
+    }),
   }));
 
   return NextResponse.json(result);

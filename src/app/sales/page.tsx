@@ -53,7 +53,7 @@ interface SaleRecord {
   total_cents: number;
   customer_name?: string;
   created_at: string;
-  items: { product_name?: string; quantity: number; subtotal_cents: number }[];
+  items: { id: string; product_name?: string; quantity: number; unit_price_cents: number; subtotal_cents: number }[];
 }
 
 export default function SalesPage() {
@@ -72,6 +72,7 @@ export default function SalesPage() {
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSalesList, setShowSalesList] = useState(false);
+  const [expandedSales, setExpandedSales] = useState<Set<string>>(new Set());
   const [productSearch, setProductSearch] = useState('');
   const [productPage, setProductPage] = useState(1);
   const PRODUCTS_PER_PAGE = 12;
@@ -86,6 +87,15 @@ export default function SalesPage() {
   const cartRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [showScanner, setShowScanner] = useState(false);
+
+  const toggleSale = (id: string) => {
+    setExpandedSales((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   useEffect(() => {
     searchInputRef.current?.focus();
@@ -637,6 +647,7 @@ export default function SalesPage() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      <th className="py-3 px-4 w-8"></th>
                       <th className="py-3 px-4">Folio</th>
                       <th className="py-3 px-4">Cliente</th>
                       <th className="py-3 px-4">Productos</th>
@@ -646,29 +657,119 @@ export default function SalesPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
                     {sales.map((sale) => (
-                      <tr key={sale.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
-                        <td className="py-3 px-4 font-mono text-xs text-gray-500">
-                          #{sale.id.slice(0, 8)}
-                        </td>
-                        <td className="py-3 px-4 text-gray-900 dark:text-gray-100">
-                          {sale.customer_name || 'Mostrador'}
-                        </td>
-                        <td className="py-3 px-4 text-gray-500 text-xs">
-                          {sale.items?.length || 0} item(s)
-                        </td>
-                        <td className="py-3 px-4 text-right font-semibold text-green-600 dark:text-green-400">
-                          {formatARS(sale.total_cents / 100)}
-                        </td>
-                        <td className="py-3 px-4 text-right text-xs text-gray-500">
-                          {new Date(sale.created_at).toLocaleDateString('es-ES', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </td>
-                      </tr>
+                      <React.Fragment key={sale.id}>
+                        <tr
+                          className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20 cursor-pointer"
+                          onClick={() => toggleSale(sale.id)}
+                        >
+                          <td className="py-3 px-4">
+                            {expandedSales.has(sale.id) ? (
+                              <ChevronUp className="h-4 w-4 text-gray-400" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4 text-gray-400" />
+                            )}
+                          </td>
+                          <td className="py-3 px-4 font-mono text-xs text-gray-500">
+                            #{sale.id.slice(0, 8)}
+                          </td>
+                          <td className="py-3 px-4 text-gray-900 dark:text-gray-100">
+                            {sale.customer_name || 'Mostrador'}
+                          </td>
+                          <td className="py-3 px-4 text-gray-500 text-xs">
+                            {sale.items?.length || 0} item(s)
+                          </td>
+                          <td className="py-3 px-4 text-right font-semibold text-green-600 dark:text-green-400">
+                            {formatARS(sale.total_cents / 100)}
+                          </td>
+                          <td className="py-3 px-4 text-right text-xs text-gray-500">
+                            {new Date(sale.created_at).toLocaleDateString('es-ES', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </td>
+                        </tr>
+                        {expandedSales.has(sale.id) && (
+                          <tr>
+                            <td colSpan={6} className="p-0">
+                              <div className="border-l-4 border-l-indigo-500 bg-indigo-50 dark:bg-indigo-950/20 mx-4 my-2 rounded-lg overflow-hidden">
+                                <div className="px-6 py-4">
+                                  <div className="flex items-start justify-between mb-4">
+                                    <div>
+                                      <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                                        Venta #{sale.id.slice(0, 8)}
+                                      </h3>
+                                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                        {sale.customer_name || 'Mostrador'}
+                                      </p>
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        {new Date(sale.created_at).toLocaleDateString('es-ES', {
+                                          day: '2-digit',
+                                          month: 'long',
+                                          year: 'numeric',
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                        })}
+                                      </p>
+                                    </div>
+                                    <div className="text-right">
+                                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400">
+                                        Completada
+                                      </span>
+                                      <p className="text-xl font-bold text-green-600 dark:text-green-400 mt-2">
+                                        {formatARS(sale.total_cents / 100)}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                                    <div className="space-y-1">
+                                      <p className="text-sm">
+                                        <span className="text-gray-500">Cliente:</span>{' '}
+                                        <span className="text-gray-900 dark:text-gray-100">{sale.customer_name || 'Mostrador'}</span>
+                                      </p>
+                                      <p className="text-sm">
+                                        <span className="text-gray-500">Cantidad de productos:</span>{' '}
+                                        <span className="text-gray-900 dark:text-gray-100">
+                                          {sale.items?.reduce((acc, i) => acc + i.quantity, 0) || 0}
+                                        </span>
+                                      </p>
+                                    </div>
+                                    <div>
+                                      {sale.items && sale.items.length > 0 ? (
+                                        <table className="w-full text-sm">
+                                          <thead>
+                                            <tr className="text-xs text-gray-500 border-b border-gray-200 dark:border-gray-700">
+                                              <th className="text-left py-1.5">Descripción</th>
+                                              <th className="text-right py-1.5">Cant.</th>
+                                              <th className="text-right py-1.5">P. Unit.</th>
+                                              <th className="text-right py-1.5">Subtotal</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {sale.items.map((item) => (
+                                              <tr key={item.id} className="border-t border-gray-100 dark:border-gray-800">
+                                                <td className="py-1.5 text-gray-900 dark:text-gray-100">{item.product_name || 'Producto'}</td>
+                                                <td className="py-1.5 text-right text-gray-600 dark:text-gray-400">{item.quantity}</td>
+                                                <td className="py-1.5 text-right text-gray-600 dark:text-gray-400">{formatARS(item.unit_price_cents / 100)}</td>
+                                                <td className="py-1.5 text-right font-medium text-gray-900 dark:text-gray-100">{formatARS(item.subtotal_cents / 100)}</td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      ) : (
+                                        <p className="text-sm text-gray-400">Sin items</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>
