@@ -24,7 +24,7 @@ export async function GET() {
   const planConfig = PLANS[plan] || PLANS.starter;
 
   const TRIAL_DAYS = 45;
-  const trialEndsAt = tenant?.created_at
+  const trialEndsAt = plan === 'starter' && tenant?.created_at
     ? new Date(new Date(tenant.created_at).getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString()
     : null;
 

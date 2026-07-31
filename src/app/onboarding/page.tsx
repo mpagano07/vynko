@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -93,7 +94,7 @@ export default function OnboardingPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <Card className="w-full max-w-md p-8">
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold mb-2">Vynko</h1>
+          <Image src="/icons/logoVynko.png" alt="Vynko" width={943} height={835} className="h-12 w-auto object-contain mx-auto mb-2" />
           <p className="text-gray-600">Configura tu empresa</p>
         </div>
 

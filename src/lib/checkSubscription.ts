@@ -35,6 +35,16 @@ export function checkSubscriptionBlocked(tenant: TenantSubscription | null): Che
   }
 
   if (status === 'free' || status === 'incomplete') {
+    const plan = tenant.subscription_plan || 'starter';
+
+    if (plan !== 'starter') {
+      return {
+        blocked: true,
+        reason: 'trial_expired',
+        message: 'Tu suscripción no está activa. Completá el pago para seguir usando Vynko.',
+      };
+    }
+
     if (tenant.created_at) {
       const now = new Date();
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());

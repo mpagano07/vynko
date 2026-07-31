@@ -174,7 +174,7 @@ function BillingContent() {
       })()
     : null;
 
-  const isTrial = subscription?.status === 'free' || subscription?.status === 'inactive';
+  const isTrial = subscription?.plan === 'starter' && (subscription?.status === 'free' || subscription?.status === 'inactive');
 
   const autoBlockedReason = blockedReason
     ? blockedReason

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -109,11 +110,8 @@ export default function SignupPage() {
     <div className="min-h-screen flex bg-gray-900">
       <div className="hidden lg:flex lg:w-1/2 items-center justify-center p-12">
         <div className="max-w-md">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="h-10 w-10 rounded-lg bg-cyan-500 flex items-center justify-center">
-              <span className="text-white font-bold text-lg">V</span>
-            </div>
-            <h1 className="text-2xl font-bold text-white">Vynko</h1>
+          <div className="mb-6">
+            <Image src="/icons/logoVynko.png" alt="Vynko" width={943} height={835} className="h-12 w-auto object-contain" />
           </div>
           <p className="text-gray-400 text-lg leading-relaxed">
             Gestioná tu stock, ventas y proveedores en un solo lugar con inteligencia artificial.
@@ -158,11 +156,8 @@ export default function SignupPage() {
 
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-sm">
-          <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
-            <div className="h-9 w-9 rounded-lg bg-cyan-500 flex items-center justify-center">
-              <span className="text-white font-bold text-base">V</span>
-            </div>
-            <h1 className="text-xl font-bold text-white">Vynko</h1>
+          <div className="lg:hidden flex justify-center mb-8">
+            <Image src="/icons/logoVynko.png" alt="Vynko" width={943} height={835} className="h-10 w-auto object-contain" />
           </div>
 
           <h2 className="text-2xl font-bold text-white mb-1">Crear cuenta</h2>

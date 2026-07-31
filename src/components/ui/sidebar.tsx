@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
@@ -416,7 +417,10 @@ export function Sidebar() {
   if (loading) {
     return (
       <aside className="hidden md:flex flex-col w-64 h-screen bg-gray-900 text-white p-4 border-r border-gray-800">
-        <div className="mb-8 text-2xl font-bold text-blue-400">Vynko</div>
+        <div className="mb-8 flex items-center gap-2">
+          <Image src="/icons/logoVynko.png" alt="Vynko" width={943} height={835} className="h-10 w-auto object-contain" />
+          <span className="text-2xl font-bold text-blue-400">Vynko</span>
+        </div>
         <div className="animate-pulse space-y-4">
           <div className="h-8 bg-gray-700 rounded" />
           <div className="h-8 bg-gray-700 rounded" />
@@ -468,7 +472,10 @@ export function Sidebar() {
         )}
       >
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-bold text-blue-400">Vynko</h1>
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-blue-400">
+            <Image src="/icons/logoVynko.png" alt="Vynko" width={943} height={835} className="h-10 w-auto object-contain" />
+            Vynko
+          </h1>
           <button onClick={close} aria-label="Cerrar menú" className="p-1 rounded-md hover:bg-gray-800 text-gray-400">
             <X className="h-5 w-5" />
           </button>
@@ -488,7 +495,10 @@ export function Sidebar() {
       {/* Desktop sidebar */}
       <aside className="hidden md:flex flex-col w-64 h-screen bg-gray-900 text-white p-4 border-r border-gray-800">
         <div className="mb-4">
-          <h1 className="text-2xl font-bold text-blue-400">Vynko</h1>
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-blue-400">
+            <Image src="/icons/logoVynko.png" alt="Vynko" width={943} height={835} className="h-10 w-auto object-contain" />
+            Vynko
+          </h1>
           {tenants && tenants.length > 0 && (
             <div className="relative mt-2">
               {tenantSwitcherContent}
