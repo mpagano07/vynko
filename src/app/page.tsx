@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { PLANS } from '@/lib/plans';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -23,13 +23,16 @@ const chartData = [
 
 export default function LandingPage() {
   const router = useRouter();
-  const { user, profile, logout } = useAuth();
+  const { user, profile, logout, loading: authLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState('');
   const [waitlistLoading, setWaitlistLoading] = useState(false);
   const [waitlistDone, setWaitlistDone] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
   const [modal, setModal] = useState<'privacidad' | 'terminos' | null>(null);
+
+  useEffect(() => { setIsMounted(true); }, []);
 
   const handleWaitlist = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,10 +56,10 @@ export default function LandingPage() {
       {/* Navbar */}
       <nav className="fixed top-0 left-0 right-0 z-50 border-b border-gray-800/50 bg-gray-950/80 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex items-center justify-between h-20">
             <div className="flex items-center gap-8">
-              <Link href="/">
-                <Image src="/icons/logoVynko.png" alt="Vynko" width={943} height={835} className="h-10 w-auto object-contain" />
+              <Link href="/" className="flex items-center">
+                <Image src="/icons/logoVynko.png" alt="Vynko" width={943} height={835} className="h-14 w-auto object-contain" />
               </Link>
               <div className="hidden md:flex items-center gap-6">
                 <Link href="#features" className="text-sm text-gray-400 hover:text-white transition-colors">Características</Link>
@@ -65,13 +68,15 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {user ? (
+              {authLoading ? (
+                <div className="h-8 w-32 rounded-lg bg-gray-800/60 animate-pulse" />
+              ) : user ? (
                 <>
                   <Link
                     href="/dashboard"
                     className="text-sm font-medium text-gray-300 hover:text-white transition-colors px-4 py-2"
                   >
-                    {profile?.full_name || user.email}
+                    {profile?.full_name ?? ''}
                   </Link>
                   <button
                     onClick={async () => { await logout(); router.push('/'); }}
@@ -102,7 +107,7 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero Section */}
-      <section className="relative pt-32 pb-20 overflow-hidden">
+      <section className="relative pt-36 pb-20 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-cyan-500/5 via-transparent to-transparent" />
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-cyan-500/5 rounded-full blur-3xl" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
@@ -165,14 +170,26 @@ export default function LandingPage() {
                   ))}
                 </div>
                 <div className="h-32">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                      <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#6b7280' }} />
-                      <YAxis hide />
-                      <Bar dataKey="ventas" fill="#06b6d4" radius={[4, 4, 0, 0]} maxBarSize={24} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  {isMounted ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                        <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#6b7280' }} />
+                        <YAxis hide />
+                        <Bar dataKey="ventas" fill="#06b6d4" radius={[4, 4, 0, 0]} maxBarSize={24} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="w-full h-full flex items-end gap-1 px-2">
+                      {chartData.map((d) => (
+                        <div
+                          key={d.name}
+                          className="flex-1 bg-cyan-900/40 rounded-t"
+                          style={{ height: `${(d.ventas / 6300) * 100}%` }}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="mt-4 flex items-center gap-3 p-3 bg-amber-500/5 border border-amber-500/10 rounded-lg">
                   <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
@@ -392,7 +409,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-2">
-              <Image src="/icons/logoVynko.png" alt="Vynko" width={943} height={835} className="h-9 w-auto object-contain" />
+              <Image src="/icons/logoVynko.png" alt="Vynko" width={943} height={835} className="h-12 w-auto object-contain" />
             </div>
             <div className="flex items-center gap-6 text-sm text-gray-500">
               <button onClick={() => setModal('privacidad')} className="hover:text-gray-300 transition-colors">Privacidad</button>
