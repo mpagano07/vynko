@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useProducts } from '@/lib/hooks/useProducts';
 import { useCategories } from '@/lib/hooks/useCategories';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -34,6 +35,7 @@ import {
   ArrowRightLeft,
   ChevronDown,
   Settings2,
+  Scan,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import { TransferInbox } from '@/components/transfers/TransferInbox';
@@ -41,6 +43,7 @@ import { TransferInbox } from '@/components/transfers/TransferInbox';
 export default function ProductsPage() {
   const { tenant, tenants } = useAuth();
   const tenantId = tenant?.id ?? null;
+  const router = useRouter();
   const multiBranch = (tenants?.length || 0) > 1;
   const { products, isLoading: productsLoading, mutate: mutateProducts } = useProducts(tenantId);
   const { categories, isLoading: categoriesLoading, mutate: mutateCategories } = useCategories(tenantId);
@@ -530,6 +533,13 @@ export default function ProductsPage() {
                   >
                     <Percent className="h-4 w-4 text-amber-500 shrink-0" />
                     Ajustar precios
+                  </button>
+                  <button
+                    onClick={() => { setIsActionsMenuOpen(false); router.push('/scanning?mode=stockin'); }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    <Scan className="h-4 w-4 text-teal-500 shrink-0" />
+                    Carga de inventario
                   </button>
                   <button
                     onClick={() => { setIsImportModalOpen(true); setIsActionsMenuOpen(false); }}

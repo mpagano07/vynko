@@ -66,7 +66,6 @@ const operacionesItems: NavItem[] = [
   { name: 'QR', href: '/codigos', requiredPlan: ALL_PLANS },
   { name: 'Escáner', href: '/scanning', requiredPlan: ALL_PLANS },
   { name: 'Antipérdidas', href: '/loss-prevention', requiredPlan: ALL_PLANS },
-  { name: 'Visión Góndolas', href: '/shelf-vision', requiredPlan: ['business', 'enterprise'], badge: 'Próximamente' },
 ];
 
 function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch }: { onNavClick?: () => void; tenantPlan?: string; userRole?: string | null; isBlocked?: boolean; multiBranch?: boolean }) {

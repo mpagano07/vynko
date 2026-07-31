@@ -1,14 +1,14 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useCallback, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { BarcodeScanner } from '@/components/scanner/BarcodeScanner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Package, Scan, Plus, Loader2, CheckCircle2 } from 'lucide-react';
+import { Package, Scan, Plus, Loader2, CheckCircle2, PackagePlus } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import toast from 'react-hot-toast';
 
@@ -26,15 +26,25 @@ interface ScannedProduct {
 
 type ScanState = 'scanning' | 'found' | 'not_found' | 'creating' | 'created' | 'error';
 
-const STOCK_REASONS = [
-  { value: 'found', label: 'Inventario encontrado' },
-  { value: 'correction', label: 'Corrección de stock' },
-  { value: 'damaged', label: 'Producto dañado (restar)' },
-  { value: 'lost', label: 'Producto perdido (restar)' },
-] as const;
+const STOCK_REASONS: { value: string; label: string; sign: 1 | -1 }[] = [
+  { value: 'found', label: 'Inventario encontrado', sign: 1 },
+  { value: 'correction', label: 'Corrección de stock', sign: 1 },
+  { value: 'damaged', label: 'Producto dañado (restar)', sign: -1 },
+  { value: 'lost', label: 'Producto perdido (restar)', sign: -1 },
+];
 
 export default function ScanningPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-blue-500" /></div>}>
+      <ScanningPageContent />
+    </Suspense>
+  );
+}
+
+function ScanningPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const stockinMode = searchParams?.get('mode') === 'stockin';
   const { tenant } = useAuth();
   const tenantId = tenant?.id ?? null;
 
@@ -44,6 +54,8 @@ export default function ScanningPage() {
   const [addQuantity, setAddQuantity] = useState(1);
   const [addReason, setAddReason] = useState('found');
   const [isAddingStock, setIsAddingStock] = useState(false);
+
+  const reasons = stockinMode ? STOCK_REASONS.filter((r) => r.sign === 1) : STOCK_REASONS;
 
   const handleScan = useCallback(async (code: string) => {
     setScannedCode(code);
@@ -81,7 +93,8 @@ export default function ScanningPage() {
     setIsAddingStock(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const quantity = addReason === 'damaged' || addReason === 'lost' ? -Math.abs(addQuantity) : addQuantity;
+      const reason = reasons.find((r) => r.value === addReason);
+      const quantity = reason?.sign === -1 ? -Math.abs(addQuantity) : addQuantity;
 
       const res = await fetch(`/api/products/${product.id}/adjust`, {
         method: 'POST',
@@ -111,14 +124,27 @@ export default function ScanningPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <Scan className="h-8 w-8 text-blue-600 dark:text-blue-400" />
-            Escáner de Códigos
+            {stockinMode ? (
+              <PackagePlus className="h-8 w-8 text-teal-600 dark:text-teal-400" />
+            ) : (
+              <Scan className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+            )}
+            {stockinMode ? 'Carga de Inventario' : 'Escáner de Códigos'}
           </h1>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Apunta la cámara a un código de barras para buscar o registrar un producto.
+            {stockinMode
+              ? 'Escaneá un código de barras para sumar stock a tu inventario.'
+              : 'Apunta la cámara a un código de barras para buscar o registrar un producto.'}
           </p>
         </div>
       </div>
+
+      {stockinMode && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800 text-sm text-teal-700 dark:text-teal-400">
+          <PackagePlus className="h-4 w-4 shrink-0" />
+          Modo carga de inventario: cada escaneo suma stock al producto.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="overflow-hidden p-0">
@@ -173,7 +199,7 @@ export default function ScanningPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                    Cantidad a ajustar
+                    {stockinMode ? 'Cantidad a cargar' : 'Cantidad a ajustar'}
                   </label>
                   <Input
                     type="number"
@@ -192,11 +218,11 @@ export default function ScanningPage() {
                     onChange={(e) => setAddReason(e.target.value)}
                     className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100"
                   >
-                    {STOCK_REASONS.map((r) => (
+                    {reasons.map((r) => (
                       <option key={r.value} value={r.value}>{r.label}</option>
                     ))}
                   </select>
-                  {(addReason === 'damaged' || addReason === 'lost') && (
+                  {!stockinMode && (addReason === 'damaged' || addReason === 'lost') && (
                     <p className="text-xs text-amber-600 mt-1">Esta opción restará stock</p>
                   )}
                 </div>
@@ -220,9 +246,11 @@ export default function ScanningPage() {
                     ) : (
                       <Package className="h-4 w-4" />
                     )}
-                    {addReason === 'damaged' || addReason === 'lost'
-                      ? `Quitar ${addQuantity}`
-                      : `Agregar ${addQuantity}`
+                    {stockinMode
+                      ? `Cargar ${addQuantity}`
+                      : addReason === 'damaged' || addReason === 'lost'
+                        ? `Quitar ${addQuantity}`
+                        : `Agregar ${addQuantity}`
                     }
                   </Button>
                 </div>
