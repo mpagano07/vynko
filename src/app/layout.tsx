@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   referrer: 'origin-when-cross-origin',
   manifest: '/manifest.json',
   icons: {
-    icon: '/icons/icon-512.png',
+    icon: '/icons/favicon.png',
     apple: '/icons/icon-512.png',
   },
 };

@@ -59,7 +59,7 @@ export default function LandingPage() {
           <div className="flex items-center justify-between h-20">
             <div className="flex items-center gap-8">
               <Link href="/" className="flex items-center">
-                <Image src="/icons/logoVynko.png" alt="Vynko" width={943} height={835} className="h-14 w-auto object-contain" />
+                <Image src="/icons/vynkoLogout.png?v=2" alt="Vynko" width={1279} height={396} className="h-10 w-auto object-contain" />
               </Link>
               <div className="hidden md:flex items-center gap-6">
                 <Link href="#features" className="text-sm text-gray-400 hover:text-white transition-colors">Características</Link>
@@ -67,7 +67,7 @@ export default function LandingPage() {
                 <Link href="#pricing" className="text-sm text-gray-400 hover:text-white transition-colors">Precios</Link>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            {isMounted && (<div className="flex items-center gap-3">
               {authLoading ? (
                 <div className="h-8 w-32 rounded-lg bg-gray-800/60 animate-pulse" />
               ) : user ? (
@@ -101,7 +101,7 @@ export default function LandingPage() {
                   </Link>
                 </>
               )}
-            </div>
+            </div> )}
           </div>
         </div>
       </nav>
