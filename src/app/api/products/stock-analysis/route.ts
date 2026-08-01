@@ -14,7 +14,7 @@ export async function GET(request: Request) {
       .from('products')
       .select(`
         id, name, sku,
-        stock_data:product_stock(stock, min_stock)
+        stock_data:product_stock!inner(stock, min_stock)
       `);
     if (!auth.allTenants) productsQ = productsQ.eq('product_stock.tenant_id', tenantId);
     productsQ = productsQ.eq('product_stock.active', true);

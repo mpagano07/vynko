@@ -7,10 +7,13 @@ export async function GET(request: Request) {
   const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-  const { data, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from('suppliers')
     .select('*')
     .order('name', { ascending: true });
+  if (!auth.allTenants) query = query.eq('tenant_id', auth.tenantId);
+
+  const { data, error } = await query;
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data || []);

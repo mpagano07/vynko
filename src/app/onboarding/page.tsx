@@ -7,10 +7,12 @@ import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
+import { useAuth } from '@/lib/hooks/useAuth';
 import toast from 'react-hot-toast';
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { switchTenant } = useAuth();
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<'company' | 'success'>('company');
   const [formData, setFormData] = useState({
@@ -50,9 +52,8 @@ export default function OnboardingPage() {
       toast.success('Empresa creada exitosamente');
       setStep('success');
 
-      setTimeout(() => {
-        router.push(`/?tenant=${result.tenantId}`);
-      }, 2000);
+      await switchTenant(result.tenantId);
+      router.push('/dashboard');
     } catch (error: unknown) {
       console.error('Onboarding error:', error, JSON.stringify(error, null, 2));
       const message = error instanceof Error ? error.message : 'Error al crear empresa';
@@ -64,12 +65,12 @@ export default function OnboardingPage() {
 
   if (step === 'success') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Card className="w-full max-w-md p-8 text-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <Card className="w-full max-w-md p-8 bg-gray-800 border border-gray-700 text-center">
           <div className="mb-4">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="w-16 h-16 bg-green-900/30 border border-green-800/50 rounded-full flex items-center justify-center mx-auto mb-4">
               <svg
-                className="w-8 h-8 text-green-600"
+                className="w-8 h-8 text-green-400"
                 fill="currentColor"
                 viewBox="0 0 20 20"
               >
@@ -81,8 +82,8 @@ export default function OnboardingPage() {
               </svg>
             </div>
           </div>
-          <h2 className="text-2xl font-bold mb-2">¡Bienvenido!</h2>
-          <p className="text-gray-600">
+          <h2 className="text-2xl font-bold mb-2 text-white">¡Bienvenido!</h2>
+          <p className="text-gray-400">
             Tu empresa {formData.companyName} ha sido creada. Redirigiendo al dashboard...
           </p>
         </Card>
@@ -91,16 +92,16 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <Card className="w-full max-w-md p-8">
+    <div className="min-h-screen flex items-center justify-center bg-gray-900">
+      <Card className="w-full max-w-md p-8 bg-gray-800 border border-gray-700">
         <div className="mb-8 text-center">
-          <Image src="/icons/logoVynko.png" alt="Vynko" width={943} height={835} className="h-12 w-auto object-contain mx-auto mb-2" />
-          <p className="text-gray-600">Configura tu empresa</p>
+          <Image src="/icons/vynkoLogout.png?v=2" alt="Vynko" width={1279} height={396} className="h-10 w-auto object-contain mx-auto mb-2" />
+          <p className="text-gray-400">Configura tu empresa</p>
         </div>
 
         <form onSubmit={handleCreateCompany} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-2 text-gray-700">
+            <label className="block text-sm font-medium mb-2 text-gray-300">
               Nombre de la empresa
             </label>
             <Input
@@ -111,11 +112,12 @@ export default function OnboardingPage() {
                 setFormData({ ...formData, companyName: e.target.value })
               }
               required
+              className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-500"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2 text-gray-700">
+            <label className="block text-sm font-medium mb-2 text-gray-300">
               Tu nombre
             </label>
             <Input
@@ -126,6 +128,7 @@ export default function OnboardingPage() {
                 setFormData({ ...formData, ownerName: e.target.value })
               }
               required
+              className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-500"
             />
           </div>
 

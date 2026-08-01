@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     .from('products')
     .select(`
       *,
-      stock_data:product_stock(
+      stock_data:product_stock!inner(
         stock,
         min_stock,
         max_stock

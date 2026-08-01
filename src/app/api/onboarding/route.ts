@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { PLAN_LIMITS } from '@/lib/plans';
+import type { PlanId } from '@/lib/plans';
 
 const slugify = (value: string) =>
   value
@@ -59,6 +61,35 @@ export async function POST(request: Request) {
   const user = await getAuthenticatedUser(request);
   if (!user) {
     return NextResponse.json({ error: 'No authenticated user' }, { status: 401 });
+  }
+
+  const { data: existingMemberships } = await supabaseAdmin
+    .from('tenant_users')
+    .select('tenant_id')
+    .eq('user_id', user.id);
+
+  const existingTenantIds = (existingMemberships ?? []).map((m: any) => m.tenant_id);
+
+  if (existingTenantIds.length > 0) {
+    const { data: existingTenants } = await supabaseAdmin
+      .from('tenants')
+      .select('subscription_plan')
+      .in('id', existingTenantIds);
+
+    const planRank: Record<string, number> = { enterprise: 4, business: 3, starter: 2, free: 1 };
+    let bestPlan = 'starter';
+    for (const t of existingTenants ?? []) {
+      const p = t.subscription_plan || 'starter';
+      if ((planRank[p] || 0) > (planRank[bestPlan] || 0)) bestPlan = p;
+    }
+
+    const maxBranches = PLAN_LIMITS[bestPlan as PlanId]?.branches ?? 1;
+    if (existingTenantIds.length >= maxBranches) {
+      return NextResponse.json(
+        { error: `Tu plan actual (${bestPlan}) permite hasta ${maxBranches} sucursal${maxBranches !== 1 ? 'es' : ''}.` },
+        { status: 403 }
+      );
+    }
   }
 
   const tenantId = crypto.randomUUID();

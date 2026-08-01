@@ -17,6 +17,8 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
+import { PLAN_LIMITS } from '@/lib/plans';
+import type { PlanId } from '@/lib/plans';
 
 interface ActivityLog {
   id: string;
@@ -407,7 +409,10 @@ function TransfersHistoryTab() {
 type Tab = 'activity' | 'transfers';
 
 export default function ActivityLogsPage() {
-  const { role } = useAuth();
+  const { role, tenant, tenants } = useAuth();
+  const plan = tenant?.subscription_plan || 'starter';
+  const maxBranches = PLAN_LIMITS[plan as PlanId]?.branches ?? 1;
+  const multiBranch = maxBranches > 1 && (tenants?.length || 0) > 1;
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -501,17 +506,19 @@ export default function ActivityLogsPage() {
           <ScrollText className="h-4 w-4" />
           Actividad general
         </button>
-        <button
-          onClick={() => setActiveTab('transfers')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'transfers'
-              ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
-              : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-          }`}
-        >
-          <ArrowRightLeft className="h-4 w-4" />
-          Transferencias
-        </button>
+        {multiBranch && (
+          <button
+            onClick={() => setActiveTab('transfers')}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'transfers'
+                ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}
+          >
+            <ArrowRightLeft className="h-4 w-4" />
+            Transferencias
+          </button>
+        )}
       </div>
 
       {activeTab === 'activity' ? (

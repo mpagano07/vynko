@@ -479,7 +479,7 @@ export function Sidebar() {
           </button>
         </div>
         {tenants && tenants.length > 0 && (
-          <div className="relative -mt-6 mb-4 z-30">
+          <div className="relative mb-4 z-30">
             {tenantSwitcherContent}
           </div>
         )}

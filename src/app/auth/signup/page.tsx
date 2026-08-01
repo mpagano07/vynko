@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
+import { Eye, EyeOff } from 'lucide-react';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -18,6 +19,8 @@ export default function SignupPage() {
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [confirmError, setConfirmError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const validate = () => {
     let valid = true;
@@ -111,7 +114,7 @@ export default function SignupPage() {
       <div className="hidden lg:flex lg:w-1/2 items-center justify-center p-12">
         <div className="max-w-md">
           <div className="mb-6">
-            <Image src="/icons/logoVynko.png" alt="Vynko" width={943} height={835} className="h-12 w-auto object-contain" />
+            <Image src="/icons/vynkoLogout.png?v=2" alt="Vynko" width={1279} height={396} className="h-10 w-auto object-contain" />
           </div>
           <p className="text-gray-400 text-lg leading-relaxed">
             Gestioná tu stock, ventas y proveedores en un solo lugar con inteligencia artificial.
@@ -157,7 +160,7 @@ export default function SignupPage() {
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-sm">
           <div className="lg:hidden flex justify-center mb-8">
-            <Image src="/icons/logoVynko.png" alt="Vynko" width={943} height={835} className="h-10 w-auto object-contain" />
+            <Image src="/icons/vynkoLogout.png?v=2" alt="Vynko" width={1279} height={396} className="h-8 w-auto object-contain" />
           </div>
 
           <h2 className="text-2xl font-bold text-white mb-1">Crear cuenta</h2>
@@ -178,26 +181,46 @@ export default function SignupPage() {
             </div>
             <div>
               <label className="block text-sm font-medium mb-1.5 text-gray-300">Contraseña</label>
-              <Input
-                type="password"
-                name="password"
-                placeholder="Mínimo 6 caracteres"
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); setPasswordError(''); }}
-                className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
-              />
+              <div className="relative">
+                <Input
+                  type={showPassword ? 'text' : 'password'}
+                  name="password"
+                  placeholder="Mínimo 6 caracteres"
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); setPasswordError(''); }}
+                  className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500 pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-200"
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
               {passwordError && <p className="text-xs text-red-400 mt-1">{passwordError}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium mb-1.5 text-gray-300">Confirmar contraseña</label>
-              <Input
-                type="password"
-                name="confirmPassword"
-                placeholder="Repetí la contraseña"
-                value={confirmPassword}
-                onChange={(e) => { setConfirmPassword(e.target.value); setConfirmError(''); }}
-                className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
-              />
+              <div className="relative">
+                <Input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  name="confirmPassword"
+                  placeholder="Repetí la contraseña"
+                  value={confirmPassword}
+                  onChange={(e) => { setConfirmPassword(e.target.value); setConfirmError(''); }}
+                  className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500 pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-200"
+                  aria-label={showConfirmPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
               {confirmError && <p className="text-xs text-red-400 mt-1">{confirmError}</p>}
             </div>
 
