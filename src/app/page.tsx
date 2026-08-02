@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { PLANS } from '@/lib/plans';
+import { isTrialExpired } from '@/lib/checkSubscription';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { formatARS } from '@/lib/utils/currency';
 import {
@@ -23,7 +24,7 @@ const chartData = [
 
 export default function LandingPage() {
   const router = useRouter();
-  const { user, profile, logout, loading: authLoading } = useAuth();
+  const { user, profile, tenant, logout, loading: authLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState('');
   const [waitlistLoading, setWaitlistLoading] = useState(false);
@@ -33,6 +34,8 @@ export default function LandingPage() {
   const [modal, setModal] = useState<'privacidad' | 'terminos' | null>(null);
 
   useEffect(() => { setIsMounted(true); }, []);
+
+  const trialExpired = isTrialExpired(tenant);
 
   const handleWaitlist = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -368,14 +371,14 @@ export default function LandingPage() {
                     </span>
                   ) : (
                     <Link
-                      href="/auth/signup"
+                      href={id === 'starter' && trialExpired ? '/billing' : '/auth/signup'}
                       className={`block text-center w-full py-3 rounded-lg font-semibold text-sm transition-colors ${
                         isPopular
                           ? 'bg-cyan-500 hover:bg-cyan-400 text-black'
                           : 'bg-gray-800 hover:bg-gray-700 text-white border border-gray-700'
                       }`}
                     >
-                      {id === 'starter' ? 'Comenzar gratis' : 'Suscribirse'}
+                      {id === 'starter' && trialExpired ? 'Suscribirse' : id === 'starter' ? 'Comenzar gratis' : 'Suscribirse'}
                     </Link>
                   )}
                 </div>

@@ -1,5 +1,30 @@
 const TRIAL_DAYS = 45;
 
+export function isTrialExpired(tenant: TenantSubscription | null): boolean {
+  if (!tenant) return false;
+  const status = tenant.subscription_status || 'free';
+  if (status === 'active') return false;
+
+  if (status === 'free' || status === 'incomplete') {
+    const plan = tenant.subscription_plan || 'starter';
+    if (plan !== 'starter') return true;
+
+    if (tenant.created_at) {
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const created = new Date(tenant.created_at);
+      const createdDay = new Date(created.getFullYear(), created.getMonth(), created.getDate());
+      const daysElapsed = Math.floor((todayStart.getTime() - createdDay.getTime()) / (1000 * 60 * 60 * 24));
+      return daysElapsed >= TRIAL_DAYS;
+    }
+    return false;
+  }
+
+  if (status === 'past_due') return true;
+
+  return false;
+}
+
 export interface TenantSubscription {
   subscription_status?: string | null;
   subscription_plan?: string | null;

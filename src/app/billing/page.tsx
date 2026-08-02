@@ -158,6 +158,7 @@ function BillingContent() {
   }
 
   const currentPlanId = subscription?.plan || 'starter';
+  const isPlanActive = subscription?.status === 'active';
 
   const TRIAL_DAYS = 45;
   const now = new Date();
@@ -371,7 +372,7 @@ function BillingContent() {
                 <Button variant="outline" disabled className="w-full">
                   Próximamente
                 </Button>
-              ) : !isCurrent && (
+              ) : (!isCurrent || !isPlanActive) && (
                 <Button
                   onClick={() => handleSubscribe(id)}
                   disabled={checkoutLoading === id}
@@ -381,7 +382,7 @@ function BillingContent() {
                   {checkoutLoading === id ? (
                     <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Procesando...</>
                   ) : (
-                    <>{isDowngrade ? `Cambiar a ${plan.name}` : 'Suscribirse'} <ArrowRight className="h-4 w-4 ml-1" /></>
+                    <>{isDowngrade && !isCurrent ? `Cambiar a ${plan.name}` : 'Suscribirse'} <ArrowRight className="h-4 w-4 ml-1" /></>
                   )}
                 </Button>
               )}
