@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { storeRefreshToken } from '@/lib/webauthn';
-import type { User } from '@supabase/supabase-js';
+import type { Session, User } from '@supabase/supabase-js';
 
 export interface UserProfile {
   id: string;
@@ -71,6 +71,52 @@ function clearStoredActiveTenantId() {
   } catch {
     // ignore
   }
+}
+
+// The browser client persists the session as `supabase.auth.token` cookies
+// (chunked as `supabase.auth.token.0`, `.1`, ...). Check there so we can tell
+// "logged out" apart from "session exists but the first refresh failed".
+function hasStoredSession(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const cookieNames = document.cookie.split(';').map((c) => c.split('=')[0].trim());
+    if (cookieNames.some((n) => n === 'supabase.auth.token' || n.startsWith('supabase.auth.token.'))) {
+      return true;
+    }
+    return localStorage.getItem('supabase.auth.token') !== null;
+  } catch {
+    return false;
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms)),
+  ]);
+}
+
+// When the app is opened after a long time the access token has expired, so
+// the first getSession() must hit the network to refresh it. If that request
+// transiently fails (flaky network, device just waking up, 5xx from the auth
+// server) getSession() resolves to null and the app settles on "logged out"
+// until a manual reload. Retry a few times while a stored session still
+// exists, and bound each attempt so a hung request can't leave `loading`
+// stuck forever.
+async function getSessionWithRetry(): Promise<Session | null> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) {
+      await new Promise((r) => setTimeout(r, 1200));
+    }
+    try {
+      const { data } = await withTimeout(supabase.auth.getSession(), 6000);
+      if (data.session) return data.session;
+    } catch (err) {
+      console.warn('Auth session check attempt failed:', err);
+    }
+    if (!hasStoredSession()) return null;
+  }
+  return null;
 }
 
 interface AuthContextValue {
@@ -200,7 +246,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const init = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const session = await getSessionWithRetry();
         if (!mounted) return;
 
         if (session?.user) {
