@@ -174,7 +174,7 @@ export default function LandingPage() {
                 </div>
                 <div className="h-32">
                   {isMounted ? (
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={128}>
                       <BarChart data={chartData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
                         <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#6b7280' }} />

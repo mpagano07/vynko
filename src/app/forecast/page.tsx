@@ -272,7 +272,7 @@ export default function ForecastPage() {
             Top 5 Productos por Demanda Diaria
           </h2>
           <div className="h-40">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={160}>
               <BarChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke="#9ca3af" />
