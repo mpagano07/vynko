@@ -1,3 +1,5 @@
+import prices from './prices.json';
+
 export type PlanFeature = {
   label: string;
   value?: string;
@@ -27,7 +29,7 @@ export const PLANS: Record<PlanId, Plan> = {
   starter: {
     id: 'starter',
     name: 'Starter',
-    price: 19900,
+    price: prices.starter,
     badge: '45 días gratis',
     features: [
       { label: 'Productos', value: '50', included: true },
@@ -44,7 +46,7 @@ export const PLANS: Record<PlanId, Plan> = {
   business: {
     id: 'business',
     name: 'Business',
-    price: 1000,
+    price: prices.business,
     features: [
       { label: 'Productos', value: 'Ilimitados', included: true },
       { label: 'Usuarios', value: 'Ilimitados', included: true },
@@ -61,7 +63,7 @@ export const PLANS: Record<PlanId, Plan> = {
   enterprise: {
     id: 'enterprise',
     name: 'Enterprise',
-    price: 0,
+    price: prices.enterprise,
     badge: 'Próximamente',
     comingSoon: true,
     features: [],

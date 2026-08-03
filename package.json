@@ -8,7 +8,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "update-prices": "node scripts/update-prices.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

@@ -35,3 +35,51 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 # vynko
+
+## Cambiar el precio de los planes (inflación)
+
+Los precios viven en un único lugar: `src/lib/prices.json`. Cambiar el precio ahí actualiza las suscripciones **nuevas**; para que los clientes existentes pasen a pagar el nuevo monto en el siguiente cobro, hay que sincronizar en Mercado Pago con el script `update-prices`.
+
+### 1. Editar el precio
+
+En `src/lib/prices.json`, actualizá el plan que quieras:
+
+```json
+{
+  "starter": 19900,
+  "business": 34900,
+  "enterprise": 0
+}
+```
+
+### 2. Revisar qué se va a actualizar
+
+```bash
+npm run update-prices -- --dry-run
+```
+
+Muestra los tenants activos, su plan y el monto destino, sin modificar nada.
+
+### 3. Aplicar
+
+```bash
+npm run update-prices
+```
+
+El nuevo monto aplica al **siguiente cobro recurrente**. Es recomendable avisar a los clientes del aumento.
+
+### Comandos útiles
+
+| Comando | Qué hace |
+| --- | --- |
+| `npm run update-prices` | Actualiza el monto de todas las suscripciones activas según `prices.json` |
+| `npm run update-prices -- --dry-run` | Simula sin aplicar cambios |
+| `npm run update-prices -- --business=39900` | Sobreescribe el precio de un plan solo para esta corrida |
+| `npm run update-prices -- --backfill` | Recupera el id de preaprobación de clientes activos que no lo tengan guardado (necesario una vez al migrar la columna, o si se dieron de alta antes del webhook) |
+
+### Prerrequisitos
+
+- La columna `mercadopago_preapproval_id` debe existir en la tabla `tenants` (migración `migrations/008_mercadopago.sql`).
+- Variables en `.env.local`: `MERCADOPAGO_ACCESS_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL` (y `NEXT_PUBLIC_CURRENCY`, por defecto `ARS`).
+- El webhook de Mercado Pago debe apuntar a `/api/webhooks/mercadopago` para que las suscripciones nuevas guarden su id de preaprobación.
+
