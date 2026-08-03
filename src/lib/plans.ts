@@ -27,7 +27,7 @@ export const PLANS: Record<PlanId, Plan> = {
   starter: {
     id: 'starter',
     name: 'Starter',
-    price: 19900,
+    price: 100,
     badge: '45 días gratis',
     features: [
       { label: 'Productos', value: '50', included: true },
