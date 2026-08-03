@@ -84,7 +84,7 @@ const preApproval = new PreApproval(mp);
 // Recupera todos los preapprovals de MP en páginas (status 'authorized').
 async function fetchAuthorizedPreApprovals() {
   const results = [];
-  const limit = 500;
+  const limit = 100;
   let offset = 0;
   for (;;) {
     const res = await preApproval.search({
