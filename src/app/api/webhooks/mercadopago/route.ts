@@ -1,13 +1,19 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { getPreApprovalById } from '@/lib/mercadopago';
+import { getPreApprovalById, verifyMercadoPagoSignature } from '@/lib/mercadopago';
 
 export async function POST(request: Request) {
   const body = await request.json();
+  const id = body.data?.id || body.id;
+
+  const isValidSignature = verifyMercadoPagoSignature(request, id);
+  if (!isValidSignature) {
+    console.error('Invalid MercadoPago webhook signature');
+    return NextResponse.json({ error: 'Unauthorized webhook request' }, { status: 401 });
+  }
 
   try {
     const topic = body.type || body.topic;
-    const id = body.data?.id;
 
     if (!id) {
       return NextResponse.json({ error: 'Missing id' }, { status: 400 });
