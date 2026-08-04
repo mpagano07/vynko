@@ -16,7 +16,7 @@ export async function POST() {
 
   const { data: tenant } = await supabaseAdmin
     .from('tenants')
-    .select('mercadopago_preapproval_id')
+    .select('mercadopago_preapproval_id, subscription_current_period_end')
     .eq('id', tu[0].tenant_id)
     .single();
 
@@ -32,6 +32,7 @@ export async function POST() {
       subscription_status: 'canceled',
       subscription_plan: 'free',
       mercadopago_preapproval_id: null,
+      subscription_current_period_end: tenant.subscription_current_period_end ?? null,
     })
     .eq('id', tu[0].tenant_id);
 

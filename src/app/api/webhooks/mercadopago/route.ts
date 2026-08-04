@@ -40,6 +40,9 @@ export async function POST(request: Request) {
           mercadopago_preapproval_id: id,
         };
         if (planToSet) updateData.subscription_plan = planToSet;
+        if (preapproval.next_payment_date) {
+          updateData.subscription_current_period_end = preapproval.next_payment_date;
+        }
 
         await supabaseAdmin
           .from('tenants')
