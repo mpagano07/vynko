@@ -23,17 +23,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Token expirado' }, { status: 400 });
     }
 
-    const { data: users } = await supabaseAdmin.auth.admin.listUsers();
-    const user = users?.users?.find(
-      (u: any) => u.email?.toLowerCase() === tokenData.email.toLowerCase()
-    );
+    const { data: profile, error: profileErr } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('email', tokenData.email.toLowerCase())
+      .maybeSingle();
 
-    if (!user) {
+    if (profileErr || !profile) {
       return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 });
     }
 
+    const userId = profile.id;
+
     const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-      user.id,
+      userId,
       { password }
     );
 

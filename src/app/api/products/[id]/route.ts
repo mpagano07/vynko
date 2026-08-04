@@ -28,11 +28,15 @@ export async function PATCH(
       .from('products')
       .update(updateData)
       .eq('id', id)
+      .eq('tenant_id', auth.tenantId)
       .select()
       .single();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    if (!data) {
+      return NextResponse.json({ error: 'Producto no encontrado o sin permisos' }, { status: 403 });
     }
 
     if (data && (body.stock !== undefined || body.min_stock !== undefined || body.max_stock !== undefined)) {
@@ -94,10 +98,11 @@ export async function DELETE(
     .from('products')
     .delete()
     .eq('id', id)
+    .eq('tenant_id', auth.tenantId)
     .select('name')
     .single();
 
-  if (!deleted) return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 });
+  if (!deleted) return NextResponse.json({ error: 'Producto no encontrado o sin permisos' }, { status: 403 });
 
   await createActivityLog({
     tenantId: auth.tenantId,

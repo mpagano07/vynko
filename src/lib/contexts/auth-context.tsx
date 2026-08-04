@@ -305,7 +305,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadProfileAndTenant]);
 
   const logout = async () => {
-    await (supabase.auth as any)._removeSession();
+    await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
     setTenant(null);

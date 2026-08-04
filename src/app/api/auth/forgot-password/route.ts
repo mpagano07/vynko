@@ -34,14 +34,16 @@ export async function POST(request: Request) {
     const origin = new URL(request.url).origin;
     const resetLink = `${origin}/auth/reset-password?token=${token}`;
 
-    const { error: emailError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-      email.toLowerCase(),
-      { redirectTo: resetLink }
-    );
+    // Generate recovery link using Supabase Admin Auth
+    const { data: linkData, error: emailError } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'recovery',
+      email: email.toLowerCase(),
+      options: { redirectTo: resetLink }
+    });
 
     if (emailError) {
-      console.error('Error sending email:', emailError);
-      return NextResponse.json({ error: 'Error al enviar el email' }, { status: 500 });
+      console.error('Error generating recovery link:', emailError);
+      return NextResponse.json({ error: 'Error al procesar la solicitud' }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, message: 'Email enviado' });

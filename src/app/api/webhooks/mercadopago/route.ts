@@ -3,9 +3,19 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getPreApprovalById, verifyMercadoPagoSignature } from '@/lib/mercadopago';
 
 export async function POST(request: Request) {
-  const body = await request.json();
-  const id = body.data?.id || body.id;
+  // Clone the request to read the raw text for signature verification
+  // while still being able to parse JSON afterwards.
+  const cloned = request.clone();
+  const rawText = await cloned.text();
 
+  let body: Record<string, any>;
+  try {
+    body = JSON.parse(rawText);
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  const id = body.data?.id || body.id;
   const isValidSignature = verifyMercadoPagoSignature(request, id);
   if (!isValidSignature) {
     console.error('Invalid MercadoPago webhook signature');
@@ -77,8 +87,16 @@ export async function POST(request: Request) {
           .from('tenants')
           .update(updateData)
           .eq('id', externalRef);
-      } else if (status === 'pending') {
+      } else if (status === 'paused') {
+        // Subscription paused by MercadoPago (e.g. failed payment attempts)
+        // Mark as past_due so the subscription gate blocks access.
+        await supabaseAdmin
+          .from('tenants')
+          .update({ subscription_status: 'past_due' })
+          .eq('id', externalRef)
+          .eq('mercadopago_preapproval_id', id);
       }
+      // status === 'pending' -> no action needed (waiting for first payment)
     }
   } catch (err) {
     console.error('MercadoPago webhook error:', err);

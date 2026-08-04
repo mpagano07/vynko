@@ -198,11 +198,12 @@ export async function POST(request: Request) {
       }, { status: 201 });
     }
 
-    const { data: users, error: listError } = await supabaseAdmin.auth.admin.listUsers();
-    if (listError) {
-      return NextResponse.json({ error: listError.message }, { status: 500 });
-    }
-    const authUser = users?.users?.find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
+    const { data: profileForEmail } = await supabaseAdmin
+      .from('profiles')
+      .select('id, email')
+      .eq('email', email.toLowerCase())
+      .maybeSingle();
+    const authUser = profileForEmail ? { id: profileForEmail.id, email: profileForEmail.email } : null;
 
     if (authUser) {
       const profileData: Record<string, any> = { id: authUser.id, email: authUser.email, tenant_id: ownerTenantIds[0] };
