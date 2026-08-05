@@ -9,8 +9,12 @@ import type { Metadata, Viewport } from 'next';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Vynko',
-  description: 'Plataforma SaaS B2B de gestión de stock y ventas con IA',
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://vynko.app'),
+  title: {
+    default: 'Vynko | Gestión de Stock y Ventas con IA',
+    template: '%s | Vynko',
+  },
+  description: 'Plataforma SaaS B2B de gestión inteligente de stock, ventas en punto de venta, transferencia multi-sucursal y control comercial para tu negocio.',
   generator: 'Next.js',
   applicationName: 'Vynko',
   referrer: 'origin-when-cross-origin',
@@ -18,6 +22,19 @@ export const metadata: Metadata = {
   icons: {
     icon: '/icons/favicon.png',
     apple: '/icons/icon-512.png',
+  },
+  openGraph: {
+    title: 'Vynko | Gestión de Stock y Ventas con IA',
+    description: 'Plataforma SaaS B2B de gestión inteligente de stock, ventas en punto de venta y control comercial para tu negocio.',
+    url: 'https://vynko.app',
+    siteName: 'Vynko',
+    locale: 'es_AR',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Vynko | Gestión de Stock y Ventas con IA',
+    description: 'Plataforma SaaS B2B de gestión inteligente de stock y ventas para negocios.',
   },
 };
 

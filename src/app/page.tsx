@@ -415,8 +415,8 @@ export default function LandingPage() {
               <Image src="/icons/logoVynko.png" alt="Vynko" width={943} height={835} className="h-12 w-auto object-contain" />
             </div>
             <div className="flex items-center gap-6 text-sm text-gray-500">
-              <button onClick={() => setModal('privacidad')} className="hover:text-gray-300 transition-colors">Privacidad</button>
-              <button onClick={() => setModal('terminos')} className="hover:text-gray-300 transition-colors">Términos</button>
+              <Link href="/privacidad" className="hover:text-gray-300 transition-colors">Privacidad</Link>
+              <Link href="/terminos" className="hover:text-gray-300 transition-colors">Términos</Link>
               <span>© 2026 Vynko</span>
             </div>
           </div>

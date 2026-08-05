@@ -41,6 +41,36 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
     const last = lastScanRef.current;
     if (last && last.code === text && now - last.time < SCAN_THROTTLE_MS) return;
     lastScanRef.current = { code: text, time: now };
+
+    // Feedback auditivo (Beep 880Hz por 150ms)
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        const ctx = new AudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.15);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.15);
+      }
+    } catch {
+      // ignorar restricciones de audio autoplay
+    }
+
+    // Feedback háptico (Vibración)
+    if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate([100]);
+      } catch {
+        // ignorar fallo de vibración
+      }
+    }
+
     onResultRef.current(text);
   }, []);
 

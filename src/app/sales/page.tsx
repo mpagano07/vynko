@@ -615,21 +615,23 @@ export default function SalesPage() {
       </div>
 
       <Card className="border border-gray-100 dark:border-gray-800">
-        <button
-          onClick={() => setShowSalesList(!showSalesList)}
-          className="w-full flex items-center justify-between p-4 text-left"
-        >
-          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <Receipt className="h-5 w-5 text-indigo-600" />
-            Últimas Ventas
-          </h2>
-          <span className="text-xs text-gray-400 dark:text-gray-500 ml-2">Últimos 15 días</span>
-          {showSalesList ? (
-            <ChevronUp className="h-5 w-5 text-gray-400" />
-          ) : (
-            <ChevronDown className="h-5 w-5 text-gray-400" />
-          )}
-        </button>
+        <div className="flex flex-col sm:flex-row items-center justify-between p-4 gap-3">
+          <button
+            onClick={() => setShowSalesList(!showSalesList)}
+            className="flex items-center gap-2 text-left w-full sm:w-auto"
+          >
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+              <Receipt className="h-5 w-5 text-indigo-600" />
+              Últimas Ventas
+            </h2>
+            <span className="text-xs text-gray-400 dark:text-gray-500 ml-2">Últimos 15 días</span>
+            {showSalesList ? (
+              <ChevronUp className="h-5 w-5 text-gray-400" />
+            ) : (
+              <ChevronDown className="h-5 w-5 text-gray-400" />
+            )}
+          </button>
+        </div>
 
         {showSalesList && (
           <div className="border-t border-gray-100 dark:border-gray-800">

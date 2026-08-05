@@ -5,6 +5,8 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import toast from 'react-hot-toast';
 import {
   Loader2,
   ScrollText,
@@ -15,6 +17,9 @@ import {
   Package,
   ChevronUp,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import { PLAN_LIMITS } from '@/lib/plans';
@@ -381,25 +386,32 @@ function TransfersHistoryTab() {
         </table>
       </div>
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 pb-2">
-          <button
-            disabled={page === 0}
-            onClick={() => setPage(p => Math.max(0, p - 1))}
-            className="px-3 py-1.5 text-sm rounded-md border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-800"
-          >
-            Anterior
-          </button>
-          <span className="text-sm text-gray-500">
-            Página {page + 1} de {totalPages}
+      {transfers.length > 0 && (
+        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800">
+          <span className="text-xs text-gray-400">
+            Mostrando {page * limit + 1}–{Math.min((page + 1) * limit, transfers.length)} de {transfers.length} transferencias
           </span>
-          <button
-            disabled={page >= totalPages - 1}
-            onClick={() => setPage(p => p + 1)}
-            className="px-3 py-1.5 text-sm rounded-md border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-800"
-          >
-            Siguiente
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              disabled={page === 0}
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Anterior
+            </button>
+            <span className="text-xs text-gray-400">
+              Página {page + 1} de {Math.max(totalPages, 1)}
+            </span>
+            <button
+              disabled={page >= totalPages - 1}
+              onClick={() => setPage(p => p + 1)}
+              className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Siguiente
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -421,7 +433,7 @@ export default function ActivityLogsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('activity');
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
   const [saleDetails, setSaleDetails] = useState<Record<string, SaleDetail>>({});
-  const limit = 50;
+  const limit = 20;
 
   const toggleLog = (log: ActivityLog) => {
     const isOpen = expandedLogs.has(log.id);
@@ -441,6 +453,105 @@ export default function ActivityLogsPage() {
           setSaleDetails((prev) => ({ ...prev, [log.id]: data }));
         }
       })();
+    }
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = {};
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+
+      let allLogs: ActivityLog[] = [];
+      let offset = 0;
+      const batchSize = 200;
+      let hasMore = true;
+
+      while (hasMore) {
+        const params = new URLSearchParams({ limit: String(batchSize), offset: String(offset) });
+        if (entityFilter) params.set('entity_type', entityFilter);
+        const res = await fetch(`/api/activity-logs?${params}`, { headers });
+        if (!res.ok) break;
+        const json = await res.json();
+        const batch = json.data || [];
+        allLogs = allLogs.concat(batch);
+        if (json.total <= offset + batchSize || batch.length < batchSize) hasMore = false;
+        else offset += batchSize;
+      }
+
+      if (allLogs.length === 0) {
+        toast.error('No hay registros para exportar');
+        return;
+      }
+
+      const saleLogs = allLogs.filter((log) => log.entity_type === 'sale' && log.entity_id);
+      const saleDetailMap: Record<string, SaleDetail> = {};
+      const concurrency = 8;
+      for (let i = 0; i < saleLogs.length; i += concurrency) {
+        const chunk = saleLogs.slice(i, i + concurrency);
+        await Promise.all(
+          chunk.map(async (log) => {
+            try {
+              const res = await fetch(`/api/sales/${log.entity_id}`, { headers });
+              if (res.ok) {
+                const data: SaleDetail = await res.json();
+                saleDetailMap[log.id] = data;
+              }
+            } catch {
+              /* ignore */
+            }
+          })
+        );
+      }
+
+      const XLSX = await import('xlsx');
+      const rows: Record<string, string | number>[] = [];
+
+      for (const log of allLogs) {
+        const fecha = new Date(log.created_at).toLocaleString('es-AR');
+        const usuario = log.user_name || 'Usuario';
+        const detail = saleDetailMap[log.id];
+
+        if (log.entity_type === 'sale' && detail && detail.items?.length) {
+          for (const item of detail.items) {
+            rows.push({
+              'Fecha': fecha,
+              'Usuario': usuario,
+              'Tipo': 'Venta',
+              'Folio': `#${detail.id.slice(0, 8)}`,
+              'Cliente': detail.customer_name || 'Mostrador',
+              'Producto': item.product_name || 'Producto',
+              'Cantidad': item.quantity,
+              'Precio Unitario (ARS)': item.unit_price_cents / 100,
+              'Subtotal (ARS)': item.subtotal_cents / 100,
+              'Total Venta (ARS)': detail.total_cents / 100,
+            });
+          }
+        } else {
+          rows.push({
+            'Fecha': fecha,
+            'Usuario': usuario,
+            'Tipo': ENTITY_LABELS[log.entity_type] || log.entity_type,
+            'Folio': log.details?.folio || '',
+            'Cliente': '',
+            'Producto': log.details?.name || log.details?.sku || '',
+            'Cantidad': '',
+            'Precio Unitario (ARS)': '',
+            'Subtotal (ARS)': '',
+            'Total Venta (ARS)': '',
+          });
+        }
+      }
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Actividad');
+      const filename = `actividad_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      XLSX.writeFile(wb, filename);
+      toast.success(`Se exportaron ${rows.length} registros`);
+    } catch (err) {
+      console.error('Error al exportar actividad:', err);
+      toast.error('Error al generar el archivo Excel');
     }
   };
 
@@ -491,6 +602,23 @@ export default function ActivityLogsPage() {
             Registro detallado de todas las acciones realizadas en el sistema.
           </p>
         </div>
+        {activeTab === 'activity' && !loading && logs.length > 0 && (
+          <div className="relative group">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportExcel}
+              className="flex items-center gap-2 text-xs border-gray-300 dark:border-gray-700 w-full sm:w-auto justify-center"
+            >
+              <FileSpreadsheet className="h-4 w-4 text-green-600" />
+              Exportar a Excel
+            </Button>
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+              Se descargará todo lo filtrado
+              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700" />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -703,25 +831,32 @@ export default function ActivityLogsPage() {
             )}
           </Card>
 
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2">
-              <button
-                disabled={page === 0}
-                onClick={() => setPage(p => Math.max(0, p - 1))}
-                className="px-3 py-1.5 text-sm rounded-md border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-800"
-              >
-                Anterior
-              </button>
-              <span className="text-sm text-gray-500">
-                Página {page + 1} de {totalPages}
+          {total > 0 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800">
+              <span className="text-xs text-gray-400">
+                Mostrando {page * limit + 1}–{Math.min((page + 1) * limit, total)} de {total} registros
               </span>
-              <button
-                disabled={page >= totalPages - 1}
-                onClick={() => setPage(p => p + 1)}
-                className="px-3 py-1.5 text-sm rounded-md border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-800"
-              >
-                Siguiente
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={page === 0}
+                  onClick={() => setPage(p => Math.max(0, p - 1))}
+                  className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Anterior
+                </button>
+                <span className="text-xs text-gray-400">
+                  Página {page + 1} de {Math.max(totalPages, 1)}
+                </span>
+                <button
+                  disabled={page >= totalPages - 1}
+                  onClick={() => setPage(p => p + 1)}
+                  className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  Siguiente
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           )}
         </>

@@ -9,6 +9,8 @@ import { SidebarProvider } from '@/lib/contexts/sidebar-context';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
 
+import { NetworkStatusNotifier } from '@/components/ui/NetworkStatusNotifier';
+
 const LazyToaster = dynamic(() => import('@/components/ui/lazy-toaster'), { ssr: false });
 
 // Stable header placeholder - same height as real header (h-14 = 56px) to prevent CLS
@@ -26,6 +28,8 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
 
   const isPublicRoute = 
     pathname === '/' ||
+    pathname?.startsWith('/privacidad') ||
+    pathname?.startsWith('/terminos') ||
     pathname?.startsWith('/login') ||
     pathname?.startsWith('/auth') ||
     pathname?.startsWith('/onboarding') ||
@@ -78,11 +82,12 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
   }, []);
 
   if (isPublicRoute) {
-    return <><LazyToaster />{children}</>;
+    return <><NetworkStatusNotifier /><LazyToaster />{children}</>;
   }
 
   return (
     <SidebarProvider>
+      <NetworkStatusNotifier />
       <LazyToaster />
       {/* Outer container: flex-row on desktop, flex-col on mobile */}
       <div className="flex flex-row flex-1 min-h-screen w-full">
