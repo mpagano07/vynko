@@ -28,7 +28,6 @@ export async function PATCH(
       .from('products')
       .update(updateData)
       .eq('id', id)
-      .eq('tenant_id', auth.tenantId)
       .select()
       .single();
 
@@ -98,7 +97,6 @@ export async function DELETE(
     .from('products')
     .delete()
     .eq('id', id)
-    .eq('tenant_id', auth.tenantId)
     .select('name')
     .single();
 

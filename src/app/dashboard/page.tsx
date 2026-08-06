@@ -216,7 +216,7 @@ export default function DashboardPage() {
               Nuevo producto
             </Button>
           </Link>
-          <Link href="/providers" prefetch={false} className="hidden sm:inline-flex">
+          <Link href="/providers?create_po=1" prefetch={false} className="hidden sm:inline-flex">
             <Button size="sm" variant="outline" className="gap-1.5 h-8 px-3 text-sm font-medium">
               <ShoppingCart className="h-3.5 w-3.5" />
               Nueva compra

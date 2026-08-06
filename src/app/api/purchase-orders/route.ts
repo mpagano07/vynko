@@ -75,8 +75,7 @@ export async function POST(request: Request) {
     const { data: products, error: prodError } = await supabaseAdmin
       .from('products')
       .select('id, name, cost, cost_cents')
-      .in('id', productIds)
-      .eq('tenant_id', auth.tenantId);
+      .in('id', productIds);
 
     if (prodError) return NextResponse.json({ error: prodError.message }, { status: 500 });
 

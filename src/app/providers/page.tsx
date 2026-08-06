@@ -1,11 +1,13 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -17,11 +19,15 @@ import {
   Search,
   Loader2,
   X,
+  Check,
 } from 'lucide-react';
 import type { Supplier, PurchaseOrder } from '@/lib/types/supplier';
 import type { CommercialDocument } from '@/lib/types/document';
+import type { Product } from '@/lib/types/product';
+import { formatARS } from '@/lib/utils/currency';
 
 export default function ProvidersPage() {
+  const router = useRouter();
   const { tenant, allTenants } = useAuth();
   const tenantId = tenant?.id ?? null;
 
@@ -54,6 +60,29 @@ export default function ProvidersPage() {
   const [remitos, setRemitos] = useState<CommercialDocument[]>([]);
   const [loadingChain, setLoadingChain] = useState(false);
 
+  // Purchase order modal state
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isPoModalOpen, setIsPoModalOpen] = useState(false);
+  const [poSupplierId, setPoSupplierId] = useState('');
+  const [poExpectedDate, setPoExpectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [poNotes, setPoNotes] = useState('');
+  const [poItems, setPoItems] = useState<{ product_id: string; quantity: number; unit_cost: number }[]>([]);
+  const [isSubmittingPo, setIsSubmittingPo] = useState(false);
+  const [poStatus, setPoStatus] = useState<'draft' | 'sent'>('draft');
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('create_po') === '1') {
+      const supplierId = params.get('supplier_id');
+      if (supplierId) setPoSupplierId(supplierId);
+      setIsPoModalOpen(true);
+      const url = new URL(window.location.href);
+      url.searchParams.delete('create_po');
+      url.searchParams.delete('supplier_id');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, []);
+
   useEffect(() => {
     if (!tenantId && !allTenants) return;
     let cancelled = false;
@@ -63,10 +92,17 @@ export default function ProvidersPage() {
       const headers: Record<string, string> = {};
       if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
 
-      const supRes = await fetch('/api/suppliers', { headers });
+      const [supRes, prodRes] = await Promise.all([
+        fetch('/api/suppliers', { headers }),
+        fetch('/api/products', { headers }),
+      ]);
 
       if (cancelled) return;
       if (supRes.ok) setSuppliers(await supRes.json());
+      if (prodRes.ok) {
+        const allProducts: Product[] = await prodRes.json();
+        setProducts(allProducts.filter(p => p.is_active !== false));
+      }
     })().catch(console.error).finally(() => {
       if (!cancelled) setLoading(false);
     });
@@ -112,6 +148,90 @@ export default function ProvidersPage() {
     } else {
       setSelectedSupplierId(supplierId);
       fetchDocumentChain(supplierId);
+    }
+  };
+
+  const resetPoForm = () => {
+    setPoSupplierId(selectedSupplierId ?? '');
+    setPoExpectedDate(new Date().toISOString().split('T')[0]);
+    setPoNotes('');
+    setPoItems([]);
+    setPoStatus('draft');
+  };
+
+  const openPoModal = () => {
+    resetPoForm();
+    setIsPoModalOpen(true);
+  };
+
+  const addPoItemFromProduct = (productId: string) => {
+    const product = products.find((p) => p.id === productId);
+    if (!product) return;
+    setPoItems((prev) => [...prev, { product_id: productId, quantity: 1, unit_cost: product.cost || 0 }]);
+  };
+
+  const updatePoItem = (index: number, field: 'quantity' | 'unit_cost', value: number) => {
+    setPoItems((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
+    );
+  };
+
+  const removePoItem = (index: number) => {
+    setPoItems((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const poTotalCents = poItems.reduce(
+    (sum, item) => sum + item.quantity * Math.round(item.unit_cost * 100),
+    0
+  );
+
+  const handleCreatePo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!poSupplierId) {
+      toast.error('Selecciona un proveedor');
+      return;
+    }
+    if (poItems.length === 0) {
+      toast.error('Agrega al menos un producto al pedido');
+      return;
+    }
+
+    setIsSubmittingPo(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+
+      const res = await fetch('/api/purchase-orders', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          supplier_id: poSupplierId,
+          expected_date: poExpectedDate || null,
+          notes: poNotes || null,
+          status: poStatus,
+          items: poItems.map((i) => ({
+            product_id: i.product_id,
+            quantity: i.quantity,
+            unit_cost: i.unit_cost,
+          })),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al crear el pedido');
+
+      toast.success('Pedido creado exitosamente');
+      setIsPoModalOpen(false);
+      resetPoForm();
+
+      router.push(`/documentos?type=orden_compra&selected=${data.id}`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error al crear pedido');
+    } finally {
+      setIsSubmittingPo(false);
     }
   };
 
@@ -212,10 +332,16 @@ export default function ProvidersPage() {
             Administra tus proveedores.
           </p>
         </div>
-        <Button variant="outline" onClick={() => openSupplierModal(null)} className="flex items-center gap-2">
-          <Plus className="h-4 w-4" />
-          Nuevo Proveedor
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={openPoModal} className="flex items-center gap-2">
+            <Plus className="h-4 w-4" />
+            Nueva compra
+          </Button>
+          <Button variant="outline" onClick={() => openSupplierModal(null)} className="flex items-center gap-2">
+            <Plus className="h-4 w-4" />
+            Nuevo Proveedor
+          </Button>
+        </div>
       </div>
 
       <Card className="p-4 border border-gray-100 dark:border-gray-800">
@@ -462,6 +588,187 @@ export default function ProvidersPage() {
         </div>
       )}
 
+      {/* Purchase Order Create Modal */}
+      {isPoModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
+          <Card className="w-full max-w-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
+            <button
+              onClick={() => { setIsPoModalOpen(false); resetPoForm(); }}
+              className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+              Nueva Compra
+            </h2>
+
+            <form onSubmit={handleCreatePo} className="space-y-4 overflow-y-auto pr-1 flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    Proveedor *
+                  </label>
+                  <Select value={poSupplierId} onChange={(e) => setPoSupplierId(e.target.value)} required>
+                    <option value="">Seleccionar proveedor...</option>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    Fecha Esperada
+                  </label>
+                  <Input
+                    type="date"
+                    value={poExpectedDate}
+                    onChange={(e) => setPoExpectedDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    Estado
+                  </label>
+                  <Select value={poStatus} onChange={(e) => setPoStatus(e.target.value as 'draft' | 'sent')}>
+                    <option value="draft">Borrador</option>
+                    <option value="sent">Enviado</option>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Productos</h3>
+                <div className="mb-3">
+                  <Select
+                    value=""
+                    onChange={e => {
+                      if (e.target.value) {
+                        addPoItemFromProduct(e.target.value);
+                      }
+                    }}
+                    className="text-xs"
+                  >
+                    <option value="">+ Agregar producto...</option>
+                    {products.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} - {formatARS(p.cost || 0)}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                {poItems.length === 0 ? (
+                  <p className="text-sm text-gray-400 py-4 text-center">
+                    Agregá productos seleccionando del menú superior
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {poItems.map((item, index) => {
+                      const product = products.find((p) => p.id === item.product_id);
+                      return (
+                        <div key={index} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                              {product?.name || item.product_id}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => updatePoItem(index, 'quantity', Math.max(1, item.quantity - 1))}
+                              className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                            >
+                              −
+                            </button>
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => updatePoItem(index, 'quantity', Math.max(1, Number(e.target.value) || 1))}
+                              className="w-14 text-center text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 py-1"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => updatePoItem(index, 'quantity', item.quantity + 1)}
+                              className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                            >
+                              +
+                            </button>
+                          </div>
+                          <div className="w-24">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.unit_cost}
+                              onChange={(e) => updatePoItem(index, 'unit_cost', Math.max(0, Number(e.target.value) || 0))}
+                              className="w-full text-right text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 py-1 px-2"
+                            />
+                          </div>
+                          <div className="text-right text-sm font-medium text-gray-900 dark:text-gray-100 w-24">
+                            {formatARS(item.quantity * item.unit_cost)}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removePoItem(index)}
+                            className="text-red-500 hover:text-red-700 p-1"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                    <div className="flex justify-end pt-2">
+                      <div className="text-right">
+                        <span className="text-sm text-gray-500">Total: </span>
+                        <span className="text-lg font-bold text-green-600 dark:text-green-400">
+                          {formatARS(poTotalCents / 100)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  Notas del pedido
+                </label>
+                <textarea
+                  className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                  rows={2}
+                  placeholder="Condiciones de pago, instrucciones de entrega..."
+                  value={poNotes}
+                  onChange={(e) => setPoNotes(e.target.value)}
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-lg font-bold text-gray-900 dark:text-gray-100 pt-2">
+                <span>Total Estimado</span>
+                <span className="text-2xl text-indigo-600 dark:text-indigo-400">
+                  {formatARS(poTotalCents / 100)}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
+                <Button type="button" variant="outline" onClick={() => { setIsPoModalOpen(false); resetPoForm(); }}>
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={isSubmittingPo}>
+                  {isSubmittingPo ? (
+                    <><Loader2 className="h-4 w-4 animate-spin mr-2" />Creando...</>
+                  ) : (
+                    <><Check className="h-4 w-4 mr-2" />Crear Pedido</>
+                  )}
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
       <ConfirmModal
         open={!!supplierIdToDelete}
         onCancel={() => setSupplierIdToDelete(null)}
@@ -494,7 +801,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function formatARS(cents: number): string {
+function formatCents(cents: number): string {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(cents / 100);
 }
 
@@ -531,7 +838,7 @@ function DocumentChainItem({
       <span className="font-mono text-gray-900 dark:text-gray-100">#{number}</span>
       <StatusBadge status={status} />
       <span className="text-xs text-gray-400 ml-2">{date ? formatDate(date) : ''}</span>
-      <span className="text-gray-500 ml-auto">{formatARS(total)}</span>
+      <span className="text-gray-500 ml-auto">{formatCents(total)}</span>
     </div>
   );
 

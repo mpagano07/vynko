@@ -1050,17 +1050,19 @@ export default function DocumentosPage() {
 
                               {(order.status === 'draft' || order.status === 'sent' || order.status === 'partial') && (
                                 <div className="flex gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
-                                  <Button variant="outline" size="sm" onClick={() => handleReceiveOrder(order.id)}
-                                    className="text-green-600 border-green-200 hover:bg-green-50 dark:border-green-800 dark:hover:bg-green-900/20"
+                                  <button
+                                    onClick={() => handleReceiveOrder(order.id)}
+                                    className="px-2 py-1 text-xs font-medium text-green-700 bg-green-100 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50 rounded"
                                   >
                                     Recibir
-                                  </Button>
+                                  </button>
                                   {order.status !== 'partial' && (
-                                    <Button variant="outline" size="sm" onClick={() => handleCancelOrder(order.id)}
-                                      className="text-red-600 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20"
+                                    <button
+                                      onClick={() => handleCancelOrder(order.id)}
+                                      className="px-2 py-1 text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50 rounded"
                                     >
                                       Cancelar
-                                    </Button>
+                                    </button>
                                   )}
                                 </div>
                               )}
@@ -1598,26 +1600,24 @@ export default function DocumentosPage() {
               </div>
 
               <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Productos</h3>
-                  <div className="flex items-center gap-2">
-                    <Select
-                      value=""
-                      onChange={e => {
-                        if (e.target.value) {
-                          addPoItemFromProduct(e.target.value);
-                        }
-                      }}
-                      className="text-xs"
-                    >
-                      <option value="">+ Agregar producto...</option>
-                      {products.map(p => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} - {formatARS(p.cost || 0)}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Productos</h3>
+                <div className="mb-3">
+                  <Select
+                    value=""
+                    onChange={e => {
+                      if (e.target.value) {
+                        addPoItemFromProduct(e.target.value);
+                      }
+                    }}
+                    className="text-xs"
+                  >
+                    <option value="">+ Agregar producto...</option>
+                    {products.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} - {formatARS(p.cost || 0)}
+                      </option>
+                    ))}
+                  </Select>
                 </div>
 
                 {poItems.length === 0 ? (
