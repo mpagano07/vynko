@@ -12,7 +12,7 @@ export async function PATCH(
 
   const body = await request.json();
   const allowed = ['name', 'email', 'phone', 'address', 'notes'];
-  const updates: Record<string, any> = {};
+  const updates: Record<string, unknown> = {};
   for (const key of allowed) {
     if (body[key] !== undefined) updates[key] = body[key];
   }

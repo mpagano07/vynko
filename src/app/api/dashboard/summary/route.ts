@@ -15,8 +15,8 @@ export async function GET(request: Request) {
 
     const allTenantsBool = auth.allTenants;
 
-    function qFilter(q: any) {
-      return allTenantsBool ? q : q.eq('tenant_id', tenantId);
+    function qFilter<T extends { eq: (col: string, value: string) => unknown }>(q: T): T {
+      return allTenantsBool ? q : (q.eq('tenant_id', tenantId) as T);
     }
 
     const [recentSalesRes, customersRes, lastSaleRes, suppliersRes] = await Promise.all([

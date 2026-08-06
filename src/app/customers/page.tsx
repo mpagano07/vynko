@@ -19,8 +19,22 @@ interface Customer {
   created_at?: string;
 }
 
+interface CustomerHistoryItem {
+  id: string;
+  product_name?: string;
+  quantity: number;
+  subtotal?: number;
+}
+
+interface CustomerHistorySale {
+  id: string;
+  total?: number;
+  created_at: string;
+  items?: CustomerHistoryItem[];
+}
+
 interface CustomerHistory {
-  sales: any[];
+  sales: CustomerHistorySale[];
   totalSpent: number;
   visitCount: number;
 }
@@ -54,7 +68,10 @@ export default function CustomersPage() {
     if (res.ok) setCustomers(await res.json());
   };
 
-  useEffect(() => { fetchCustomers().finally(() => setLoading(false)); }, []);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchCustomers().finally(() => setLoading(false));
+  }, []);
 
   const openCreate = () => {
     setEditing(null);
@@ -245,7 +262,7 @@ export default function CustomersPage() {
                 <div className="overflow-y-auto flex-1 space-y-3">
                   {historyData.sales.length === 0 ? (
                     <p className="text-sm text-gray-500 text-center py-8">Sin compras registradas.</p>
-                  ) : historyData.sales.map((s: any) => (
+                  ) : historyData.sales.map((s) => (
                     <div key={s.id} className="p-4 border border-gray-100 dark:border-gray-800 rounded-lg">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-mono text-gray-400">#{s.id.slice(0, 8)}</span>
@@ -256,7 +273,7 @@ export default function CustomersPage() {
                         {new Date(s.created_at).toLocaleDateString('es-AR', { dateStyle: 'medium' })}
                       </div>
                       <div className="space-y-1">
-                        {s.items?.map((i: any) => (
+                        {s.items?.map((i) => (
                           <div key={i.id} className="flex justify-between text-xs text-gray-700 dark:text-gray-300">
                             <span>{i.product_name} × {i.quantity}</span>
                             <span>{i.subtotal != null ? formatARS(i.subtotal) : ''}</span>

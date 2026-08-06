@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { MercadoPagoConfig, PreApproval } from 'mercadopago';
 
 let _client: MercadoPagoConfig | null = null;
@@ -26,6 +27,7 @@ export function createPreApproval(body: {
     frequency_type: 'months';
     transaction_amount: number;
     currency_id: string;
+    trial_period_days?: number;
   };
 }) {
   const preApproval = new PreApproval(getClient());
@@ -80,7 +82,6 @@ export function verifyMercadoPagoSignature(request: Request, dataId?: string): b
   const manifest = `id:${dataId || ''};request-id:${xRequestId};ts:${ts};`;
 
   try {
-    const crypto = require('crypto');
     const hmac = crypto.createHmac('sha256', secret);
     hmac.update(manifest);
     const hash = hmac.digest('hex');

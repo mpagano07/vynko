@@ -28,7 +28,7 @@ export async function GET(request: Request) {
 
   query = query.order('created_at', { ascending: false });
 
-  const { data: orders, error } = await query;
+  const { data: orders } = await query;
 
   const result = (orders ?? []).map((o: Record<string, unknown>) => {
     const supplier = o.supplier as Record<string, unknown> | undefined;

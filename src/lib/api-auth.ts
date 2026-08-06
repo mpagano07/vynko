@@ -20,7 +20,7 @@ export async function getAuth(request?: Request): Promise<AuthInfo | null> {
 
   if (!tu || tu.length === 0) return null;
 
-  const tenantIds = (tu as any[]).map((t: any) => t.tenant_id);
+  const tenantIds = (tu ?? []).map((t) => t.tenant_id);
   let tenantId = tenantIds[0];
   let allTenants = false;
 

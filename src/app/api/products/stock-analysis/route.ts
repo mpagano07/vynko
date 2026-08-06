@@ -22,17 +22,17 @@ export async function GET(request: Request) {
 
     const criticalProducts = (allProducts ?? [])
       .filter(p => {
-        const s = (p as any).stock_data?.[0];
+        const s = p.stock_data?.[0];
         if (!s) return false;
-        const stock = (s?.stock as number) ?? 0;
-        const minStock = (s?.min_stock as number) ?? 0;
+        const stock = Number(s?.stock) || 0;
+        const minStock = Number(s?.min_stock) || 0;
         return stock <= minStock;
       })
       .slice(0, 15)
       .map(p => ({
         ...p,
-        stock: (p as any).stock_data?.[0]?.stock ?? 0,
-        min_stock: (p as any).stock_data?.[0]?.min_stock ?? 0,
+        stock: Number(p.stock_data?.[0]?.stock) || 0,
+        min_stock: Number(p.stock_data?.[0]?.min_stock) || 0,
         stock_data: undefined,
       }));
 

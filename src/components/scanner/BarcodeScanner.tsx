@@ -44,7 +44,9 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
 
     // Feedback auditivo (Beep 880Hz por 150ms)
     try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (AudioCtx) {
         const ctx = new AudioCtx();
         const osc = ctx.createOscillator();
@@ -74,7 +76,7 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
     onResultRef.current(text);
   }, []);
 
-  const handleError = useCallback((err: any) => {
+  const handleError = useCallback(() => {
     // no barcode found in this frame — expected
   }, []);
 
@@ -94,7 +96,7 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
           if (result) {
             handleDecode(result.getText());
           } else if (err) {
-            handleError(err);
+            handleError();
           }
         }
       );
@@ -113,6 +115,9 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
     const reader = new BrowserMultiFormatReader();
     readerRef.current = reader;
 
+    // La cámara se inicializa una sola vez al montar el componente; el estado
+    // debe aplicarse de forma síncrona para reflejar la UI de inicialización.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     start();
 
     return () => {

@@ -7,7 +7,7 @@ export async function createActivityLog(params: {
   action: string;
   entityType: string;
   entityId?: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
 }) {
   const name = params.userName || await resolveUserName(params.userId);
   const { error } = await supabaseAdmin

@@ -206,7 +206,7 @@ export async function POST(request: Request) {
     const authUser = profileForEmail ? { id: profileForEmail.id, email: profileForEmail.email } : null;
 
     if (authUser) {
-      const profileData: Record<string, any> = { id: authUser.id, email: authUser.email, tenant_id: ownerTenantIds[0] };
+      const profileData: Record<string, unknown> = { id: authUser.id, email: authUser.email, tenant_id: ownerTenantIds[0] };
       if (assignName) profileData.full_name = assignName;
       await supabaseAdmin.from('profiles').upsert(profileData, { onConflict: 'id' });
 

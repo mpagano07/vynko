@@ -62,9 +62,10 @@ export default function AIChatPage() {
       if (!res.ok) throw new Error(data.error || 'Error al consultar la IA');
 
       setMessages((prev) => [...prev, { role: 'assistant', content: data.reply }]);
-    } catch (err: any) {
-      setError(err.message);
-      setMessages((prev) => [...prev, { role: 'assistant', content: `❌ ${err.message}` }]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error';
+      setError(message);
+      setMessages((prev) => [...prev, { role: 'assistant', content: `❌ ${message}` }]);
     } finally {
       setLoading(false);
     }

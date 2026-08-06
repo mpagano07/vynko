@@ -26,6 +26,8 @@ function LoginContent() {
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
+    // Inicialización única (navegador, SSR impide lazy init)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsMobile(/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
   }, []);
 
@@ -35,6 +37,7 @@ function LoginContent() {
       try {
         const { email: savedEmail, password: savedPassword } = JSON.parse(saved);
         if (savedEmail) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setEmail(savedEmail);
           if (savedPassword) setPassword(savedPassword);
           setRemember(true);

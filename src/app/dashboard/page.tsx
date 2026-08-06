@@ -38,6 +38,17 @@ interface PerTenantData {
   criticalCount: number;
 }
 
+interface SalesEntry {
+  total_cents: number;
+}
+
+interface CriticalProduct {
+  id: string;
+  name: string;
+  stock: number;
+  min_stock: number;
+}
+
 interface PendingOrderItem {
   product_id: string | null;
   product_name: string;
@@ -103,10 +114,10 @@ export default function DashboardPage() {
               fetchWithTenant('/api/purchase-orders/pending', t.id),
             ]);
 
-            const todayTotal = (sales as any[] || []).reduce((sum: number, s: any) => sum + ((s.total_cents as number) || 0), 0);
-            const saleCount = (sales as any[] || []).length;
+            const todayTotal = (sales as SalesEntry[] || []).reduce((sum, s) => sum + (s.total_cents || 0), 0);
+            const saleCount = (sales as SalesEntry[] || []).length;
             const md = monthly as MonthlyData | null;
-            const cp = (critical as any[] || []);
+            const cp = (critical as CriticalProduct[] || []);
             const po = (pending as PendingOrder[] || []);
 
             allSalesTotal += todayTotal;

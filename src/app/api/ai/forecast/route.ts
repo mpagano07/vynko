@@ -4,6 +4,23 @@ import { getAuth } from '@/lib/api-auth';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { formatARS } from '@/lib/utils/currency';
 
+interface Prediction {
+  productId: string;
+  productName: string;
+  currentStock: number;
+  minStock: number;
+  maxStock: number;
+  price: number;
+  cost: number;
+  avgDailySales: number;
+  projectedMonthlyDemand: number;
+  daysUntilStockout: number | null;
+  needsReorder: boolean;
+  suggestedOrder: number;
+  totalSoldLast30: number;
+  activeDays: number;
+}
+
 export async function GET(request: Request) {
   const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
@@ -29,47 +46,60 @@ export async function GET(request: Request) {
     supabaseAdmin.from('sales').select('created_at, total_cents').eq('tenant_id', auth.tenantId).gte('sales.created_at', sixtyDaysAgo.toISOString()).lt('sales.created_at', thirtyDaysAgo.toISOString()),
   ]);
 
-  const stockMap = new Map((stockData.data || []).map((s: any) => [s.product_id, s]));
-  const productMap = new Map((productsData.data || []).map((p: any) => {
-    const s = stockMap.get(p.id) || { stock: 0, min_stock: 0, max_stock: 0 };
-    return [p.id, { ...p, stock: s.stock, min_stock: s.min_stock, max_stock: s.max_stock }];
-  }));
+  const stockMap = new Map<string, Record<string, unknown>>(
+    ((stockData.data as unknown[] | null) ?? []).map((row) => {
+      const s = row as Record<string, unknown>;
+      return [String(s.product_id), s];
+    })
+  );
+  const productMap = new Map<string, Record<string, unknown>>(
+    ((productsData.data as unknown[] | null) ?? []).map((row) => {
+      const p = row as Record<string, unknown>;
+      const s = stockMap.get(String(p.id)) || {};
+      return [String(p.id), { ...p, stock: Number(s.stock) || 0, min_stock: Number(s.min_stock) || 0, max_stock: Number(s.max_stock) || 0 }];
+    })
+  );
   const dailySales = new Map<string, { totalQty: number; daysWithSales: Set<string> }>();
 
-  for (const item of (saleItemsData.data || []) as any[]) {
-    const day = item.sales?.created_at?.slice(0, 10);
+  for (const row of (saleItemsData.data as unknown[] | null) ?? []) {
+    const item = row as Record<string, unknown>;
+    const sales = (item.sales ?? null) as Record<string, unknown> | null;
+    const day = typeof sales?.created_at === 'string' ? sales.created_at.slice(0, 10) : undefined;
     if (!day) continue;
-    if (!dailySales.has(item.product_id)) {
-      dailySales.set(item.product_id, { totalQty: 0, daysWithSales: new Set() });
+    const productId = String(item.product_id ?? '');
+    if (!dailySales.has(productId)) {
+      dailySales.set(productId, { totalQty: 0, daysWithSales: new Set() });
     }
-    const entry = dailySales.get(item.product_id)!;
-    entry.totalQty += item.quantity || 0;
+    const entry = dailySales.get(productId)!;
+    entry.totalQty += Number(item.quantity) || 0;
     entry.daysWithSales.add(day);
   }
 
-  const totalSales30 = (salesData.data || []).reduce((sum: number, s: any) => sum + ((s.total_cents || 0) / 100), 0);
-  const totalTransactions = (salesData.data || []).length;
+  const totalSales30 = ((salesData.data as unknown[] | null) ?? []).reduce((sum: number, row) => {
+    const s = row as Record<string, unknown>;
+    return sum + (Number(s.total_cents) || 0) / 100;
+  }, 0);
+  const totalTransactions = (salesData.data as unknown[] | null)?.length || 0;
 
-  const predictions = Array.from(dailySales.entries())
+  const predictions: Prediction[] = Array.from(dailySales.entries())
     .map(([productId, stats]) => {
-      const product = productMap.get(productId) as any;
+      const product = productMap.get(productId);
       if (!product) return null;
-      const daysActive = Math.max(stats.daysWithSales.size, 1);
       const avgDaily = stats.totalQty / 30;
       const projectedMonthly = Math.round(avgDaily * 30);
-      const stock = product.stock ?? 0;
+      const stock = Number(product.stock) || 0;
       const daysUntilStockout = avgDaily > 0 ? Math.round(stock / avgDaily) : Infinity;
-      const minStock = product.min_stock ?? 0;
+      const minStock = Number(product.min_stock) || 0;
       const needsReorder = stock <= projectedMonthly * 0.5 || stock <= minStock;
 
       return {
-        productId: product.id,
-        productName: product.name,
+        productId: String(product.id ?? ''),
+        productName: String(product.name ?? ''),
         currentStock: stock,
         minStock,
-        maxStock: product.max_stock ?? 0,
-        price: product.price_cents ? product.price_cents / 100 : 0,
-        cost: product.cost || 0,
+        maxStock: Number(product.max_stock) || 0,
+        price: product.price_cents ? Number(product.price_cents) / 100 : 0,
+        cost: Number(product.cost) || 0,
         avgDailySales: Math.round(avgDaily * 10) / 10,
         projectedMonthlyDemand: projectedMonthly,
         daysUntilStockout: daysUntilStockout === Infinity ? null : daysUntilStockout,
@@ -79,31 +109,35 @@ export async function GET(request: Request) {
         activeDays: stats.daysWithSales.size,
       };
     })
-    .filter(Boolean)
-    .sort((a: any, b: any) => (b.avgDailySales || 0) - (a.avgDailySales || 0));
+    .filter((p): p is Prediction => p !== null)
+    .sort((a, b) => (b.avgDailySales || 0) - (a.avgDailySales || 0));
 
-  const topProducts = predictions.slice(0, 5) as any[];
-  const needsReorder = predictions.filter((p: any) => p.needsReorder) as any[];
+  const topProducts = predictions.slice(0, 5);
+  const needsReorder = predictions.filter((p) => p.needsReorder);
 
   // Prior period (30-60 days ago) computation
   const priorDailySales = new Map<string, number>();
-  for (const item of (priorSaleItemsData.data || []) as any[]) {
-    const pid = item.product_id;
+  for (const row of (priorSaleItemsData.data as unknown[] | null) ?? []) {
+    const item = row as Record<string, unknown>;
+    const pid = String(item.product_id ?? '');
     if (!pid) continue;
-    priorDailySales.set(pid, (priorDailySales.get(pid) || 0) + (item.quantity || 0));
+    priorDailySales.set(pid, (priorDailySales.get(pid) || 0) + (Number(item.quantity) || 0));
   }
-  const priorTotalSales = (priorSalesData.data || []).reduce((sum: number, s: any) => sum + ((s.total_cents || 0) / 100), 0);
-  const priorTransactions = (priorSalesData.data || []).length;
+  const priorTotalSales = ((priorSalesData.data as unknown[] | null) ?? []).reduce((sum: number, row) => {
+    const s = row as Record<string, unknown>;
+    return sum + (Number(s.total_cents) || 0) / 100;
+  }, 0);
+  const priorTransactions = (priorSalesData.data as unknown[] | null)?.length || 0;
   const priorProductsWithSales = priorDailySales.size;
 
   // Prior period reorder count (recompute with same logic)
   const priorNeedsReorderCount = Array.from(priorDailySales.entries()).filter(([productId, totalQty]) => {
-    const product = productMap.get(productId) as any;
+    const product = productMap.get(productId);
     if (!product) return false;
     const avgDaily = totalQty / 30;
     const projectedMonthly = Math.round(avgDaily * 30);
-    const stock = product.stock ?? 0;
-    const minStock = product.min_stock ?? 0;
+    const stock = Number(product.stock) || 0;
+    const minStock = Number(product.min_stock) || 0;
     return stock <= projectedMonthly * 0.5 || stock <= minStock;
   }).length;
 
@@ -122,10 +156,10 @@ export async function GET(request: Request) {
       const prompt = `Analizá estos datos de demanda de productos para un negocio:
 
 Productos con más demanda (top 5):
-${topProducts.map((p: any) => `- ${p.productName}: ${p.avgDailySales}/día, ${p.projectedMonthlyDemand}/mes proyectado, stock actual: ${p.currentStock}`).join('\n')}
+${topProducts.map((p) => `- ${p.productName}: ${p.avgDailySales}/día, ${p.projectedMonthlyDemand}/mes proyectado, stock actual: ${p.currentStock}`).join('\n')}
 
 Productos que necesitan reposición:
-${needsReorder.map((p: any) => `- ${p.productName}: stock ${p.currentStock}, venta diaria ${p.avgDailySales}, sugerido: ${p.suggestedOrder}`).join('\n')}
+${needsReorder.map((p) => `- ${p.productName}: stock ${p.currentStock}, venta diaria ${p.avgDailySales}, sugerido: ${p.suggestedOrder}`).join('\n')}
 
 Ventas totales últimos 30 días: ${formatARS(totalSales30)} (${totalTransactions} transacciones)
 

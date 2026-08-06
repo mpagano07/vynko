@@ -31,7 +31,7 @@ export async function GET(request: Request) {
     .eq('id', tu[0].tenant_id)
     .single();
 
-  const result = checkSubscriptionBlocked(tenant as any);
+  const result = checkSubscriptionBlocked(tenant);
 
   return NextResponse.json(result);
 }

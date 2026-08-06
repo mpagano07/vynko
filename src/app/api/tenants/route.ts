@@ -64,7 +64,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const insertData: Record<string, any> = {
+    const insertData: Record<string, unknown> = {
       id: tenantId,
       name: name.trim(),
       slug: tenantSlug,

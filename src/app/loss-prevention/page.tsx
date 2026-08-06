@@ -8,7 +8,6 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
-import { ConfirmModal } from '@/components/ui/confirm-modal';
 import toast from 'react-hot-toast';
 import {
   ShieldAlert, Package, TrendingDown, AlertTriangle,
@@ -27,11 +26,22 @@ const reasonOptions = [
 
 const reasonMap = Object.fromEntries(reasonOptions.map(r => [r.value, r]));
 
+interface StockAdjustment {
+  id: string;
+  quantity: number;
+  productId: string;
+  productName: string;
+  productSku?: string;
+  reason?: string;
+  createdAt: string;
+  createdBy: string;
+}
+
 export default function LossPreventionPage() {
   const { tenant } = useAuth();
   const { products, isLoading: productsLoading } = useProducts(tenant?.id);
   const [loading, setLoading] = useState(true);
-  const [history, setHistory] = useState<any[]>([]);
+  const [history, setHistory] = useState<StockAdjustment[]>([]);
   const [search, setSearch] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -64,7 +74,9 @@ export default function LossPreventionPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!productsLoading) fetchHistory().finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productsLoading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -94,8 +106,8 @@ export default function LossPreventionPage() {
     fetchHistory();
   };
 
-  const losses = history.filter((h: any) => h.quantity < 0);
-  const totalLosses = losses.reduce((sum: number, h: any) => sum + Math.abs(h.quantity), 0);
+  const losses = history.filter((h) => h.quantity < 0);
+  const totalLosses = losses.reduce((sum, h) => sum + Math.abs(h.quantity), 0);
   const totalValue = (() => {
     let v = 0;
     for (const h of losses) {
@@ -106,7 +118,7 @@ export default function LossPreventionPage() {
   })();
 
   const topLost: [string, number][] = Object.entries(
-    losses.reduce((acc: Record<string, number>, h: any) => {
+    losses.reduce((acc: Record<string, number>, h) => {
       acc[h.productName] = (acc[h.productName] || 0) + Math.abs(h.quantity);
       return acc;
     }, {} as Record<string, number>)
@@ -183,7 +195,7 @@ export default function LossPreventionPage() {
             Productos con más pérdidas
           </h2>
           <div className="space-y-2">
-            {topLost.map(([name, qty]: any, i: number) => (
+            {topLost.map(([name, qty], i) => (
               <div key={name} className="flex items-center gap-3">
                 <span className="text-xs font-bold text-gray-400 w-5">{i + 1}</span>
                 <div className="flex-1 h-8 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
@@ -229,8 +241,8 @@ export default function LossPreventionPage() {
           </div>
         ) : (
           <div className="divide-y divide-gray-100 dark:divide-gray-800">
-            {filtered.map((h: any) => {
-              const reasonInfo = reasonMap[h.reason?.split(':')[0]] || reasonMap.correction;
+            {filtered.map((h) => {
+              const reasonInfo = reasonMap[h.reason?.split(':')[0] || ''] || reasonMap.correction;
               return (
                 <div key={h.id} className="flex items-center gap-4 px-6 py-3.5 text-sm hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
                   <div className={`w-2 h-2 rounded-full flex-shrink-0 ${h.quantity < 0 ? 'bg-rose-400' : 'bg-emerald-400'}`} />

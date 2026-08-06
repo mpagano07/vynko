@@ -42,7 +42,7 @@ export async function POST(
     .eq('tenant_id', auth.tenantId)
     .maybeSingle();
 
-  const currentStock = (stockRow as any)?.stock ?? 0;
+  const currentStock = Number((stockRow as Record<string, unknown> | null)?.stock) || 0;
   const newStock = currentStock + quantity;
   if (newStock < 0) {
     return NextResponse.json({ error: 'El stock no puede ser negativo' }, { status: 400 });

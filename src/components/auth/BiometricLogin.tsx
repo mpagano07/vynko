@@ -50,7 +50,7 @@ export default function BiometricLogin() {
       const { data: sessionData, error } = await supabase.auth.setSession({
         access_token: data.access_token,
         refresh_token: data.refresh_token,
-      } as any);
+      });
       return error ? null : sessionData.session;
     } catch {
       return null;

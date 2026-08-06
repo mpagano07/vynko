@@ -22,17 +22,17 @@ export async function GET(request: Request) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    const critical = (products ?? []).filter(p => {
-      const s = (p as any).stock_data?.[0];
+    const critical = (products ?? []).filter((p) => {
+      const s = p.stock_data?.[0];
       if (!s) return false;
-      const stock = (s?.stock as number) ?? 0;
-      const minStock = (s?.min_stock as number) ?? 0;
+      const stock = Number(s.stock) || 0;
+      const minStock = Number(s.min_stock) || 0;
       return stock <= minStock;
-    }).map(p => ({
+    }).map((p) => ({
       id: p.id,
       name: p.name,
-      stock: (p as any).stock_data?.[0]?.stock ?? 0,
-      min_stock: (p as any).stock_data?.[0]?.min_stock ?? 0,
+      stock: Number(p.stock_data?.[0]?.stock) || 0,
+      min_stock: Number(p.stock_data?.[0]?.min_stock) || 0,
     }));
 
     return NextResponse.json(critical);

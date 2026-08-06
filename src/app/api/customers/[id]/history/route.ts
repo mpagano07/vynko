@@ -25,18 +25,23 @@ export async function GET(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const totalSpent = (sales ?? []).reduce((sum, s: any) => sum + (s.total_cents || 0), 0);
+  const totalSpent = (sales ?? []).reduce((sum, s) => sum + (s.total_cents || 0), 0);
   const visitCount = (sales ?? []).length;
 
-  const formatted = (sales ?? []).map((s: any) => ({
+  const formatted = (sales ?? []).map((s) => ({
     ...s,
     total: (s.total_cents || 0) / 100,
-    items: (s.items || []).map((i: any) => ({
-      ...i,
-      unit_price: (i.unit_price_cents || 0) / 100,
-      subtotal: (i.subtotal_cents || 0) / 100,
-      product_name: i.product?.name || 'Producto',
-    })),
+    items: (s.items || []).map((i) => {
+      const product = Array.isArray(i.product)
+        ? (i.product[0] as Record<string, unknown> | undefined)
+        : (i.product as unknown as Record<string, unknown> | undefined);
+      return {
+        ...i,
+        unit_price: (i.unit_price_cents || 0) / 100,
+        subtotal: (i.subtotal_cents || 0) / 100,
+        product_name: product?.name || 'Producto',
+      };
+    }),
   }));
 
   return NextResponse.json({ sales: formatted, totalSpent: totalSpent / 100, visitCount });

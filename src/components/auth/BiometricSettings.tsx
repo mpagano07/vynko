@@ -14,7 +14,7 @@ import {
   storeRefreshToken,
 } from '@/lib/webauthn';
 import toast from 'react-hot-toast';
-import { Fingerprint, Smartphone, Trash2, RefreshCw, Loader2, Check, X } from 'lucide-react';
+import { Fingerprint, Smartphone, Trash2, RefreshCw, Loader2, Check } from 'lucide-react';
 
 export default function BiometricSettings() {
   const [supported, setSupported] = useState(false);

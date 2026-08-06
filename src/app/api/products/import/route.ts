@@ -34,7 +34,7 @@ export async function POST(request: Request) {
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const body = await request.json();
-  const products = body.products as Record<string, any>[];
+  const products = body.products as Record<string, unknown>[];
 
   if (!Array.isArray(products) || products.length === 0) {
     return NextResponse.json({ error: 'No products provided' }, { status: 400 });
@@ -63,12 +63,13 @@ export async function POST(request: Request) {
   for (let i = 0; i < products.length; i++) {
     const row = products[i];
     try {
-      if (!row.name?.trim()) {
+      const name = String(row.name ?? '');
+      if (!name.trim()) {
         results.push({ row: i + 1, status: 'skipped', error: 'Nombre requerido' });
         continue;
       }
 
-      const upsertData: Record<string, any> = {};
+      const upsertData: Record<string, unknown> = {};
       if (row.price !== undefined) upsertData.price_cents = Math.round(Number(row.price) * 100);
       for (const key of ALLOWED_FIELDS) {
         if (row[key] !== undefined && row[key] !== null && row[key] !== '') upsertData[key] = row[key];
@@ -78,8 +79,9 @@ export async function POST(request: Request) {
       const min_stock = Number(row.min_stock) || 0;
       const max_stock = Number(row.max_stock) || 0;
 
-      if (row.category_name?.trim()) {
-        const categoryId = await resolveCategory(auth.tenantId, row.category_name);
+      const categoryName = String(row.category_name ?? '');
+      if (categoryName.trim()) {
+        const categoryId = await resolveCategory(auth.tenantId, categoryName);
         if (categoryId) upsertData.category_id = categoryId;
       }
 
@@ -111,18 +113,18 @@ export async function POST(request: Request) {
           .eq('id', existingId);
 
         if (error) {
-          results.push({ row: i + 1, status: 'skipped', name: row.name, error: error.message });
+          results.push({ row: i + 1, status: 'skipped', name, error: error.message });
         } else {
           await supabaseAdmin
             .from('product_stock')
             .upsert({ product_id: existingId, tenant_id: auth.tenantId, stock, min_stock, max_stock, active: true, updated_at: new Date().toISOString() },
               { onConflict: 'product_id,tenant_id' });
-          results.push({ row: i + 1, status: 'updated', name: row.name });
+          results.push({ row: i + 1, status: 'updated', name });
         }
       } else {
         if (productCount !== null) {
           if (productCount >= maxProducts) {
-            results.push({ row: i + 1, status: 'skipped', name: row.name, error: 'Límite de productos alcanzado para tu plan' });
+            results.push({ row: i + 1, status: 'skipped', name, error: 'Límite de productos alcanzado para tu plan' });
             continue;
           }
           productCount++;
@@ -135,16 +137,16 @@ export async function POST(request: Request) {
           .single();
 
         if (error) {
-          results.push({ row: i + 1, status: 'skipped', name: row.name, error: error.message });
+          results.push({ row: i + 1, status: 'skipped', name, error: error.message });
         } else if (created) {
           await supabaseAdmin
             .from('product_stock')
             .insert({ product_id: created.id, tenant_id: auth.tenantId, stock, min_stock, max_stock });
-          results.push({ row: i + 1, status: 'created', name: row.name });
+          results.push({ row: i + 1, status: 'created', name });
         }
       }
-    } catch (err: any) {
-      results.push({ row: i + 1, status: 'skipped', error: err.message });
+    } catch (err) {
+      results.push({ row: i + 1, status: 'skipped', error: err instanceof Error ? err.message : 'Error' });
     }
   }
 

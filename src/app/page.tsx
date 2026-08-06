@@ -33,7 +33,11 @@ export default function LandingPage() {
 
   const [modal, setModal] = useState<'privacidad' | 'terminos' | null>(null);
 
-  useEffect(() => { setIsMounted(true); }, []);
+  useEffect(() => {
+    // Inicialización única (evita mismatch de hidratación)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsMounted(true);
+  }, []);
 
   const trialExpired = isTrialExpired(tenant);
 
@@ -316,7 +320,7 @@ export default function LandingPage() {
             <p className="mt-4 text-gray-400">Elegí el plan que mejor se adapte a tu negocio.</p>
           </div>
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {Object.entries(PLANS).map(([id, plan], idx) => {
+            {Object.entries(PLANS).map(([id, plan]) => {
               const isPopular = id === 'starter';
               return (
                 <div

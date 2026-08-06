@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useProducts } from '@/lib/hooks/useProducts';
 import { useCategories } from '@/lib/hooks/useCategories';
@@ -12,21 +12,17 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import type { Product } from '@/lib/types/product';
-import type { Category } from '@/lib/types/category';
 import toast from 'react-hot-toast';
 import {
   Search,
   Plus,
   Edit,
   Trash2,
-  AlertTriangle,
   Tag,
   Package,
   X,
-  Check,
   Loader2,
   FolderKanban,
-  ImageIcon,
   Upload,
   FileSpreadsheet,
   Download,
@@ -40,13 +36,27 @@ import {
 import { formatARS } from '@/lib/utils/currency';
 import { TransferInbox } from '@/components/transfers/TransferInbox';
 
+interface PriceAdjustSample {
+  id: string;
+  name: string;
+  old_price_cents: number;
+  new_price_cents: number;
+}
+
+interface TransferProduct {
+  id: string;
+  name: string;
+  sku?: string;
+  barcode?: string;
+}
+
 export default function ProductsPage() {
   const { tenant, tenants } = useAuth();
   const tenantId = tenant?.id ?? null;
   const router = useRouter();
   const multiBranch = (tenants?.length || 0) > 1;
   const { products, isLoading: productsLoading, mutate: mutateProducts } = useProducts(tenantId);
-  const { categories, isLoading: categoriesLoading, mutate: mutateCategories } = useCategories(tenantId);
+  const { categories, mutate: mutateCategories } = useCategories(tenantId);
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
@@ -73,8 +83,6 @@ export default function ProductsPage() {
     image_url: '',
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   // Category Modal State
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -88,7 +96,7 @@ export default function ProductsPage() {
 
   // Import Excel State
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [importRows, setImportRows] = useState<Record<string, any>[]>([]);
+  const [importRows, setImportRows] = useState<Record<string, unknown>[]>([]);
   const [importColumns, setImportColumns] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
   const [importResults, setImportResults] = useState<{ row: number; status: string; name?: string; error?: string }[] | null>(null);
@@ -115,7 +123,7 @@ export default function ProductsPage() {
   const [priceAdjustPercentage, setPriceAdjustPercentage] = useState('');
   const [priceAdjusting, setPriceAdjusting] = useState(false);
   const [priceAdjustResult, setPriceAdjustResult] = useState<{
-    percentage: number; total: number; updated: number; sample?: any[]; errors?: any[];
+    percentage: number; total: number; updated: number; sample?: PriceAdjustSample[]; errors?: string[];
   } | null>(null);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -128,7 +136,7 @@ export default function ProductsPage() {
       const XLSX = await import('xlsx');
       const wb = XLSX.read(buf, { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const data: Record<string, any>[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      const data: Record<string, unknown>[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
 
       if (data.length === 0) {
         toast.error('El archivo está vacío');
@@ -150,7 +158,7 @@ export default function ProductsPage() {
 
       const cols = Object.keys(data[0]);
       const mapped = data.map(row => {
-        const mappedRow: Record<string, any> = {};
+        const mappedRow: Record<string, unknown> = {};
         for (const [col, val] of Object.entries(row)) {
           const key = colMap[col.toLowerCase().trim()] || col;
           mappedRow[key] = val;
@@ -192,8 +200,8 @@ export default function ProductsPage() {
       setImportResults(data.results);
       toast.success(`Importación completada: ${data.summary.created} creados, ${data.summary.updated} actualizados`);
       mutateProducts();
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
     } finally {
       setImporting(false);
     }
@@ -261,8 +269,8 @@ export default function ProductsPage() {
       setPriceAdjustResult(data);
       toast.success(`Precios actualizados: ${data.updated} de ${data.total} productos`);
       mutateProducts();
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
     } finally {
       setPriceAdjusting(false);
     }
@@ -272,6 +280,7 @@ export default function ProductsPage() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('create') === '1') {
       const barcode = params.get('barcode') || '';
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setProductForm((prev) => ({ ...prev, barcode }));
       setIsProductModalOpen(true);
     }
@@ -348,7 +357,6 @@ export default function ProductsPage() {
         description: product.description || '',
         image_url: product.image_url || '',
       });
-      setImagePreview(product.image_url || null);
     } else {
       setEditingProduct(null);
       setProductForm({
@@ -367,7 +375,6 @@ export default function ProductsPage() {
         description: '',
         image_url: '',
       });
-      setImagePreview(null);
     }
     setImageFile(null);
     setIsProductModalOpen(true);
@@ -386,7 +393,6 @@ export default function ProductsPage() {
       let imageUrl = productForm.image_url;
 
       if (imageFile) {
-        setIsUploadingImage(true);
         const formData = new FormData();
         formData.append('file', imageFile);
         const { data: { session } } = await supabase.auth.getSession();
@@ -398,7 +404,6 @@ export default function ProductsPage() {
         const uploadData = await uploadRes.json();
         if (!uploadRes.ok) throw new Error(uploadData.error || 'Error al subir la imagen');
         imageUrl = uploadData.url;
-        setIsUploadingImage(false);
       }
 
       const { data: { session } } = await supabase.auth.getSession();
@@ -421,11 +426,10 @@ export default function ProductsPage() {
       toast.success(editingProduct ? 'Producto actualizado' : 'Producto creado');
       setIsProductModalOpen(false);
       mutateProducts();
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
     } finally {
       setIsSubmittingProduct(false);
-      setIsUploadingImage(false);
     }
   };
 
@@ -459,8 +463,8 @@ export default function ProductsPage() {
       toast.success('Categoría creada');
       setCategoryForm({ name: '', description: '', color: '#3b82f6' });
       mutateCategories();
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
     } finally {
       setIsSubmittingCategory(false);
     }
@@ -477,7 +481,7 @@ export default function ProductsPage() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, any> = {};
+      const headers: Record<string, string> = {};
       if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
       if (tenantId) headers['x-tenant-id'] = tenantId;
 
@@ -494,8 +498,8 @@ export default function ProductsPage() {
         toast.success('Categoría eliminada');
         mutateCategories();
       }
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
     }
   };
 
@@ -628,7 +632,7 @@ export default function ProductsPage() {
           <div>
             <Select
               value={stockFilter}
-              onChange={(e) => setStockFilter(e.target.value as any)}
+              onChange={(e) => setStockFilter(e.target.value as 'all' | 'critical' | 'low' | 'normal')}
             >
               <option value="all">Cualquier nivel de stock</option>
               <option value="critical">Stock Crítico (menor al mínimo)</option>
@@ -682,6 +686,7 @@ export default function ProductsPage() {
                         <div className="flex items-center gap-3">
                           {product.image_url && (
                             <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100 dark:bg-gray-800">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={product.image_url}
                                 alt={product.name}
@@ -1256,7 +1261,7 @@ export default function ProductsPage() {
                   <div>
                     <p className="text-xs font-semibold text-gray-500 mb-2">Ejemplo de precios actualizados:</p>
                     <div className="space-y-1">
-                      {priceAdjustResult.sample.map((p: any) => (
+                      {priceAdjustResult.sample.map((p) => (
                         <div key={p.id} className="flex justify-between text-xs text-gray-600 dark:text-gray-400">
                           <span className="truncate max-w-[180px]">{p.name}</span>
                           <span>{formatARS(p.old_price_cents / 100)} → {formatARS(p.new_price_cents / 100)}</span>
@@ -1462,13 +1467,14 @@ function NewTransferModal({
   const [searchTerm, setSearchTerm] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const [allProducts, setAllProducts] = useState<Record<string, any>[]>([]);
+  const [allProducts, setAllProducts] = useState<TransferProduct[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
 
   const otherTenants = tenants.filter((t) => t.id !== fromTenantId);
 
   useEffect(() => {
     if (!fromTenantId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAllProducts([]);
       return;
     }
@@ -1509,8 +1515,8 @@ function NewTransferModal({
     }).slice(0, 8);
   }, [searchTerm, allProducts, items]);
 
-  const addItem = (product: Record<string, unknown>) => {
-    setItems(prev => [...prev, { product_id: product.id as string, product_name: product.name as string, quantity: 1 }]);
+  const addItem = (product: TransferProduct) => {
+    setItems(prev => [...prev, { product_id: product.id, product_name: product.name, quantity: 1 }]);
     setSearchTerm('');
   };
 

@@ -56,10 +56,10 @@ export async function GET(
     return NextResponse.json({
       product: {
         ...data,
-        price: (data as any).price_cents != null ? (data as any).price_cents / 100 : 0,
-        stock: (stockData as any)?.stock ?? 0,
-        min_stock: (stockData as any)?.min_stock ?? 0,
-        max_stock: (stockData as any)?.max_stock ?? 0,
+        price: data.price_cents != null ? data.price_cents / 100 : 0,
+        stock: stockData?.stock ?? 0,
+        min_stock: stockData?.min_stock ?? 0,
+        max_stock: stockData?.max_stock ?? 0,
       },
     });
   } catch (err) {

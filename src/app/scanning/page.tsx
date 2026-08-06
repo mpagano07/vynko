@@ -8,7 +8,7 @@ import { BarcodeScanner } from '@/components/scanner/BarcodeScanner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Package, Scan, Plus, Loader2, CheckCircle2, PackagePlus } from 'lucide-react';
+import { Package, Scan, Loader2, CheckCircle2, PackagePlus } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import toast from 'react-hot-toast';
 

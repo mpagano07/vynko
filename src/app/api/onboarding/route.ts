@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     .select('tenant_id')
     .eq('user_id', user.id);
 
-  const existingTenantIds = (existingMemberships ?? []).map((m: any) => m.tenant_id);
+  const existingTenantIds = (existingMemberships ?? []).map((m) => m.tenant_id);
 
   if (existingTenantIds.length > 0) {
     const { data: existingTenants } = await supabaseAdmin

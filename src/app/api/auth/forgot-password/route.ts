@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     const resetLink = `${origin}/auth/reset-password?token=${token}`;
 
     // Generate recovery link using Supabase Admin Auth
-    const { data: linkData, error: emailError } = await supabaseAdmin.auth.admin.generateLink({
+    const { error: emailError } = await supabaseAdmin.auth.admin.generateLink({
       type: 'recovery',
       email: email.toLowerCase(),
       options: { redirectTo: resetLink }

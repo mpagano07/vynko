@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { supabase } from '@/lib/supabaseClient';
 import { cn } from '@/lib/utils/cn';
 import { Menu, Building2 } from 'lucide-react';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
@@ -11,7 +10,7 @@ import { useSidebar } from '@/lib/contexts/sidebar-context';
 export function Header() {
   const pathname = usePathname();
   const router = useRouter();
-  const { profile, tenant, user, logout, loading } = useAuth();
+  const { profile, tenant, user, logout } = useAuth();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const { toggle: toggleSidebar } = useSidebar();
 

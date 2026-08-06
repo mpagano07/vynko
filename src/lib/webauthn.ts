@@ -55,13 +55,6 @@ export function storeRefreshToken(token: string): void {
   localStorage.setItem(REFRESH_KEY, token);
 }
 
-function toBase64Url(buf: ArrayBuffer): string {
-  const bytes = new Uint8Array(buf);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
 function fromBase64Url(str: string): ArrayBuffer {
   let s = str.replace(/-/g, '+').replace(/_/g, '/');
   while (s.length % 4) s += '=';

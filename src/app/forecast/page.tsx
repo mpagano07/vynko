@@ -28,6 +28,23 @@ interface Prediction {
   cost: number;
 }
 
+function TrendBadge({ value }: { value: number | null }) {
+  if (value === null) return null;
+  const isUp = value > 0;
+  const isDown = value < 0;
+  if (!isUp && !isDown) return null;
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold rounded-full px-1.5 py-0.5 ${
+      isUp
+        ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-400'
+        : 'text-rose-600 bg-rose-50 dark:bg-rose-950/30 dark:text-rose-400'
+    }`}>
+      {isUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+      {isUp ? '+' : ''}{value}%
+    </span>
+  );
+}
+
 export default function ForecastPage() {
   const { role, tenant, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -36,7 +53,12 @@ export default function ForecastPage() {
     predictions: Prediction[];
     topProducts: Prediction[];
     needsReorder: Prediction[];
-    summary: any;
+    summary: {
+      totalSales30: number;
+      totalTransactions30: number;
+      productsWithSales: number;
+      totalProducts: number;
+    };
     trends: {
       totalSales: number | null;
       transactions: number | null;
@@ -60,8 +82,8 @@ export default function ForecastPage() {
         const res = await fetch('/api/ai/forecast', { headers });
         if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Error'); }
         setData(await res.json());
-      } catch (err: any) {
-        setError(err.message);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Error al cargar');
       } finally {
         setLoading(false);
       }
@@ -122,7 +144,6 @@ export default function ForecastPage() {
   const top3Sales = data.topProducts.slice(0, 3).reduce((s, p) => s + p.avgDailySales, 0);
   const top3Pct = totalDailySales > 0 ? Math.round((top3Sales / totalDailySales) * 100) : 0;
   const avgDailyAll = data.predictions.length > 0 ? totalDailySales / data.predictions.length : 0;
-  const highDemandProducts = data.predictions.filter((p) => avgDailyAll > 0 && p.avgDailySales > avgDailyAll * 2).length;
 
   const totalStock = data.predictions.reduce((s, p) => s + p.currentStock, 0);
   const inventoryCoverageDays = totalDailySales > 0 ? Math.round(totalStock / totalDailySales) : null;
@@ -142,23 +163,6 @@ export default function ForecastPage() {
   const displayedPredictions = isPaginated
     ? filteredPredictions.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
     : filteredPredictions;
-
-  function TrendBadge({ value }: { value: number | null }) {
-    if (value === null) return null;
-    const isUp = value > 0;
-    const isDown = value < 0;
-    if (!isUp && !isDown) return null;
-    return (
-      <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold rounded-full px-1.5 py-0.5 ${
-        isUp
-          ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-400'
-          : 'text-rose-600 bg-rose-50 dark:bg-rose-950/30 dark:text-rose-400'
-      }`}>
-        {isUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-        {isUp ? '+' : ''}{value}%
-      </span>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -278,7 +282,7 @@ export default function ForecastPage() {
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke="#9ca3af" />
                 <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" />
                 <Tooltip
-                  formatter={(value: any) => [Number(value).toFixed(1), 'Unidades/día']}
+                  formatter={(value: unknown) => [Number(value).toFixed(1), 'Unidades/día']}
                   contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '12px' }}
                 />
                 <Bar dataKey="Venta diaria" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={40} />

@@ -8,14 +8,16 @@ export async function POST(request: Request) {
   const cloned = request.clone();
   const rawText = await cloned.text();
 
-  let body: Record<string, any>;
+  let body: Record<string, unknown>;
   try {
-    body = JSON.parse(rawText);
+    body = JSON.parse(rawText) as Record<string, unknown>;
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const id = body.data?.id || body.id;
+  const data = body.data as Record<string, unknown> | undefined;
+  const rawId = data?.id ?? body.id;
+  const id = typeof rawId === 'string' ? rawId : undefined;
   const isValidSignature = verifyMercadoPagoSignature(request, id);
   if (!isValidSignature) {
     console.error('Invalid MercadoPago webhook signature');

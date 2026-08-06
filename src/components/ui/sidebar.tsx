@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
+import type { TenantInfo } from '@/lib/hooks/useAuth';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
 import { cn } from '@/lib/utils/cn';
 import { X, LogOut, Clock, AlertTriangle, ChevronDown, ChevronUp, Settings, Check, Plus, Loader2, Pencil } from 'lucide-react';
@@ -74,7 +75,6 @@ const operacionesItems: NavItem[] = [
 function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch }: { onNavClick?: () => void; tenantPlan?: string; userRole?: string | null; isBlocked?: boolean; multiBranch?: boolean }) {
   const pathname = usePathname();
   const [operacionesOpen, setOperacionesOpen] = useState(false);
-  const operacionesRef = useRef<HTMLDivElement>(null);
 
   const effectivePlan = !tenantPlan || tenantPlan === 'free' ? 'starter' : tenantPlan;
 
@@ -161,35 +161,35 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch }
             />
           </button>
           <div
-            ref={operacionesRef}
             className={cn(
-              'overflow-hidden transition-all duration-200',
-              operacionesOpen ? 'opacity-100' : 'opacity-0'
+              'grid transition-all duration-200',
+              operacionesOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
             )}
-            style={{ maxHeight: operacionesOpen ? `${operacionesRef.current?.scrollHeight ?? 200}px` : '0px' }}
           >
-            <div className="ml-4 mt-1 space-y-1 border-l border-gray-700 pl-3">
-              {visibleOperaciones.map((item) => (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  prefetch={false}
-                  onClick={onNavClick}
-                  className={cn(
-                    'flex items-center justify-between rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-                    pathname === item.href
-                      ? 'bg-gray-800 text-white'
-                      : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-                  )}
-                >
-                  <span>{item.name}</span>
-                  {item.badge && (
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-800/40">
-                      {item.badge}
-                    </span>
-                  )}
-                </Link>
-              ))}
+            <div className="overflow-hidden min-h-0">
+              <div className="ml-4 mt-1 space-y-1 border-l border-gray-700 pl-3">
+                {visibleOperaciones.map((item) => (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    prefetch={false}
+                    onClick={onNavClick}
+                    className={cn(
+                      'flex items-center justify-between rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                      pathname === item.href
+                        ? 'bg-gray-800 text-white'
+                        : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                    )}
+                  >
+                    <span>{item.name}</span>
+                    {item.badge && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-800/40">
+                        {item.badge}
+                      </span>
+                    )}
+                  </Link>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -400,7 +400,7 @@ export function Sidebar() {
               ) : (
                 <div className="px-3 py-2 text-xs text-gray-500">
                   Límite de {maxBranches} sucursal{maxBranches !== 1 ? 'es' : ''} alcanzado para tu plan ({currentPlan}).
-                  <a href="/billing" className="text-blue-400 hover:text-blue-300 ml-1">Mejorar plan</a>
+                  <Link href="/billing" className="text-blue-400 hover:text-blue-300 ml-1">Mejorar plan</Link>
                 </div>
               )}
             </div>
@@ -512,7 +512,7 @@ export function Sidebar() {
   );
 }
 
-function TrialCounter({ tenant }: { tenant: any }) {
+function TrialCounter({ tenant }: { tenant: TenantInfo | null }) {
   if (!tenant || !tenant.created_at) return null;
   const plan = tenant.subscription_plan || 'starter';
   if (plan !== 'starter') return null;

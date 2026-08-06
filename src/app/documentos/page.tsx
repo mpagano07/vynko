@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,6 @@ import {
   Printer,
   Package,
   X,
-  Truck,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import type {
@@ -169,6 +168,8 @@ export default function DocumentosPage() {
     const docType = params.get('type') as DocumentType | null;
 
     if (docType && Object.keys(DOCUMENT_TYPE_LABELS).includes(docType)) {
+      // Inicialización única desde la URL (no se puede usar lazy init por SSR)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTypeFilter(docType);
     }
 
@@ -199,18 +200,6 @@ export default function DocumentosPage() {
       window.history.replaceState({}, '', url.toString());
     }
   }, []);
-
-  useEffect(() => {
-    if (!autoReceiveId) return;
-    if (typeFilter !== 'orden_compra') {
-      setTypeFilter('orden_compra');
-      return;
-    }
-    const order = purchaseOrders.find(o => o.id === autoReceiveId);
-    if (!order) return;
-    handleReceiveOrder(order.id);
-    setAutoReceiveId(null);
-  }, [autoReceiveId, purchaseOrders, typeFilter]);
 
   const filteredDocuments = useMemo(() => {
     return documents.filter(doc => {
@@ -545,7 +534,7 @@ export default function DocumentosPage() {
     }
   };
 
-  const handleReceiveOrder = (id: string) => {
+  const handleReceiveOrder = useCallback((id: string) => {
     const order = purchaseOrders.find(o => o.id === id);
     if (!order) return;
     setReceiveOrderId(id);
@@ -568,7 +557,17 @@ export default function DocumentosPage() {
       })
     );
     setIsReceiveModalOpen(true);
-  };
+  }, [purchaseOrders]);
+
+  useEffect(() => {
+    if (!autoReceiveId) return;
+    const order = purchaseOrders.find(o => o.id === autoReceiveId);
+    if (!order) return;
+    // Abre el modal cuando llega el pedido desde el dashboard (param receive=)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    handleReceiveOrder(order.id);
+    setAutoReceiveId(null);
+  }, [autoReceiveId, purchaseOrders, handleReceiveOrder]);
 
   const handleCancelOrder = (id: string) => {
     setConfirmModal({

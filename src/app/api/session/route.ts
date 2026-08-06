@@ -34,7 +34,7 @@ export async function GET(request: Request) {
 
     const activeTenantId = request.headers.get('x-active-tenant-id');
 
-    let tenants: any[] = [];
+    let tenants: Record<string, unknown>[] = [];
     let tenant = null;
     let role = null;
 

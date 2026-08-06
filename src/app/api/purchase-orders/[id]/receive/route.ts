@@ -38,7 +38,7 @@ export async function POST(
       return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 });
     }
 
-    const supplier = (order as any).supplier as Record<string, unknown> | undefined;
+    const supplier = order.supplier as Record<string, unknown> | undefined;
     const supplierName = supplier?.name as string || 'Proveedor';
 
     const { data: seqResult } = await supabaseAdmin
@@ -141,7 +141,6 @@ export async function POST(
     let allFullyReceived = true;
 
     for (const item of (poItems as Record<string, unknown>[])) {
-      const product = item.product as Record<string, unknown> | undefined;
       const productId = item.product_id as string;
       const orderedQty = Number(item.quantity_ordered) || 0;
       const currentQtyReceived = Number(item.quantity_received) || 0;
@@ -164,7 +163,7 @@ export async function POST(
           .eq('tenant_id', auth.tenantId)
           .maybeSingle();
 
-        const currentStock = (stockRow as any)?.stock ?? 0;
+        const currentStock = Number((stockRow as Record<string, unknown> | null)?.stock) || 0;
 
         const stockUpdate: Record<string, unknown> = {
           product_id: productId,

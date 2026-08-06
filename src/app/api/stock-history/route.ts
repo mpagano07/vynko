@@ -37,14 +37,14 @@ export async function GET(request: NextRequest) {
   }
 
   // Fetch profile names separately (no FK between stock_history and profiles)
-  const userIds = [...new Set((data || []).map((r: any) => r.created_by))];
+  const userIds = [...new Set((data || []).map((r) => r.created_by))];
   const { data: profiles } = await supabaseAdmin
     .from('profiles')
     .select('id, full_name')
     .in('id', userIds);
-  const profileMap = new Map((profiles || []).map((p: any) => [p.id, p.full_name]));
+  const profileMap = new Map((profiles || []).map((p) => [p.id, p.full_name]));
 
-  const formatted = (data || []).map((r: any) => ({
+  const formatted = (data || []).map((r) => ({
     id: r.id,
     productId: r.product_id,
     productName: r.product?.name || 'Producto',

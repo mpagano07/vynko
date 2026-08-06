@@ -45,9 +45,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         .select('*, product:products(id, name)')
         .eq('purchase_order_id', id);
 
-      const supplierName = (order as any)?.provider_id || 'proveedor';
-
-      let productNames: string[] = [];
+      const productNames: string[] = [];
       for (const item of (items as Record<string, unknown>[] | undefined) ?? []) {
         const product = item.product as Record<string, unknown> | undefined;
         const qty = Number(item.quantity_ordered) || 0;
@@ -62,7 +60,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             .eq('tenant_id', auth.tenantId)
             .maybeSingle();
 
-          const currentStock = (stockRow as any)?.stock ?? 0;
+          const currentStock = Number((stockRow as Record<string, unknown> | null)?.stock) || 0;
 
           await supabaseAdmin
             .from('product_stock')

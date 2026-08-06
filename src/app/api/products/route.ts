@@ -30,7 +30,7 @@ export async function GET(request: Request) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  const products = (data as any[])?.map((p: any) => ({
+  const products = data?.map((p) => ({
     ...p,
     stock: p.stock_data?.[0]?.stock ?? 0,
     min_stock: p.stock_data?.[0]?.min_stock ?? 0,
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
 
   const body = await request.json();
   const allowedFields = ['category_id', 'sku', 'barcode', 'name', 'description', 'cost', 'image_url', 'metadata'];
-  const insertData: Record<string, any> = {};
+  const insertData: Record<string, unknown> = {};
   if (body.price !== undefined) insertData.price_cents = Math.round(body.price * 100);
   for (const key of allowedFields) {
     if (body[key] !== undefined) insertData[key] = body[key];
@@ -113,5 +113,5 @@ export async function POST(request: Request) {
       details: { name: created.name, sku: created.sku },
     });
   }
-  return NextResponse.json(created ? { ...created, price: (created as any).price_cents != null ? (created as any).price_cents / 100 : 0, stock: body.stock ?? 0, min_stock: body.min_stock ?? 0, max_stock: body.max_stock ?? 0 } : null, { status: 201 });
+  return NextResponse.json(created ? { ...created, price: created.price_cents != null ? created.price_cents / 100 : 0, stock: body.stock ?? 0, min_stock: body.min_stock ?? 0, max_stock: body.max_stock ?? 0 } : null, { status: 201 });
 }

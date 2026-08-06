@@ -17,7 +17,7 @@ export async function PATCH(
       'category_id', 'sku', 'barcode', 'name', 'description',
       'cost', 'image_url', 'metadata',
     ];
-    const updateData: Record<string, any> = {};
+    const updateData: Record<string, unknown> = {};
     if (body.price !== undefined) updateData.price_cents = Math.round(body.price * 100);
     for (const key of allowedFields) {
       if (body[key] !== undefined) updateData[key] = body[key];
@@ -39,7 +39,7 @@ export async function PATCH(
     }
 
     if (data && (body.stock !== undefined || body.min_stock !== undefined || body.max_stock !== undefined || body.deposito !== undefined || body.pasillo !== undefined || body.estanteria !== undefined)) {
-      const stockUpdate: Record<string, any> = { updated_at: new Date().toISOString() };
+      const stockUpdate: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (body.stock !== undefined) stockUpdate.stock = body.stock;
       if (body.min_stock !== undefined) stockUpdate.min_stock = body.min_stock;
       if (body.max_stock !== undefined) stockUpdate.max_stock = body.max_stock;
@@ -78,13 +78,13 @@ export async function PATCH(
 
     return NextResponse.json({
       ...data,
-      price: (data as any).price_cents != null ? (data as any).price_cents / 100 : 0,
-      stock: (stockData?.data as any)?.stock ?? 0,
-      min_stock: (stockData?.data as any)?.min_stock ?? 0,
-      max_stock: (stockData?.data as any)?.max_stock ?? 0,
-      deposito: (stockData?.data as any)?.deposito ?? null,
-      pasillo: (stockData?.data as any)?.pasillo ?? null,
-      estanteria: (stockData?.data as any)?.estanteria ?? null,
+      price: data.price_cents != null ? data.price_cents / 100 : 0,
+      stock: stockData?.data?.stock ?? 0,
+      min_stock: stockData?.data?.min_stock ?? 0,
+      max_stock: stockData?.data?.max_stock ?? 0,
+      deposito: stockData?.data?.deposito ?? null,
+      pasillo: stockData?.data?.pasillo ?? null,
+      estanteria: stockData?.data?.estanteria ?? null,
     });
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
@@ -113,7 +113,7 @@ export async function DELETE(
     userId: auth.userId,
     action: 'deleted',
     entityType: 'product',
-    details: { name: (deleted as any).name },
+    details: { name: deleted.name },
   });
 
   return NextResponse.json({ success: true });

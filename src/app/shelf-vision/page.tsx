@@ -21,6 +21,14 @@ interface AnalysisResult {
   suggestedActions: string[];
 }
 
+interface MatchedProduct {
+  productName: string;
+  estimatedQuantity: number;
+  confidence: string;
+  matchFound?: boolean;
+  actualProduct?: { stock: number; minStock: number };
+}
+
 export default function ShelfVisionPage() {
   const router = useRouter();
   const { tenant, loading: authLoading } = useAuth();
@@ -29,7 +37,7 @@ export default function ShelfVisionPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<{
     analysis: AnalysisResult;
-    matchedProducts: any[];
+    matchedProducts: MatchedProduct[];
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -120,8 +128,8 @@ export default function ShelfVisionPage() {
       if (!analyzeRes.ok) throw new Error(analyzeData.error || 'Error al analizar');
 
       setResult(analyzeData);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error');
     } finally {
       setAnalyzing(false);
     }
@@ -176,6 +184,7 @@ export default function ShelfVisionPage() {
           ) : (
             <div>
               <div className="relative w-full max-h-80 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 mb-4">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={imageUrl} alt="Shelf" className="w-full object-contain max-h-80" />
                 <button onClick={reset} className="absolute top-2 right-2 p-1.5 bg-black/50 rounded-full text-white hover:bg-black/70">
                   <X className="h-4 w-4" />
@@ -244,7 +253,7 @@ export default function ShelfVisionPage() {
                 <h2 className="text-lg font-bold text-gray-900 dark:text-white">Productos detectados vs. inventario</h2>
               </div>
               <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                {result.matchedProducts.map((item: any, i: number) => (
+                {result.matchedProducts.map((item, i) => (
                   <div key={i} className="flex items-center gap-4 px-6 py-3.5 text-sm">
                     {item.matchFound ? (
                       <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0" />
@@ -265,7 +274,7 @@ export default function ShelfVisionPage() {
                         </p>
                       )}
                     </div>
-                    {item.matchFound && (
+                    {item.matchFound && item.actualProduct && (
                       <div className={`text-xs font-semibold px-2 py-1 rounded ${
                         Math.abs(item.estimatedQuantity - item.actualProduct.stock) <= 2
                           ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'

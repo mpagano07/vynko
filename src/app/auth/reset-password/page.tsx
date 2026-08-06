@@ -26,6 +26,7 @@ function ResetPasswordContent() {
     }
 
     if (tokenParam) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setToken(tokenParam);
       fetch('/api/auth/verify-reset-token', {
         method: 'POST',

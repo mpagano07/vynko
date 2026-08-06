@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No hay productos' }, { status: 404 });
   }
 
-  const updates = products.map((p: any) => ({
+  const updates = products.map((p) => ({
     id: p.id,
     name: p.name,
     old_price_cents: p.price_cents,
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
   const errors: { id: string; name: string; error: string }[] = [];
 
   for (const update of updates) {
-    const updateData: Record<string, any> = {
+    const updateData: Record<string, unknown> = {
       price_cents: update.new_price_cents,
       updated_at: new Date().toISOString(),
     };

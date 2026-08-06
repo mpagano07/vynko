@@ -114,7 +114,7 @@ export async function POST(request: Request) {
       .in('product_id', productIds)
       .eq('tenant_id', auth.tenantId);
 
-    const stockMap = new Map((stockRows ?? []).map((s: any) => [s.product_id, s.stock ?? 0]));
+    const stockMap = new Map((stockRows ?? []).map((s) => [s.product_id, s.stock ?? 0]));
 
     type ProductRow = { id: string; name: string; price: number; price_cents?: number };
     const productMap = new Map((products ?? []).map((p) => [p.id, p as unknown as ProductRow]));

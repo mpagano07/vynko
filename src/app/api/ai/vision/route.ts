@@ -40,14 +40,20 @@ export async function POST(request: Request) {
     supabaseAdmin.from('categories').select('id, name'),
   ]);
 
-  const stockMap = new Map((stockData.data || []).map((s: any) => [s.product_id, s]));
-  const productsWithStock = (productsData.data || []).map((p: any) => {
-    const s = stockMap.get(p.id) || { stock: 0, min_stock: 0 };
-    return { ...p, stock: s.stock, min_stock: s.min_stock };
+  const stockMap = new Map<string, Record<string, unknown>>(
+    ((stockData.data as unknown[] | null) ?? []).map((row) => {
+      const s = row as Record<string, unknown>;
+      return [String(s.product_id), s];
+    })
+  );
+  const productsWithStock: Array<{ name: string; stock: number; min_stock: number }> = ((productsData.data as unknown[] | null) ?? []).map((row) => {
+    const p = row as Record<string, unknown>;
+    const s = stockMap.get(String(p.id)) || {};
+    return { name: String(p.name ?? ''), stock: Number(s.stock) || 0, min_stock: Number(s.min_stock) || 0 };
   });
 
-  const productNames = productsWithStock.map((p: any) => p.name).join(', ');
-  const categoryNames = (categoriesData.data || []).map((c: any) => c.name).join(', ');
+  const productNames = productsWithStock.map((p) => String(p.name ?? '')).join(', ');
+  const categoryNames = ((categoriesData.data as unknown[] | null) ?? []).map((c) => String((c as Record<string, unknown>).name ?? '')).join(', ');
 
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
@@ -83,16 +89,25 @@ Si no se ve una góndola o productos en la imagen, devolvé un JSON con descript
       parsed = { description: reply, estimatedStock: [], observations: [], suggestedActions: [] };
     }
 
-    const matched: any[] = [];
+    const matched: Array<{
+      productName: string;
+      estimatedQuantity: number;
+      confidence: string;
+      actualProduct: { name: string; stock: number; minStock: number } | null;
+      matchFound: boolean;
+    }> = [];
     if (parsed.estimatedStock && productsWithStock.length) {
       for (const est of parsed.estimatedStock) {
         const actual = productsWithStock.find(
-          (p) => p.name.toLowerCase().includes(est.productName.toLowerCase()) ||
-                 est.productName.toLowerCase().includes(p.name.toLowerCase())
+          (p) => {
+            const name = String(p.name ?? '');
+            return name.toLowerCase().includes(est.productName.toLowerCase()) ||
+                   est.productName.toLowerCase().includes(name.toLowerCase());
+          }
         );
         matched.push({
           ...est,
-          actualProduct: actual ? { name: actual.name, stock: actual.stock, minStock: actual.min_stock } : null,
+          actualProduct: actual ? { name: String(actual.name ?? ''), stock: Number(actual.stock) || 0, minStock: Number(actual.min_stock) || 0 } : null,
           matchFound: !!actual,
         });
       }

@@ -12,17 +12,23 @@ async function getTenantContext(tenantId: string) {
     supabaseAdmin.from('sales').select('total_cents, created_at').eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(10),
   ]);
 
-  const stockMap = new Map((stockData.data || []).map((s: any) => [s.product_id, s]));
+  const stockMap = new Map<string, Record<string, unknown>>(
+    ((stockData.data as unknown[] | null) ?? []).map((row) => {
+      const s = row as Record<string, unknown>;
+      return [String(s.product_id), s];
+    })
+  );
 
-  const productList = (products.data || []).map((p: any) => {
-    const s = stockMap.get(p.id) || { stock: 0, min_stock: 0, max_stock: 0 };
+  const productList = ((products.data as unknown[] | null) ?? []).map((row) => {
+    const p = row as Record<string, unknown>;
+    const s = stockMap.get(String(p.id)) || {};
     return {
-      name: p.name,
-      stock: s.stock,
-      min_stock: s.min_stock,
-      max_stock: s.max_stock,
-      price: p.price_cents ? p.price_cents / 100 : 0,
-      cost: p.cost || 0,
+      name: String(p.name ?? ''),
+      stock: Number(s.stock) || 0,
+      min_stock: Number(s.min_stock) || 0,
+      max_stock: Number(s.max_stock) || 0,
+      price: p.price_cents ? Number(p.price_cents) / 100 : 0,
+      cost: Number(p.cost) || 0,
     };
   });
 
@@ -30,11 +36,14 @@ async function getTenantContext(tenantId: string) {
     productCount: productList.length,
     products: productList,
     categoryCount: categories.data?.length || 0,
-    recentSales: (recentSales.data || []).map((s: any) => ({
-      total: s.total_cents ? s.total_cents / 100 : 0,
-      date: s.created_at,
-    })),
-    lowStockCount: productList.filter((p: any) => (p.stock ?? 0) <= (p.min_stock ?? 0)).length,
+    recentSales: ((recentSales.data as unknown[] | null) ?? []).map((row) => {
+      const s = row as Record<string, unknown>;
+      return {
+        total: s.total_cents ? Number(s.total_cents) / 100 : 0,
+        date: String(s.created_at ?? ''),
+      };
+    }),
+    lowStockCount: productList.filter((p) => (p.stock ?? 0) <= (p.min_stock ?? 0)).length,
   };
 }
 

@@ -25,13 +25,20 @@ import { formatARS } from '@/lib/utils/currency';
 import { PLAN_LIMITS } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 
+interface ActivityDetails {
+  name?: string;
+  folio?: string;
+  sku?: string;
+  [key: string]: unknown;
+}
+
 interface ActivityLog {
   id: string;
   user_name: string;
   action: string;
   entity_type: string;
   entity_id: string | null;
-  details: Record<string, any>;
+  details?: ActivityDetails;
   created_at: string;
 }
 
@@ -184,6 +191,7 @@ function TransfersHistoryTab() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchTransfers();
   }, [fetchTransfers]);
 
@@ -576,7 +584,7 @@ export default function ActivityLogsPage() {
   }, [entityFilter, page]);
 
   useEffect(() => {
-    setLoading(true);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchLogs().finally(() => setLoading(false));
   }, [fetchLogs]);
 

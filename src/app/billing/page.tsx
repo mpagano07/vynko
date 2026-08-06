@@ -8,7 +8,7 @@ import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { PLANS, PLAN_ORDER } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import { formatARS } from '@/lib/utils/currency';
-import { CreditCard, CheckCircle2, XCircle, Loader2, Zap, ArrowRight, AlertTriangle } from 'lucide-react';
+import { CreditCard, CheckCircle2, XCircle, Loader2, ArrowRight, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -87,9 +87,9 @@ function BillingContent() {
       });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error || 'Error'); return; }
-      if (data.url) window.location.href = data.url;
-    } catch (err: any) {
-      toast.error(err.message);
+      if (data.url) window.location.assign(data.url);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
     } finally {
       setCheckoutLoading(null);
     }
@@ -114,15 +114,15 @@ function BillingContent() {
 
       if (data.url) {
         toast.success(`Tu plan es ${PLANS[pendingDowngrade as PlanId].name}. Completá el pago para activar tu suscripción.`);
-        window.location.href = data.url;
+        window.location.assign(data.url);
         return;
       }
 
       toast.success(`Cambiaste al plan ${PLANS[pendingDowngrade as PlanId].name}`);
       const statusRes = await fetch('/api/billing/status', { headers });
       if (statusRes.ok) setSubscription(await statusRes.json());
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
     } finally {
       setDowngrading(false);
     }
@@ -140,8 +140,8 @@ function BillingContent() {
       if (!res.ok) { toast.error(data.error || 'Error'); return; }
       toast.success('Suscripción cancelada');
       setSubscription(null);
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
     } finally {
       setCancelling(false);
       setShowCancelModal(false);

@@ -74,6 +74,7 @@ export default function ProvidersPage() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('create_po') === '1') {
       const supplierId = params.get('supplier_id');
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (supplierId) setPoSupplierId(supplierId);
       setIsPoModalOpen(true);
       const url = new URL(window.location.href);

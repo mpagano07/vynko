@@ -76,7 +76,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     userId: auth.userId,
     action: 'deleted',
     entityType: 'supplier',
-    details: { name: (deleted as any).name },
+    details: { name: deleted.name },
   });
 
   return NextResponse.json({ success: true });

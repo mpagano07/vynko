@@ -346,13 +346,13 @@ export function TransferInbox({ currentTenantId, trigger = 0, onAction }: Transf
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchTransfers = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
-    else setRefreshing(true);
-
     try {
       const {
         data: { session },
       } = await supabase.auth.getSession();
+
+      if (silent) setRefreshing(true);
+
       const token = session?.access_token;
 
       const res = await fetch('/api/stock-transfers?status=pending', {
@@ -385,7 +385,16 @@ export function TransferInbox({ currentTenantId, trigger = 0, onAction }: Transf
   }, []);
 
   useEffect(() => {
-    fetchTransfers();
+    let cancelled = false;
+    const load = async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      fetchTransfers();
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, [fetchTransfers, trigger]);
 
   if (loading) {

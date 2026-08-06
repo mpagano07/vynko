@@ -150,6 +150,7 @@ export default function SalesPage() {
     });
 
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
   const filteredProducts = products.filter(

@@ -43,7 +43,7 @@ export async function POST(request: Request) {
       transaction_amount: planConfig.price,
       currency_id: 'ARS',
       trial_period_days: planConfig.id === 'starter' ? 45 : 0,
-    } as any,
+    },
   });
 
   await supabaseAdmin
