@@ -14,9 +14,11 @@ export async function POST(
 
   try {
     const body = await request.json();
-    const { received_date, warehouse, notes, items } = body as {
+    const { received_date, deposito, pasillo, estanteria, notes, items } = body as {
       received_date?: string;
-      warehouse?: string;
+      deposito?: string;
+      pasillo?: string;
+      estanteria?: string;
       notes?: string;
       items: { product_id: string; quantity_received: number }[];
     };
@@ -164,14 +166,19 @@ export async function POST(
 
         const currentStock = (stockRow as any)?.stock ?? 0;
 
+        const stockUpdate: Record<string, unknown> = {
+          product_id: productId,
+          tenant_id: auth.tenantId,
+          stock: currentStock + qtyReceivingNow,
+          updated_at: new Date().toISOString(),
+        };
+        if (deposito !== undefined) stockUpdate.deposito = deposito;
+        if (pasillo !== undefined) stockUpdate.pasillo = pasillo;
+        if (estanteria !== undefined) stockUpdate.estanteria = estanteria;
+
         await supabaseAdmin
           .from('product_stock')
-          .upsert({
-            product_id: productId,
-            tenant_id: auth.tenantId,
-            stock: currentStock + qtyReceivingNow,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'product_id,tenant_id' });
+          .upsert(stockUpdate, { onConflict: 'product_id,tenant_id' });
 
         await supabaseAdmin
           .from('stock_history')

@@ -38,11 +38,14 @@ export async function PATCH(
       return NextResponse.json({ error: 'Producto no encontrado o sin permisos' }, { status: 403 });
     }
 
-    if (data && (body.stock !== undefined || body.min_stock !== undefined || body.max_stock !== undefined)) {
+    if (data && (body.stock !== undefined || body.min_stock !== undefined || body.max_stock !== undefined || body.deposito !== undefined || body.pasillo !== undefined || body.estanteria !== undefined)) {
       const stockUpdate: Record<string, any> = { updated_at: new Date().toISOString() };
       if (body.stock !== undefined) stockUpdate.stock = body.stock;
       if (body.min_stock !== undefined) stockUpdate.min_stock = body.min_stock;
       if (body.max_stock !== undefined) stockUpdate.max_stock = body.max_stock;
+      if (body.deposito !== undefined) stockUpdate.deposito = body.deposito;
+      if (body.pasillo !== undefined) stockUpdate.pasillo = body.pasillo;
+      if (body.estanteria !== undefined) stockUpdate.estanteria = body.estanteria;
 
       const { error: stockError } = await supabaseAdmin
         .from('product_stock')
@@ -68,7 +71,7 @@ export async function PATCH(
 
     const stockData = data ? await supabaseAdmin
       .from('product_stock')
-      .select('stock, min_stock, max_stock')
+      .select('stock, min_stock, max_stock, deposito, pasillo, estanteria')
       .eq('product_id', id)
       .eq('tenant_id', auth.tenantId)
       .maybeSingle() : null;
@@ -79,6 +82,9 @@ export async function PATCH(
       stock: (stockData?.data as any)?.stock ?? 0,
       min_stock: (stockData?.data as any)?.min_stock ?? 0,
       max_stock: (stockData?.data as any)?.max_stock ?? 0,
+      deposito: (stockData?.data as any)?.deposito ?? null,
+      pasillo: (stockData?.data as any)?.pasillo ?? null,
+      estanteria: (stockData?.data as any)?.estanteria ?? null,
     });
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });

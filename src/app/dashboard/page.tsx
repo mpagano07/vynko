@@ -38,10 +38,29 @@ interface PerTenantData {
   criticalCount: number;
 }
 
+interface PendingOrderItem {
+  product_id: string | null;
+  product_name: string;
+  quantity_ordered: number;
+  quantity_received: number;
+  quantity_pending: number;
+}
+
+interface PendingOrder {
+  id: string;
+  status: string;
+  expected_date: string | null;
+  created_at: string;
+  supplier_name: string;
+  tenant_name?: string;
+  items: PendingOrderItem[];
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const { profile, tenant, tenants, allTenants, loading: authLoading, isAuthenticated } = useAuth();
   const [criticalProducts, setCriticalProducts] = useState<{ id: string; name: string; stock: number; min_stock: number }[]>([]);
+  const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [salesData, setSalesData] = useState<{ todayTotal: number; saleCount: number } | null>(null);
   const [monthlyData, setMonthlyData] = useState<MonthlyData | null>(null);
@@ -74,18 +93,21 @@ export default function DashboardPage() {
           let allMonthCount = 0;
           let allPrevTotal = 0;
           let allCritical: { id: string; name: string; stock: number; min_stock: number }[] = [];
+          let allPending: PendingOrder[] = [];
 
           for (const t of tenants) {
-            const [sales, monthly, critical] = await Promise.all([
+            const [sales, monthly, critical, pending] = await Promise.all([
               fetchWithTenant(`/api/sales?today=true&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, t.id),
               fetchWithTenant('/api/sales/monthly', t.id),
               fetchWithTenant('/api/products/critical', t.id),
+              fetchWithTenant('/api/purchase-orders/pending', t.id),
             ]);
 
             const todayTotal = (sales as any[] || []).reduce((sum: number, s: any) => sum + ((s.total_cents as number) || 0), 0);
             const saleCount = (sales as any[] || []).length;
             const md = monthly as MonthlyData | null;
             const cp = (critical as any[] || []);
+            const po = (pending as PendingOrder[] || []);
 
             allSalesTotal += todayTotal;
             allSalesCount += saleCount;
@@ -93,6 +115,7 @@ export default function DashboardPage() {
             allMonthCount += md?.saleCount || 0;
             allPrevTotal += md?.prevTotal || 0;
             allCritical = [...allCritical, ...cp];
+            allPending = [...allPending, ...po.map((o) => ({ ...o, tenant_name: t.name }))];
 
             results[t.id] = {
               todayTotal,
@@ -118,6 +141,7 @@ export default function DashboardPage() {
                 avgTicket: allMonthCount > 0 ? allMonthTotal / allMonthCount : 0,
               });
               setCriticalProducts(allCritical);
+              setPendingOrders(allPending);
               setProductsLoading(false);
             });
           }
@@ -126,10 +150,11 @@ export default function DashboardPage() {
           const headers: Record<string, string> = {};
           if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
 
-          const [salesRes, monthlyRes, criticalRes] = await Promise.all([
+          const [salesRes, monthlyRes, criticalRes, pendingRes] = await Promise.all([
             fetch(`/api/sales?today=true&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, { headers }),
             fetch('/api/sales/monthly', { headers }),
             fetch('/api/products/critical', { headers }),
+            fetch('/api/purchase-orders/pending', { headers }),
           ]);
 
           if (cancelled) return;
@@ -150,6 +175,10 @@ export default function DashboardPage() {
           if (criticalRes.ok) {
             const cp = await criticalRes.json();
             startTransition(() => setCriticalProducts(cp));
+          }
+          if (pendingRes.ok) {
+            const po = await pendingRes.json();
+            startTransition(() => setPendingOrders(po));
           }
           if (!cancelled) startTransition(() => setProductsLoading(false));
         }
@@ -365,7 +394,7 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      <StockAndActivity criticalProducts={criticalProducts} tenantId={tenant?.id ?? ''} allTenants={allTenants} />
+      <StockAndActivity criticalProducts={criticalProducts} pendingOrders={pendingOrders} tenantId={tenant?.id ?? ''} allTenants={allTenants} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2">

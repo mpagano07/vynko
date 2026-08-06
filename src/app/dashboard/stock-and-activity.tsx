@@ -46,12 +46,36 @@ interface CriticalProduct {
   min_stock: number;
 }
 
+interface PendingOrderItem {
+  product_id: string | null;
+  product_name: string;
+  quantity_ordered: number;
+  quantity_received: number;
+  quantity_pending: number;
+}
+
+interface PendingOrder {
+  id: string;
+  status: string;
+  expected_date: string | null;
+  created_at: string;
+  supplier_name: string;
+  tenant_name?: string;
+  items: PendingOrderItem[];
+}
+
+function formatShortDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+}
+
 export default function StockAndActivity({
   criticalProducts,
+  pendingOrders,
   tenantId,
   allTenants,
 }: {
   criticalProducts: CriticalProduct[];
+  pendingOrders: PendingOrder[];
   tenantId: string;
   allTenants?: boolean;
 }) {
@@ -103,6 +127,50 @@ export default function StockAndActivity({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
       <div className="lg:col-span-2">
+        {pendingOrders.length > 0 && (
+          <div className="mb-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-medium text-gray-900 dark:text-white">Por recibir</h2>
+              {pendingOrders.length > 3 && (
+                <span className="text-xs text-indigo-600 dark:text-indigo-400">Ver todas →</span>
+              )}
+            </div>
+            <div className="space-y-2">
+              {pendingOrders.slice(0, 3).map((order) => {
+                const totalPending = order.items.reduce((s, i) => s + i.quantity_pending, 0);
+                const productList = order.items.slice(0, 3).map(i => i.product_name).join(', ');
+                return (
+                  <Card key={order.id} className="p-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-2 h-2 rounded-full flex-shrink-0 bg-sky-500" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                          {order.supplier_name}
+                          {allTenants && order.tenant_name && (
+                            <span className="text-[11px] font-normal text-gray-400 ml-1">· {order.tenant_name}</span>
+                          )}
+                        </p>
+                        <p className="text-[11px] text-gray-400">
+                          {order.items.length} producto{order.items.length !== 1 ? 's' : ''} · {totalPending} u. por recibir
+                          {order.expected_date && <> · Llega {formatShortDate(order.expected_date)}</>}
+                        </p>
+                        <p className="text-[11px] text-gray-400 truncate">{productList}</p>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="h-7 px-2.5 text-xs flex-shrink-0 ml-3 bg-sky-600 hover:bg-sky-700 text-white"
+                      onClick={() => router.push(`/documentos?type=orden_compra&selected=${order.id}&receive=${order.id}`)}
+                    >
+                      Recibir
+                    </Button>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-medium text-gray-900 dark:text-white">Alertas de stock</h2>
           {criticalCount > 5 && (

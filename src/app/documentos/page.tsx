@@ -117,10 +117,13 @@ export default function DocumentosPage() {
   const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false);
   const [receiveOrderId, setReceiveOrderId] = useState<string | null>(null);
   const [receiveDate, setReceiveDate] = useState(new Date().toISOString().split('T')[0]);
-  const [receiveWarehouse, setReceiveWarehouse] = useState('');
+  const [receiveDeposito, setReceiveDeposito] = useState('');
+  const [receivePasillo, setReceivePasillo] = useState('');
+  const [receiveEstanteria, setReceiveEstanteria] = useState('');
   const [receiveNotes, setReceiveNotes] = useState('');
   const [receiveItems, setReceiveItems] = useState<{ product_id: string; product_name: string; quantity_ordered: number; already_received: number; quantity_received: number }[]>([]);
   const [isSubmittingReceive, setIsSubmittingReceive] = useState(false);
+  const [autoReceiveId, setAutoReceiveId] = useState<string | null>(null);
 
   useEffect(() => {
     searchInputRef.current?.focus();
@@ -177,13 +180,37 @@ export default function DocumentosPage() {
       });
     }
 
-    if (selectedId || docType) {
+    const receiveId = params.get('receive');
+    if (receiveId) {
+      setAutoReceiveId(receiveId);
+      setTypeFilter('orden_compra');
+      setExpandedRows(prev => {
+        const next = new Set(prev);
+        next.add(receiveId);
+        return next;
+      });
+    }
+
+    if (selectedId || docType || receiveId) {
       const url = new URL(window.location.href);
       url.searchParams.delete('selected');
       url.searchParams.delete('type');
+      url.searchParams.delete('receive');
       window.history.replaceState({}, '', url.toString());
     }
   }, []);
+
+  useEffect(() => {
+    if (!autoReceiveId) return;
+    if (typeFilter !== 'orden_compra') {
+      setTypeFilter('orden_compra');
+      return;
+    }
+    const order = purchaseOrders.find(o => o.id === autoReceiveId);
+    if (!order) return;
+    handleReceiveOrder(order.id);
+    setAutoReceiveId(null);
+  }, [autoReceiveId, purchaseOrders, typeFilter]);
 
   const filteredDocuments = useMemo(() => {
     return documents.filter(doc => {
@@ -523,7 +550,9 @@ export default function DocumentosPage() {
     if (!order) return;
     setReceiveOrderId(id);
     setReceiveDate(new Date().toISOString().split('T')[0]);
-    setReceiveWarehouse('');
+    setReceiveDeposito('');
+    setReceivePasillo('');
+    setReceiveEstanteria('');
     setReceiveNotes('');
     setReceiveItems(
       order.items.map(item => {
@@ -595,7 +624,9 @@ export default function DocumentosPage() {
         headers,
         body: JSON.stringify({
           received_date: receiveDate,
-          warehouse: receiveWarehouse || undefined,
+          deposito: receiveDeposito || undefined,
+          pasillo: receivePasillo || undefined,
+          estanteria: receiveEstanteria || undefined,
           notes: receiveNotes || undefined,
           items: receiveItems.map(i => ({
             product_id: i.product_id,
@@ -1771,14 +1802,43 @@ export default function DocumentosPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                  Depósito
+                  Ubicación en depósito
                 </label>
-                <Input
-                  type="text"
-                  placeholder="Depósito o ubicación"
-                  value={receiveWarehouse}
-                  onChange={(e) => setReceiveWarehouse(e.target.value)}
-                />
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Depósito
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder="Ej. A"
+                      value={receiveDeposito}
+                      onChange={(e) => setReceiveDeposito(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Pasillo
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder="Ej. 3"
+                      value={receivePasillo}
+                      onChange={(e) => setReceivePasillo(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Estantería
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder="Ej. 2"
+                      value={receiveEstanteria}
+                      onChange={(e) => setReceiveEstanteria(e.target.value)}
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="border-t border-gray-100 dark:border-gray-800 pt-4">

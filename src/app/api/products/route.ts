@@ -16,7 +16,10 @@ export async function GET(request: Request) {
       stock_data:product_stock!inner(
         stock,
         min_stock,
-        max_stock
+        max_stock,
+        deposito,
+        pasillo,
+        estanteria
       )
     `);
   if (!auth.allTenants) {
@@ -32,6 +35,9 @@ export async function GET(request: Request) {
     stock: p.stock_data?.[0]?.stock ?? 0,
     min_stock: p.stock_data?.[0]?.min_stock ?? 0,
     max_stock: p.stock_data?.[0]?.max_stock ?? 0,
+    deposito: p.stock_data?.[0]?.deposito ?? null,
+    pasillo: p.stock_data?.[0]?.pasillo ?? null,
+    estanteria: p.stock_data?.[0]?.estanteria ?? null,
     stock_data: undefined,
     price: p.price_cents != null ? p.price_cents / 100 : 0,
   })) || [];
@@ -89,6 +95,9 @@ export async function POST(request: Request) {
         stock: body.stock ?? 0,
         min_stock: body.min_stock ?? 0,
         max_stock: body.max_stock ?? 0,
+        deposito: body.deposito ?? null,
+        pasillo: body.pasillo ?? null,
+        estanteria: body.estanteria ?? null,
       });
     if (stockError) {
       await supabaseAdmin.from('products').delete().eq('id', created.id);

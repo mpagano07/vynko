@@ -66,6 +66,9 @@ export default function ProductsPage() {
     stock: 0,
     min_stock: 0,
     max_stock: 0,
+    deposito: '',
+    pasillo: '',
+    estanteria: '',
     description: '',
     image_url: '',
   });
@@ -339,6 +342,9 @@ export default function ProductsPage() {
         stock: product.stock ?? 0,
         min_stock: product.min_stock ?? 0,
         max_stock: product.max_stock ?? 0,
+        deposito: product.deposito || '',
+        pasillo: product.pasillo || '',
+        estanteria: product.estanteria || '',
         description: product.description || '',
         image_url: product.image_url || '',
       });
@@ -355,6 +361,9 @@ export default function ProductsPage() {
         stock: 0,
         min_stock: 5,
         max_stock: 100,
+        deposito: '',
+        pasillo: '',
+        estanteria: '',
         description: '',
         image_url: '',
       });
@@ -653,7 +662,8 @@ export default function ProductsPage() {
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   <th className="py-4 px-6">Producto</th>
-                  <th className="py-4 px-6">Categoría</th>
+                  <th className="py-4 px-3">Categoría</th>
+                  <th className="py-4 px-3">Ubicación</th>
                   <th className="py-4 px-6">SKU / Código</th>
                   <th className="py-4 px-6">Precios (Costo / Venta)</th>
                   <th className="py-4 px-6 text-center">Stock</th>
@@ -688,7 +698,7 @@ export default function ProductsPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="py-4 px-6">
+                      <td className="py-4 px-3">
                         {category ? (
                           <span
                             className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium"
@@ -702,6 +712,17 @@ export default function ProductsPage() {
                           </span>
                         ) : (
                           <span className="text-xs text-gray-400 italic">Sin categoría</span>
+                        )}
+                      </td>
+                      <td className="py-4 px-3">
+                        {product.deposito || product.pasillo || product.estanteria ? (
+                          <div className="text-xs text-gray-700 dark:text-gray-300 leading-tight whitespace-nowrap">
+                            <p>{product.deposito ? <>Dep: {product.deposito}</> : <span className="text-gray-300 dark:text-gray-600">Dep: —</span>}</p>
+                            <p className="mt-0.5">{product.pasillo ? <>Pas: {product.pasillo}</> : <span className="text-gray-300 dark:text-gray-600">Pas: —</span>}</p>
+                            <p className="mt-0.5">{product.estanteria ? <>Est: {product.estanteria}</> : <span className="text-gray-300 dark:text-gray-600">Est: —</span>}</p>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400 italic">—</span>
                         )}
                       </td>
                       <td className="py-4 px-6">
@@ -966,6 +987,47 @@ export default function ProductsPage() {
                       value={productForm.max_stock}
                       onChange={(e) => setProductForm({ ...productForm, max_stock: Number(e.target.value) })}
                     />
+                  </div>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    Ubicación en depósito
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                        Depósito
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder="Ej. A"
+                        value={productForm.deposito}
+                        onChange={(e) => setProductForm({ ...productForm, deposito: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                        Pasillo
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder="Ej. 3"
+                        value={productForm.pasillo}
+                        onChange={(e) => setProductForm({ ...productForm, pasillo: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                        Estantería
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder="Ej. 2"
+                        value={productForm.estanteria}
+                        onChange={(e) => setProductForm({ ...productForm, estanteria: e.target.value })}
+                      />
+                    </div>
                   </div>
                 </div>
 

@@ -13,6 +13,9 @@ export interface Product {
   stock?: number;
   min_stock?: number;
   max_stock?: number;
+  deposito?: string;
+  pasillo?: string;
+  estanteria?: string;
   is_active?: boolean;
   attributes?: Record<string, any>;
   created_at?: string;
