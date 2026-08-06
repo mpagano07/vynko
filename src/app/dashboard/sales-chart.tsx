@@ -23,6 +23,14 @@ export default function SalesChart() {
   const [data, setData] = useState<ChartRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDays, setSelectedDays] = useState(7);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    // Defer chart render until the container has been laid out, otherwise
+    // ResponsiveContainer measures -1 x -1 and recharts logs a warning.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true);
+  }, []);
 
   const fetchData = useCallback(async (days: number) => {
     try {
@@ -68,7 +76,7 @@ export default function SalesChart() {
           ))}
         </div>
       </div>
-      {loading ? (
+      {loading || !mounted ? (
         <div className="h-24 bg-gray-100 dark:bg-gray-800 animate-pulse rounded" />
       ) : data.every(d => d.total === 0) ? (
         <div className="h-24 flex items-center justify-center text-sm text-gray-400">

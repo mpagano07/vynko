@@ -146,6 +146,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const activeFetchRef = useRef<Promise<void> | null>(null);
   const lastFetchedUserIdRef = useRef<string | null>(null);
+  // True once a session has been established through onAuthStateChange. Guards
+  // the initial getSessionWithRetry() against clobbering that session when it
+  // finally resolves (e.g. after timing out on a stale-cookie refresh that the
+  // user already replaced by signing in).
+  const sessionViaEventRef = useRef(false);
 
   const loadProfileAndTenant = useCallback(async () => {
     if (activeFetchRef.current) return activeFetchRef.current;
@@ -254,7 +259,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (lastFetchedUserIdRef.current !== session.user.id) {
             await loadProfileAndTenant();
           }
-        } else {
+        } else if (!sessionViaEventRef.current) {
           setUser(null);
           setProfile(null);
           setTenant(null);
@@ -279,11 +284,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         if (session?.user) {
+          sessionViaEventRef.current = true;
           setUser(session.user);
           if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || lastFetchedUserIdRef.current !== session.user.id) {
             await loadProfileAndTenant();
           }
         } else {
+          sessionViaEventRef.current = false;
           setUser(null);
           setProfile(null);
           setTenant(null);
@@ -306,6 +313,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     await supabase.auth.signOut();
+    sessionViaEventRef.current = false;
     setUser(null);
     setProfile(null);
     setTenant(null);
