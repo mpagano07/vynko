@@ -35,7 +35,6 @@ import {
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import { filterProducts } from '@/lib/product-search';
-import type { StockFilter } from '@/lib/product-search';
 import { TransferInbox } from '@/components/transfers/TransferInbox';
 
 interface PriceAdjustSample {

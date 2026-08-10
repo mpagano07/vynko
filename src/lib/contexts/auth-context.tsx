@@ -362,7 +362,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logoutRef = useRef(logout);
-  logoutRef.current = logout;
+  useEffect(() => {
+    logoutRef.current = logout;
+  });
 
   // Log the user out automatically after 30 minutes of inactivity. The timer
   // is reset on any user interaction while there is an active session, and the
