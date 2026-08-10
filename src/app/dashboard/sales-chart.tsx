@@ -23,14 +23,6 @@ export default function SalesChart() {
   const [data, setData] = useState<ChartRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDays, setSelectedDays] = useState(7);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    // Defer chart render until the container has been laid out, otherwise
-    // ResponsiveContainer measures -1 x -1 and recharts logs a warning.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setMounted(true);
-  }, []);
 
   const fetchData = useCallback(async (days: number) => {
     try {
@@ -76,7 +68,7 @@ export default function SalesChart() {
           ))}
         </div>
       </div>
-      {loading || !mounted ? (
+      {loading ? (
         <div className="h-24 bg-gray-100 dark:bg-gray-800 animate-pulse rounded" />
       ) : data.every(d => d.total === 0) ? (
         <div className="h-24 flex items-center justify-center text-sm text-gray-400">
@@ -84,7 +76,7 @@ export default function SalesChart() {
         </div>
       ) : (
         <div className="h-24 w-full">
-          <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={96}>
+          <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={96} initialDimension={{ width: 100, height: 96 }}>
             <BarChart data={data} margin={{ top: 4, right: 12, left: -10, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
               <XAxis dataKey="day" tick={{ fontSize: 10 }} stroke="#d1d5db" axisLine={false} tickLine={false} />
