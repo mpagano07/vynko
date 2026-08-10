@@ -1,0 +1,51 @@
+﻿name: Vynko CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm run test:run
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+        env:
+          # Variables publicas embebidas en el bundle del cliente durante el build.
+          # Configurar como GitHub Actions Variables (no Secrets) ya que no son secretas
+          # y se exponen al navegador de todas formas en produccion.
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_CURRENCY: ${{ vars.NEXT_PUBLIC_CURRENCY }}
+          NEXT_PUBLIC_TAX_RATE: ${{ vars.NEXT_PUBLIC_TAX_RATE }}
+          NEXT_PUBLIC_APP_NAME: ${{ vars.NEXT_PUBLIC_APP_NAME }}
+          NEXT_PUBLIC_DEFAULT_LOCALE: ${{ vars.NEXT_PUBLIC_DEFAULT_LOCALE }}
+          # Variables servidor (usadas solo en runtime, no en build time).
+          # El build de Next.js compila las rutas API sin ejecutarlas, por lo que
+          # estas variables no son necesarias para que el build tenga exito.
+          # Si en el futuro el build las requiere, agregarlas como GitHub Secrets.
