@@ -77,7 +77,38 @@ El nuevo monto aplica al **siguiente cobro recurrente**. Es recomendable avisar 
 | `npm run update-prices -- --business=39900` | Sobreescribe el precio de un plan solo para esta corrida |
 | `npm run update-prices -- --backfill` | Recupera el id de preaprobación de clientes activos que no lo tengan guardado (necesario una vez al migrar la columna, o si se dieron de alta antes del webhook) |
 
-### Prerrequisitos
+### Tests
+
+Los tests corren con [Vitest](https://vitest.dev). Están separados del código de producción: cada suite vive en un archivo `*.test.ts` al lado del módulo o ruta que cubre, y el mock de Supabase está en `src/test/supabase-mock.ts`.
+
+### Correr toda la suite
+
+```bash
+npm test
+```
+
+### Modo watch (se re-ejecutan al guardar)
+
+```bash
+npm test -- --watch
+```
+
+### Correr un archivo o grupo
+
+```bash
+npm test -- src/lib/stock.test.ts
+npm test -- src/app/api/products/route.test.ts
+```
+
+### Ver cobertura
+
+```bash
+npm test -- --coverage
+```
+
+Los tests no requieren base de datos ni variables de entorno: las rutas API se prueban con un mock encadenable de `supabaseAdmin`.
+
+## Prerrequisitos
 
 - La columna `mercadopago_preapproval_id` debe existir en la tabla `tenants` (migración `migrations/008_mercadopago.sql`).
 - Variables en `.env.local`: `MERCADOPAGO_ACCESS_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL` (y `NEXT_PUBLIC_CURRENCY`, por defecto `ARS`).

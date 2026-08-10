@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
 import { PLAN_LIMITS } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
+import { validateProduct } from '@/lib/product-validation';
 
 export async function GET(request: Request) {
   const auth = await getAuth(request);
@@ -76,6 +77,12 @@ export async function POST(request: Request) {
   if (body.price !== undefined) insertData.price_cents = Math.round(body.price * 100);
   for (const key of allowedFields) {
     if (body[key] !== undefined) insertData[key] = body[key];
+  }
+
+  const validationErrors = validateProduct({ name: body.name, sku: body.sku, price: body.price, stock: body.stock });
+  const firstError = Object.values(validationErrors)[0];
+  if (firstError) {
+    return NextResponse.json({ error: firstError }, { status: 400 });
   }
 
   const { data, error } = await supabaseAdmin

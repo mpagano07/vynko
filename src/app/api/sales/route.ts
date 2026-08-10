@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
+import { reduceStockForSale, buildStockMovement } from '@/lib/stock';
 
 export async function GET(request: Request) {
   const auth = await getAuth(request);
@@ -125,6 +126,7 @@ export async function POST(request: Request) {
       unit_price_cents: number;
       subtotal_cents: number;
       product_name: string;
+      newStock: number;
     }
 
     const saleItems: SaleItemData[] = items.map((item) => {
@@ -138,11 +140,12 @@ export async function POST(request: Request) {
       const subtotal_cents = quantity * unit_price_cents;
 
       const availableStock = stockMap.get(item.product_id) ?? 0;
-      if (quantity > availableStock) {
-        throw new Error(`Stock insuficiente para "${product.name}" (disponible: ${availableStock})`);
+      const stockResult = reduceStockForSale(availableStock, quantity, product.name);
+      if (!stockResult.ok) {
+        throw new Error(stockResult.error);
       }
 
-      return { product_id: item.product_id, quantity, unit_price_cents, subtotal_cents, product_name: product.name };
+      return { product_id: item.product_id, quantity, unit_price_cents, subtotal_cents, product_name: product.name, newStock: stockResult.newStock };
     });
 
     const total_cents = saleItems.reduce((sum, item) => sum + item.subtotal_cents, 0);
@@ -180,26 +183,22 @@ export async function POST(request: Request) {
     }
 
     for (const item of saleItems) {
-      const currentStock = stockMap.get(item.product_id) ?? 0;
-      const newStock = currentStock - item.quantity;
-
       await supabaseAdmin
         .from('product_stock')
-        .update({ stock: newStock, updated_at: new Date().toISOString() })
+        .update({ stock: item.newStock, updated_at: new Date().toISOString() })
         .eq('product_id', item.product_id)
         .eq('tenant_id', auth.tenantId);
 
       await supabaseAdmin
         .from('stock_history')
-        .insert({
-          tenant_id: auth.tenantId,
-          product_id: item.product_id,
+        .insert(buildStockMovement({
+          tenantId: auth.tenantId,
+          productId: item.product_id,
           quantity: -item.quantity,
           type: 'out',
           reason: `Venta #${sale.id.slice(0, 8)}`,
-          created_by: auth.userId,
-        });
-
+          createdBy: auth.userId,
+        }));
     }
 
     const itemNames = saleItems.map(i => i.product_name).slice(0, 3);

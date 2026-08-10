@@ -34,6 +34,8 @@ import {
   Scan,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
+import { filterProducts } from '@/lib/product-search';
+import type { StockFilter } from '@/lib/product-search';
 import { TransferInbox } from '@/components/transfers/TransferInbox';
 
 interface PriceAdjustSample {
@@ -306,28 +308,10 @@ export default function ProductsPage() {
   const itemsPerPage = 8;
 
   // Filter Logic
-  const filteredProducts = (products || []).filter((product) => {
-    const matchesSearch =
-      product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.sku?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.barcode?.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesCategory =
-      selectedCategoryId === 'all' || product.category_id === selectedCategoryId;
-
-    let matchesStock = true;
-    const stockVal = product.stock ?? 0;
-    const minVal = product.min_stock ?? 0;
-
-    if (stockFilter === 'critical') {
-      matchesStock = stockVal <= minVal;
-    } else if (stockFilter === 'low') {
-      matchesStock = stockVal > minVal && stockVal <= minVal * 1.5;
-    } else if (stockFilter === 'normal') {
-      matchesStock = stockVal > minVal * 1.5;
-    }
-
-    return matchesSearch && matchesCategory && matchesStock;
+  const filteredProducts = filterProducts(products || [], {
+    searchTerm,
+    categoryId: selectedCategoryId,
+    stockFilter,
   });
 
   // Pagination Logic

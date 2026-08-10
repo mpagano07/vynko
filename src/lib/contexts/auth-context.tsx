@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef, ty
 import { supabase } from '@/lib/supabaseClient';
 import { storeRefreshToken } from '@/lib/webauthn';
 import type { Session, User } from '@supabase/supabase-js';
+import toast from 'react-hot-toast';
 
 export interface UserProfile {
   id: string;
@@ -37,6 +38,35 @@ export interface TenantInfo {
 }
 
 const ACTIVE_TENANT_KEY = 'vynko_active_tenant_id';
+const LAST_ACTIVITY_KEY = 'vynko_last_activity';
+const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+const INACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'wheel'] as const;
+
+function getLastActivity(): number {
+  if (typeof window === 'undefined') return 0;
+  try {
+    const val = Number(localStorage.getItem(LAST_ACTIVITY_KEY));
+    return Number.isFinite(val) && val > 0 ? val : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function setLastActivity(now: number) {
+  try {
+    localStorage.setItem(LAST_ACTIVITY_KEY, String(now));
+  } catch {
+    // ignore
+  }
+}
+
+function clearLastActivity() {
+  try {
+    localStorage.removeItem(LAST_ACTIVITY_KEY);
+  } catch {
+    // ignore
+  }
+}
 
 function getStoredActiveTenantId(): string | null {
   if (typeof window === 'undefined') return null;
@@ -76,7 +106,7 @@ function clearStoredActiveTenantId() {
 // The browser client persists the session as `supabase.auth.token` cookies
 // (chunked as `supabase.auth.token.0`, `.1`, ...). Check there so we can tell
 // "logged out" apart from "session exists but the first refresh failed".
-function hasStoredSession(): boolean {
+export function hasStoredSession(): boolean {
   if (typeof window === 'undefined') return false;
   try {
     const cookieNames = document.cookie.split(';').map((c) => c.split('=')[0].trim());
@@ -250,6 +280,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true;
 
     const init = async () => {
+      // If the tab was closed longer than the inactivity window ago, expire
+      // the session immediately instead of restoring it from cookies.
+      const lastActivity = getLastActivity();
+      if (lastActivity > 0 && Date.now() - lastActivity > INACTIVITY_TIMEOUT_MS && hasStoredSession()) {
+        await supabase.auth.signOut();
+      }
+
       try {
         const session = await getSessionWithRetry();
         if (!mounted) return;
@@ -320,8 +357,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTenants([]);
     setRole(null);
     clearStoredActiveTenantId();
+    clearLastActivity();
     lastFetchedUserIdRef.current = null;
   };
+
+  const logoutRef = useRef(logout);
+  logoutRef.current = logout;
+
+  // Log the user out automatically after 30 minutes of inactivity. The timer
+  // is reset on any user interaction while there is an active session, and the
+  // last activity timestamp is persisted so a closed tab also expires.
+  useEffect(() => {
+    if (!user) return;
+
+    let timer: ReturnType<typeof setTimeout>;
+
+    const resetTimer = () => {
+      setLastActivity(Date.now());
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        clearLastActivity();
+        void logoutRef.current();
+        toast('Tu sesión expiró por inactividad. Iniciá sesión nuevamente.', {
+          duration: 5000,
+        });
+      }, INACTIVITY_TIMEOUT_MS);
+    };
+
+    INACTIVITY_EVENTS.forEach((event) => window.addEventListener(event, resetTimer, { passive: true }));
+    resetTimer();
+
+    return () => {
+      clearTimeout(timer);
+      INACTIVITY_EVENTS.forEach((event) => window.removeEventListener(event, resetTimer));
+    };
+  }, [user]);
 
   const value: AuthContextValue = {
     user,

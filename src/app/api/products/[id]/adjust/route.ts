@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { adjustStock, buildStockMovement } from '@/lib/stock';
 
 export async function POST(
   request: Request,
@@ -43,10 +44,11 @@ export async function POST(
     .maybeSingle();
 
   const currentStock = Number((stockRow as Record<string, unknown> | null)?.stock) || 0;
-  const newStock = currentStock + quantity;
-  if (newStock < 0) {
-    return NextResponse.json({ error: 'El stock no puede ser negativo' }, { status: 400 });
+  const result = adjustStock(currentStock, quantity);
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: 400 });
   }
+  const newStock = result.newStock;
 
   const { error: updateError } = await supabaseAdmin
     .from('product_stock')
@@ -57,16 +59,17 @@ export async function POST(
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
   let historyWarning: string | undefined;
+  const movement = buildStockMovement({
+    tenantId: auth.tenantId,
+    productId: id,
+    quantity,
+    type: 'adjustment',
+    reason: `${reason}${notes ? ': ' + notes : ''}`,
+    createdBy: auth.userId,
+  });
   const { error: histError } = await supabaseAdmin
     .from('stock_history')
-    .insert({
-      tenant_id: auth.tenantId,
-      product_id: id,
-      quantity,
-      type: 'adjustment',
-      reason: `${reason}${notes ? ': ' + notes : ''}`,
-      created_by: auth.userId,
-    });
+    .insert(movement);
 
   if (histError) {
     console.error('stock_history insert error:', JSON.stringify(histError));
