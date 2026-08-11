@@ -9,9 +9,6 @@ import { Input } from '@/components/ui/input';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff } from 'lucide-react';
-import BiometricLogin from '@/components/auth/BiometricLogin';
-import FingerprintSetup from '@/components/auth/FingerprintSetup';
-import { getStoredCredential } from '@/lib/webauthn';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,14 +19,6 @@ function LoginContent() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(false);
-  const [showBiometricSetup, setShowBiometricSetup] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    // Inicialización única (navegador, SSR impide lazy init)
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIsMobile(/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
-  }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem('vynko_remember');
@@ -75,11 +64,7 @@ function LoginContent() {
 
       toast.success('Sesión iniciada correctamente');
 
-      if (isMobile && !getStoredCredential()) {
-        setShowBiometricSetup(true);
-      } else {
-        router.replace('/dashboard');
-      }
+      router.replace('/dashboard');
     } catch (error: unknown) {
       const authError = error as { message?: string; code?: string };
       if (authError?.code === 'invalid_credentials') {
@@ -271,19 +256,6 @@ function LoginContent() {
             </svg>
             Google
           </Button>
-
-          <BiometricLogin />
-
-          {showBiometricSetup && (
-            <FingerprintSetup
-              onComplete={() => {
-                router.replace('/dashboard');
-              }}
-              onSkip={() => {
-                router.replace('/dashboard');
-              }}
-            />
-          )}
 
           <p className="text-sm text-gray-500 text-center mt-8">
             ¿No tienes cuenta?{' '}

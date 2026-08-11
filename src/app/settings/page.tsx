@@ -10,7 +10,6 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Settings, User, Building2, Loader2, Save, KeyRound, Users, Mail, X, Shield, ShieldCheck, FileText, MapPin } from 'lucide-react';
 import { Select } from '@/components/ui/select';
-import BiometricSettings from '@/components/auth/BiometricSettings';
 import toast from 'react-hot-toast';
 
 interface Collaborator {
@@ -420,8 +419,6 @@ export default function SettingsPage() {
               </Button>
             </form>
           </Card>
-
-          <BiometricSettings />
         </div>
 
         <div className="space-y-6">
