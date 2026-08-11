@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import type { Session } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabaseClient';
 import {
@@ -31,9 +32,9 @@ export default function BiometricLogin() {
 
   if (!available || !getStoredCredential()) return null;
 
-  async function exchangeRefreshToken(token: string) {
+  async function exchangeRefreshToken(token: string): Promise<{ session: Session | null; isAuthError: boolean }> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
+    const timeout = setTimeout(() => controller.abort(), 10000);
 
     try {
       const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
@@ -45,15 +46,29 @@ export default function BiometricLogin() {
         body: JSON.stringify({ refresh_token: token }),
         signal: controller.signal,
       });
-      if (!res.ok) return null;
+
+      if (!res.ok) {
+        const isAuthErr = res.status === 400 || res.status === 401;
+        return { session: null, isAuthError: isAuthErr };
+      }
+
       const data = await res.json();
+      if (!data.access_token || !data.refresh_token) {
+        return { session: null, isAuthError: true };
+      }
+
       const { data: sessionData, error } = await supabase.auth.setSession({
         access_token: data.access_token,
         refresh_token: data.refresh_token,
       });
-      return error ? null : sessionData.session;
+
+      if (error) {
+        return { session: null, isAuthError: true };
+      }
+
+      return { session: sessionData.session, isAuthError: false };
     } catch {
-      return null;
+      return { session: null, isAuthError: false };
     } finally {
       clearTimeout(timeout);
     }
@@ -81,13 +96,20 @@ export default function BiometricLogin() {
       if (!session) {
         const refreshToken = getStoredRefreshToken();
         if (refreshToken) {
-          session = await exchangeRefreshToken(refreshToken);
+          const result = await exchangeRefreshToken(refreshToken);
+          if (result.session) {
+            session = result.session;
+          } else if (result.isAuthError) {
+            clearStoredRefreshToken();
+            throw new Error('La sesión de huella expiró. Iniciá sesión con tu email para reactivarla.');
+          } else {
+            throw new Error('Error de conexión. Verificá tu red e intentalo de nuevo.');
+          }
         }
       }
 
       if (!session) {
-        clearStoredRefreshToken();
-        throw new Error('No se pudo restaurar la sesión. Iniciá sesión con email.');
+        throw new Error('No hay una sesión guardada. Iniciá sesión con email.');
       }
 
       if (session.refresh_token) {
