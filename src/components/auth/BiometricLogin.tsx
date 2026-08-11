@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import type { Session } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabaseClient';
 import {
@@ -31,7 +32,7 @@ export default function BiometricLogin() {
 
   if (!available || !getStoredCredential()) return null;
 
-  async function exchangeRefreshToken(token: string): Promise<{ session: any; isAuthError: boolean }> {
+  async function exchangeRefreshToken(token: string): Promise<{ session: Session | null; isAuthError: boolean }> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
 
