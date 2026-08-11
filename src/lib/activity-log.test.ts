@@ -88,7 +88,8 @@ describe('activity-log', () => {
     const insertCall = supabaseMock.__calls.find(
       (c) => c.table === 'activity_logs' && c.method === 'insert'
     );
-    expect(insertCall?.args[0].user_name).toBe('Usuario');
+    const insertArgs = insertCall?.args[0] as { user_name: string } | undefined;
+    expect(insertArgs?.user_name).toBe('Usuario');
   });
 
   it('logs error to console when insert fails', async () => {

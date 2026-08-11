@@ -38,19 +38,19 @@ describe('Card', () => {
   });
 
   it('forwards ref correctly', () => {
-    let cardRef: HTMLDivElement | null = null;
+    const cardRef = { current: null as HTMLDivElement | null };
     render(
       <Card
         data-testid="card"
         ref={(el) => {
-          cardRef = el;
+          cardRef.current = el;
         }}
       >
         <p>Contenido</p>
       </Card>
     );
     
-    expect(cardRef).not.toBeNull();
-    expect(cardRef?.tagName).toBe('DIV');
+    expect(cardRef.current).not.toBeNull();
+    expect(cardRef.current?.tagName).toBe('DIV');
   });
 });

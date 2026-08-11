@@ -64,19 +64,19 @@ describe('Select', () => {
   });
 
   it('forwards ref correctly', () => {
-    let selectRef: HTMLSelectElement | null = null;
+    const selectRef = { current: null as HTMLSelectElement | null };
     render(
       <Select
         data-testid="select"
         ref={(el) => {
-          selectRef = el;
+          selectRef.current = el;
         }}
       >
         <option value="1">Opcion 1</option>
       </Select>
     );
     
-    expect(selectRef).not.toBeNull();
-    expect(selectRef?.tagName).toBe('SELECT');
+    expect(selectRef.current).not.toBeNull();
+    expect(selectRef.current?.tagName).toBe('SELECT');
   });
 });

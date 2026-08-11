@@ -35,17 +35,17 @@ describe('Input', () => {
   });
 
   it('forwards ref correctly', () => {
-    let inputRef: HTMLInputElement | null = null;
+    const inputRef = { current: null as HTMLInputElement | null };
     render(
       <Input
         placeholder="Buscar..."
         ref={(el) => {
-          inputRef = el;
+          inputRef.current = el;
         }}
       />
     );
     
-    expect(inputRef).not.toBeNull();
-    expect(inputRef?.tagName).toBe('INPUT');
+    expect(inputRef.current).not.toBeNull();
+    expect(inputRef.current?.tagName).toBe('INPUT');
   });
 });
