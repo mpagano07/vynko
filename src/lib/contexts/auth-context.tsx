@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { storeRefreshToken } from '@/lib/webauthn';
 import type { Session, User } from '@supabase/supabase-js';
 import toast from 'react-hot-toast';
 
@@ -315,10 +314,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
-
-        if (session?.refresh_token) {
-          storeRefreshToken(session.refresh_token);
-        }
 
         if (session?.user) {
           sessionViaEventRef.current = true;
