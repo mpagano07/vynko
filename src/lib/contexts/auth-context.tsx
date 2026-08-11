@@ -284,7 +284,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // the session immediately instead of restoring it from cookies.
       const lastActivity = getLastActivity();
       if (lastActivity > 0 && Date.now() - lastActivity > INACTIVITY_TIMEOUT_MS && hasStoredSession()) {
-        await supabase.auth.signOut();
+        await supabase.auth.signOut({ scope: 'local' });
       }
 
       try {
@@ -350,7 +350,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadProfileAndTenant]);
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
     sessionViaEventRef.current = false;
     setUser(null);
     setProfile(null);
