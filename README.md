@@ -108,7 +108,34 @@ npm run test:run -- --coverage
 
 Los tests no requieren base de datos ni variables de entorno: las rutas API se prueban con un mock encadenable de `supabaseAdmin`.
 
-## Prerrequisitos
+### Tests E2E (Playwright)
+
+Los E2E corren con [Playwright](https://playwright.dev) contra la app real levantada en el puerto 3000 (la levanta sola). Viven en `e2e/`.
+
+```bash
+npm run test:e2e
+```
+
+#### Modo interactivo (UI)
+
+```bash
+npm run test:e2e:ui
+```
+
+#### Correr un archivo o un solo test
+
+```bash
+npx playwright test e2e/login.spec.ts
+npx playwright test --grep "login exitoso"
+```
+
+#### Requisitos
+
+- Primera vez: `npx playwright install chromium`.
+- Los tests que usan credenciales reales leen `E2E_USER_EMAIL` y `E2E_USER_PASSWORD` desde `.env.local` (ya están configurados para el usuario de prueba). Si faltan, ese test se salta.
+- El `webServer` del config levanta `npm run dev` automáticamente; si ya tenés el server corriendo en `:3000`, reutiliza esa instancia.
+
+#### Prerrequisitos
 
 - La columna `mercadopago_preapproval_id` debe existir en la tabla `tenants` (migración `migrations/008_mercadopago.sql`).
 - Variables en `.env.local`: `MERCADOPAGO_ACCESS_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL` (y `NEXT_PUBLIC_CURRENCY`, por defecto `ARS`).

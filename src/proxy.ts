@@ -41,13 +41,14 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  const { data: profile } = await supabase
+  const { data: tenantUsers } = await supabase
     .from('tenant_users')
     .select('tenant_id')
-    .eq('user_id', user.id)
-    .single();
+    .eq('user_id', user.id);
 
-  if (!profile?.tenant_id) {
+  const tenantId = tenantUsers?.[0]?.tenant_id;
+
+  if (!tenantId) {
     return NextResponse.redirect(new URL('/onboarding', request.url));
   }
 
@@ -62,7 +63,7 @@ export async function proxy(request: NextRequest) {
     const { data: tenant } = await supabaseAdmin
       .from('tenants')
       .select('subscription_status, subscription_plan, created_at, subscription_current_period_end')
-      .eq('id', profile.tenant_id)
+      .eq('id', tenantId)
       .single();
 
     if (tenant) {
@@ -75,7 +76,7 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  response.headers.set('x-tenant-id', profile.tenant_id);
+  response.headers.set('x-tenant-id', tenantId);
   return response;
 }
 
