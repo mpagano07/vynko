@@ -8,6 +8,7 @@ import { PLANS } from '@/lib/plans';
 import { isTrialExpired } from '@/lib/checkSubscription';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { hasStoredSession } from '@/lib/contexts/auth-context';
+
 import { formatARS } from '@/lib/utils/currency';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
@@ -76,15 +77,13 @@ export default function LandingPage() {
               </div>
             </div>
             {isMounted && (<div className="flex items-center gap-3">
-              {authLoading && !hasStoredSession() ? (
-                <div className="h-8 w-32 rounded-lg bg-gray-800/60 animate-pulse" />
-              ) : (user || (authLoading && hasStoredSession())) ? (
+              {hasStoredSession() || user ? (
                 <>
                   <Link
                     href="/dashboard"
                     className="text-sm font-medium text-gray-300 hover:text-white transition-colors px-4 py-2"
                   >
-                    {profile?.full_name ?? ''}
+                    {profile?.full_name || user?.email || 'Mi cuenta'}
                   </Link>
                   <button
                     onClick={async () => { await logout(); router.push('/'); }}
@@ -93,6 +92,8 @@ export default function LandingPage() {
                     Cerrar sesión
                   </button>
                 </>
+              ) : authLoading ? (
+                <div className="h-8 w-32 rounded-lg bg-gray-800/60 animate-pulse" />
               ) : (
                 <>
                   <Link
