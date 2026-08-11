@@ -87,8 +87,8 @@ describe('BiometricLogin component', () => {
     vi.mocked(webauthn.authenticateBiometric).mockResolvedValue(true);
     vi.mocked(webauthn.getStoredRefreshToken).mockReturnValue('valid-refresh-token');
 
-    vi.mocked(supabase.auth.getSession).mockResolvedValue({ data: { session: null }, error: null });
-    vi.mocked(supabase.auth.refreshSession).mockResolvedValue({ data: { session: null }, error: null });
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({ data: { session: null, user: null }, error: null } as any);
+    vi.mocked(supabase.auth.refreshSession).mockResolvedValue({ data: { session: null, user: null }, error: null } as any);
 
     // Mock fetch for exchangeRefreshToken
     vi.mocked(global.fetch).mockResolvedValueOnce({
@@ -106,9 +106,10 @@ describe('BiometricLogin component', () => {
           refresh_token: 'new-refresh-token',
           user: { id: 'u1' },
         } as any,
+        user: { id: 'u1' } as any,
       },
       error: null,
-    });
+    } as any);
 
     render(<BiometricLogin />);
 
@@ -133,8 +134,8 @@ describe('BiometricLogin component', () => {
     vi.mocked(webauthn.authenticateBiometric).mockResolvedValue(true);
     vi.mocked(webauthn.getStoredRefreshToken).mockReturnValue('expired-refresh-token');
 
-    vi.mocked(supabase.auth.getSession).mockResolvedValue({ data: { session: null }, error: null });
-    vi.mocked(supabase.auth.refreshSession).mockResolvedValue({ data: { session: null }, error: null });
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({ data: { session: null, user: null }, error: null } as any);
+    vi.mocked(supabase.auth.refreshSession).mockResolvedValue({ data: { session: null, user: null }, error: null } as any);
 
     // Mock HTTP 400 Bad Request
     vi.mocked(global.fetch).mockResolvedValueOnce({
@@ -166,8 +167,8 @@ describe('BiometricLogin component', () => {
     vi.mocked(webauthn.authenticateBiometric).mockResolvedValue(true);
     vi.mocked(webauthn.getStoredRefreshToken).mockReturnValue('saved-refresh-token');
 
-    vi.mocked(supabase.auth.getSession).mockResolvedValue({ data: { session: null }, error: null });
-    vi.mocked(supabase.auth.refreshSession).mockResolvedValue({ data: { session: null }, error: null });
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({ data: { session: null, user: null }, error: null } as any);
+    vi.mocked(supabase.auth.refreshSession).mockResolvedValue({ data: { session: null, user: null }, error: null } as any);
 
     // Network failure
     vi.mocked(global.fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'));
