@@ -84,26 +84,26 @@ Los tests corren con [Vitest](https://vitest.dev). Están separados del código 
 ### Correr toda la suite
 
 ```bash
-npm test
+npm run test:run
 ```
 
 ### Modo watch (se re-ejecutan al guardar)
 
 ```bash
-npm test -- --watch
+npm run test:run -- --watch
 ```
 
 ### Correr un archivo o grupo
 
 ```bash
-npm test -- src/lib/stock.test.ts
-npm test -- src/app/api/products/route.test.ts
+npm run test:run -- src/lib/stock.test.ts
+npm run test:run -- src/app/api/products/route.test.ts
 ```
 
 ### Ver cobertura
 
 ```bash
-npm test -- --coverage
+npm run test:run -- --coverage
 ```
 
 Los tests no requieren base de datos ni variables de entorno: las rutas API se prueban con un mock encadenable de `supabaseAdmin`.
