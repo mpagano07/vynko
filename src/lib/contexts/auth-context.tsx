@@ -324,6 +324,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           sessionViaEventRef.current = true;
           setUser(session.user);
           if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || lastFetchedUserIdRef.current !== session.user.id) {
+            setLoading(true);
             await loadProfileAndTenant();
           }
         } else {
