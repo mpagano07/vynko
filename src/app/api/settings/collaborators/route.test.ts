@@ -168,7 +168,7 @@ describe('POST /api/settings/collaborators', () => {
       (c) => c.table === 'profiles' && c.method === 'update'
     )).toBe(true);
     expect(supabaseMock.__calls.some(
-      (c) => c.table === 'tenant_users' && c.method === 'insert' && c.args[0]?.user_id === 'user-2'
+      (c) => c.table === 'tenant_users' && c.method === 'insert' && (c.args[0] as Record<string, unknown>)?.user_id === 'user-2'
     )).toBe(true);
   });
 

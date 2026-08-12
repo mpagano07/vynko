@@ -17,10 +17,7 @@ let adminQueue: Array<Record<string, unknown> | null>;
 
 function makeServerClient(user: { id: string } | null) {
   const getUser = vi.fn().mockResolvedValue({ data: { user }, error: null });
-  serverClientMock.mockImplementation((_url, _key, options) => {
-    // Ejercita los callbacks de cookies de proxy.ts (getAll/setAll).
-    options.cookies.getAll();
-    options.cookies.setAll([{ name: 'test-cookie', value: '1' }]);
+  serverClientMock.mockImplementation((_url, _key) => {
     return { auth: { getUser } } as never;
   });
 }
