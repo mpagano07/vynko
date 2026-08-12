@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseMock } from '@/test/supabase-mock';
-import { POST } from './route';
+import { GET, POST } from './route';
 import { createActivityLog } from '@/lib/activity-log';
 
 const mockAuth = {
@@ -135,6 +135,133 @@ describe('Stock Transfers API', () => {
       );
       expect(eqCall?.args[0]).toBe('id');
       expect(eqCall?.args[1]).toBe('tr1');
+    });
+
+    it('returns 400 when the transfer could not be created without an error message', async () => {
+      supabaseMock.__queue('stock_transfers', { data: null, error: null });
+
+      const res = await POST(makeRequest('POST', {
+        from_tenant_id: 't1',
+        to_tenant_id: 't2',
+        items: [{ product_id: 'p1', quantity: 5 }]
+      }));
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toBe('Error al crear transferencia');
+    });
+  });
+
+  describe('GET /api/stock-transfers', () => {
+    beforeEach(() => {
+      supabaseMock.__reset();
+      vi.mocked(getAuth).mockResolvedValue(mockAuth);
+    });
+
+    function makeGetRequest(query = ''): Request {
+      return new Request(`http://localhost/api/stock-transfers${query}`, { method: 'GET' });
+    }
+
+    it('returns 401 without auth', async () => {
+      vi.mocked(getAuth).mockResolvedValueOnce(null);
+      const res = await GET(makeGetRequest());
+      expect(res.status).toBe(401);
+    });
+
+    it('filtra por tenant y traduce nombres de sucursales/usuarios/productos', async () => {
+      supabaseMock.__queue('stock_transfers', {
+        data: [
+          {
+            id: 'tr1',
+            from_tenant_id: 't1',
+            to_tenant_id: 't2',
+            created_by: 'user-1',
+            items: [
+              { id: 'i1', product: { name: 'Coca' } },
+              { id: 'i2', product: null },
+            ],
+          },
+        ],
+      });
+      supabaseMock.__queue('tenants', {
+        data: [
+          { id: 't1', name: 'Central' },
+          { id: 't2', name: 'Norte' },
+        ],
+      });
+      supabaseMock.__queue('profiles', { data: [{ id: 'user-1', full_name: 'Ana' }] });
+
+      const res = await GET(makeGetRequest());
+      expect(res.status).toBe(200);
+
+      const json = await res.json();
+      expect(json[0]).toMatchObject({
+        from_tenant_name: 'Central',
+        to_tenant_name: 'Norte',
+        created_by_name: 'Ana',
+      });
+      expect(json[0].items[0].product_name).toBe('Coca');
+      expect(json[0].items[1].product_name).toBeNull();
+
+      const orCall = supabaseMock.__calls.find((c) => c.method === 'or');
+      expect(orCall?.args[0]).toBe('from_tenant_id.eq.tenant-1,to_tenant_id.eq.tenant-1');
+    });
+
+    it('aplica el filtro de estado y no usa or() para allTenants', async () => {
+      vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true });
+      supabaseMock.__queue('stock_transfers', { data: [] });
+
+      const res = await GET(makeGetRequest('?status=completed'));
+      expect(res.status).toBe(200);
+
+      const orCall = supabaseMock.__calls.find((c) => c.method === 'or');
+      expect(orCall).toBeUndefined();
+      const statusEq = supabaseMock.__calls.find(
+        (c) => c.table === 'stock_transfers' && c.method === 'eq' && c.args[0] === 'status'
+      );
+      expect(statusEq?.args[1]).toBe('completed');
+    });
+
+    it('aplica el filtro de estado para una sucursal individual', async () => {
+      supabaseMock.__queue('stock_transfers', { data: [] });
+
+      const res = await GET(makeGetRequest('?status=pending'));
+      expect(res.status).toBe(200);
+
+      const orCall = supabaseMock.__calls.find((c) => c.method === 'or');
+      expect(orCall).toBeDefined();
+      const statusEq = supabaseMock.__calls.find(
+        (c) => c.table === 'stock_transfers' && c.method === 'eq' && c.args[0] === 'status'
+      );
+      expect(statusEq?.args[1]).toBe('pending');
+    });
+
+    it('usa nombres de fallback cuando faltan datos de sucursal/usuario', async () => {
+      supabaseMock.__queue('stock_transfers', {
+        data: [
+          { id: 'tr1', from_tenant_id: 't1', to_tenant_id: 't2', created_by: 'user-1' },
+        ],
+      });
+      supabaseMock.__queue('tenants', { data: [] });
+      supabaseMock.__queue('profiles', { data: [] });
+
+      const res = await GET(makeGetRequest());
+      expect(res.status).toBe(200);
+
+      const json = await res.json();
+      expect(json[0]).toMatchObject({
+        from_tenant_name: 'Desconocido',
+        to_tenant_name: 'Desconocido',
+        created_by_name: 'Usuario',
+      });
+    });
+
+    it('devuelve 500 ante un error de base de datos', async () => {
+      supabaseMock.__queue('stock_transfers', { data: null, error: { message: 'db down' } });
+
+      const res = await GET(makeGetRequest());
+      expect(res.status).toBe(500);
+      const json = await res.json();
+      expect(json.error).toBe('db down');
     });
   });
 });

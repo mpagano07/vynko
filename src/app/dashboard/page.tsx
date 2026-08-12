@@ -395,6 +395,7 @@ export default function DashboardPage() {
               </thead>
               <tbody>
                 {tenants.map((t) => {
+                  /* v8 ignore next 2 -- inalcanzable: cada tenant recibe su entrada en perTenant */
                   const d = perTenant[t.id];
                   if (!d) return null;
                   return (
