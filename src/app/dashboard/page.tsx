@@ -69,7 +69,7 @@ interface PendingOrder {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { profile, tenant, tenants, allTenants, loading: authLoading, isAuthenticated } = useAuth();
+  const { profile, tenant, tenants, allTenants, loading: authLoading, isAuthenticated, switchTenant } = useAuth();
   const [criticalProducts, setCriticalProducts] = useState<{ id: string; name: string; stock: number; min_stock: number }[]>([]);
   const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
@@ -78,8 +78,18 @@ export default function DashboardPage() {
   const [perTenant, setPerTenant] = useState<Record<string, PerTenantData>>({});
 
   useEffect(() => {
-    if (!authLoading && isAuthenticated && !tenant && !allTenants) router.replace('/onboarding');
-  }, [authLoading, isAuthenticated, tenant, allTenants, router]);
+    if (authLoading || !isAuthenticated) return;
+    if (tenant || allTenants) return;
+
+    if (tenants.length > 0) {
+      // Tiene sucursales pero ninguna activa (ej: tenant guardado en
+      // localStorage quedó obsoleto). Auto-seleccionar la primera en lugar de
+      // mandarlo a onboarding.
+      switchTenant(tenants[0].id);
+    } else {
+      router.replace('/onboarding');
+    }
+  }, [authLoading, isAuthenticated, tenant, allTenants, tenants, router, switchTenant]);
 
   const fetchWithTenant = useCallback(async (url: string, tenantId: string) => {
     const { data: { session } } = await supabase.auth.getSession();

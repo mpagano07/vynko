@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
@@ -14,11 +14,55 @@ export default function OnboardingPage() {
   const router = useRouter();
   const { switchTenant } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
   const [step, setStep] = useState<'company' | 'success'>('company');
   const [formData, setFormData] = useState({
     companyName: '',
     ownerName: '',
   });
+
+  // Guard definitivo: si el usuario ya pertenece a una empresa, no mostramos el
+  // formulario. Se verifica contra /api/session (service role) en lugar de
+  // confiar en el estado cacheado del contexto, para que ningún fallo previo
+  // pueda dejar a un cliente con cuenta frente al onboarding.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkExistingCompany() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          if (!cancelled) router.replace('/login');
+          return;
+        }
+
+        const response = await fetch('/api/session', {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            'x-refresh-token': session.refresh_token ?? '',
+          },
+        });
+        if (cancelled) return;
+
+        const data = await response.json();
+        const hasCompany = (data.tenants?.length ?? 0) > 0 || !!data.tenant;
+
+        if (hasCompany) {
+          router.replace('/dashboard');
+        } else {
+          setChecking(false);
+        }
+      } catch (error) {
+        console.error('Onboarding check error:', error);
+        if (!cancelled) setChecking(false);
+      }
+    }
+
+    checkExistingCompany();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   const handleCreateCompany = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,6 +130,23 @@ export default function OnboardingPage() {
           <p className="text-gray-400">
             Tu empresa {formData.companyName} ha sido creada. Redirigiendo al dashboard...
           </p>
+        </Card>
+      </div>
+    );
+  }
+
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <Card className="w-full max-w-md p-8 bg-gray-800 border border-gray-700 text-center">
+          <Image src="/icons/vynkoLogout.png?v=2" alt="Vynko" width={1279} height={396} className="h-10 w-auto object-contain mx-auto mb-4" />
+          <div className="flex justify-center">
+            <svg className="h-6 w-6 text-gray-400 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+            </svg>
+          </div>
+          <p className="mt-3 text-sm text-gray-400">Verificando tu cuenta...</p>
         </Card>
       </div>
     );

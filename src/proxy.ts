@@ -41,25 +41,32 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  const { data: tenantUsers } = await supabase
+  // Admin client (service role) for DB checks: bypasses RLS so a policy or a
+  // transient failure can never drop a user who really has a company.
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false, autoRefreshToken: false } }
+  );
+
+  // Membership check. Only redirect to onboarding on a *definitive* empty
+  // result; on a query error we fail open and let the client-side /api/session
+  // decide instead of sending an existing customer to onboarding.
+  const { data: tenantUsers, error: membershipError } = await supabaseAdmin
     .from('tenant_users')
     .select('tenant_id')
     .eq('user_id', user.id);
 
-  const tenantId = tenantUsers?.[0]?.tenant_id;
+  const tenantId = membershipError ? undefined : tenantUsers?.[0]?.tenant_id;
 
-  if (!tenantId) {
+  if (membershipError) {
+    console.warn('proxy: tenant_users check failed, failing open:', membershipError.message);
+  } else if (!tenantId) {
     return NextResponse.redirect(new URL('/onboarding', request.url));
   }
 
   // Check subscription block (skip for billing page)
-  if (!pathname.startsWith(billingPath)) {
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false, autoRefreshToken: false } }
-    );
-
+  if (tenantId && !pathname.startsWith(billingPath)) {
     const { data: tenant } = await supabaseAdmin
       .from('tenants')
       .select('subscription_status, subscription_plan, created_at, subscription_current_period_end')
@@ -76,7 +83,7 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  response.headers.set('x-tenant-id', tenantId);
+  if (tenantId) response.headers.set('x-tenant-id', tenantId);
   return response;
 }
 
