@@ -1,0 +1,88 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { NextRequest } from 'next/server';
+import { proxy } from '@/proxy';
+import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
+import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
+
+vi.mock('@supabase/ssr', () => ({ createServerClient: vi.fn() }));
+vi.mock('@supabase/supabase-js', () => ({ createClient: vi.fn() }));
+vi.mock('@/lib/checkSubscription', () => ({ checkSubscriptionBlocked: vi.fn() }));
+
+const serverClientMock = vi.mocked(createServerClient);
+const adminClientMock = vi.mocked(createClient);
+const subscriptionMock = vi.mocked(checkSubscriptionBlocked);
+
+let adminQueue: Array<Record<string, unknown> | null>;
+
+function makeServerClient(user: { id: string } | null) {
+  const getUser = vi.fn().mockResolvedValue({ data: { user }, error: null });
+  serverClientMock.mockReturnValue({ auth: { getUser } } as never);
+}
+
+function makeAdminClient() {
+  adminClientMock.mockReturnValue({
+    from: () => {
+      const builder = {
+        select: vi.fn(() => builder),
+        eq: vi.fn(() => builder),
+        single: () => Promise.resolve(adminQueue.shift() ?? { data: null, error: null }),
+        then: (resolve: (v: unknown) => unknown) =>
+          Promise.resolve(adminQueue.shift() ?? { data: null, error: null }).then(resolve),
+      };
+      return builder as never;
+    },
+  } as never);
+}
+
+function request(pathname = '/dashboard') {
+  return new NextRequest(`http://localhost${pathname}`);
+}
+
+describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe caer en onboarding)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    adminQueue = [];
+    subscriptionMock.mockReturnValue({ blocked: false });
+    makeServerClient({ id: 'user-1' });
+    makeAdminClient();
+  });
+
+  it('no redirige a onboarding si el usuario tiene una empresa', async () => {
+    adminQueue.push({ data: [{ tenant_id: 't1' }], error: null });
+    adminQueue.push({ data: { subscription_status: 'active' }, error: null });
+
+    const res = await proxy(request('/dashboard'));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('x-tenant-id')).toBe('t1');
+  });
+
+  it('NO redirige a onboarding cuando la query de membresías falla (fail open)', async () => {
+    // Ej: token en pleno refresh / error transitorio de RLS en el arranque.
+    adminQueue.push({ data: null, error: { message: 'auth/invalid JWT' } });
+
+    const res = await proxy(request('/dashboard'));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('location')).toBeNull();
+  });
+
+  it('redirige a onboarding SOLO ante una membresía definitivamente vacía', async () => {
+    adminQueue.push({ data: [], error: null });
+
+    const res = await proxy(request('/dashboard'));
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toContain('/onboarding');
+  });
+
+  it('redirige a login si no hay sesión', async () => {
+    makeServerClient(null);
+
+    const res = await proxy(request('/dashboard'));
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toContain('/login');
+  });
+});
