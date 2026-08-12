@@ -85,4 +85,13 @@ describe('filterProducts', () => {
     });
     expect(result.map((p) => p.name)).toEqual(['Coca Cola 1.5L', 'Agua Mineral']);
   });
+
+  it('usa 0 como default cuando faltan stock/min_stock', () => {
+    const result = filterProducts(
+      [{ name: 'Sin stock' }],
+      { stockFilter: 'critical' }
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('Sin stock');
+  });
 });

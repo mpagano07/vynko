@@ -174,3 +174,48 @@ describe('LandingPage navbar', () => {
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/'));
   });
 });
+
+describe('LandingPage waitlist', () => {
+  beforeEach(() => {
+    authMock.mockReset();
+    hasSessionMock.mockReset();
+    mockUseAuth({ loading: false });
+  });
+
+  function getForm() {
+    const input = screen.getByPlaceholderText('tu@email.com');
+    return { input, form: input.closest('form') as HTMLFormElement };
+  }
+
+  it('muestra un error si se envía sin email', async () => {
+    render(<LandingPage />);
+
+    fireEvent.submit(getForm().form);
+
+    expect(await screen.findByText('Ingresá tu email para continuar')).toBeInTheDocument();
+  });
+
+  it('muestra un error si el email no es válido y limpia el error al tipear', async () => {
+    render(<LandingPage />);
+
+    fireEvent.submit(getForm().form);
+    expect(await screen.findByText('Ingresá tu email para continuar')).toBeInTheDocument();
+
+    const { input, form } = getForm();
+    fireEvent.change(input, { target: { value: 'no-es-un-email' } });
+    expect(screen.queryByText('Ingresá tu email para continuar')).not.toBeInTheDocument();
+
+    fireEvent.submit(form);
+    expect(await screen.findByText('Email inválido')).toBeInTheDocument();
+  });
+
+  it('con un email válido muestra el estado de éxito', async () => {
+    render(<LandingPage />);
+
+    const { input, form } = getForm();
+    fireEvent.change(input, { target: { value: 'ana@tienda.com' } });
+    fireEvent.submit(form);
+
+    expect(await screen.findByRole('button', { name: '¡Registrado!' }, { timeout: 2000 })).toBeInTheDocument();
+  });
+});

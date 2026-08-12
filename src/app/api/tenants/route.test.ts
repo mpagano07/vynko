@@ -105,4 +105,42 @@ describe('POST /api/tenants', () => {
     );
     expect(tenantInsert?.args[0]).toMatchObject({ subscription_plan: 'starter' });
   });
+
+  it('devuelve 500 cuando falla el insert del tenant', async () => {
+    supabaseMock.__queue('tenants', {
+      data: [{ subscription_plan: 'business', subscription_status: 'active', subscription_current_period_end: null }],
+    });
+    supabaseMock.__queue('tenants', { data: null, error: { message: 'insert fail' } });
+
+    const res = await POST(makeRequest({ name: 'Sucursal 2' }));
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe('insert fail');
+  });
+
+  it('devuelve 500 cuando falla el insert del tenant_users', async () => {
+    supabaseMock.__queue('tenants', {
+      data: [{ subscription_plan: 'business', subscription_status: 'active', subscription_current_period_end: null }],
+    });
+    supabaseMock.__queue('tenants', { data: null, error: null });
+    supabaseMock.__queue('tenant_users', { data: null, error: { message: 'tu fail' } });
+
+    const res = await POST(makeRequest({ name: 'Sucursal 2' }));
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe('tu fail');
+  });
+
+  it('devuelve 500 ante un body inválido', async () => {
+    const req = new Request('http://localhost/api/tenants', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{not-valid-json',
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe('Error interno del servidor');
+  });
 });

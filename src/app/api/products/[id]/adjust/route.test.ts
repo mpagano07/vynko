@@ -116,4 +116,62 @@ describe('POST /api/products/[id]/adjust', () => {
     );
     expect(res.status).toBe(401);
   });
+
+  it('devuelve advertencia cuando falla el registro en stock_history', async () => {
+    supabaseMock.__queue('products', { data: { id: 'p1', name: 'Coca' } });
+    supabaseMock.__queue('product_stock', { data: { stock: 5 } });
+    supabaseMock.__queue('product_stock', { data: null, error: null }); // update
+    supabaseMock.__queue('stock_history', {
+      data: null,
+      error: { message: 'history insert failed' },
+    });
+
+    const res = await POST(
+      makeRequest({ id: 'p1' }, { quantity: 2, reason: 'correction', notes: 'recontado' }),
+      { params: routeParams } as never
+    );
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.newStock).toBe(7);
+    expect(json.warning).toContain('no se pudo registrar en el historial');
+    expect(json.warning).toContain('history insert failed');
+    expect(json.reason).toBe('correction');
+    expect(json.notes).toBe('recontado');
+  });
+
+  it('parte de stock 0 cuando el producto no tiene registro de stock', async () => {
+    supabaseMock.__queue('products', { data: { id: 'p1', name: 'Coca' } });
+    supabaseMock.__queue('product_stock', { data: null, error: null });
+    supabaseMock.__queue('product_stock', { data: null, error: null }); // update
+    supabaseMock.__queue('stock_history', { data: null, error: null });
+
+    const res = await POST(
+      makeRequest({ id: 'p1' }, { quantity: 5, reason: 'found' }),
+      { params: routeParams } as never
+    );
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.previousStock).toBe(0);
+    expect(json.newStock).toBe(5);
+  });
+
+  it('devuelve 500 cuando falla la actualización del stock', async () => {
+    supabaseMock.__queue('products', { data: { id: 'p1', name: 'Coca' } });
+    supabaseMock.__queue('product_stock', { data: { stock: 5 } });
+    supabaseMock.__queue('product_stock', {
+      data: null,
+      error: { message: 'update failed' },
+    });
+
+    const res = await POST(
+      makeRequest({ id: 'p1' }, { quantity: 1, reason: 'found' }),
+      { params: routeParams } as never
+    );
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe('update failed');
+  });
 });

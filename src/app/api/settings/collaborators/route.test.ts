@@ -79,6 +79,16 @@ describe('GET /api/settings/collaborators', () => {
       expect.objectContaining({ id: 'inv1', role: 'member' }),
     ]);
   });
+
+  it('devuelve 500 si falla la carga de miembros', async () => {
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
+    supabaseMock.__queue('tenant_users', { data: null, error: null });
+
+    const res = await GET(makeRequest('GET'));
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe('Failed to fetch members');
+  });
 });
 
 describe('POST /api/settings/collaborators', () => {
@@ -134,6 +144,60 @@ describe('POST /api/settings/collaborators', () => {
     expect(insert?.args[0]).toMatchObject({ tenant_id: 'tenant-1', user_id: 'user-2', role: 'member' });
   });
 
+  it('actualiza el nombre y agrega a un usuario existente con perfil asociado', async () => {
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
+    supabaseMock.__queue('profiles', { data: { id: 'user-2', email: 'a@b.com' } });
+    supabaseMock.__queue('profiles', { data: null, error: null });
+    supabaseMock.__queue('tenant_users', { data: null, error: null });
+    supabaseMock.__queue('tenants', { data: { subscription_plan: 'business' } });
+    supabaseMock.__queue('tenant_users', { data: null, error: null, count: 0 });
+    supabaseMock.__queue('profiles', {
+      data: { email: 'a@b.com', full_name: 'Ana', avatar_url: null },
+    });
+
+    const res = await POST(makeRequest('POST', {
+      email: 'a@b.com',
+      role: 'member',
+      full_name: 'Ana',
+    }));
+
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.collaborator).toMatchObject({ user_id: 'user-2', full_name: 'Ana' });
+    expect(supabaseMock.__calls.some(
+      (c) => c.table === 'profiles' && c.method === 'update'
+    )).toBe(true);
+    expect(supabaseMock.__calls.some(
+      (c) => c.table === 'tenant_users' && c.method === 'insert' && (c.args[0] as Record<string, unknown>)?.user_id === 'user-2'
+    )).toBe(true);
+  });
+
+  it('registra por email a un usuario ya existente en profiles', async () => {
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
+    supabaseMock.__queue('profiles', { data: null, error: null });
+    supabaseMock.__queue('profiles', { data: { id: 'user-9', email: 'nuevo@tienda.com' } });
+    supabaseMock.__queue('profiles', { data: null, error: null });
+    supabaseMock.__queue('tenant_users', { data: null, error: null });
+    supabaseMock.__queue('tenants', { data: { subscription_plan: 'business' } });
+    supabaseMock.__queue('tenant_users', { data: null, error: null, count: 0 });
+    supabaseMock.__queue('profiles', {
+      data: { email: 'nuevo@tienda.com', full_name: 'Nuevo', avatar_url: null },
+    });
+
+    const res = await POST(makeRequest('POST', {
+      email: 'nuevo@tienda.com',
+      role: 'manager',
+      full_name: 'Nuevo',
+    }));
+
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.collaborator).toMatchObject({ user_id: 'user-9', role: 'manager' });
+    expect(supabaseMock.__calls.some(
+      (c) => c.table === 'profiles' && c.method === 'upsert'
+    )).toBe(true);
+  });
+
   it('invita por email a un usuario nuevo', async () => {
     supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
     supabaseMock.__queue('profiles', { data: null, error: null });
@@ -171,5 +235,37 @@ describe('POST /api/settings/collaborators', () => {
     expect(res.status).toBe(403);
     const json = await res.json();
     expect(json.error).toContain('permite hasta 1 usuario');
+  });
+
+  it('devuelve 500 si falla el upsert de la invitación', async () => {
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
+    supabaseMock.__queue('profiles', { data: null, error: null });
+    supabaseMock.__queue('profiles', { data: null, error: null });
+    supabaseMock.__queue('tenants', { data: { subscription_plan: 'business' } });
+    supabaseMock.__queue('invitations', {
+      data: null,
+      error: { message: 'invite fail' },
+    });
+
+    const res = await POST(makeRequest('POST', { email: 'nuevo@tienda.com', role: 'member' }));
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe('invite fail');
+    expect(supabaseMock.auth.admin.inviteUserByEmail).not.toHaveBeenCalled();
+  });
+
+  it('devuelve 500 ante un body inválido', async () => {
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
+
+    const req = new Request('http://localhost/api/settings/collaborators', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{not-valid-json',
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe('Internal server error');
   });
 });
