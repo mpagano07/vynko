@@ -32,7 +32,7 @@ function createSupabaseMock() {
         return builder;
       };
 
-    for (const method of ['select', 'eq', 'in', 'gte', 'order', 'range', 'is', 'limit', 'not']) {
+    for (const method of ['select', 'eq', 'in', 'gte', 'order', 'range', 'is', 'limit', 'not', 'or']) {
       builder[method] = chain(method);
     }
     for (const method of ['insert', 'update', 'delete', 'upsert']) {

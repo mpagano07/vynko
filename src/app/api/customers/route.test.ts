@@ -109,5 +109,64 @@ describe('Customers API', () => {
       const json = await res.json();
       expect(json.error).toBe('El nombre del cliente es requerido');
     });
+
+    it('rejects invalid JSON body (400)', async () => {
+      const req = new Request('http://localhost/api/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{not-valid-json',
+      });
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toBe('Invalid request body');
+    });
+
+    it('uses null for optional fields when omitted', async () => {
+      supabaseMock.__queue('customers', {
+        data: { id: 'c3', name: 'Solo Nombre', tenant_id: 'tenant-1' },
+      });
+
+      const res = await POST(makeRequest('POST', { name: 'Solo Nombre' }));
+      expect(res.status).toBe(201);
+
+      const insertCall = supabaseMock.__calls.find(
+        (c) => c.table === 'customers' && c.method === 'insert'
+      );
+      expect(insertCall?.args[0]).toMatchObject({
+        name: 'Solo Nombre',
+        email: null,
+        phone: null,
+        address: null,
+        notes: null,
+      });
+    });
+
+    it('returns 400 when the insert fails', async () => {
+      supabaseMock.__queue('customers', {
+        data: null,
+        error: { message: 'duplicate customer' },
+      });
+
+      const res = await POST(makeRequest('POST', { name: 'Juan' }));
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toBe('duplicate customer');
+    });
+  });
+});
+
+describe('GET /api/customers error', () => {
+  beforeEach(() => {
+    supabaseMock.__reset();
+  });
+
+  it('returns 500 on database error', async () => {
+    supabaseMock.__queue('customers', { data: null, error: { message: 'db down' } });
+
+    const res = await GET(makeRequest('GET'));
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe('db down');
   });
 });

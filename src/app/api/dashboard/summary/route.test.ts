@@ -95,4 +95,39 @@ describe('GET /api/dashboard/summary', () => {
       topSupplier: null,
     });
   });
+
+  it('devuelve 500 cuando getAuth lanza una excepción', async () => {
+    vi.mocked(getAuth).mockRejectedValueOnce(new Error('boom'));
+    const res = await GET(makeRequest());
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe('boom');
+  });
+
+  it('devuelve un mensaje genérico cuando el error no es una instancia de Error', async () => {
+    vi.mocked(getAuth).mockRejectedValueOnce('string-error');
+    const res = await GET(makeRequest());
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe('Error processing summary');
+  });
+
+  it('usa "—" como fallback cuando el detalle del producto/cliente/proveedor no existe', async () => {
+    supabaseMock.__queue('sales', { data: [{ id: 's1' }] });
+    supabaseMock.__queue('sales', { data: [{ customer_id: 'c1', total_cents: 5000 }] });
+    supabaseMock.__queue('sales', { data: [{ created_at: '2026-08-01T12:00:00.000Z' }] });
+    supabaseMock.__queue('purchase_orders', { data: [{ supplier_id: 'sup1' }] });
+    supabaseMock.__queue('sale_items', { data: [{ product_id: 'p1', quantity: 2 }] });
+    supabaseMock.__queue('products', { data: null, error: null });
+    supabaseMock.__queue('customers', { data: null, error: null });
+    supabaseMock.__queue('suppliers', { data: null, error: null });
+
+    const res = await GET(makeRequest());
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.topProduct).toEqual({ name: '—', qty: 2 });
+    expect(json.topCustomer).toEqual({ name: '—', total: 50 });
+    expect(json.topSupplier).toEqual({ name: '—' });
+  });
 });
