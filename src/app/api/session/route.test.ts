@@ -96,4 +96,13 @@ describe('GET /api/session', () => {
     expect(json.tenant).toMatchObject({ id: 't1' });
     expect(json.tenants).toHaveLength(2);
   });
+
+  it('devuelve 500 cuando la verificación del token falla', async () => {
+    vi.mocked(supabaseMock.auth.getUser).mockRejectedValueOnce(new Error('boom'));
+
+    const res = await GET(makeRequest('token'));
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json).toMatchObject({ user: null, tenants: [] });
+  });
 });

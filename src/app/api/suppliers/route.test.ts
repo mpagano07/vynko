@@ -126,5 +126,45 @@ describe('Suppliers API', () => {
         details: { name: 'Macro' },
       });
     });
+
+    it('rejects invalid JSON body (400)', async () => {
+      const req = new Request('http://localhost/api/suppliers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{not-valid-json',
+      });
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toBe('Invalid request body');
+    });
+
+    it('returns 400 when the suppliers insert fails', async () => {
+      supabaseMock.__queue('suppliers', {
+        data: null,
+        error: { message: 'duplicate supplier' },
+      });
+
+      const res = await POST(makeRequest('POST', { name: 'Macro' }));
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toBe('duplicate supplier');
+    });
+  });
+});
+
+describe('GET /api/suppliers error', () => {
+  beforeEach(() => {
+    supabaseMock.__reset();
+    vi.mocked(getAuth).mockResolvedValue(mockAuth);
+  });
+
+  it('returns 500 on database error', async () => {
+    supabaseMock.__queue('suppliers', { data: null, error: { message: 'db down' } });
+
+    const res = await GET(makeRequest('GET'));
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe('db down');
   });
 });

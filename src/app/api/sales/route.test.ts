@@ -188,6 +188,33 @@ describe('POST /api/sales', () => {
     const res = await POST(makeRequest({ items: [{ product_id: 'p1', quantity: 1 }] }));
     expect(res.status).toBe(401);
   });
+
+  it('borra la venta y devuelve 400 cuando falla el insert de sale_items', async () => {
+    supabaseMock.__queue('products', {
+      data: [{ id: 'p1', name: 'Coca', price: 2, price_cents: 200 }],
+    });
+    supabaseMock.__queue('product_stock', { data: [{ product_id: 'p1', stock: 10 }] });
+    supabaseMock.__queue('sales', { data: { id: 'sale-9' } });
+    supabaseMock.__queue('sale_items', {
+      data: null,
+      error: { message: 'items fail' },
+    });
+
+    const res = await POST(makeRequest({ items: [{ product_id: 'p1', quantity: 2 }] }));
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe('items fail');
+
+    const del = supabaseMock.__calls.find(
+      (c) => c.table === 'sales' && c.method === 'delete'
+    );
+    expect(del).toBeDefined();
+    const delEq = supabaseMock.__calls.find(
+      (c) => c.table === 'sales' && c.method === 'eq' && c.args[0] === 'id'
+    );
+    expect(delEq?.args[1]).toBe('sale-9');
+    expect(createActivityLog).not.toHaveBeenCalled();
+  });
 });
 
 describe('GET /api/sales', () => {
@@ -251,5 +278,29 @@ describe('GET /api/sales', () => {
       (c) => c.table === 'sales' && c.method === 'eq' && c.args[0] === 'tenant_id'
     );
     expect(tenantEq?.args[1]).toBe('tenant-1');
+  });
+
+  it('mapea customer_name y product_name de items', async () => {
+    supabaseMock.__queue('sales', {
+      data: [
+        {
+          id: 's1',
+          total_cents: 1000,
+          customer: { name: 'Ana' },
+          items: [
+            { id: 'i1', product: { name: 'Coca' } },
+            { id: 'i2', product: null },
+          ],
+        },
+      ],
+    });
+
+    const res = await GET(makeGetRequest('http://localhost/api/sales'));
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json[0].customer_name).toBe('Ana');
+    expect(json[0].items[0].product_name).toBe('Coca');
+    expect(json[0].items[1].product_name).toBeNull();
   });
 });

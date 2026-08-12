@@ -109,5 +109,63 @@ describe('Categories API', () => {
       const json = await res.json();
       expect(json.error).toBe('El nombre de la categoría es requerido');
     });
+
+    it('rejects invalid JSON body (400)', async () => {
+      const req = new Request('http://localhost/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{not-valid-json',
+      });
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toBe('Invalid request body');
+    });
+
+    it('uses null for optional description/icon/color when omitted', async () => {
+      supabaseMock.__queue('categories', {
+        data: { id: 'c3', name: 'Bebidas', tenant_id: 'tenant-1' },
+      });
+
+      const res = await POST(makeRequest('POST', { name: 'Bebidas' }));
+      expect(res.status).toBe(201);
+
+      const insertCall = supabaseMock.__calls.find(
+        (c) => c.table === 'categories' && c.method === 'insert'
+      );
+      expect(insertCall?.args[0]).toMatchObject({
+        name: 'Bebidas',
+        description: null,
+        icon: null,
+        color: null,
+      });
+    });
+
+    it('returns 400 when the insert fails', async () => {
+      supabaseMock.__queue('categories', {
+        data: null,
+        error: { message: 'duplicate name' },
+      });
+
+      const res = await POST(makeRequest('POST', { name: 'Bebidas' }));
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toBe('duplicate name');
+    });
+  });
+});
+
+describe('GET /api/categories error', () => {
+  beforeEach(() => {
+    supabaseMock.__reset();
+  });
+
+  it('returns 500 on database error', async () => {
+    supabaseMock.__queue('categories', { data: null, error: { message: 'db down' } });
+
+    const res = await GET(makeRequest('GET'));
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe('db down');
   });
 });

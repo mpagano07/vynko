@@ -50,6 +50,11 @@ describe('checkSubscription', () => {
       };
       expect(isTrialExpired(tenant)).toBe(false);
     });
+
+    it('returns false for statuses outside free/active/past_due (canceled)', () => {
+      expect(isTrialExpired({ subscription_status: 'canceled' })).toBe(false);
+      expect(isTrialExpired({ subscription_status: 'trialing' })).toBe(false);
+    });
   });
 
   describe('checkSubscriptionBlocked', () => {
