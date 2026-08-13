@@ -41,6 +41,10 @@ yarn-error.log*
 .env*.development
 .env*.production
 
+# db sync (prod -> dev)
+.env.db
+/scripts/dumps/
+
 # vercel
 .vercel
 
