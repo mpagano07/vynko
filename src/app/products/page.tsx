@@ -596,13 +596,13 @@ export default function ProductsPage() {
               type="text"
               placeholder="Buscar por nombre, SKU o barras..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               className="pl-9"
             />
           </div>
 
           <div>
-            <Select value={selectedCategoryId} onChange={(e) => setSelectedCategoryId(e.target.value)}>
+            <Select value={selectedCategoryId} onChange={(e) => { setSelectedCategoryId(e.target.value); setCurrentPage(1); }}>
               <option value="all">Todas las categorías</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -615,7 +615,7 @@ export default function ProductsPage() {
           <div>
             <Select
               value={stockFilter}
-              onChange={(e) => setStockFilter(e.target.value as 'all' | 'critical' | 'low' | 'normal')}
+              onChange={(e) => { setStockFilter(e.target.value as 'all' | 'critical' | 'low' | 'normal'); setCurrentPage(1); }}
             >
               <option value="all">Cualquier nivel de stock</option>
               <option value="critical">Stock Crítico (menor al mínimo)</option>
@@ -832,7 +832,12 @@ export default function ProductsPage() {
 
       {/* PRODUCT DIALOG MODAL */}
       {isProductModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Producto"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs"
+        >
           <Card className="w-full max-w-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
             <button
               onClick={() => setIsProductModalOpen(false)}
@@ -848,10 +853,12 @@ export default function ProductsPage() {
             <form onSubmit={handleSaveProduct} className="space-y-4 overflow-y-auto pr-1 flex-1">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <label htmlFor="product-name" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                     Nombre del Producto *
                   </label>
                   <Input
+                    id="product-name"
+                    name="name"
                     type="text"
                     required
                     placeholder="Ej. Coca Cola 1.5L"
@@ -861,10 +868,12 @@ export default function ProductsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <label htmlFor="product-category" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                     Categoría
                   </label>
                   <Select
+                    id="product-category"
+                    name="categoria"
                     value={productForm.category_id}
                     onChange={(e) => setProductForm({ ...productForm, category_id: e.target.value })}
                   >
@@ -879,10 +888,12 @@ export default function ProductsPage() {
 
                 <div className="grid grid-cols-2 gap-4 sm:col-span-2">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <label htmlFor="product-barcode" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                       Código de Barras / GTIN
                     </label>
                     <Input
+                      id="product-barcode"
+                      name="barcode"
                       type="text"
                       placeholder="Ej. 7791234567890"
                       value={productForm.barcode}
@@ -890,10 +901,12 @@ export default function ProductsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <label htmlFor="product-sku" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                       SKU
                     </label>
                     <Input
+                      id="product-sku"
+                      name="sku"
                       type="text"
                       placeholder="Ej. REF-COCA-1.5"
                       value={productForm.sku}
@@ -904,10 +917,12 @@ export default function ProductsPage() {
 
                 <div className="grid grid-cols-3 gap-2 sm:col-span-2">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <label htmlFor="product-cost" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                       Costo ($)
                     </label>
                     <Input
+                      id="product-cost"
+                      name="cost"
                       type="number"
                       step="0.01"
                       placeholder="0.00"
@@ -916,10 +931,12 @@ export default function ProductsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <label htmlFor="product-price" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                       Precio ($)
                     </label>
                     <Input
+                      id="product-price"
+                      name="price"
                       type="number"
                       step="0.01"
                       required
@@ -947,30 +964,36 @@ export default function ProductsPage() {
 
                 <div className="grid grid-cols-3 gap-2 sm:col-span-2">
                   <div>
-                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <label htmlFor="product-stock" className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
                       Stock Inicial
                     </label>
                     <Input
+                      id="product-stock"
+                      name="stock"
                       type="number"
                       value={productForm.stock}
                       onChange={(e) => setProductForm({ ...productForm, stock: Number(e.target.value) })}
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <label htmlFor="product-min-stock" className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
                       Mínimo Crítico
                     </label>
                     <Input
+                      id="product-min-stock"
+                      name="min_stock"
                       type="number"
                       value={productForm.min_stock}
                       onChange={(e) => setProductForm({ ...productForm, min_stock: Number(e.target.value) })}
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <label htmlFor="product-max-stock" className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
                       Máximo Sugerido
                     </label>
                     <Input
+                      id="product-max-stock"
+                      name="max_stock"
                       type="number"
                       value={productForm.max_stock}
                       onChange={(e) => setProductForm({ ...productForm, max_stock: Number(e.target.value) })}
@@ -984,10 +1007,12 @@ export default function ProductsPage() {
                   </label>
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      <label htmlFor="product-deposito" className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
                         Depósito
                       </label>
                       <Input
+                        id="product-deposito"
+                        name="deposito"
                         type="text"
                         placeholder="Ej. A"
                         value={productForm.deposito}
@@ -995,10 +1020,12 @@ export default function ProductsPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      <label htmlFor="product-pasillo" className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
                         Pasillo
                       </label>
                       <Input
+                        id="product-pasillo"
+                        name="pasillo"
                         type="text"
                         placeholder="Ej. 3"
                         value={productForm.pasillo}
@@ -1006,10 +1033,12 @@ export default function ProductsPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      <label htmlFor="product-estanteria" className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
                         Estantería
                       </label>
                       <Input
+                        id="product-estanteria"
+                        name="estanteria"
                         type="text"
                         placeholder="Ej. 2"
                         value={productForm.estanteria}
@@ -1020,10 +1049,12 @@ export default function ProductsPage() {
                 </div>
 
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <label htmlFor="product-description" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                     Descripción del producto
                   </label>
                   <textarea
+                    id="product-description"
+                    name="description"
                     className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                     rows={3}
                     placeholder="Detalles del producto, empaque, etc."

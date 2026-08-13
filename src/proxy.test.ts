@@ -17,7 +17,7 @@ let adminQueue: Array<Record<string, unknown> | null>;
 
 function makeServerClient(user: { id: string } | null) {
   const getUser = vi.fn().mockResolvedValue({ data: { user }, error: null });
-  serverClientMock.mockImplementation((_url, _key) => {
+  serverClientMock.mockImplementation(() => {
     return { auth: { getUser } } as never;
   });
 }
