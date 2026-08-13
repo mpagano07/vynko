@@ -112,22 +112,75 @@ Los tests no requieren base de datos ni variables de entorno: las rutas API se p
 
 Los E2E corren con [Playwright](https://playwright.dev) contra la app real levantada en el puerto 3000 (la levanta sola). Viven en `e2e/`.
 
+#### Correr todos los tests E2E
+
 ```bash
 npm run test:e2e
 ```
 
-#### Modo interactivo (UI)
+#### Modo interactivo (UI con inspector)
 
 ```bash
 npm run test:e2e:ui
 ```
 
-#### Correr un archivo o un solo test
+#### Modo headed (ver navegador mientras se ejecutan)
+
+```bash
+npx playwright test --headed
+```
+
+#### Correr un archivo específico
 
 ```bash
 npx playwright test e2e/login.spec.ts
-npx playwright test --grep "login exitoso"
+npx playwright test e2e/products.spec.ts
+npx playwright test e2e/onboarding.spec.ts
 ```
+
+#### Correr un solo test por nombre
+
+```bash
+npx playwright test --grep "login exitoso"
+npx playwright test --grep "crear producto"
+npx playwright test --grep "buscar"
+```
+
+#### Correr tests con un solo worker (serial)
+
+```bash
+npx playwright test --workers=1
+```
+
+#### Listar todos los tests disponibles
+
+```bash
+npx playwright test --list
+```
+
+#### Batería de tests disponible
+
+**Autenticación** (`e2e/login.spec.ts`):
+- Muestra el formulario de login
+- Login con credenciales inválidas
+- Login exitoso → redirección a dashboard
+- Campos obligatorios (error si están vacíos)
+- Logout → redirección a login
+- Usuario no autenticado → redirección a login
+- Sesión persiste al recargar página
+
+**Productos** (`e2e/products.spec.ts`):
+- Listar productos (tabla visible + columnas correctas)
+- Buscar producto (filtrar y limpiar búsqueda)
+- Crear producto exitoso
+- Crear producto con datos inválidos
+- Editar producto
+- Eliminar/desactivar producto
+- Producto desactivado no usable en venta
+- Filtrar productos por categoría
+
+**Onboarding** (`e2e/onboarding.spec.ts`):
+- Usuario nuevo sin empresa es redirigido a onboarding
 
 #### Requisitos
 
@@ -135,7 +188,19 @@ npx playwright test --grep "login exitoso"
 - Los tests que usan credenciales reales leen `E2E_USER_EMAIL` y `E2E_USER_PASSWORD` desde `.env.local` (ya están configurados para el usuario de prueba). Si faltan, ese test se salta.
 - El `webServer` del config levanta `npm run dev` automáticamente; si ya tenés el server corriendo en `:3000`, reutiliza esa instancia.
 
-#### Prerrequisitos
+#### Helpers y Fixtures
+
+Los tests de productos usan helpers reutilizables definidos en `e2e/fixtures.ts`:
+- `authenticatedPage`: Fixture que proporciona una página autenticada (se autentica una sola vez)
+- `createProductViaUI()`: Crear producto llenando formulario
+- `editProductViaUI()`: Editar producto
+- `deleteProductViaUI()`: Eliminar producto con confirmación
+- `searchProduct()`: Buscar en listado
+- `filterByCategory()`: Filtrar por categoría
+- `countProductsInTable()`: Contar filas en tabla
+- `isProductVisibleInTable()`: Verificar si producto está visible
+
+#### Prerequisitos adicionales
 
 - La columna `mercadopago_preapproval_id` debe existir en la tabla `tenants` (migración `migrations/008_mercadopago.sql`).
 - Variables en `.env.local`: `MERCADOPAGO_ACCESS_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL` (y `NEXT_PUBLIC_CURRENCY`, por defecto `ARS`).
