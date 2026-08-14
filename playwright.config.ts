@@ -5,10 +5,13 @@ dotenv.config({ path: '.env.local' });
 
 export default defineConfig({
   testDir: './e2e',
-  fullyParallel: true,
+  fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // Todos los specs comparten la misma base y mutan datos (crear/editar/
+  // eliminar productos, ajustar stock), por lo que deben correr en serie
+  // para ser deterministas. Con varios workers se pisan entre sí.
+  workers: 1,
   reporter: 'html',
   use: {
     baseURL: 'http://localhost:3000',
@@ -17,7 +20,7 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: { ...devices['Desktop Chrome'], channel: 'chrome' },
     },
   ],
   webServer: {
