@@ -1,4 +1,4 @@
-import { test as base, Page } from '@playwright/test';
+import { test as base, expect, Page } from '@playwright/test';
 
 const E2E_USER_EMAIL = process.env.E2E_USER_EMAIL ?? '';
 const E2E_USER_PASSWORD = process.env.E2E_USER_PASSWORD ?? '';
@@ -251,4 +251,192 @@ export async function getProductPriceFromTable(page: Page, productName: string):
   // Buscar celda de precio (típicamente la segunda o tercera columna)
   const priceCell = productRow.locator('td').nth(3);
   return (await priceCell.textContent()) ?? '';
+}
+
+// ===== Helpers de Stock =====
+
+/**
+ * Lee el stock actual y la clase del badge de un producto en la tabla de
+ * productos. El badge puede ser emerald (saludable), amber (bajo) o
+ * red (crítico).
+ */
+export async function getStockInfo(page: Page, productName: string): Promise<{ stock: number; badgeClass: string }> {
+  await page.locator('table').first().waitFor({ state: 'visible', timeout: 15_000 });
+  const loader = page.locator('[data-testid="loader"], .animate-spin').first();
+  await loader.waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+  await searchProduct(page, productName);
+
+  const row = page.locator('tbody tr').filter({ hasText: productName }).first();
+  await row.waitFor({ state: 'visible', timeout: 5_000 });
+
+  const badge = row.locator('td').nth(5).locator('span.rounded-full').first();
+  const stockText = (await badge.textContent()) ?? '';
+  const badgeClass = (await badge.getAttribute('class')) ?? '';
+  return { stock: parseInt(stockText, 10) || 0, badgeClass };
+}
+
+/**
+ * Ajusta el stock de un producto usando el formulario de Antipérdidas
+ * ("Reportar ajuste"). Los motivos 'found' y 'correction' suman stock; el
+ * resto ('damaged', 'lost', 'stolen', 'expired') restan.
+ *
+ * Con expectSuccess=false, verifica que la operación falle (p.ej. retirar
+ * más stock del disponible) y que el modal siga abierto.
+ */
+export async function adjustStockViaLossPrevention(
+  page: Page,
+  productName: string,
+  quantity: number,
+  reason: string,
+  expectSuccess = true
+) {
+  await page.goto('/loss-prevention');
+  await page.getByRole('button', { name: 'Reportar ajuste' }).click();
+
+  const form = page.getByRole('button', { name: 'Guardar ajuste' }).locator('xpath=ancestor::form[1]');
+  await form.waitFor({ state: 'visible', timeout: 10_000 });
+
+  const productSelect = form.locator('select').nth(0);
+  await productSelect.locator('option', { hasText: productName }).first().waitFor({ state: 'attached', timeout: 15_000 });
+  const optionValue = await productSelect.locator('option', { hasText: productName }).first().getAttribute('value');
+  await productSelect.selectOption(String(optionValue));
+
+  await form.locator('select').nth(1).selectOption(reason);
+
+  await form.locator('input[type="number"]').fill(String(quantity));
+  await form.getByRole('button', { name: 'Guardar ajuste' }).click();
+
+  if (!expectSuccess) {
+    const errorToast = page.locator('[role="status"]').filter({ hasText: 'El stock no puede ser negativo' }).first();
+    await expect(errorToast).toBeVisible({ timeout: 10_000 });
+    await expect(form).toBeVisible();
+    return;
+  }
+
+  const signedQuantity = reason === 'found' || reason === 'correction' ? `+${quantity}` : `-${quantity}`;
+  await expect(page.locator('[role="status"]').first()).toContainText(`Stock ajustado: ${signedQuantity} unidades`, { timeout: 10_000 });
+  await expect(form).toBeHidden({ timeout: 10_000 });
+}
+
+// ===== Helpers de Sucursales (multi-tenant) =====
+
+const DESKTOP_SIDEBAR = 'aside.hidden.md\\:flex';
+
+async function toggleTenantSwitcher(page: Page) {
+  await page.locator(`${DESKTOP_SIDEBAR} p.truncate.flex-1`).first().click();
+}
+
+/**
+ * Nombre de la sucursal activa (label del selector de sucursales del sidebar).
+ */
+export async function getCurrentTenantName(page: Page): Promise<string> {
+  return ((await page.locator(`${DESKTOP_SIDEBAR} p.truncate.flex-1`).first().textContent()) ?? '').trim();
+}
+
+/**
+ * Lista los nombres de todas las sucursales del usuario.
+ */
+export async function getTenantNames(page: Page): Promise<string[]> {
+  await toggleTenantSwitcher(page);
+  const names = await page.locator(`${DESKTOP_SIDEBAR} span.truncate.flex-1.text-left`).allTextContents();
+  await page.locator(`${DESKTOP_SIDEBAR} .fixed.inset-0`).first().click({ position: { x: 30, y: 30 } }).catch(() => {});
+  return names.map((n) => n.trim()).filter(Boolean);
+}
+
+/**
+ * Cambia de sucursal desde el selector del sidebar y espera a que se aplique.
+ */
+export async function switchTenantByName(page: Page, tenantName: string) {
+  await toggleTenantSwitcher(page);
+  await page.locator(DESKTOP_SIDEBAR).getByRole('button', { name: tenantName }).click();
+  await expect(page.locator(`${DESKTOP_SIDEBAR} p.truncate.flex-1`).first()).toHaveText(tenantName, { timeout: 15_000 });
+}
+
+// ===== Helpers de Ventas (caja /sales) =====
+
+/**
+ * Formatea un valor en pesos (es-AR) igual que el frontend (formatARS).
+ * Se usa para comparar los totales del checkout con los valores esperados.
+ */
+export function formatARSTest(value: number): string {
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+/**
+ * Agrega un producto al carrito de la caja: busca por nombre en el input de
+ * la página /sales y hace clic en la tarjeta del producto.
+ */
+export async function addProductToCart(page: Page, productName: string) {
+  const searchInput = page.getByPlaceholder('Buscar producto por nombre, SKU o código de barras...');
+  await searchInput.fill(productName);
+  const card = page.locator('button').filter({ hasText: productName }).first();
+  await card.waitFor({ state: 'visible', timeout: 10_000 });
+  await card.click();
+}
+
+/**
+ * Devuelve el contenedor del ítem de un producto dentro del carrito de /sales.
+ */
+export function getCartItem(page: Page, productName: string) {
+  return page.locator('div.bg-gray-100').filter({ hasText: productName }).first();
+}
+
+/**
+ * Abre la sección colapsable "Últimas Ventas" de /sales y espera a que cargue
+ * la primera fila del historial.
+ */
+export async function openSalesHistory(page: Page) {
+  await page.getByRole('heading', { name: 'Últimas Ventas' }).click();
+  await page.locator('table tbody tr').first().waitFor({ state: 'visible', timeout: 15_000 });
+}
+
+/**
+ * Texto de la primera fila del historial de /sales (la venta más reciente).
+ */
+export async function getNewestSaleRowText(page: Page): Promise<string> {
+  await openSalesHistory(page);
+  return (await page.locator('table tbody tr').first().textContent()) ?? '';
+}
+
+/**
+ * Limpia las ventas y productos de prueba de la batería de ventas.
+ *
+ * Los productos que ya fueron vendidos no se pueden eliminar por la UI: la FK
+ * de `sale_items.product_id` (sin ON DELETE CASCADE) los bloquea y el DELETE
+ * responde 403. Por eso primero se borran las ventas de prueba vía service
+ * role (borrado en cascada de sale_items) y después los productos.
+ */
+export async function cleanupSalesData(page: Page, productNames: string[]) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+  if (url && key) {
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const admin = createClient(url, key, { auth: { persistSession: false } });
+      const { data: products } = await admin.from('products').select('id').in('name', productNames);
+      const ids = (products ?? []).map((p) => p.id);
+      if (ids.length > 0) {
+        const { data: items } = await admin.from('sale_items').select('sale_id').in('product_id', ids);
+        const saleIds = [...new Set((items ?? []).map((i) => i.sale_id))];
+        if (saleIds.length > 0) {
+          await admin.from('sales').delete().in('id', saleIds);
+        }
+        for (const id of ids) {
+          await admin.from('products').delete().eq('id', id);
+        }
+      }
+    } catch (e) {
+      console.log('cleanupSalesData: error al limpiar vía service role:', e);
+    }
+  }
+
+  await page.goto('/products');
+  for (const name of productNames) {
+    expect(await isProductVisibleInTable(page, name)).toBe(false);
+  }
 }

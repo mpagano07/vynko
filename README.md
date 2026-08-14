@@ -135,6 +135,8 @@ npx playwright test --headed
 ```bash
 npx playwright test e2e/login.spec.ts
 npx playwright test e2e/products.spec.ts
+npx playwright test e2e/sales.spec.ts
+npx playwright test e2e/stock.spec.ts
 npx playwright test e2e/onboarding.spec.ts
 ```
 
@@ -147,6 +149,10 @@ npx playwright test --grep "buscar"
 ```
 
 #### Correr tests con un solo worker (serial)
+
+Todos los specs comparten la misma base y mutan datos (crear/editar/eliminar
+productos, ajustar stock), por lo que el config ya corre todo en serie con
+`workers: 1`. También se puede forzar explícitamente:
 
 ```bash
 npx playwright test --workers=1
@@ -182,6 +188,34 @@ npx playwright test --list
 **Onboarding** (`e2e/onboarding.spec.ts`):
 - Usuario nuevo sin empresa es redirigido a onboarding
 
+**Ventas** (`e2e/sales.spec.ts`):
+- Setup: crea productos con precios y stock conocidos
+- Flujo completo: buscar, agregar al carrito, modificar cantidad, verificar subtotal/total, confirmar, venta exitosa, carrito vacío y stock actualizado
+- Venta de varios productos: total sumado y stock descontado de cada uno
+- Modificar cantidad (subir/bajar) y eliminar producto del carrito
+- Cancelar una venta (salir sin confirmar): no se registra nada
+- Intentar vender sin stock suficiente: error y stock sin cambios; producto sin stock deshabilitado
+- Vender hasta agotar stock: stock 0, badge crítico y tarjeta deshabilitada
+- Historial: las ventas aparecen en "Últimas Ventas" con su detalle (items, cantidades, total)
+- Cleanup: borra las ventas de prueba (service role, por la FK de `sale_items`) y los productos
+
+> Nota: la caja (`/sales`) hace fetch sin el header `x-active-tenant-id`, así que
+> opera sobre la primera sucursal del usuario. En un contexto nuevo de Playwright
+> `/products` usa esa misma sucursal por defecto, por lo que los tests son
+> consistentes sin cambiar de sucursal.
+
+**Stock** (`e2e/stock.spec.ts`):
+- Setup: crea un producto con stock inicial para las pruebas
+- Visualizar stock actual (badge de estado)
+- Aumentar stock (ajuste con motivo que suma)
+- Disminuir stock (ajuste con motivo que resta)
+- Verificación de actualización en tabla e historial de `/loss-prevention`
+- Retirar más stock del disponible → error y stock sin cambios
+- Stock 0 → badge crítico y no permite negativos
+- Stock crítico/bajo se reflejan en badges y filtros
+- Aislamiento de stock por sucursal
+- Cleanup: elimina el producto de prueba
+
 #### Requisitos
 
 - Primera vez: `npx playwright install chromium`.
@@ -190,7 +224,7 @@ npx playwright test --list
 
 #### Helpers y Fixtures
 
-Los tests de productos usan helpers reutilizables definidos en `e2e/fixtures.ts`:
+Los tests de productos, stock y ventas usan helpers reutilizables definidos en `e2e/fixtures.ts`:
 - `authenticatedPage`: Fixture que proporciona una página autenticada (se autentica una sola vez)
 - `createProductViaUI()`: Crear producto llenando formulario
 - `editProductViaUI()`: Editar producto
@@ -199,6 +233,14 @@ Los tests de productos usan helpers reutilizables definidos en `e2e/fixtures.ts`
 - `filterByCategory()`: Filtrar por categoría
 - `countProductsInTable()`: Contar filas en tabla
 - `isProductVisibleInTable()`: Verificar si producto está visible
+- `getStockInfo()`: Leer stock y badge de estado de un producto
+- `adjustStockViaLossPrevention()`: Aplicar un ajuste de stock vía `/loss-prevention`
+- `getCurrentTenantName()` / `getTenantNames()`: Leer la sucursal activa y las disponibles
+- `switchTenantByName()`: Cambiar de sucursal desde el sidebar
+- `formatARSTest()`: Formatear pesos (es-AR) para comparar totales del checkout
+- `addProductToCart()` / `getCartItem()`: Agregar un producto al carrito de `/sales` y obtener su ítem
+- `openSalesHistory()` / `getNewestSaleRowText()`: Abrir "Últimas Ventas" y leer la venta más reciente
+- `cleanupSalesData()`: Borrar ventas (service role) y productos de prueba de la batería de ventas
 
 #### Prerequisitos adicionales
 
