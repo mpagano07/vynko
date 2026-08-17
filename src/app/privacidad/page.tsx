@@ -15,7 +15,7 @@ export default function PrivacidadPage() {
       <header className="border-b border-gray-800 bg-gray-950/80 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center">
-            <Image src="/icons/vynkoLogout.png?v=2" alt="Vynko" width={120} height={38} className="h-8 w-auto object-contain" />
+            <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} className="h-8 w-auto object-contain" />
           </Link>
           <Link
             href="/"
