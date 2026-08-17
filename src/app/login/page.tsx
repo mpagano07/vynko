@@ -99,7 +99,7 @@ function LoginContent() {
       <div className="hidden lg:flex lg:w-1/2 items-center justify-center p-12">
         <div className="max-w-md">
           <div className="mb-6">
-            <Image src="/icons/vynkoLogout.png?v=2" alt="Vynko" width={1279} height={396} className="h-10 w-auto object-contain" />
+            <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} className="h-10 w-auto object-contain" />
           </div>
           <p className="text-gray-400 text-lg leading-relaxed">
             Gestión de stock inteligente. Controlá tu inventario, ventas y
@@ -146,7 +146,7 @@ function LoginContent() {
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-sm">
           <div className="lg:hidden flex justify-center mb-8">
-            <Image src="/icons/vynkoLogout.png?v=2" alt="Vynko" width={1279} height={396} className="h-8 w-auto object-contain" />
+            <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} className="h-8 w-auto object-contain" />
           </div>
 
           <h2 className="text-2xl font-bold text-white mb-1">Iniciar sesión</h2>

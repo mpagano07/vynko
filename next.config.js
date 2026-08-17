@@ -20,6 +20,10 @@ const nextConfig = {
         pathname: '/icons/**',
         search: '?v=2',
       },
+      {
+        pathname: '/icons/**',
+        search: '?v=3',
+      },
     ],
   },
   experimental: {

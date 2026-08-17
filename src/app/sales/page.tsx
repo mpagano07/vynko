@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,7 @@ import {
   X,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
+import { getTenantHeaders } from '@/lib/fetchWithTenant';
 import type { Customer } from '@/lib/types/sale';
 
 interface CartItem {
@@ -53,7 +54,7 @@ interface SaleRecord {
   total_cents: number;
   customer_name?: string;
   created_at: string;
-  items: { id: string; product_name?: string; quantity: number; unit_price_cents: number; subtotal_cents: number }[];
+  items: { id: string; product_id: string; product_name?: string; quantity: number; unit_price_cents: number; subtotal_cents: number }[];
 }
 
 export default function SalesPage() {
@@ -75,7 +76,7 @@ export default function SalesPage() {
   const [expandedSales, setExpandedSales] = useState<Set<string>>(new Set());
   const [productSearch, setProductSearch] = useState('');
   const [productPage, setProductPage] = useState(1);
-  const PRODUCTS_PER_PAGE = 12;
+  const PRODUCTS_PER_PAGE = 10;
   const [flyAnim, setFlyAnim] = useState<{
     id: string;
     name: string;
@@ -102,7 +103,7 @@ export default function SalesPage() {
   }, []);
 
   const fetchSales = async (page: number, headers: Record<string, string>) => {
-    const res = await fetch(`/api/sales?days=15&page=${page}&limit=${SALES_PER_PAGE}`, { headers });
+    const res = await fetch(`/api/sales?days=15&page=${page}&limit=${SALES_PER_PAGE}`, { headers: { ...headers, ...getTenantHeaders() } });
     if (res.ok) {
       const d = await res.json();
       setSales(d.data ?? []);
@@ -131,6 +132,7 @@ export default function SalesPage() {
       const { data: { session } } = await supabase.auth.getSession();
       const headers = {
         ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        ...getTenantHeaders(),
       };
 
       const [prodRes, custRes] = await Promise.all([
@@ -160,8 +162,21 @@ export default function SalesPage() {
       (p.sku && p.sku.toLowerCase().includes(productSearch.toLowerCase()))
   );
 
-  const totalProductPages = Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE);
-  const paginatedProducts = filteredProducts.slice(
+  const sortedProducts = useMemo(() => {
+    const saleCount = new Map<string, number>();
+    for (const sale of sales) {
+      for (const item of sale.items) {
+        if (item.product_id) {
+          saleCount.set(item.product_id, (saleCount.get(item.product_id) || 0) + item.quantity);
+        }
+      }
+    }
+    if (saleCount.size === 0) return filteredProducts;
+    return [...filteredProducts].sort((a, b) => (saleCount.get(b.id) || 0) - (saleCount.get(a.id) || 0));
+  }, [filteredProducts, sales]);
+
+  const totalProductPages = Math.ceil(sortedProducts.length / PRODUCTS_PER_PAGE);
+  const paginatedProducts = sortedProducts.slice(
     (productPage - 1) * PRODUCTS_PER_PAGE,
     productPage * PRODUCTS_PER_PAGE
   );
@@ -225,7 +240,13 @@ export default function SalesPage() {
 
   const handleScanBarcode = async (code: string) => {
     try {
-      const res = await fetch(`/api/products/barcode/${encodeURIComponent(code)}`);
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/products/barcode/${encodeURIComponent(code)}`, {
+        headers: {
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+          ...getTenantHeaders(),
+        },
+      });
       const data = await res.json();
       if (data.product) {
         const p = data.product;
@@ -279,11 +300,13 @@ export default function SalesPage() {
     setIsSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      const tenantHeaders = getTenantHeaders();
       const res = await fetch('/api/sales', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+          ...tenantHeaders,
         },
         body: JSON.stringify({
           customer_id: selectedCustomerId || null,
@@ -307,6 +330,7 @@ export default function SalesPage() {
       const { data: { session: s2 } } = await supabase.auth.getSession();
       const h2 = {
         ...(s2?.access_token ? { Authorization: `Bearer ${s2.access_token}` } : {}),
+        ...getTenantHeaders(),
       };
       const [pRes, cRes] = await Promise.all([
         fetch('/api/products', { headers: h2 }),
@@ -415,7 +439,7 @@ export default function SalesPage() {
             <>
               <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 px-1">
                 <span>
-                  Mostrando {((productPage - 1) * PRODUCTS_PER_PAGE) + 1}–{Math.min(productPage * PRODUCTS_PER_PAGE, filteredProducts.length)} de {filteredProducts.length} productos
+                  Mostrando {((productPage - 1) * PRODUCTS_PER_PAGE) + 1}–{Math.min(productPage * PRODUCTS_PER_PAGE, sortedProducts.length)} de {sortedProducts.length} productos
                 </span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
