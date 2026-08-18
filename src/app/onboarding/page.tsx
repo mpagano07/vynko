@@ -48,7 +48,12 @@ export default function OnboardingPage() {
         const hasCompany = (data.tenants?.length ?? 0) > 0 || !!data.tenant;
 
         if (hasCompany) {
-          router.replace('/dashboard');
+          // Use full page reload instead of router.replace to force the auth
+          // context to re-initialize from scratch. A simple router.replace
+          // can create an infinite loop when the auth context failed to load
+          // tenant data (e.g. cold start after deploy): dashboard sees
+          // tenant=null → redirects here → we redirect back → repeat.
+          window.location.href = '/dashboard';
         } else {
           setChecking(false);
         }

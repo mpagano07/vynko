@@ -277,6 +277,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
     const init = async () => {
       // If the tab was closed longer than the inactivity window ago, expire
@@ -304,12 +305,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (err) {
         console.error('Auth initialization error:', err);
-      } finally {
-        if (mounted) setLoading(false);
       }
+      // setLoading(false) is handled by the onAuthStateChange callback
+      // for INITIAL_SESSION. We must NOT set it here because
+      // loadProfileAndTenant() may still be in-flight (called from the
+      // INITIAL_SESSION handler), and setting loading=false prematurely
+      // causes the dashboard to redirect to /onboarding with tenant=null.
     };
 
     init();
+
+    // Safety fallback: if onAuthStateChange never fires, set loading to false
+    // after 30s so the user is not stuck forever.
+    fallbackTimer = setTimeout(() => {
+      setLoading((prev) => {
+        if (prev) return false;
+        return prev;
+      });
+    }, 30_000);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
@@ -341,6 +354,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       mounted = false;
       subscription.unsubscribe();
+      if (fallbackTimer) clearTimeout(fallbackTimer);
     };
   }, [loadProfileAndTenant]);
 
