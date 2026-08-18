@@ -65,6 +65,7 @@ describe('OnboardingPage guard', () => {
     sessionMock.mockReset();
     authMock.mockReturnValue({ switchTenant: vi.fn() } as unknown as ReturnType<typeof useAuth>);
     vi.stubGlobal('fetch', fetchMock);
+    Object.defineProperty(window, 'location', { value: { href: '' }, writable: true, configurable: true });
   });
 
   it('redirige al dashboard si el usuario ya tiene una empresa', async () => {
@@ -74,7 +75,7 @@ describe('OnboardingPage guard', () => {
     render(<OnboardingPage />);
 
     await screen.findByText(/Verificando tu cuenta/i);
-    await vi.waitFor(() => expect(router.replace).toHaveBeenCalledWith('/dashboard'));
+    await vi.waitFor(() => expect(window.location.href).toBe('/dashboard'));
     expect(screen.queryByText('Configura tu empresa')).not.toBeInTheDocument();
   });
 
@@ -84,7 +85,7 @@ describe('OnboardingPage guard', () => {
 
     render(<OnboardingPage />);
 
-    await vi.waitFor(() => expect(router.replace).toHaveBeenCalledWith('/dashboard'));
+    await vi.waitFor(() => expect(window.location.href).toBe('/dashboard'));
     expect(screen.queryByText('Configura tu empresa')).not.toBeInTheDocument();
   });
 
