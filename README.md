@@ -140,6 +140,7 @@ npx playwright test e2e/stock.spec.ts
 npx playwright test e2e/onboarding.spec.ts
 npx playwright test e2e/sucursales.spec.ts
 npx playwright test e2e/dashboard.spec.ts
+npx playwright test e2e/sales-history.spec.ts
 ```
 
 #### Correr un solo test por nombre
@@ -149,6 +150,7 @@ npx playwright test --grep "login exitoso"
 npx playwright test --grep "crear producto"
 npx playwright test --grep "buscar"
 npx playwright test --grep "dashboard carga correctamente"
+npx playwright test --grep "historial"
 ```
 
 #### Correr tests con un solo worker (serial)
@@ -227,6 +229,30 @@ npx playwright test --list
 - Después de una venta los indicadores se actualizan: de "Sin ventas" a tener ventas, estado cambia
 - Cambio de sucursal muestra datos diferentes: Branch A con ventas vs Branch B sin ventas, aislamiento verificado
 - Cleanup: elimina productos de prueba
+
+**Stock** (`e2e/stock.spec.ts`):
+- Setup: crea un producto con stock inicial para las pruebas
+- Visualizar stock actual (badge de estado)
+- Aumentar stock (ajuste con motivo que suma)
+- Disminuir stock (ajuste con motivo que resta)
+- Verificación de actualización en tabla e historial de `/loss-prevention`
+- Retirar más stock del disponible → error y stock sin cambios
+- Stock 0 → badge crítico y no permite negativos
+- Stock crítico/bajo se reflejan en badges y filtros
+- Aislamiento de stock por sucursal
+- Cleanup: elimina el producto de prueba
+
+**Historial de ventas** (`e2e/sales-history.spec.ts`):
+- Setup: crea dos productos de prueba con precios conocidos
+- Ver historial: sección "Últimas Ventas" se expande y muestra tabla con columnas Folio/Cliente/Productos/Total/Fecha
+- Registrar ventas de prueba para tener datos en el historial
+- Venta recién creada aparece en el historial con total y cantidad correctos
+- Abrir detalle de venta: click en fila muestra panel con folio y badge "Completada"
+- Ver total: el total de la venta aparece formateado en verde en el detalle
+- Ver productos vendidos: tabla de items muestra ambos productos con cantidades, precios unitarios y subtotales
+- Ver fecha: formato dd/mm/yyyy en la tabla y formato largo "dd de month de yyyy" en el detalle
+- Ver cliente o "Mostrador" tanto en la tabla como en el detalle
+- Cleanup: borra ventas y productos de prueba
 
 #### Requisitos
 
