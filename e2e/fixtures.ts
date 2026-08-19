@@ -426,6 +426,96 @@ export async function loginAsUser(page: Page, email: string, password: string) {
   await page.waitForLoadState('networkidle');
 }
 
+// ===== Helpers de Billing / MercadoPago =====
+
+/**
+ * Intercepta la redirección a MercadoPago checkout para evitar pagos reales.
+ * Devuelve la URL de checkout que se intentó abrir.
+ *
+ * Uso:
+ *   const url = await mockMercadoPagoCheckout(page);
+ *   // ... interactuar con la UI ...
+ *   expect(url).toContain('mercadopago');
+ */
+export async function mockMercadoPagoCheckout(page: Page): Promise<string> {
+  let capturedUrl = '';
+
+  await page.route('**/*', async (route) => {
+    const url = route.request().url();
+
+    // Intercept navigation to MercadoPago checkout
+    if (url.includes('mercadopago') || url.includes('sandbox.mercadopago')) {
+      capturedUrl = url;
+      await route.abort();
+      return;
+    }
+
+    await route.continue();
+  });
+
+  // Also capture window.location.assign calls via console
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) {
+      const navUrl = frame.url();
+      if (navUrl.includes('mercadopago')) {
+        capturedUrl = navUrl;
+      }
+    }
+  });
+
+  // Return a function that retrieves the captured URL
+  return capturedUrl;
+}
+
+/**
+ * Restaura el estado de billing del tenant de prueba vía service role.
+ * Asegura que no queden suscripciones activas de MP tras los tests.
+ */
+export async function cleanupBillingData(page: Page) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+  if (!url || !key) return;
+
+  try {
+    const { createClient } = await import('@supabase/supabase-js');
+    const admin = createClient(url, key, { auth: { persistSession: false } });
+
+    // Get the tenant for the E2E user
+    const e2eEmail = process.env.E2E_USER_EMAIL ?? '';
+    if (!e2eEmail) return;
+
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('email', e2eEmail)
+      .single();
+
+    if (!profile) return;
+
+    const { data: tu } = await admin
+      .from('tenant_users')
+      .select('tenant_id')
+      .eq('user_id', profile.id)
+      .limit(1)
+      .single();
+
+    if (!tu) return;
+
+    // Reset billing fields to safe defaults (trial state)
+    await admin
+      .from('tenants')
+      .update({
+        subscription_status: 'free',
+        subscription_plan: 'starter',
+        mercadopago_preapproval_id: null,
+        subscription_current_period_end: null,
+      })
+      .eq('id', tu.tenant_id);
+  } catch (e) {
+    console.log('cleanupBillingData: error al limpiar billing vía service role:', e);
+  }
+}
+
 // ===== Helpers de Ventas (caja /sales) =====
 
 /**
