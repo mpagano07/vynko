@@ -114,6 +114,8 @@ Los tests no requieren base de datos ni variables de entorno: las rutas API se p
 - `src/app/api/webhooks/mercadopago/route.test.ts` — Handler de webhooks: autorizado, cancelado, pausado, firma inválida (12 tests)
 - `src/lib/checkSubscription.test.ts` — Lógica de bloqueo de suscripción por trial vencido / pago vencido (15 tests)
 - `src/proxy.test.ts` — Middleware: auth, onboarding, subscription gate (9 tests)
+- `src/app/api/settings/tenant/route.test.ts` — Guard owner-only de PATCH /api/settings/tenant (6 tests)
+- `src/app/api/activity-logs/route.test.ts` — Guard owner/manager de GET /api/activity-logs (6 tests)
 
 ### Tests E2E (Playwright)
 
@@ -150,6 +152,7 @@ npx playwright test e2e/dashboard.spec.ts
 npx playwright test e2e/sales-history.spec.ts
 npx playwright test e2e/import-export.spec.ts
 npx playwright test e2e/billing.spec.ts
+npx playwright test e2e/permissions.spec.ts
 ```
 
 #### Correr un solo test por nombre
@@ -163,6 +166,9 @@ npx playwright test --grep "historial"
 npx playwright test --grep "importar"
 npx playwright test --grep "billing"
 npx playwright test --grep "planes"
+npx playwright test --grep "permisos"
+npx playwright test --grep "member"
+npx playwright test --grep "owner"
 ```
 
 #### Correr tests con un solo worker (serial)
@@ -289,6 +295,19 @@ npx playwright test --list
 - Link de soporte visible
 - Cleanup: restaura tenant a free/starter
 
+**Permisos y Roles** (`e2e/permissions.spec.ts`):
+- Owner: sidebar muestra todos los nav items
+- Owner: puede acceder a /billing, /settings, /activity-logs
+- Member: sidebar NO muestra Pronóstico, Historial, Planes, Configuración
+- Member: sidebar SÍ muestra Dashboard, Ventas, Productos, Proveedores, Clientes, Documentos
+- Member: /billing redirige a /dashboard
+- Member: /settings redirige a /dashboard
+- Member: /activity-logs muestra "No tienes permisos"
+- Member: /forecast redirige a /dashboard
+- Member: GET /api/activity-logs retorna 403
+- Member: GET /api/settings/collaborators retorna 403
+- Member: PATCH /api/settings/tenant retorna 403
+
 > Nota: los tests de billing interceptan la redirección a MercadoPago con
 > `page.route()` para evitar pagos reales. Las API routes internas se testean
 > contra el servidor real pero sin completar el flujo de pago.
@@ -297,12 +316,15 @@ npx playwright test --list
 
 - Primera vez: `npx playwright install chromium`.
 - Los tests que usan credenciales reales leen `E2E_USER_EMAIL` y `E2E_USER_PASSWORD` desde `.env.local` (ya están configurados para el usuario de prueba). Si faltan, ese test se salta.
+- Los tests de permisos usan `E2E_MEMBER_USER_EMAIL` y `E2E_MEMBER_USER_PASSWORD` para autenticar un usuario con rol member.
 - El `webServer` del config levanta `npm run dev` automáticamente; si ya tenés el server corriendo en `:3000`, reutiliza esa instancia.
 
 #### Helpers y Fixtures
 
 Los tests de productos, stock y ventas usan helpers reutilizables definidos en `e2e/fixtures.ts`:
 - `authenticatedPage`: Fixture que proporciona una página autenticada (se autentica una sola vez)
+- `memberPage`: Fixture que proporciona una página autenticada como usuario member (se autentica una sola vez)
+- `getSidebarNavItems()`: Leer los items de navegación visibles en el sidebar desktop
 - `createProductViaUI()`: Crear producto llenando formulario
 - `editProductViaUI()`: Editar producto
 - `deleteProductViaUI()`: Eliminar producto con confirmación
