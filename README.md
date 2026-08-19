@@ -138,6 +138,8 @@ npx playwright test e2e/products.spec.ts
 npx playwright test e2e/sales.spec.ts
 npx playwright test e2e/stock.spec.ts
 npx playwright test e2e/onboarding.spec.ts
+npx playwright test e2e/sucursales.spec.ts
+npx playwright test e2e/dashboard.spec.ts
 ```
 
 #### Correr un solo test por nombre
@@ -146,6 +148,7 @@ npx playwright test e2e/onboarding.spec.ts
 npx playwright test --grep "login exitoso"
 npx playwright test --grep "crear producto"
 npx playwright test --grep "buscar"
+npx playwright test --grep "dashboard carga correctamente"
 ```
 
 #### Correr tests con un solo worker (serial)
@@ -215,6 +218,15 @@ npx playwright test --list
 - Stock crítico/bajo se reflejan en badges y filtros
 - Aislamiento de stock por sucursal
 - Cleanup: elimina el producto de prueba
+
+**Dashboard** (`e2e/dashboard.spec.ts`):
+- Setup: verifica múltiples sucursales y crea producto de prueba
+- Dashboard carga correctamente: saludo, nombre de sucursal, 4 tarjetas KPI, botones de acción
+- Dashboard muestra la sucursal activa correcta: coincide con sidebar, cambia al switchear sucursal
+- Datos principales: cada tarjeta KPI (Ventas hoy, Ingresos del mes, Stock crítico, Estado) muestra un valor
+- Después de una venta los indicadores se actualizan: de "Sin ventas" a tener ventas, estado cambia
+- Cambio de sucursal muestra datos diferentes: Branch A con ventas vs Branch B sin ventas, aislamiento verificado
+- Cleanup: elimina productos de prueba
 
 #### Requisitos
 
