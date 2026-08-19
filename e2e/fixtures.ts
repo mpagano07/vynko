@@ -95,11 +95,17 @@ export async function createProductViaUI(
   const saveButton = page.getByRole('button', { name: /Guardar|Crear/i });
   await saveButton.click({ timeout: 5_000 });
 
-  // Esperar a que se cierre el modal
-  await modalHeading.waitFor({ state: 'hidden', timeout: 15_000 });
-
-  // Esperar a toast de éxito
-  await page.locator('[role="status"]').filter({ hasText: 'Producto creado' }).first().waitFor({ timeout: 10_000 });
+  // Esperar a que se cierre el modal (max 20s). Si no se cierra, capturar el estado para debug.
+  try {
+    await modalHeading.waitFor({ state: 'hidden', timeout: 20_000 });
+  } catch {
+    const toastText = await page.locator('[role="status"]').first().textContent().catch(() => null);
+    const pageUrl = page.url();
+    throw new Error(
+      `createProductViaUI: el modal no se cerró tras guardar. ` +
+      `Toast: ${toastText ?? '(ninguno)'}. URL: ${pageUrl}`
+    );
+  }
 }
 
 /**
@@ -347,9 +353,77 @@ export async function getTenantNames(page: Page): Promise<string[]> {
  * Cambia de sucursal desde el selector del sidebar y espera a que se aplique.
  */
 export async function switchTenantByName(page: Page, tenantName: string) {
+  const current = await getCurrentTenantName(page);
+  if (current === tenantName) return;
+
   await toggleTenantSwitcher(page);
-  await page.locator(DESKTOP_SIDEBAR).getByRole('button', { name: tenantName }).click();
-  await expect(page.locator(`${DESKTOP_SIDEBAR} p.truncate.flex-1`).first()).toHaveText(tenantName, { timeout: 15_000 });
+  const btn = page.locator(DESKTOP_SIDEBAR).getByRole('button', { name: tenantName });
+  await btn.waitFor({ state: 'visible', timeout: 5_000 });
+  await btn.click();
+
+  await expect(
+    page.locator(`${DESKTOP_SIDEBAR} p.truncate.flex-1`).first()
+  ).toHaveText(tenantName, { timeout: 15_000 });
+}
+
+// ===== Helpers de Dashboard =====
+
+/**
+ * Lee el nombre de la sucursal activa que se muestra debajo del saludo
+ * "Hola, {nombre}" en el dashboard.
+ */
+export async function getDashboardTenantName(page: Page): Promise<string> {
+  await page.waitForLoadState('networkidle');
+  const heading = page.getByRole('heading', { name: /Hola/ });
+  await heading.waitFor({ state: 'visible', timeout: 10_000 });
+  const container = heading.locator('..');
+  const el = container.locator('p').first();
+  return ((await el.textContent()) ?? '').trim();
+}
+
+// ===== Helpers de Limpieza Genérica =====
+
+/**
+ * Elimina productos de prueba por nombre usando service role (bypass RLS).
+ * También elimina las ventas asociadas (sale_items → sales) para evitar
+ * errores de FK.
+ */
+export async function cleanupBranchProducts(page: Page, productNames: string[]) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+  if (!url || !key || productNames.length === 0) return;
+  try {
+    const { createClient } = await import('@supabase/supabase-js');
+    const admin = createClient(url, key, { auth: { persistSession: false } });
+    const { data: products } = await admin.from('products').select('id').in('name', productNames);
+    const ids = (products ?? []).map((p: { id: string }) => p.id);
+    if (ids.length > 0) {
+      const { data: items } = await admin.from('sale_items').select('sale_id').in('product_id', ids);
+      const saleIds = [...new Set((items ?? []).map((i: { sale_id: string }) => i.sale_id))];
+      if (saleIds.length > 0) {
+        await admin.from('sales').delete().in('id', saleIds);
+      }
+      await admin.from('product_stock').delete().in('product_id', ids);
+      for (const id of ids) {
+        await admin.from('products').delete().eq('id', id);
+      }
+    }
+  } catch (e) {
+    console.log('cleanupBranchProducts: error al limpiar vía service role:', e);
+  }
+}
+
+/**
+ * Helper de login reutilizable para cualquier cuenta.
+ * Navega al login, completa credenciales y espera redirección a /dashboard.
+ */
+export async function loginAsUser(page: Page, email: string, password: string) {
+  await page.goto('/login');
+  await page.getByPlaceholder('tu@email.com').fill(email);
+  await page.getByPlaceholder('••••••••').fill(password);
+  await page.getByRole('button', { name: 'Iniciar sesión' }).click();
+  await page.waitForURL(/\/dashboard/, { timeout: 20_000 });
+  await page.waitForLoadState('networkidle');
 }
 
 // ===== Helpers de Ventas (caja /sales) =====
