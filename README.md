@@ -108,6 +108,13 @@ npm run test:run -- --coverage
 
 Los tests no requieren base de datos ni variables de entorno: las rutas API se prueban con un mock encadenable de `supabaseAdmin`.
 
+#### Suites de Vitest
+
+- `src/lib/mercadopago.test.ts` — Verificación de firma HMAC-SHA256 de webhooks de MercadoPago (10 tests)
+- `src/app/api/webhooks/mercadopago/route.test.ts` — Handler de webhooks: autorizado, cancelado, pausado, firma inválida (12 tests)
+- `src/lib/checkSubscription.test.ts` — Lógica de bloqueo de suscripción por trial vencido / pago vencido (15 tests)
+- `src/proxy.test.ts` — Middleware: auth, onboarding, subscription gate (9 tests)
+
 ### Tests E2E (Playwright)
 
 Los E2E corren con [Playwright](https://playwright.dev) contra la app real levantada en el puerto 3000 (la levanta sola). Viven en `e2e/`.
@@ -142,6 +149,7 @@ npx playwright test e2e/sucursales.spec.ts
 npx playwright test e2e/dashboard.spec.ts
 npx playwright test e2e/sales-history.spec.ts
 npx playwright test e2e/import-export.spec.ts
+npx playwright test e2e/billing.spec.ts
 ```
 
 #### Correr un solo test por nombre
@@ -153,6 +161,8 @@ npx playwright test --grep "buscar"
 npx playwright test --grep "dashboard carga correctamente"
 npx playwright test --grep "historial"
 npx playwright test --grep "importar"
+npx playwright test --grep "billing"
+npx playwright test --grep "planes"
 ```
 
 #### Correr tests con un solo worker (serial)
@@ -265,6 +275,24 @@ npx playwright test --list
 - Info de columnas aceptadas: panel de ayuda muestra todas las columnas válidas
 - Cleanup: elimina productos importados
 
+**Facturación / Mercado Pago** (`e2e/billing.spec.ts`):
+- Billing page muestra planes, precios ARS y features
+- Plan actual con badge y nombre visible
+- Checkout Starter: intercepta redirect a MercadoPago (sin pago real)
+- Checkout Business: intercepta redirect a MercadoPago (sin pago real)
+- Sin sesión: redirige a login
+- Cancelar suscripción: modal de confirmación → API → toast éxito
+- Downgrade Business a Starter: modal de warning con feature loss
+- Billing status API: retorna plan, status y features
+- Billing status sin autenticación: retorna 401
+- Enterprise: botón "Próximamente" deshabilitado
+- Link de soporte visible
+- Cleanup: restaura tenant a free/starter
+
+> Nota: los tests de billing interceptan la redirección a MercadoPago con
+> `page.route()` para evitar pagos reales. Las API routes internas se testean
+> contra el servidor real pero sin completar el flujo de pago.
+
 #### Requisitos
 
 - Primera vez: `npx playwright install chromium`.
@@ -290,6 +318,8 @@ Los tests de productos, stock y ventas usan helpers reutilizables definidos en `
 - `addProductToCart()` / `getCartItem()`: Agregar un producto al carrito de `/sales` y obtener su ítem
 - `openSalesHistory()` / `getNewestSaleRowText()`: Abrir "Últimas Ventas" y leer la venta más reciente
 - `cleanupSalesData()`: Borrar ventas (service role) y productos de prueba de la batería de ventas
+- `mockMercadoPagoCheckout()`: Interceptar redirect a MercadoPago para evitar pagos reales
+- `cleanupBillingData()`: Restaurar estado de billing del tenant vía service role
 
 #### Prerequisitos adicionales
 

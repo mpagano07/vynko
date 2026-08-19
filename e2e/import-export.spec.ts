@@ -2,7 +2,6 @@ import { test, expect, isProductVisibleInTable, createProductViaUI, cleanupSales
 import * as XLSX from 'xlsx';
 import * as fs from 'fs';
 import * as path from 'path';
-import { download } from 'playwright';
 
 test.describe.configure({ mode: 'serial', timeout: 120_000 });
 
@@ -19,7 +18,7 @@ function ensureTmpDir() {
   if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR, { recursive: true });
 }
 
-function writeXlsx(filename: string, headers: string[], rows: (string | number)[][]): string {
+function writeXlsx(filename: string, headers: string[], rows: (string | number | undefined | null)[][]): string {
   ensureTmpDir();
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
   const wb = XLSX.utils.book_new();
