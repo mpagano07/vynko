@@ -5,6 +5,7 @@ const E2E_USER_PASSWORD = process.env.E2E_USER_PASSWORD ?? '';
 
 interface AuthFixture {
   authenticatedPage: Page;
+  memberPage: Page;
 }
 
 /**
@@ -31,6 +32,21 @@ export const test = base.extend<AuthFixture>({
     await use(page);
 
     // Cleanup
+    await context.close();
+  },
+
+  memberPage: async ({ browser }, use) => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+
+    await page.goto('/login');
+    await page.getByPlaceholder('tu@email.com').fill(E2E_MEMBER_USER_EMAIL);
+    await page.getByPlaceholder('••••••••').fill(E2E_MEMBER_USER_PASSWORD);
+    await page.getByRole('button', { name: 'Iniciar sesión' }).click();
+    await page.waitForURL(/\/dashboard/, { timeout: 20_000 });
+
+    await use(page);
+
     await context.close();
   },
 });
@@ -514,6 +530,21 @@ export async function cleanupBillingData(page: Page) {
   } catch (e) {
     console.log('cleanupBillingData: error al limpiar billing vía service role:', e);
   }
+}
+
+// ===== Helpers de Permisos / Roles =====
+
+const E2E_MEMBER_USER_EMAIL = process.env.E2E_MEMBER_USER_EMAIL ?? '';
+const E2E_MEMBER_USER_PASSWORD = process.env.E2E_MEMBER_USER_PASSWORD ?? '';
+
+/**
+ * Lee los nombres de todos los items de navegación visibles en el sidebar desktop.
+ */
+export async function getSidebarNavItems(page: Page): Promise<string[]> {
+  const sidebar = page.locator('aside.hidden.md\\:flex');
+  const links = sidebar.locator('nav a');
+  await links.first().waitFor({ timeout: 15_000 });
+  return links.allTextContents();
 }
 
 // ===== Helpers de Ventas (caja /sales) =====
