@@ -141,6 +141,7 @@ npx playwright test e2e/onboarding.spec.ts
 npx playwright test e2e/sucursales.spec.ts
 npx playwright test e2e/dashboard.spec.ts
 npx playwright test e2e/sales-history.spec.ts
+npx playwright test e2e/import-export.spec.ts
 ```
 
 #### Correr un solo test por nombre
@@ -151,6 +152,7 @@ npx playwright test --grep "crear producto"
 npx playwright test --grep "buscar"
 npx playwright test --grep "dashboard carga correctamente"
 npx playwright test --grep "historial"
+npx playwright test --grep "importar"
 ```
 
 #### Correr tests con un solo worker (serial)
@@ -253,6 +255,15 @@ npx playwright test --list
 - Ver fecha: formato dd/mm/yyyy en la tabla y formato largo "dd de month de yyyy" en el detalle
 - Ver cliente o "Mostrador" tanto en la tabla como en el detalle
 - Cleanup: borra ventas y productos de prueba
+
+**Importación / Exportación** (`e2e/import-export.spec.ts`):
+- Importar archivo válido: crea productos con SKU, precio, stock y categoría
+- Importar archivo sin columna nombre: omite filas sin nombre requerido
+- Rechazar archivo inválido (.txt): muestra toast de error
+- Importar archivo vacío: muestra toast de "vacío"
+- Exportar productos: genera .xlsx con columnas Nombre, SKU, Precio Venta, Stock
+- Info de columnas aceptadas: panel de ayuda muestra todas las columnas válidas
+- Cleanup: elimina productos importados
 
 #### Requisitos
 
