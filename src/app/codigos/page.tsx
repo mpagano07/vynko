@@ -27,6 +27,8 @@ export default function CodigosPage() {
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [qrs, setQrs] = useState<Map<string, string>>(new Map());
   const [generating, setGenerating] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
   const printRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -71,6 +73,12 @@ export default function CodigosPage() {
     return matchesSearch && matchesCat;
   });
 
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const paginatedProducts = filtered.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   const downloadQR = useCallback((productId: string, filename: string) => {
     const url = qrs.get(productId);
     if (!url) return;
@@ -114,12 +122,12 @@ export default function CodigosPage() {
               type="text"
               placeholder="Buscar por nombre, SKU o código..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               className="pl-9"
             />
           </div>
           <div>
-            <Select value={selectedCategoryId} onChange={(e) => setSelectedCategoryId(e.target.value)}>
+            <Select value={selectedCategoryId} onChange={(e) => { setSelectedCategoryId(e.target.value); setCurrentPage(1); }}>
               <option value="all">Todas las categorías</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
@@ -145,40 +153,90 @@ export default function CodigosPage() {
           <p className="text-sm text-gray-500 mt-1">No hay productos que coincidan con la búsqueda.</p>
         </div>
       ) : (
-        <div ref={printRef} className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 print:grid-cols-4">
-          {filtered.map((p) => {
-            const qrUrl = qrs.get(p.id);
-            const code = p.barcode || p.sku || p.id;
-            return (
-              <Card key={p.id} className="p-4 flex flex-col items-center gap-3 border border-gray-100 dark:border-gray-800 print:border print:border-gray-300 print:shadow-none print:break-inside-avoid">
-                {qrUrl ? (
-                  <Image src={qrUrl} alt={`QR ${p.name}`} width={300} height={300} className="w-32 h-32 print:w-28 print:h-28" unoptimized />
-                ) : (
-                  <div className="w-32 h-32 flex items-center justify-center text-gray-300">
-                    <Loader2 className="h-6 w-6 animate-spin" />
+        <Card className="border border-gray-100 dark:border-gray-800 print:border-none print:shadow-none">
+          <div ref={printRef} className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 p-4 print:grid-cols-4">
+            {paginatedProducts.map((p) => {
+              const qrUrl = qrs.get(p.id);
+              const code = p.barcode || p.sku || p.id;
+              return (
+                <Card key={p.id} className="p-4 flex flex-col items-center gap-3 border border-gray-100 dark:border-gray-800 print:border print:border-gray-300 print:shadow-none print:break-inside-avoid">
+                  {qrUrl ? (
+                    <Image src={qrUrl} alt={`QR ${p.name}`} width={300} height={300} className="w-32 h-32 print:w-28 print:h-28" unoptimized />
+                  ) : (
+                    <div className="w-32 h-32 flex items-center justify-center text-gray-300">
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    </div>
+                  )}
+                  <div className="text-center min-w-0 w-full">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate" title={p.name}>
+                      {p.name}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate font-mono" title={code}>
+                      {code}
+                    </p>
                   </div>
-                )}
-                <div className="text-center min-w-0 w-full">
-                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate" title={p.name}>
-                    {p.name}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate font-mono" title={code}>
-                    {code}
-                  </p>
-                </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => downloadQR(p.id, code)}
+                    className="w-full flex items-center justify-center gap-1.5 print:hidden"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Descargar
+                  </Button>
+                </Card>
+              );
+            })}
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-gray-100 dark:border-gray-800 px-6 py-4 print:hidden">
+              <span className="text-xs text-gray-500">
+                Página <strong>{currentPage}</strong> de <strong>{totalPages}</strong>
+              </span>
+              <div className="flex items-center gap-1">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => downloadQR(p.id, code)}
-                  className="w-full flex items-center justify-center gap-1.5 print:hidden"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                 >
-                  <Download className="h-3.5 w-3.5" />
-                  Descargar
+                  Anterior
                 </Button>
-              </Card>
-            );
-          })}
-        </div>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                  .reduce<(number | '...')[]>((acc, p, i, arr) => {
+                    if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push('...');
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((p, i) =>
+                    p === '...' ? (
+                      <span key={`dots-${i}`} className="px-1 text-gray-400 text-xs">…</span>
+                    ) : (
+                      <Button
+                        key={p}
+                        variant={currentPage === p ? 'primary' : 'outline'}
+                        size="sm"
+                        onClick={() => setCurrentPage(p)}
+                        className="min-w-[28px] px-1"
+                      >
+                        {p}
+                      </Button>
+                    )
+                  )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                >
+                  Siguiente
+                </Button>
+              </div>
+            </div>
+          )}
+        </Card>
       )}
 
       <style>{`
