@@ -133,15 +133,16 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 // exists, and bound each attempt so a hung request can't leave `loading`
 // stuck forever.
 async function getSessionWithRetry(): Promise<Session | null> {
+  const TIMEOUT_MS = 12000;
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) {
-      await new Promise((r) => setTimeout(r, 1200));
+      await new Promise((r) => setTimeout(r, 1000));
     }
     try {
-      const { data } = await withTimeout(supabase.auth.getSession(), 6000);
+      const { data } = await withTimeout(supabase.auth.getSession(), TIMEOUT_MS);
       if (data.session) return data.session;
     } catch (err) {
-      console.warn('Auth session check attempt failed:', err);
+      console.warn(`Auth session check attempt ${attempt + 1}/3 failed:`, err);
     }
     if (!hasStoredSession()) return null;
   }
