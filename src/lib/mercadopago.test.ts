@@ -21,7 +21,8 @@ describe('verifyMercadoPagoSignature', () => {
   const SECRET = 'test-webhook-secret-123';
   const DATA_ID = 'preapproval-123';
   const REQUEST_ID = 'req-456';
-  const TIMESTAMP = '1700000000';
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const TIMESTAMP = String(nowSeconds);
 
   beforeEach(() => {
     process.env.MERCADOPAGO_WEBHOOK_SECRET = SECRET;
@@ -107,5 +108,52 @@ describe('verifyMercadoPagoSignature', () => {
       'x-request-id': REQUEST_ID,
     });
     expect(verifyMercadoPagoSignature(req, DATA_ID)).toBe(true);
+  });
+
+  it('rejects signatures older than 10 minutes', () => {
+    const staleTs = String(nowSeconds - 11 * 60);
+    const v1 = makeSignature(staleTs, SECRET, DATA_ID, REQUEST_ID);
+    const req = makeRequest({
+      'x-signature': `ts=${staleTs},v1=${v1}`,
+      'x-request-id': REQUEST_ID,
+    });
+    expect(verifyMercadoPagoSignature(req, DATA_ID)).toBe(false);
+  });
+
+  it('accepts signatures within the clock skew window', () => {
+    const recentTs = String(nowSeconds - 5 * 60);
+    const v1 = makeSignature(recentTs, SECRET, DATA_ID, REQUEST_ID);
+    const req = makeRequest({
+      'x-signature': `ts=${recentTs},v1=${v1}`,
+      'x-request-id': REQUEST_ID,
+    });
+    expect(verifyMercadoPagoSignature(req, DATA_ID)).toBe(true);
+  });
+
+  it('rejects timestamps too far in the future', () => {
+    const futureTs = String(nowSeconds + 11 * 60);
+    const v1 = makeSignature(futureTs, SECRET, DATA_ID, REQUEST_ID);
+    const req = makeRequest({
+      'x-signature': `ts=${futureTs},v1=${v1}`,
+      'x-request-id': REQUEST_ID,
+    });
+    expect(verifyMercadoPagoSignature(req, DATA_ID)).toBe(false);
+  });
+
+  it('rejects non-hex v1 values', () => {
+    const req = makeRequest({
+      'x-signature': `ts=${TIMESTAMP},v1=zzzz-not-hex-at-all!!!!!!!!!!!!!!!!!!!!!!!!`,
+      'x-request-id': REQUEST_ID,
+    });
+    expect(verifyMercadoPagoSignature(req, DATA_ID)).toBe(false);
+  });
+
+  it('rejects truncated v1 values (length mismatch)', () => {
+    const v1 = makeSignature(TIMESTAMP, SECRET, DATA_ID, REQUEST_ID).slice(0, 32);
+    const req = makeRequest({
+      'x-signature': `ts=${TIMESTAMP},v1=${v1}`,
+      'x-request-id': REQUEST_ID,
+    });
+    expect(verifyMercadoPagoSignature(req, DATA_ID)).toBe(false);
   });
 });

@@ -11,6 +11,7 @@ import { formatARS } from '@/lib/utils/currency';
 import { CreditCard, CheckCircle2, XCircle, Loader2, ArrowRight, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { getTenantHeaders } from '@/lib/fetchWithTenant';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function BillingPage() {
@@ -78,7 +79,7 @@ function BillingContent() {
     setCheckoutLoading(planId);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const headers: Record<string, string> = { 'Content-Type': 'application/json', ...getTenantHeaders() };
       if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
 
       const res = await fetch('/api/billing/create-checkout', {
