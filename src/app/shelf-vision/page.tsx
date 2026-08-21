@@ -227,8 +227,8 @@ export default function ShelfVisionPage() {
             {result.analysis.observations.length > 0 && (
               <div className="mt-4 space-y-1">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Observaciones</p>
-                {result.analysis.observations.map((obs: string, i: number) => (
-                  <p key={i} className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2">
+                {result.analysis.observations.map((obs: string) => (
+                  <p key={obs} className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2">
                     <span className="text-blue-500 mt-0.5">•</span> {obs}
                   </p>
                 ))}
@@ -238,8 +238,8 @@ export default function ShelfVisionPage() {
             {result.analysis.suggestedActions.length > 0 && (
               <div className="mt-4 space-y-1">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Acciones sugeridas</p>
-                {result.analysis.suggestedActions.map((a: string, i: number) => (
-                  <p key={i} className="text-sm text-amber-700 dark:text-amber-400 flex items-start gap-2">
+                {result.analysis.suggestedActions.map((a: string) => (
+                  <p key={a} className="text-sm text-amber-700 dark:text-amber-400 flex items-start gap-2">
                     <span className="mt-0.5">→</span> {a}
                   </p>
                 ))}
@@ -253,8 +253,8 @@ export default function ShelfVisionPage() {
                 <h2 className="text-lg font-bold text-gray-900 dark:text-white">Productos detectados vs. inventario</h2>
               </div>
               <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                {result.matchedProducts.map((item, i) => (
-                  <div key={i} className="flex items-center gap-4 px-6 py-3.5 text-sm">
+                {result.matchedProducts.map((item) => (
+                  <div key={item.productName} className="flex items-center gap-4 px-6 py-3.5 text-sm">
                     {item.matchFound ? (
                       <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0" />
                     ) : (

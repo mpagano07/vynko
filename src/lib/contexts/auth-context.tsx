@@ -369,6 +369,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRole(null);
     clearStoredActiveTenantId();
     clearLastActivity();
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem('vynko_remember');
+    }
     lastFetchedUserIdRef.current = null;
   };
 

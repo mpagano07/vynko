@@ -22,17 +22,16 @@ function LoginContent() {
 
   useEffect(() => {
     const saved = localStorage.getItem('vynko_remember');
-    if (saved) {
-      try {
-        const { email: savedEmail, password: savedPassword } = JSON.parse(saved);
-        if (savedEmail) {
-          // eslint-disable-next-line react-hooks/set-state-in-effect
-          setEmail(savedEmail);
-          if (savedPassword) setPassword(savedPassword);
-          setRemember(true);
-        }
-      } catch {}
-    }
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved) as { email?: string };
+      if (parsed.email) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setEmail(parsed.email);
+        setRemember(true);
+        localStorage.setItem('vynko_remember', JSON.stringify({ email: parsed.email }));
+      }
+    } catch {}
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -57,7 +56,7 @@ function LoginContent() {
       if (error) throw error;
 
       if (remember) {
-        localStorage.setItem('vynko_remember', JSON.stringify({ email: emailVal, password: passwordVal }));
+        localStorage.setItem('vynko_remember', JSON.stringify({ email: emailVal }));
       } else {
         localStorage.removeItem('vynko_remember');
       }
@@ -154,12 +153,13 @@ function LoginContent() {
 
           <form onSubmit={handleLogin} noValidate className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1.5 text-gray-300">
+              <label htmlFor="login-email" className="block text-sm font-medium mb-1.5 text-gray-300">
                 Email
               </label>
               <Input
                 type="email"
                 name="email"
+                id="login-email"
                 placeholder="tu@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -169,13 +169,14 @@ function LoginContent() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1.5 text-gray-300">
+              <label htmlFor="login-password" className="block text-sm font-medium mb-1.5 text-gray-300">
                 Contraseña
               </label>
               <div className="relative">
                 <Input
                   type={showPassword ? 'text' : 'password'}
                   name="password"
+                  id="login-password"
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -186,7 +187,7 @@ function LoginContent() {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300"
-                  tabIndex={-1}
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
@@ -201,7 +202,7 @@ function LoginContent() {
                   onChange={(e) => setRemember(e.target.checked)}
                   className="h-4 w-4 rounded border-gray-600 bg-gray-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0"
                 />
-                <span className="text-sm text-gray-400">Recordarme</span>
+                <span className="text-sm text-gray-400">Recordar mi email</span>
               </label>
               <Link
                 href="/auth/forgot-password"

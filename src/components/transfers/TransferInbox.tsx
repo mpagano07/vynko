@@ -40,10 +40,6 @@ interface Transfer {
   items: TransferItem[];
 }
 
-interface TransferInboxProps {
-  currentTenantId: string;
-}
-
 // Fetch product names for items that don't have them
 async function enrichItems(items: TransferItem[], token?: string): Promise<TransferItem[]> {
   const productIds = items.filter(i => !i.product_name).map(i => i.product_id);
@@ -221,6 +217,8 @@ function TransferCard({
           <button
             onClick={() => setExpanded(e => !e)}
             className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 text-gray-500 transition-colors"
+            aria-label={expanded ? 'Contraer detalles' : 'Expandir detalles'}
+            aria-expanded={expanded}
           >
             {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>

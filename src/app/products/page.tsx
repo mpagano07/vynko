@@ -34,6 +34,7 @@ import {
   Scan,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
+import { getTenantHeaders } from '@/lib/fetchWithTenant';
 import { filterProducts } from '@/lib/product-search';
 import { TransferInbox } from '@/components/transfers/TransferInbox';
 
@@ -397,7 +398,7 @@ export default function ProductsPage() {
         method,
         headers: {
           'Content-Type': 'application/json',
-          ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
+          ...getTenantHeaders(),
           ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
         },
         body: JSON.stringify({ ...productForm, image_url: imageUrl }),
@@ -434,7 +435,7 @@ export default function ProductsPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
+          ...getTenantHeaders(),
           ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
         },
         body: JSON.stringify(categoryForm),
@@ -464,9 +465,10 @@ export default function ProductsPage() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
+      const headers: Record<string, string> = {
+        ...getTenantHeaders(),
+      };
       if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-      if (tenantId) headers['x-tenant-id'] = tenantId;
 
       if (type === 'delete-product') {
         const res = await fetch(tenantId ? `/api/products/${id}?tenantId=${tenantId}` : `/api/products/${id}`, { method: 'DELETE', headers });

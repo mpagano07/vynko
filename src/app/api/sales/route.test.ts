@@ -130,7 +130,7 @@ describe('POST /api/sales', () => {
     ]);
   });
 
-  it('respeta el unit_price personalizado cuando se envía', async () => {
+  it('ignora el unit_price enviado por el cliente y usa el precio de la DB', async () => {
     supabaseMock.__queue('products', {
       data: [{ id: 'p1', name: 'Coca', price: 2, price_cents: 200 }],
     });
@@ -146,12 +146,12 @@ describe('POST /api/sales', () => {
     expect(res.status).toBe(201);
 
     const json = await res.json();
-    expect(json.items[0]).toMatchObject({ unit_price_cents: 300, subtotal_cents: 600 });
+    expect(json.items[0]).toMatchObject({ unit_price_cents: 200, subtotal_cents: 400 });
 
     const saleInsert = supabaseMock.__calls.find(
       (c) => c.table === 'sales' && c.method === 'insert'
     );
-    expect(saleInsert?.args[0]).toMatchObject({ total_cents: 600 });
+    expect(saleInsert?.args[0]).toMatchObject({ total_cents: 400 });
   });
 
   it('rechaza una venta sin items', async () => {

@@ -1,45 +1,87 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { rateLimit } from '@/lib/rate-limit';
+
+const EXT_BY_MIME: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+};
+
+function detectImageMime(bytes: Uint8Array): string | null {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 &&
+    bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a
+  ) {
+    return 'image/png';
+  }
+  if (bytes.length >= 6 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
+    return 'image/gif';
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+  ) {
+    return 'image/webp';
+  }
+  return null;
+}
 
 export async function POST(request: Request) {
   const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   const tenantId = auth.tenantId;
 
-  const formData = await request.formData();
-  const file = formData.get('file') as File;
-  if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+  const limit = rateLimit(`upload:${tenantId}`, 30, 60 * 60 * 1000);
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: 'Límite de subidas alcanzado. Probá de nuevo más tarde.' },
+      { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } }
+    );
+  }
 
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-  if (!allowedTypes.includes(file.type)) {
-    return NextResponse.json({ error: 'Formato no válido. Usá JPG, PNG, WebP o GIF.' }, { status: 400 });
+  let file: File;
+  try {
+    const formData = await request.formData();
+    const raw = formData.get('file');
+    if (!(raw instanceof File)) throw new Error();
+    file = raw;
+  } catch {
+    return NextResponse.json({ error: 'No file provided' }, { status: 400 });
   }
 
   if (file.size > 5 * 1024 * 1024) {
     return NextResponse.json({ error: 'La imagen no debe superar los 5MB.' }, { status: 400 });
   }
 
-  const buffer = await file.arrayBuffer();
-  const ext = file.name.split('.').pop() || 'jpg';
-  const fileName = `${tenantId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  const buffer = new Uint8Array(await file.arrayBuffer());
+  const mime = detectImageMime(buffer);
+  if (!mime || !EXT_BY_MIME[mime]) {
+    return NextResponse.json(
+      { error: 'El archivo no es una imagen válida. Usá JPG, PNG, WebP o GIF.' },
+      { status: 400 }
+    );
+  }
+
+  const fileName = `${tenantId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${EXT_BY_MIME[mime]}`;
 
   const { error: uploadError } = await supabaseAdmin.storage
     .from('product-images')
-    .upload(fileName, buffer, { contentType: file.type, cacheControl: '3600' });
+    .upload(fileName, buffer, { contentType: mime, cacheControl: '3600' });
 
   if (uploadError) {
-    if (uploadError.message?.includes('bucket')) {
-      await supabaseAdmin.storage.createBucket('product-images', {
-        public: true, fileSizeLimit: 5242880,
-      });
-      const { error: retryError } = await supabaseAdmin.storage
-        .from('product-images')
-        .upload(fileName, buffer, { contentType: file.type, cacheControl: '3600' });
-      if (retryError) return NextResponse.json({ error: retryError.message }, { status: 500 });
-    } else {
-      return NextResponse.json({ error: uploadError.message }, { status: 500 });
-    }
+    console.error('Upload error:', uploadError.message);
+    return NextResponse.json(
+      { error: 'No se pudo subir la imagen. Intentá de nuevo.' },
+      { status: 500 }
+    );
   }
 
   const { data: { publicUrl } } = supabaseAdmin.storage

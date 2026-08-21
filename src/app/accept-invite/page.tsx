@@ -106,6 +106,7 @@ export default function AcceptInvitePage() {
                 <Input
                   type="text"
                   placeholder="Tu nombre"
+                  aria-label="Tu nombre"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="pl-9"
@@ -117,6 +118,7 @@ export default function AcceptInvitePage() {
                 <Input
                   type="password"
                   placeholder="Contraseña (mín. 6 caracteres)"
+                  aria-label="Contraseña"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="pl-9"

@@ -44,6 +44,8 @@ export function cancelPreApproval(id: string) {
   return preApproval.update({ id, body: { status: 'cancelled' } });
 }
 
+const MAX_CLOCK_SKEW_SECONDS = 10 * 60;
+
 export function verifyMercadoPagoSignature(request: Request, dataId?: string): boolean {
   const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
   if (!secret) {
@@ -78,14 +80,27 @@ export function verifyMercadoPagoSignature(request: Request, dataId?: string): b
     return false;
   }
 
+  const tsNumber = Number(ts);
+  if (!Number.isFinite(tsNumber)) {
+    return false;
+  }
+  const skewSeconds = Math.abs(Date.now() / 1000 - tsNumber);
+  if (skewSeconds > MAX_CLOCK_SKEW_SECONDS) {
+    return false;
+  }
+
   // MercadoPago manifest format: id:<data.id>;request-id:<x-request-id>;ts:<ts>;
   const manifest = `id:${dataId || ''};request-id:${xRequestId};ts:${ts};`;
 
   try {
     const hmac = crypto.createHmac('sha256', secret);
     hmac.update(manifest);
-    const hash = hmac.digest('hex');
-    return hash === v1;
+    const expected = hmac.digest();
+    const received = Buffer.from(v1, 'hex');
+    if (expected.length !== received.length || received.length === 0) {
+      return false;
+    }
+    return crypto.timingSafeEqual(expected, received);
   } catch (err) {
     console.error('Error verifying MercadoPago signature:', err);
     return false;

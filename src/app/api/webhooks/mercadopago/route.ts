@@ -41,11 +41,23 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'No external reference' }, { status: 400 });
       }
 
+      const refParts = String(externalRef).split(':');
+      const tenantId = refParts[0];
+      const refPlan = refParts.length > 1 ? refParts[1] : null;
+      const validRefPlan =
+        refPlan === 'starter' || refPlan === 'business' ? (refPlan as 'starter' | 'business') : null;
+
+      if (!tenantId) {
+        return NextResponse.json({ error: 'No external reference' }, { status: 400 });
+      }
+
       if (status === 'authorized') {
         const reason = preapproval.reason || '';
-        let planToSet: 'starter' | 'business' | null = null;
-        if (reason.includes('Business')) planToSet = 'business';
-        else if (reason.includes('Starter')) planToSet = 'starter';
+        let planToSet: 'starter' | 'business' | null = validRefPlan;
+        if (!planToSet) {
+          if (reason.includes('Business')) planToSet = 'business';
+          else if (reason.includes('Starter')) planToSet = 'starter';
+        }
 
         const updateData: Record<string, unknown> = {
           subscription_status: 'active',
@@ -59,19 +71,19 @@ export async function POST(request: Request) {
         await supabaseAdmin
           .from('tenants')
           .update(updateData)
-          .eq('id', externalRef);
+          .eq('id', tenantId);
 
         if (planToSet === 'business') {
           await supabaseAdmin
             .from('product_stock')
             .update({ active: true })
-            .eq('tenant_id', externalRef);
+            .eq('tenant_id', tenantId);
         }
       } else if (status === 'cancelled') {
         const { data: tenantRow } = await supabaseAdmin
           .from('tenants')
           .select('subscription_plan, mercadopago_preapproval_id')
-          .eq('id', externalRef)
+          .eq('id', tenantId)
           .single();
 
         const currentPlan = tenantRow?.subscription_plan;
@@ -88,14 +100,14 @@ export async function POST(request: Request) {
         await supabaseAdmin
           .from('tenants')
           .update(updateData)
-          .eq('id', externalRef);
+          .eq('id', tenantId);
       } else if (status === 'paused') {
         // Subscription paused by MercadoPago (e.g. failed payment attempts)
         // Mark as past_due so the subscription gate blocks access.
         await supabaseAdmin
           .from('tenants')
           .update({ subscription_status: 'past_due' })
-          .eq('id', externalRef)
+          .eq('id', tenantId)
           .eq('mercadopago_preapproval_id', id);
       }
       // status === 'pending' -> no action needed (waiting for first payment)
