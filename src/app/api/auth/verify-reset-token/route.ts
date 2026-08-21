@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { hashResetToken } from '@/lib/reset-token';
 
 export async function POST(request: Request) {
   try {
@@ -12,7 +13,7 @@ export async function POST(request: Request) {
     const { data, error } = await supabaseAdmin
       .from('password_reset_tokens')
       .select('email, expires_at')
-      .eq('token', token)
+      .eq('token_hash', hashResetToken(token))
       .maybeSingle();
 
     if (error || !data) {

@@ -4,6 +4,7 @@ import { useState, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { getTenantHeaders } from '@/lib/fetchWithTenant';
 import { BarcodeScanner } from '@/components/scanner/BarcodeScanner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -45,8 +46,7 @@ function ScanningPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const stockinMode = searchParams?.get('mode') === 'stockin';
-  const { tenant } = useAuth();
-  const tenantId = tenant?.id ?? null;
+  useAuth();
 
   const [scanState, setScanState] = useState<ScanState>('scanning');
   const [scannedCode, setScannedCode] = useState('');
@@ -100,7 +100,7 @@ function ScanningPageContent() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
+          ...getTenantHeaders(),
           ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
         },
         body: JSON.stringify({ quantity, reason: addReason }),

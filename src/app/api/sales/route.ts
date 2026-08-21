@@ -94,7 +94,7 @@ export async function POST(request: Request) {
     const { customer_id, notes, items } = body as {
       customer_id?: string;
       notes?: string;
-      items: { product_id: string; quantity: number; unit_price?: number }[];
+      items: { product_id: string; quantity: number }[];
     };
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -134,9 +134,7 @@ export async function POST(request: Request) {
       if (!product) throw new Error(`Producto no encontrado: ${item.product_id}`);
 
       const quantity = Number(item.quantity) || 1;
-      const unit_price_cents = item.unit_price != null
-        ? Math.round(Number(item.unit_price) * 100)
-        : (product.price_cents ?? Math.round(Number(product.price) * 100));
+      const unit_price_cents = product.price_cents ?? Math.round(Number(product.price) * 100);
       const subtotal_cents = quantity * unit_price_cents;
 
       const availableStock = stockMap.get(item.product_id) ?? 0;

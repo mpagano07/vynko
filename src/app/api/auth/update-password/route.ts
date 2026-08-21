@@ -1,18 +1,30 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { hashResetToken } from '@/lib/reset-token';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
 export async function POST(request: Request) {
   try {
+    const ipLimit = rateLimit(`upw:${getClientIp(request)}`, 10, 15 * 60 * 1000);
+    if (!ipLimit.ok) {
+      return NextResponse.json(
+        { error: 'Demasiados intentos. Probá de nuevo más tarde.' },
+        { status: 429, headers: { 'Retry-After': String(ipLimit.retryAfterSeconds) } }
+      );
+    }
+
     const { token, password } = await request.json();
 
     if (!token || !password || typeof password !== 'string' || password.length < 6) {
       return NextResponse.json({ error: 'Contraseña inválida' }, { status: 400 });
     }
 
+    const tokenHash = hashResetToken(token);
+
     const { data: tokenData, error: tokenError } = await supabaseAdmin
       .from('password_reset_tokens')
       .select('email, expires_at')
-      .eq('token', token)
+      .eq('token_hash', tokenHash)
       .maybeSingle();
 
     if (tokenError || !tokenData) {
@@ -48,7 +60,7 @@ export async function POST(request: Request) {
     await supabaseAdmin
       .from('password_reset_tokens')
       .delete()
-      .eq('token', token);
+      .eq('email', tokenData.email.toLowerCase());
 
     return NextResponse.json({ success: true });
   } catch (err) {

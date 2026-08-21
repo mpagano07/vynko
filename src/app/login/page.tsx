@@ -22,17 +22,16 @@ function LoginContent() {
 
   useEffect(() => {
     const saved = localStorage.getItem('vynko_remember');
-    if (saved) {
-      try {
-        const { email: savedEmail, password: savedPassword } = JSON.parse(saved);
-        if (savedEmail) {
-          // eslint-disable-next-line react-hooks/set-state-in-effect
-          setEmail(savedEmail);
-          if (savedPassword) setPassword(savedPassword);
-          setRemember(true);
-        }
-      } catch {}
-    }
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved) as { email?: string };
+      if (parsed.email) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setEmail(parsed.email);
+        setRemember(true);
+        localStorage.setItem('vynko_remember', JSON.stringify({ email: parsed.email }));
+      }
+    } catch {}
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -57,7 +56,7 @@ function LoginContent() {
       if (error) throw error;
 
       if (remember) {
-        localStorage.setItem('vynko_remember', JSON.stringify({ email: emailVal, password: passwordVal }));
+        localStorage.setItem('vynko_remember', JSON.stringify({ email: emailVal }));
       } else {
         localStorage.removeItem('vynko_remember');
       }
@@ -203,7 +202,7 @@ function LoginContent() {
                   onChange={(e) => setRemember(e.target.checked)}
                   className="h-4 w-4 rounded border-gray-600 bg-gray-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0"
                 />
-                <span className="text-sm text-gray-400">Recordarme</span>
+                <span className="text-sm text-gray-400">Recordar mi email</span>
               </label>
               <Link
                 href="/auth/forgot-password"

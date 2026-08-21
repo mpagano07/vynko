@@ -314,7 +314,6 @@ export default function SalesPage() {
           items: cart.map((item) => ({
             product_id: item.product_id,
             quantity: item.quantity,
-            unit_price: item.price,
           })),
         }),
       });

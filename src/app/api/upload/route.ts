@@ -1,11 +1,20 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { rateLimit } from '@/lib/rate-limit';
 
 export async function POST(request: Request) {
   const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   const tenantId = auth.tenantId;
+
+  const limit = rateLimit(`upload:${tenantId}`, 30, 60 * 60 * 1000);
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: 'Límite de subidas alcanzado. Probá de nuevo más tarde.' },
+      { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } }
+    );
+  }
 
   const formData = await request.formData();
   const file = formData.get('file') as File;
