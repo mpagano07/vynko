@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,34 +17,8 @@ function ResetPasswordContent() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
-    let tokenParam = searchParams?.get('token');
-    if (!tokenParam && typeof window !== 'undefined') {
-      const url = new URL(window.location.href);
-      tokenParam = url.searchParams.get('token');
-    }
-
-    if (tokenParam) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setToken(tokenParam);
-      fetch('/api/auth/verify-reset-token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: tokenParam }),
-      }).then(async (res) => {
-        const data = await res.json();
-        if (data.valid) {
-          setReady(true);
-        } else {
-          toast.error(data.error || 'Link inválido o expirado');
-          router.push('/login');
-        }
-      });
-      return;
-    }
-
     let code = searchParams?.get('code');
     if (!code && typeof window !== 'undefined') {
       const url = new URL(window.location.href);
@@ -53,7 +28,7 @@ function ResetPasswordContent() {
     if (code) {
       supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
         if (error) {
-          toast.error(error.message);
+          toast.error('Link inválido o expirado');
           router.push('/login');
           return;
         }
@@ -66,7 +41,7 @@ function ResetPasswordContent() {
       if (session) {
         setReady(true);
       } else {
-        toast.error('Link inválido');
+        toast.error('Link inválido o expirado');
         router.push('/login');
       }
     });
@@ -88,20 +63,11 @@ function ResetPasswordContent() {
     setLoading(true);
 
     try {
-      if (token) {
-        const res = await fetch('/api/auth/update-password', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token, password }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
-      } else {
-        const { error } = await supabase.auth.updateUser({ password });
-        if (error) throw error;
-      }
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
 
       toast.success('Contraseña actualizada correctamente');
+      await supabase.auth.signOut({ scope: 'local' });
       router.push('/login');
     } catch (error: unknown) {
       const maybeError = error as { message?: string };
@@ -113,26 +79,26 @@ function ResetPasswordContent() {
 
   if (!ready) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Card className="w-full max-w-md p-8 text-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <Card className="w-full max-w-md p-8 text-center bg-gray-800 border border-gray-700">
           <Loader2 className="h-8 w-8 animate-spin text-indigo-500 mx-auto" />
-          <p className="mt-4 text-gray-600">Verificando link...</p>
+          <p className="mt-4 text-gray-400">Verificando link...</p>
         </Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <Card className="w-full max-w-md p-8">
+    <div className="min-h-screen flex items-center justify-center bg-gray-900 p-8">
+      <Card className="w-full max-w-md p-8 bg-gray-800 border border-gray-700">
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold mb-2">Nueva contraseña</h1>
-          <p className="text-gray-600">Ingresa tu nueva contraseña</p>
+          <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} className="h-10 w-auto object-contain mx-auto mb-2" />
+          <p className="text-gray-400">Nueva contraseña</p>
         </div>
 
         <form onSubmit={handleReset} className="space-y-4">
           <div>
-            <label htmlFor="new-password" className="block text-sm font-medium mb-2 text-gray-700">
+            <label htmlFor="new-password" className="block text-sm font-medium mb-2 text-gray-300">
               Nueva contraseña
             </label>
             <Input
@@ -143,11 +109,12 @@ function ResetPasswordContent() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={6}
+              className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-500"
             />
           </div>
 
           <div>
-            <label htmlFor="confirm-password" className="block text-sm font-medium mb-2 text-gray-700">
+            <label htmlFor="confirm-password" className="block text-sm font-medium mb-2 text-gray-300">
               Confirmar contraseña
             </label>
             <Input
@@ -158,6 +125,7 @@ function ResetPasswordContent() {
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
               minLength={6}
+              className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-500"
             />
           </div>
 
@@ -178,9 +146,9 @@ export default function ResetPasswordPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-          <Card className="w-full max-w-md p-8 text-center">
-            <div className="animate-pulse">Cargando...</div>
+        <div className="min-h-screen flex items-center justify-center bg-gray-900">
+          <Card className="w-full max-w-md p-8 text-center bg-gray-800 border border-gray-700">
+            <div className="animate-pulse text-gray-400">Cargando...</div>
           </Card>
         </div>
       }
