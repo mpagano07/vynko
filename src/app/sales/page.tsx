@@ -573,6 +573,7 @@ export default function SalesPage() {
                       <button
                         onClick={() => updateQuantity(item.product_id, -1)}
                         className="p-2 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700"
+                        aria-label={`Quitar una unidad de ${item.name}`}
                       >
                         <Minus className="h-3 w-3" />
                       </button>
@@ -582,12 +583,14 @@ export default function SalesPage() {
                       <button
                         onClick={() => updateQuantity(item.product_id, 1)}
                         className="p-2 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700"
+                        aria-label={`Agregar una unidad de ${item.name}`}
                       >
                         <Plus className="h-3 w-3" />
                       </button>
                       <button
                         onClick={() => removeFromCart(item.product_id)}
                         className="p-2 rounded text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 ml-1"
+                        aria-label={`Eliminar ${item.name} del carrito`}
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>

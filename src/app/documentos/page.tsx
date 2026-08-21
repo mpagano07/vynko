@@ -57,11 +57,14 @@ const PO_STATUS_LABELS: Record<string, string> = {
 };
 
 interface DocumentItem {
+  uid: string;
   product_id?: string;
   description: string;
   quantity: number;
   unit_price_cents: number;
 }
+
+type DocumentFormState = Omit<CreateDocumentRequest, 'items'> & { items: DocumentItem[] };
 
 export default function DocumentosPage() {
   const { tenant } = useAuth();
@@ -92,7 +95,7 @@ export default function DocumentosPage() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  const [formData, setFormData] = useState<CreateDocumentRequest>({
+  const [formData, setFormData] = useState<DocumentFormState>({
     document_type: 'remito_salida',
     customer_id: '',
     customer_name: '',
@@ -415,7 +418,7 @@ export default function DocumentosPage() {
       ...prev,
       items: [
         ...prev.items,
-        { description: '', quantity: 1, unit_price_cents: 0 },
+        { uid: crypto.randomUUID(), description: '', quantity: 1, unit_price_cents: 0 },
       ],
     }));
   };
@@ -429,6 +432,7 @@ export default function DocumentosPage() {
       items: [
         ...prev.items,
         {
+          uid: crypto.randomUUID(),
           product_id: product.id,
           description: product.name,
           quantity: 1,
@@ -1497,7 +1501,7 @@ export default function DocumentosPage() {
                 ) : (
                   <div className="space-y-2">
                     {formData.items.map((item, i) => (
-                      <div key={i} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                      <div key={item.uid} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
                         <div className="flex-1 grid grid-cols-1 sm:grid-cols-4 gap-2">
                           <div className="sm:col-span-2">
                             <Input
@@ -1537,6 +1541,7 @@ export default function DocumentosPage() {
                           onClick={() => removeItem(i)}
                           className="text-red-500 hover:text-red-700 p-1"
                           title="Eliminar item"
+                          aria-label={`Eliminar item ${item.description || i + 1}`}
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -1659,7 +1664,7 @@ export default function DocumentosPage() {
                     {poItems.map((item, index) => {
                       const product = products.find((p) => p.id === item.product_id);
                       return (
-                        <div key={index} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                        <div key={item.product_id} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50">
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                               {product?.name || item.product_id}

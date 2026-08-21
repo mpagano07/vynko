@@ -668,7 +668,7 @@ export default function ProvidersPage() {
                     {poItems.map((item, index) => {
                       const product = products.find((p) => p.id === item.product_id);
                       return (
-                        <div key={index} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                        <div key={item.product_id} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50">
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                               {product?.name || item.product_id}
