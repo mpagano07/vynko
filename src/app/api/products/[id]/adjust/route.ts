@@ -56,7 +56,7 @@ export async function POST(
     .eq('product_id', id)
     .eq('tenant_id', auth.tenantId);
 
-  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+  if (updateError) { console.error('DB error:', updateError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
 
   let historyWarning: string | undefined;
   const movement = buildStockMovement({
@@ -73,7 +73,7 @@ export async function POST(
 
   if (histError) {
     console.error('stock_history insert error:', JSON.stringify(histError));
-    historyWarning = 'El stock se actualizó pero no se pudo registrar en el historial. ' + histError.message;
+    historyWarning = 'El stock se actualizó pero no se pudo registrar en el historial.';
   }
 
   return NextResponse.json({

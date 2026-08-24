@@ -90,8 +90,9 @@ export async function POST(request: Request) {
       if (row.sku) {
         const { data: existing } = await supabaseAdmin
           .from('products')
-          .select('id')
+          .select('id, product_stock!inner(tenant_id)')
           .eq('sku', row.sku)
+          .eq('product_stock.tenant_id', auth.tenantId)
           .maybeSingle();
         if (existing) existingId = existing.id;
       }
@@ -99,8 +100,9 @@ export async function POST(request: Request) {
       if (!existingId && row.barcode) {
         const { data: existing } = await supabaseAdmin
           .from('products')
-          .select('id')
+          .select('id, product_stock!inner(tenant_id)')
           .eq('barcode', row.barcode)
+          .eq('product_stock.tenant_id', auth.tenantId)
           .maybeSingle();
         if (existing) existingId = existing.id;
       }
@@ -113,7 +115,7 @@ export async function POST(request: Request) {
           .eq('id', existingId);
 
         if (error) {
-          results.push({ row: i + 1, status: 'skipped', name, error: error.message });
+          results.push({ row: i + 1, status: 'skipped', name, error: 'Error al importar la fila' });
         } else {
           await supabaseAdmin
             .from('product_stock')
@@ -137,7 +139,7 @@ export async function POST(request: Request) {
           .single();
 
         if (error) {
-          results.push({ row: i + 1, status: 'skipped', name, error: error.message });
+          results.push({ row: i + 1, status: 'skipped', name, error: 'Error al importar la fila' });
         } else if (created) {
           await supabaseAdmin
             .from('product_stock')
@@ -145,8 +147,8 @@ export async function POST(request: Request) {
           results.push({ row: i + 1, status: 'created', name });
         }
       }
-    } catch (err) {
-      results.push({ row: i + 1, status: 'skipped', error: err instanceof Error ? err.message : 'Error' });
+    } catch {
+      results.push({ row: i + 1, status: 'skipped', error: 'Error al importar la fila' });
     }
   }
 

@@ -35,7 +35,7 @@ export async function GET(request: Request) {
     if (entityType) query = query.eq('entity_type', entityType);
 
     const { data, error, count } = await query;
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
 
     return NextResponse.json({ data: data || [], total: count || 0 });
   } catch (err: unknown) {

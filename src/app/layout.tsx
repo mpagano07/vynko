@@ -6,8 +6,6 @@ import { TenantHeaderProvider } from '@/components/TenantHeaderProvider';
 
 import type { Metadata, Viewport } from 'next';
 
-export const dynamic = 'force-dynamic';
-
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://vynko.app'),
   title: {
@@ -30,11 +28,13 @@ export const metadata: Metadata = {
     siteName: 'Vynko',
     locale: 'es_AR',
     type: 'website',
+    images: [{ url: '/icons/icon-512.png', width: 512, height: 512, alt: 'Vynko' }],
   },
   twitter: {
-    card: 'summary_large_image',
+    card: 'summary',
     title: 'Vynko | Gestión de Stock y Ventas con IA',
     description: 'Plataforma SaaS B2B de gestión inteligente de stock y ventas para negocios.',
+    images: ['/icons/icon-512.png'],
   },
 };
 

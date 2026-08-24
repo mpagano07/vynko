@@ -28,7 +28,7 @@ export async function GET(request: Request) {
 
   const { data: documents, error } = await query;
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
   return NextResponse.json(documents ?? []);
 }
 
@@ -60,51 +60,69 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Tipo de documento inválido' }, { status: 400 });
     }
 
-    const { data: seqResult } = await supabaseAdmin
-      .from('commercial_document_sequences')
-      .select('next_number')
-      .eq('tenant_id', auth.tenantId)
-      .eq('document_type', document_type)
-      .single();
+    const totalCents = items.reduce((sum, item) => sum + item.unit_price_cents * item.quantity, 0);
 
-    let nextNumber = 1;
-    if (seqResult) {
-      nextNumber = seqResult.next_number as number;
-    } else {
-      await supabaseAdmin
+    let document: Record<string, unknown> | null = null;
+    for (let attempt = 0; attempt < 5 && !document; attempt++) {
+      const { data: seqResult } = await supabaseAdmin
         .from('commercial_document_sequences')
+        .select('next_number')
+        .eq('tenant_id', auth.tenantId)
+        .eq('document_type', document_type)
+        .single();
+
+      const candidate = (seqResult?.next_number as number) ?? 1;
+      if (!seqResult) {
+        await supabaseAdmin
+          .from('commercial_document_sequences')
+          .upsert({
+            tenant_id: auth.tenantId,
+            document_type,
+            next_number: candidate,
+          }, { onConflict: 'tenant_id,document_type' });
+      }
+
+      const { data: claimed } = await supabaseAdmin
+        .from('commercial_document_sequences')
+        .update({ next_number: candidate + 1, updated_at: new Date().toISOString() })
+        .eq('tenant_id', auth.tenantId)
+        .eq('document_type', document_type)
+        .eq('next_number', candidate)
+        .select('next_number');
+
+      if (!claimed || claimed.length === 0) continue;
+
+      const { data, error } = await supabaseAdmin
+        .from('commercial_documents')
         .insert({
           tenant_id: auth.tenantId,
           document_type,
-          next_number: 1,
-        });
+          document_number: candidate,
+          sale_id: sale_id || null,
+          purchase_order_id: purchase_order_id || null,
+          customer_id: customer_id || null,
+          customer_name,
+          supplier_name: supplier_name || null,
+          notes: notes || null,
+          total_cents: totalCents,
+          status: 'pending',
+          valid_until: valid_until || null,
+          delivery_date: delivery_date || null,
+          created_by: auth.userId,
+        })
+        .select()
+        .single();
+
+      if (!error) {
+        document = data as Record<string, unknown>;
+      }
     }
 
-    const totalCents = items.reduce((sum, item) => sum + item.unit_price_cents * item.quantity, 0);
-
-    const { data: document, error: docError } = await supabaseAdmin
-      .from('commercial_documents')
-      .insert({
-        tenant_id: auth.tenantId,
-        document_type,
-        document_number: nextNumber,
-        sale_id: sale_id || null,
-        purchase_order_id: purchase_order_id || null,
-        customer_id: customer_id || null,
-        customer_name,
-        supplier_name: supplier_name || null,
-        notes: notes || null,
-        total_cents: totalCents,
-        status: 'pending',
-        valid_until: valid_until || null,
-        delivery_date: delivery_date || null,
-        created_by: auth.userId,
-      })
-      .select()
-      .single();
-
-    if (docError) {
-      return NextResponse.json({ error: docError.message }, { status: 400 });
+    if (!document) {
+      return NextResponse.json(
+        { error: 'No se pudo generar el número de documento. Intentá de nuevo.' },
+        { status: 409 }
+      );
     }
 
     const documentItems = items.map(item => ({
@@ -122,14 +140,8 @@ export async function POST(request: Request) {
 
     if (itemsError) {
       await supabaseAdmin.from('commercial_documents').delete().eq('id', document.id);
-      return NextResponse.json({ error: itemsError.message }, { status: 400 });
+      { console.error('DB error:', itemsError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
     }
-
-    await supabaseAdmin
-      .from('commercial_document_sequences')
-      .update({ next_number: nextNumber + 1, updated_at: new Date().toISOString() })
-      .eq('tenant_id', auth.tenantId)
-      .eq('document_type', document_type);
 
     const { data: fullDocument } = await supabaseAdmin
       .from('commercial_documents')

@@ -80,7 +80,7 @@ export async function POST(request: Request) {
       .insert(insertData);
 
     if (tenantError) {
-      return NextResponse.json({ error: tenantError.message }, { status: 500 });
+      { console.error('DB error:', tenantError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
     }
 
     const { error: tenantUserError } = await supabaseAdmin
@@ -92,7 +92,7 @@ export async function POST(request: Request) {
       });
 
     if (tenantUserError) {
-      return NextResponse.json({ error: tenantUserError.message }, { status: 500 });
+      { console.error('DB error:', tenantUserError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
     }
 
     const { data: tenantData } = await supabaseAdmin

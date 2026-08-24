@@ -38,6 +38,10 @@ import { getTenantHeaders } from '@/lib/fetchWithTenant';
 import { filterProducts } from '@/lib/product-search';
 import { TransferInbox } from '@/components/transfers/TransferInbox';
 
+function marginPercent(price: number, cost: number): number {
+  return ((price - cost) / cost) * 100;
+}
+
 interface PriceAdjustSample {
   id: string;
   name: string;
@@ -734,7 +738,9 @@ export default function ProductsPage() {
                         </div>
                         {product.cost != null && product.cost > 0 && product.price > 0 && (
                           <div className="text-xs text-gray-500 mt-0.5">
-                            Margen: <span className="font-medium text-emerald-600 dark:text-emerald-400">+{(((product.price - product.cost) / product.cost) * 100).toFixed(0)}%</span>
+                            Margen: <span className={`font-medium ${marginPercent(product.price, product.cost) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                              {marginPercent(product.price, product.cost) >= 0 ? '+' : ''}{marginPercent(product.price, product.cost).toFixed(0)}%
+                            </span>
                           </div>
                         )}
                       </td>
@@ -954,10 +960,14 @@ export default function ProductsPage() {
                     <Input
                       type="text"
                       readOnly
-                      className="bg-gray-50 dark:bg-gray-800 cursor-not-allowed text-emerald-600 dark:text-emerald-400 font-medium"
+                      className={`bg-gray-50 dark:bg-gray-800 cursor-not-allowed font-medium ${
+                        productForm.cost > 0 && productForm.price > 0 && marginPercent(productForm.price, productForm.cost) >= 0
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-red-600 dark:text-red-400'
+                      }`}
                       value={
                         productForm.cost > 0 && productForm.price > 0
-                          ? `+${(((productForm.price - productForm.cost) / productForm.cost) * 100).toFixed(0)}%`
+                          ? `${marginPercent(productForm.price, productForm.cost) >= 0 ? '+' : ''}${marginPercent(productForm.price, productForm.cost).toFixed(0)}%`
                           : '—'
                       }
                     />

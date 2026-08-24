@@ -25,6 +25,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Transferencia no encontrada' }, { status: 404 });
   }
 
+  const userCanAccess = auth.allTenants || auth.tenantIds.includes(transfer.from_tenant_id) || auth.tenantIds.includes(transfer.to_tenant_id);
+  if (!userCanAccess) {
+    return NextResponse.json({ error: 'No tienes permisos sobre esta transferencia' }, { status: 403 });
+  }
+
   if (transfer.status === 'received') {
     return NextResponse.json({ error: 'La transferencia ya fue recibida' }, { status: 400 });
   }
@@ -145,7 +150,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     .single();
 
   if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 500 });
+    { console.error('DB error:', updateError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
   }
 
   await createActivityLog({
@@ -189,7 +194,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     .eq('id', id);
 
   if (deleteError) {
-    return NextResponse.json({ error: deleteError.message }, { status: 500 });
+    { console.error('DB error:', deleteError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
   }
 
   await createActivityLog({

@@ -61,11 +61,16 @@ export default function CustomersPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
 
   const fetchCustomers = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch('/api/customers', {
-      headers: session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {},
-    });
-    if (res.ok) setCustomers(await res.json());
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/customers', {
+        headers: session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {},
+      });
+      if (res.ok) setCustomers(await res.json());
+      else toast.error('No se pudieron cargar los clientes');
+    } catch {
+      toast.error('Error de conexión al cargar clientes');
+    }
   };
 
   useEffect(() => {
@@ -89,44 +94,58 @@ export default function CustomersPage() {
     e.preventDefault();
     if (!form.name.trim()) { toast.error('El nombre es requerido'); return; }
     setSubmitting(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
 
-    const url = editing ? `/api/customers/${editing.id}` : '/api/customers';
-    const method = editing ? 'PATCH' : 'POST';
-    const res = await fetch(url, { method, headers, body: JSON.stringify(form) });
-    const data = await res.json();
-    if (!res.ok) { toast.error(data.error || 'Error al guardar'); setSubmitting(false); return; }
+      const url = editing ? `/api/customers/${editing.id}` : '/api/customers';
+      const method = editing ? 'PATCH' : 'POST';
+      const res = await fetch(url, { method, headers, body: JSON.stringify(form) });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || 'Error al guardar'); return; }
 
-    toast.success(editing ? 'Cliente actualizado' : 'Cliente creado');
-    setModalOpen(false);
-    setSubmitting(false);
-    fetchCustomers();
+      toast.success(editing ? 'Cliente actualizado' : 'Cliente creado');
+      setModalOpen(false);
+      fetchCustomers();
+    } catch {
+      toast.error('Error de conexión al guardar el cliente');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    const { data: { session } } = await supabase.auth.getSession();
-    const headers: Record<string, string> = {};
-    if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-    const res = await fetch(`/api/customers/${deleteTarget.id}`, { method: 'DELETE', headers });
-    if (!res.ok) { const d = await res.json(); toast.error(d.error || 'Error al eliminar'); return; }
-    toast.success('Cliente eliminado');
-    setDeleteTarget(null);
-    fetchCustomers();
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = {};
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+      const res = await fetch(`/api/customers/${deleteTarget.id}`, { method: 'DELETE', headers });
+      if (!res.ok) { const d = await res.json(); toast.error(d.error || 'Error al eliminar'); return; }
+      toast.success('Cliente eliminado');
+      setDeleteTarget(null);
+      fetchCustomers();
+    } catch {
+      toast.error('Error de conexión al eliminar el cliente');
+    }
   };
 
   const openHistory = async (c: Customer) => {
     setHistoryTarget(c);
     setHistoryLoading(true);
     setHistoryData(null);
-    const { data: { session } } = await supabase.auth.getSession();
-    const headers: Record<string, string> = {};
-    if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-    const res = await fetch(`/api/customers/${c.id}/history`, { headers });
-    if (res.ok) setHistoryData(await res.json());
-    setHistoryLoading(false);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = {};
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+      const res = await fetch(`/api/customers/${c.id}/history`, { headers });
+      if (res.ok) setHistoryData(await res.json());
+    } catch {
+      toast.error('Error de conexión al cargar el historial');
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   const filtered = customers.filter(c =>

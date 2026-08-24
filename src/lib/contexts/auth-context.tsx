@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
+import { useSWRConfig } from 'swr';
 import { supabase } from '@/lib/supabaseClient';
 import type { Session, User } from '@supabase/supabase-js';
 import toast from 'react-hot-toast';
@@ -166,6 +167,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const { mutate: globalMutate } = useSWRConfig();
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [tenant, setTenant] = useState<TenantInfo | null>(null);
@@ -203,7 +205,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const headers: Record<string, string> = {
           Authorization: `Bearer ${session.access_token}`,
-          'x-refresh-token': session.refresh_token ?? '',
         };
         if (isAll) {
           headers['x-active-tenant-id'] = '__all__';
@@ -360,7 +361,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadProfileAndTenant]);
 
   const logout = async () => {
-    await supabase.auth.signOut({ scope: 'local' });
+    await supabase.auth.signOut();
     sessionViaEventRef.current = false;
     setUser(null);
     setProfile(null);
@@ -373,6 +374,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.localStorage.removeItem('vynko_remember');
     }
     lastFetchedUserIdRef.current = null;
+    await globalMutate(() => true, undefined, { revalidate: false });
   };
 
   const logoutRef = useRef(logout);

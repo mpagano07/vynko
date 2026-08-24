@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     if (!auth.allTenants) query = query.eq('tenant_id', auth.tenantId);
     const { data: sales, error } = await query;
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
     return NextResponse.json(sales ?? []);
   }
 
@@ -61,7 +61,7 @@ export async function GET(request: Request) {
 
   const { data: sales, error, count } = await query;
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
 
   const result = (sales ?? []).map((s: Record<string, unknown>) => {
     const customer = s.customer as Record<string, unknown> | undefined;
@@ -107,7 +107,7 @@ export async function POST(request: Request) {
       .select('id, name, price, price_cents')
       .in('id', productIds);
 
-    if (prodError) return NextResponse.json({ error: prodError.message }, { status: 500 });
+    if (prodError) { console.error('DB error:', prodError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
 
     const { data: stockRows } = await supabaseAdmin
       .from('product_stock')
@@ -126,7 +126,6 @@ export async function POST(request: Request) {
       unit_price_cents: number;
       subtotal_cents: number;
       product_name: string;
-      newStock: number;
     }
 
     const saleItems: SaleItemData[] = items.map((item) => {
@@ -143,75 +142,137 @@ export async function POST(request: Request) {
         throw new Error(stockResult.error);
       }
 
-      return { product_id: item.product_id, quantity, unit_price_cents, subtotal_cents, product_name: product.name, newStock: stockResult.newStock };
+      return { product_id: item.product_id, quantity, unit_price_cents, subtotal_cents, product_name: product.name };
     });
 
     const total_cents = saleItems.reduce((sum, item) => sum + item.subtotal_cents, 0);
 
-    const { data: sale, error: saleError } = await supabaseAdmin
-      .from('sales')
-      .insert({
-        tenant_id: auth.tenantId,
-        customer_id: customer_id || null,
-        total_cents,
-        status: 'completed',
-        notes: notes || null,
-        sold_by: auth.userId,
-      })
-      .select()
-      .single();
+    const decrementStockAtomic = async (
+      productId: string,
+      productName: string,
+      quantity: number
+    ): Promise<void> => {
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const { data: row } = await supabaseAdmin
+          .from('product_stock')
+          .select('id, stock')
+          .eq('product_id', productId)
+          .eq('tenant_id', auth.tenantId)
+          .maybeSingle();
 
-    if (saleError) return NextResponse.json({ error: saleError.message }, { status: 400 });
+        const available = row?.stock ?? 0;
+        if (!row || available < quantity) {
+          throw new Error(`Stock insuficiente para "${productName}" (disponible: ${available})`);
+        }
 
-    const itemsWithSaleId = saleItems.map((item) => ({
-      sale_id: sale.id,
-      product_id: item.product_id,
-      quantity: item.quantity,
-      unit_price_cents: item.unit_price_cents,
-      subtotal_cents: item.subtotal_cents,
-    }));
+        const { data: updated } = await supabaseAdmin
+          .from('product_stock')
+          .update({ stock: available - quantity, updated_at: new Date().toISOString() })
+          .eq('id', row.id)
+          .eq('stock', available)
+          .select('id');
 
-    const { error: itemsError } = await supabaseAdmin
-      .from('sale_items')
-      .insert(itemsWithSaleId);
+        if ((updated?.length ?? 0) > 0) return;
+      }
+      throw new Error(`Demasiada concurrencia sobre "${productName}". Intentá de nuevo.`);
+    };
 
-    if (itemsError) {
-      await supabaseAdmin.from('sales').delete().eq('id', sale.id);
-      return NextResponse.json({ error: itemsError.message }, { status: 400 });
+    const incrementStockAtomic = async (
+      productId: string,
+      quantity: number
+    ): Promise<void> => {
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const { data: row } = await supabaseAdmin
+          .from('product_stock')
+          .select('id, stock')
+          .eq('product_id', productId)
+          .eq('tenant_id', auth.tenantId)
+          .maybeSingle();
+        if (!row) return;
+
+        const { data: updated } = await supabaseAdmin
+          .from('product_stock')
+          .update({ stock: row.stock + quantity, updated_at: new Date().toISOString() })
+          .eq('id', row.id)
+          .eq('stock', row.stock)
+          .select('id');
+
+        if ((updated?.length ?? 0) > 0) return;
+      }
+    };
+
+    const decremented: SaleItemData[] = [];
+    try {
+      for (const item of saleItems) {
+        await decrementStockAtomic(item.product_id, item.product_name, item.quantity);
+        decremented.push(item);
+      }
+
+      const { data: sale, error: saleError } = await supabaseAdmin
+        .from('sales')
+        .insert({
+          tenant_id: auth.tenantId,
+          customer_id: customer_id || null,
+          total_cents,
+          status: 'completed',
+          notes: notes || null,
+          sold_by: auth.userId,
+        })
+        .select()
+        .single();
+
+      if (saleError) throw new Error('No se pudo registrar la venta');
+
+      const itemsWithSaleId = saleItems.map((item) => ({
+        sale_id: sale.id,
+        product_id: item.product_id,
+        quantity: item.quantity,
+        unit_price_cents: item.unit_price_cents,
+        subtotal_cents: item.subtotal_cents,
+      }));
+
+      const { error: itemsError } = await supabaseAdmin
+        .from('sale_items')
+        .insert(itemsWithSaleId);
+
+      if (itemsError) {
+        await supabaseAdmin.from('sales').delete().eq('id', sale.id);
+        throw new Error('No se pudieron guardar los ítems de la venta');
+      }
+
+      for (const item of saleItems) {
+        await supabaseAdmin
+          .from('stock_history')
+          .insert(buildStockMovement({
+            tenantId: auth.tenantId,
+            productId: item.product_id,
+            quantity: -item.quantity,
+            type: 'out',
+            reason: `Venta #${sale.id.slice(0, 8)}`,
+            createdBy: auth.userId,
+          }));
+      }
+
+      const itemNames = saleItems.map(i => i.product_name).slice(0, 3);
+      const detail = itemNames.join(', ') + (saleItems.length > 3 ? ` y ${saleItems.length - 3} más` : '');
+
+      await createActivityLog({
+        tenantId: auth.tenantId,
+        userId: auth.userId,
+        action: 'created',
+        entityType: 'sale',
+        entityId: sale.id,
+        details: { total_cents, items_count: saleItems.length, products: detail, folio: sale.id.slice(0, 8) },
+      });
+
+      return NextResponse.json({ ...sale, items: itemsWithSaleId }, { status: 201 });
+    } catch (err: unknown) {
+      for (const item of decremented) {
+        await incrementStockAtomic(item.product_id, item.quantity);
+      }
+      const message = err instanceof Error ? err.message : 'Error al procesar la venta';
+      return NextResponse.json({ error: message }, { status: 400 });
     }
-
-    for (const item of saleItems) {
-      await supabaseAdmin
-        .from('product_stock')
-        .update({ stock: item.newStock, updated_at: new Date().toISOString() })
-        .eq('product_id', item.product_id)
-        .eq('tenant_id', auth.tenantId);
-
-      await supabaseAdmin
-        .from('stock_history')
-        .insert(buildStockMovement({
-          tenantId: auth.tenantId,
-          productId: item.product_id,
-          quantity: -item.quantity,
-          type: 'out',
-          reason: `Venta #${sale.id.slice(0, 8)}`,
-          createdBy: auth.userId,
-        }));
-    }
-
-    const itemNames = saleItems.map(i => i.product_name).slice(0, 3);
-    const detail = itemNames.join(', ') + (saleItems.length > 3 ? ` y ${saleItems.length - 3} más` : '');
-
-    await createActivityLog({
-      tenantId: auth.tenantId,
-      userId: auth.userId,
-      action: 'created',
-      entityType: 'sale',
-      entityId: sale.id,
-      details: { total_cents, items_count: saleItems.length, products: detail, folio: sale.id.slice(0, 8) },
-    });
-
-    return NextResponse.json({ ...sale, items: itemsWithSaleId }, { status: 201 });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Error al procesar la venta';
     return NextResponse.json({ error: message }, { status: 400 });

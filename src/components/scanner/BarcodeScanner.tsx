@@ -12,6 +12,24 @@ interface BarcodeScannerProps {
 
 const SCAN_THROTTLE_MS = 2000;
 
+let audioCtxSingleton: AudioContext | null = null;
+
+function getBeepContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  const AudioCtx =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioCtx) return null;
+  if (!audioCtxSingleton) {
+    try {
+      audioCtxSingleton = new AudioCtx();
+    } catch {
+      return null;
+    }
+  }
+  return audioCtxSingleton;
+}
+
 export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
@@ -44,11 +62,11 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
 
     // Feedback auditivo (Beep 880Hz por 150ms)
     try {
-      const AudioCtx =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (AudioCtx) {
-        const ctx = new AudioCtx();
+      const ctx = getBeepContext();
+      if (ctx) {
+        if (ctx.state === 'suspended') {
+          ctx.resume().catch(() => undefined);
+        }
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.type = 'sine';
@@ -57,6 +75,10 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
         gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.15);
         osc.connect(gain);
         gain.connect(ctx.destination);
+        osc.onended = () => {
+          osc.disconnect();
+          gain.disconnect();
+        };
         osc.start();
         osc.stop(ctx.currentTime + 0.15);
       }

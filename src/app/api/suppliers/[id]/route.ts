@@ -21,10 +21,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .from('suppliers')
       .update(updateData)
       .eq('id', id)
+      .eq('tenant_id', auth.tenantId)
       .select()
       .single();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
 
     await supabaseAdmin
       .from('providers')
@@ -35,7 +36,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         address: body.address !== undefined ? body.address : undefined,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', id);
+      .eq('id', id)
+      .eq('tenant_id', auth.tenantId);
 
     await createActivityLog({
       tenantId: auth.tenantId,
@@ -61,6 +63,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     .from('suppliers')
     .delete()
     .eq('id', id)
+    .eq('tenant_id', auth.tenantId)
     .select('name')
     .single();
 
@@ -69,7 +72,8 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   await supabaseAdmin
     .from('providers')
     .delete()
-    .eq('id', id);
+    .eq('id', id)
+    .eq('tenant_id', auth.tenantId);
 
   await createActivityLog({
     tenantId: auth.tenantId,

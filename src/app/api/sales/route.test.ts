@@ -47,9 +47,10 @@ describe('POST /api/sales', () => {
       data: [{ id: 'p1', name: 'Coca', price: 2, price_cents: 200 }],
     });
     supabaseMock.__queue('product_stock', { data: [{ product_id: 'p1', stock: 10 }] });
+    supabaseMock.__queue('product_stock', { data: { id: 'ps1', stock: 10 } });
+    supabaseMock.__queue('product_stock', { data: [{ id: 'ps1' }] });
     supabaseMock.__queue('sales', { data: { id: 'sale-1' } });
     supabaseMock.__queue('sale_items', { data: null, error: null });
-    supabaseMock.__queue('product_stock', { data: null, error: null });
     supabaseMock.__queue('stock_history', { data: null, error: null });
 
     const res = await POST(
@@ -93,10 +94,12 @@ describe('POST /api/sales', () => {
         { product_id: 'p2', stock: 20 },
       ],
     });
+    supabaseMock.__queue('product_stock', { data: { id: 'ps1', stock: 10 } });
+    supabaseMock.__queue('product_stock', { data: [{ id: 'ps1' }] });
+    supabaseMock.__queue('product_stock', { data: { id: 'ps2', stock: 20 } });
+    supabaseMock.__queue('product_stock', { data: [{ id: 'ps2' }] });
     supabaseMock.__queue('sales', { data: { id: 'sale-2' } });
     supabaseMock.__queue('sale_items', { data: null, error: null });
-    supabaseMock.__queue('product_stock', { data: null, error: null });
-    supabaseMock.__queue('product_stock', { data: null, error: null });
     supabaseMock.__queue('stock_history', { data: null, error: null });
     supabaseMock.__queue('stock_history', { data: null, error: null });
 
@@ -135,9 +138,10 @@ describe('POST /api/sales', () => {
       data: [{ id: 'p1', name: 'Coca', price: 2, price_cents: 200 }],
     });
     supabaseMock.__queue('product_stock', { data: [{ product_id: 'p1', stock: 10 }] });
+    supabaseMock.__queue('product_stock', { data: { id: 'ps1', stock: 10 } });
+    supabaseMock.__queue('product_stock', { data: [{ id: 'ps1' }] });
     supabaseMock.__queue('sales', { data: { id: 'sale-3' } });
     supabaseMock.__queue('sale_items', { data: null, error: null });
-    supabaseMock.__queue('product_stock', { data: null, error: null });
     supabaseMock.__queue('stock_history', { data: null, error: null });
 
     const res = await POST(
@@ -194,16 +198,20 @@ describe('POST /api/sales', () => {
       data: [{ id: 'p1', name: 'Coca', price: 2, price_cents: 200 }],
     });
     supabaseMock.__queue('product_stock', { data: [{ product_id: 'p1', stock: 10 }] });
+    supabaseMock.__queue('product_stock', { data: { id: 'ps1', stock: 10 } });
+    supabaseMock.__queue('product_stock', { data: [{ id: 'ps1' }] });
     supabaseMock.__queue('sales', { data: { id: 'sale-9' } });
     supabaseMock.__queue('sale_items', {
       data: null,
       error: { message: 'items fail' },
     });
+    supabaseMock.__queue('product_stock', { data: { id: 'ps1', stock: 8 } });
+    supabaseMock.__queue('product_stock', { data: [{ id: 'ps1' }] });
 
     const res = await POST(makeRequest({ items: [{ product_id: 'p1', quantity: 2 }] }));
     expect(res.status).toBe(400);
     const json = await res.json();
-    expect(json.error).toBe('items fail');
+    expect(json.error).toBe('No se pudieron guardar los ítems de la venta');
 
     const del = supabaseMock.__calls.find(
       (c) => c.table === 'sales' && c.method === 'delete'

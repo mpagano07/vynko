@@ -136,7 +136,7 @@ describe('POST /api/products/[id]/adjust', () => {
     expect(json.success).toBe(true);
     expect(json.newStock).toBe(7);
     expect(json.warning).toContain('no se pudo registrar en el historial');
-    expect(json.warning).toContain('history insert failed');
+    expect(json.warning).toContain('no se pudo registrar en el historial');
     expect(json.reason).toBe('correction');
     expect(json.notes).toBe('recontado');
   });
@@ -172,6 +172,6 @@ describe('POST /api/products/[id]/adjust', () => {
     );
     expect(res.status).toBe(500);
     const json = await res.json();
-    expect(json.error).toBe('update failed');
+    expect(json.error).toBe('Ocurrio un error inesperado. Intenta de nuevo.');
   });
 });

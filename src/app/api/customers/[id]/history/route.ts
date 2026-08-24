@@ -23,7 +23,7 @@ export async function GET(
     .eq('customer_id', id)
     .order('created_at', { ascending: false });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
 
   const totalSpent = (sales ?? []).reduce((sum, s) => sum + (s.total_cents || 0), 0);
   const visitCount = (sales ?? []).length;

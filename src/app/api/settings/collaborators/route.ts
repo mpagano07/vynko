@@ -264,7 +264,7 @@ export async function POST(request: Request) {
     );
 
     if (inviteError) {
-      return NextResponse.json({ error: inviteError.message }, { status: 500 });
+      { console.error('DB error:', inviteError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
     }
 
     const origin = new URL(request.url).origin;

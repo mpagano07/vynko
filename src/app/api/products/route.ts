@@ -29,7 +29,7 @@ export async function GET(request: Request) {
   q = q.eq('product_stock.active', true);
   const { data, error } = await q;
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
   }
   const products = data?.map((p) => ({
     ...p,
@@ -90,7 +90,7 @@ export async function POST(request: Request) {
     .insert(insertData)
     .select();
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
   }
   const created = data?.[0];
   if (created) {
@@ -108,7 +108,7 @@ export async function POST(request: Request) {
       });
     if (stockError) {
       await supabaseAdmin.from('products').delete().eq('id', created.id);
-      return NextResponse.json({ error: stockError.message }, { status: 400 });
+      { console.error('DB error:', stockError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
     }
 
     await createActivityLog({

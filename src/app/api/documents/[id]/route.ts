@@ -56,7 +56,7 @@ export async function PATCH(
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
   return NextResponse.json(data);
 }
 
@@ -75,6 +75,6 @@ export async function DELETE(
     .eq('id', id)
     .eq('tenant_id', auth.tenantId);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
   return NextResponse.json({ success: true });
 }

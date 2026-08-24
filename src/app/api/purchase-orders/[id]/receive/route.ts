@@ -110,7 +110,7 @@ export async function POST(
       .single();
 
     if (docError) {
-      return NextResponse.json({ error: docError.message }, { status: 400 });
+      { console.error('DB error:', docError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
     }
 
     const documentItems = remitoItems.map(item => ({
@@ -128,7 +128,7 @@ export async function POST(
 
     if (itemsError) {
       await supabaseAdmin.from('commercial_documents').delete().eq('id', document.id);
-      return NextResponse.json({ error: itemsError.message }, { status: 400 });
+      { console.error('DB error:', itemsError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
     }
 
     await supabaseAdmin
@@ -210,7 +210,7 @@ export async function POST(
       .eq('tenant_id', auth.tenantId);
 
     if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 400 });
+      { console.error('DB error:', updateError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
     }
 
     await createActivityLog({

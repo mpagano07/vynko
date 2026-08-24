@@ -77,7 +77,7 @@ export async function POST(request: Request) {
       .select('id, name, cost, cost_cents')
       .in('id', productIds);
 
-    if (prodError) return NextResponse.json({ error: prodError.message }, { status: 500 });
+    if (prodError) { console.error('DB error:', prodError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
 
     type ProductRow = { id: string; name: string; cost: number; cost_cents?: number };
     const productMap = new Map((products ?? []).map((p) => [p.id, p as unknown as ProductRow]));
@@ -137,7 +137,7 @@ export async function POST(request: Request) {
       .select()
       .single();
 
-    if (poError) return NextResponse.json({ error: poError.message }, { status: 400 });
+    if (poError) { console.error('DB error:', poError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
 
     const { error: itemsError } = await supabaseAdmin
       .from('purchase_order_items')
@@ -153,7 +153,7 @@ export async function POST(request: Request) {
 
     if (itemsError) {
       await supabaseAdmin.from('purchase_orders').delete().eq('id', order.id);
-      return NextResponse.json({ error: itemsError.message }, { status: 400 });
+      { console.error('DB error:', itemsError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
     }
 
     await createActivityLog({

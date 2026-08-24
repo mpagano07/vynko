@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     .select('product_id')
     .in('tenant_id', scopeTenantIds);
 
-  if (stockError) return NextResponse.json({ error: stockError.message }, { status: 500 });
+  if (stockError) { console.error('DB error:', stockError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
 
   const tenantProductIds = new Set((stockRows ?? []).map((row) => row.product_id as string));
   const allowedIds = product_ids && product_ids.length > 0
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     .select('id, name, price_cents, cost')
     .in('id', allowedIds);
 
-  if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 });
+  if (fetchError) { console.error('DB error:', fetchError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
   if (!products || products.length === 0) {
     return NextResponse.json({ error: 'No hay productos' }, { status: 404 });
   }
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
       .in('id', allowedIds);
 
     if (updateError) {
-      errors.push({ id: update.id, name: update.name, error: updateError.message });
+      errors.push({ id: update.id, name: update.name, error: 'Error al aplicar el precio' });
     }
   }
 

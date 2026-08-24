@@ -250,7 +250,7 @@ describe('POST /api/settings/collaborators', () => {
     const res = await POST(makeRequest('POST', { email: 'nuevo@tienda.com', role: 'member' }));
     expect(res.status).toBe(500);
     const json = await res.json();
-    expect(json.error).toBe('invite fail');
+    expect(json.error).toBe('Ocurrio un error inesperado. Intenta de nuevo.');
     expect(supabaseMock.auth.admin.inviteUserByEmail).not.toHaveBeenCalled();
   });
 

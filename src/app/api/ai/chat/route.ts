@@ -3,12 +3,24 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getAuth } from '@/lib/api-auth';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { formatARS } from '@/lib/utils/currency';
+import { rateLimit } from '@/lib/rate-limit';
 
 async function getTenantContext(tenantId: string) {
-  const [products, stockData, categories, recentSales] = await Promise.all([
-    supabaseAdmin.from('products').select('id, name, price_cents, cost'),
-    supabaseAdmin.from('product_stock').select('product_id, stock, min_stock, max_stock').eq('tenant_id', tenantId).eq('active', true),
-    supabaseAdmin.from('categories').select('name'),
+  const stockData = await supabaseAdmin
+    .from('product_stock')
+    .select('product_id, stock, min_stock, max_stock')
+    .eq('tenant_id', tenantId)
+    .eq('active', true);
+
+  const productIds = ((stockData.data as unknown[] | null) ?? []).map(
+    (row) => (row as Record<string, unknown>).product_id as string
+  );
+
+  const [products, categories, recentSales] = await Promise.all([
+    productIds.length > 0
+      ? supabaseAdmin.from('products').select('id, name, price_cents, cost').in('id', productIds)
+      : Promise.resolve({ data: [] }),
+    supabaseAdmin.from('categories').select('name').eq('tenant_id', tenantId),
     supabaseAdmin.from('sales').select('total_cents, created_at').eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(10),
   ]);
 
@@ -48,8 +60,16 @@ async function getTenantContext(tenantId: string) {
 }
 
 export async function POST(request: Request) {
-  const auth = await getAuth();
+  const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+
+  const limit = rateLimit(`ai:chat:${auth.tenantId}`, 20, 60 * 1000);
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: 'Límite de consultas a la IA alcanzado. Por favor esperá un minuto.' },
+      { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } }
+    );
+  }
 
   const apiKey = process.env.GOOGLE_AI_API_KEY;
   if (!apiKey || apiKey === 'YOUR_GOOGLE_AI_API_KEY') {
@@ -93,10 +113,7 @@ Consulta del usuario: ${message}`;
     const reply = result.response.text() || 'Lo siento, no pude procesar tu consulta.';
     return NextResponse.json({ reply });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Error desconocido';
-    const stack = err instanceof Error ? err.stack : '';
-    console.error('Gemini chat error:', msg);
-    console.error('Stack:', stack);
-    return NextResponse.json({ error: `Error: ${msg}` }, { status: 500 });
+    console.error('Gemini chat error:', err);
+    return NextResponse.json({ error: 'No se pudo procesar la consulta con el asistente de IA.' }, { status: 500 });
   }
 }

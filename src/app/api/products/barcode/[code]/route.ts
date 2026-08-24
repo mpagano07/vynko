@@ -30,12 +30,12 @@ export async function GET(
     };
 
     let { data, error } = await lookupByBarcode();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
     if (!data) {
       const result = await lookupById();
       data = result.data;
       error = result.error;
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
     }
 
     if (!data) {

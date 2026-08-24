@@ -108,7 +108,7 @@ export async function POST(request: Request) {
     );
 
   if (tenantError) {
-    return NextResponse.json({ error: tenantError.message }, { status: 500 });
+    { console.error('DB error:', tenantError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
   }
 
   const { error: profileError } = await supabaseAdmin.from('profiles').upsert(
@@ -124,7 +124,7 @@ export async function POST(request: Request) {
   );
 
   if (profileError) {
-    return NextResponse.json({ error: profileError.message }, { status: 500 });
+    { console.error('DB error:', profileError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
   }
 
   const { error: tenantUserError } = await supabaseAdmin.from('tenant_users').upsert(
@@ -139,7 +139,7 @@ export async function POST(request: Request) {
   );
 
   if (tenantUserError) {
-    return NextResponse.json({ error: tenantUserError.message }, { status: 500 });
+    { console.error('DB error:', tenantUserError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
   }
 
   return NextResponse.json({ tenantId });

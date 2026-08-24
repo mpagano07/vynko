@@ -301,6 +301,19 @@ export default function SettingsPage() {
 
     setSavingPassword(true);
     try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      const email = currentUser?.email;
+      if (!email) throw new Error('No se pudo verificar tu identidad');
+
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email,
+        password: passwordForm.currentPassword,
+      });
+      if (verifyError) {
+        toast.error('La contraseña actual es incorrecta');
+        return;
+      }
+
       const { error } = await supabase.auth.updateUser({
         password: passwordForm.newPassword,
       });

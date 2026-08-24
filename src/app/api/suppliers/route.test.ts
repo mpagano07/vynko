@@ -148,7 +148,7 @@ describe('Suppliers API', () => {
       const res = await POST(makeRequest('POST', { name: 'Macro' }));
       expect(res.status).toBe(400);
       const json = await res.json();
-      expect(json.error).toBe('duplicate supplier');
+      expect(json.error).toBe('Ocurrio un error inesperado. Intenta de nuevo.');
     });
   });
 });
@@ -165,6 +165,6 @@ describe('GET /api/suppliers error', () => {
     const res = await GET(makeRequest('GET'));
     expect(res.status).toBe(500);
     const json = await res.json();
-    expect(json.error).toBe('db down');
+    expect(json.error).toBe('Ocurrio un error inesperado. Intenta de nuevo.');
   });
 });

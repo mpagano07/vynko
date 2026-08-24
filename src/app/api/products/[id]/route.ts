@@ -44,7 +44,7 @@ export async function PATCH(
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
     }
     if (!data) {
       return NextResponse.json({ error: 'Producto no encontrado o sin permisos' }, { status: 403 });
@@ -68,7 +68,7 @@ export async function PATCH(
         }, { onConflict: 'product_id,tenant_id' });
 
       if (stockError) {
-        return NextResponse.json({ error: stockError.message }, { status: 400 });
+        { console.error('DB error:', stockError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
       }
     }
 

@@ -76,6 +76,8 @@ export default function DashboardPage() {
   const [salesData, setSalesData] = useState<{ todayTotal: number; saleCount: number } | null>(null);
   const [monthlyData, setMonthlyData] = useState<MonthlyData | null>(null);
   const [perTenant, setPerTenant] = useState<Record<string, PerTenantData>>({});
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (authLoading || !isAuthenticated) return;
@@ -103,6 +105,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!tenant?.id && !allTenants) return;
     let cancelled = false;
+    let failed = false;
 
     (async () => {
       try {
@@ -123,6 +126,7 @@ export default function DashboardPage() {
               fetchWithTenant('/api/products/critical', t.id),
               fetchWithTenant('/api/purchase-orders/pending', t.id),
             ]);
+            if (!sales || !monthly || !critical || !pending) failed = true;
 
             const todayTotal = (sales as SalesEntry[] || []).reduce((sum, s) => sum + (s.total_cents || 0), 0);
             const saleCount = (sales as SalesEntry[] || []).length;
@@ -179,6 +183,7 @@ export default function DashboardPage() {
           ]);
 
           if (cancelled) return;
+          if (!salesRes.ok || !monthlyRes.ok || !criticalRes.ok || !pendingRes.ok) failed = true;
 
           if (salesRes.ok) {
             const sales: Record<string, unknown>[] = await salesRes.json();
@@ -205,12 +210,18 @@ export default function DashboardPage() {
         }
       } catch (err) {
         console.error(err);
+        if (!cancelled) failed = true;
       } finally {
-        if (!cancelled) startTransition(() => setProductsLoading(false));
+        if (!cancelled) {
+          startTransition(() => {
+            setProductsLoading(false);
+            setLoadError(failed);
+          });
+        }
       }
     })();
     return () => { cancelled = true; };
-  }, [tenant?.id, allTenants, tenants, fetchWithTenant]);
+  }, [tenant?.id, allTenants, tenants, fetchWithTenant, reloadKey]);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) router.push('/login');
@@ -290,6 +301,17 @@ export default function DashboardPage() {
           </span>
         )}
       </Link>
+
+      {loadError && !isLoading && (
+        <div className="flex items-center justify-between px-4 py-3 rounded-lg border border-red-300 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 text-sm">
+          <span className="text-red-700 dark:text-red-300">
+            Hubo un problema de conexión al cargar los datos. Los valores mostrados pueden estar incompletos.
+          </span>
+          <Button size="sm" variant="outline" onClick={() => setReloadKey((k) => k + 1)}>
+            Reintentar
+          </Button>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="p-4 h-[104px] flex flex-col justify-between">

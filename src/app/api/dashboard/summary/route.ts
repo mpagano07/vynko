@@ -36,7 +36,8 @@ export async function GET(request: Request) {
 
     const saleIds = ((recentSalesRes.data ?? []) as { id: string }[]).map(s => s.id);
 
-    let topProduct: { name: string; qty: number } | null = null;
+    let topPid: string | undefined;
+    let topProductQty = 0;
     if (saleIds.length > 0) {
       const { data: saleItems } = await supabaseAdmin
         .from('sale_items')
@@ -49,25 +50,24 @@ export async function GET(request: Request) {
           const pid = item.product_id as string;
           qtyByProduct[pid] = (qtyByProduct[pid] || 0) + ((item.quantity as number) || 0);
         }
-        const topPid = Object.entries(qtyByProduct).sort((a, b) => b[1] - a[1])[0]?.[0];
+        topPid = Object.entries(qtyByProduct).sort((a, b) => b[1] - a[1])[0]?.[0];
         if (topPid) {
-          const { data: prod } = await supabaseAdmin.from('products').select('name').eq('id', topPid).maybeSingle();
-          topProduct = { name: prod?.name || '—', qty: qtyByProduct[topPid] };
+          topProductQty = qtyByProduct[topPid];
         }
       }
     }
 
-    let topCustomer: { name: string; total: number } | null = null;
+    let topCid: string | undefined;
+    let topCustomerTotal = 0;
     if (customersRes.data && customersRes.data.length > 0) {
       const totalByCustomer: Record<string, number> = {};
       for (const sale of customersRes.data) {
         const cid = sale.customer_id as string;
         totalByCustomer[cid] = (totalByCustomer[cid] || 0) + ((sale.total_cents as number) || 0);
       }
-      const topCid = Object.entries(totalByCustomer).sort((a, b) => b[1] - a[1])[0]?.[0];
+      topCid = Object.entries(totalByCustomer).sort((a, b) => b[1] - a[1])[0]?.[0];
       if (topCid) {
-        const { data: cust } = await supabaseAdmin.from('customers').select('name').eq('id', topCid).maybeSingle();
-        topCustomer = { name: cust?.name || '—', total: totalByCustomer[topCid] / 100 };
+        topCustomerTotal = totalByCustomer[topCid] / 100;
       }
     }
 
@@ -76,19 +76,25 @@ export async function GET(request: Request) {
       lastPurchase = { date: lastSaleRes.data[0].created_at as string };
     }
 
-    let topSupplier: { name: string } | null = null;
+    let topSid: string | undefined;
     if (suppliersRes.data && suppliersRes.data.length > 0) {
       const countBySupplier: Record<string, number> = {};
       for (const po of suppliersRes.data) {
         const sid = po.supplier_id as string;
         countBySupplier[sid] = (countBySupplier[sid] || 0) + 1;
       }
-      const topSid = Object.entries(countBySupplier).sort((a, b) => b[1] - a[1])[0]?.[0];
-      if (topSid) {
-        const { data: supp } = await supabaseAdmin.from('suppliers').select('name').eq('id', topSid).maybeSingle();
-        topSupplier = { name: supp?.name || '—' };
-      }
+      topSid = Object.entries(countBySupplier).sort((a, b) => b[1] - a[1])[0]?.[0];
     }
+
+    const [prodRes, custRes, suppRes] = await Promise.all([
+      topPid ? supabaseAdmin.from('products').select('name').eq('id', topPid).maybeSingle() : Promise.resolve({ data: null }),
+      topCid ? supabaseAdmin.from('customers').select('name').eq('id', topCid).maybeSingle() : Promise.resolve({ data: null }),
+      topSid ? supabaseAdmin.from('suppliers').select('name').eq('id', topSid).maybeSingle() : Promise.resolve({ data: null }),
+    ]);
+
+    const topProduct = topPid ? { name: prodRes.data?.name || '—', qty: topProductQty } : null;
+    const topCustomer = topCid ? { name: custRes.data?.name || '—', total: topCustomerTotal } : null;
+    const topSupplier = topSid ? { name: suppRes.data?.name || '—' } : null;
 
     return NextResponse.json({
       topProduct,
