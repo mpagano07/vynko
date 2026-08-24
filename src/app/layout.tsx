@@ -6,6 +6,8 @@ import { TenantHeaderProvider } from '@/components/TenantHeaderProvider';
 
 import type { Metadata, Viewport } from 'next';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://vynko.app'),
   title: {
