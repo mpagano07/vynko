@@ -4,6 +4,7 @@ import { getAuth } from '@/lib/api-auth';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { formatARS } from '@/lib/utils/currency';
 import { rateLimit } from '@/lib/rate-limit';
+import { fixResponse } from '@/lib/utils/encoding';
 
 interface Prediction {
   productId: string;
@@ -192,7 +193,7 @@ Dame un análisis breve (3-4 oraciones) en español destacando tendencias y reco
     }
   }
 
-  return NextResponse.json({
+  return NextResponse.json(fixResponse({
     predictions,
     topProducts,
     needsReorder,
@@ -210,5 +211,5 @@ Dame un análisis breve (3-4 oraciones) en español destacando tendencias y reco
       needsReorder: trendPct(needsReorder.length, priorNeedsReorderCount),
     },
     aiAnalysis,
-  });
+  }));
 }

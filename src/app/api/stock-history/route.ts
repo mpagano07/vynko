@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { fixResponse } from '@/lib/utils/encoding';
 
 export async function GET(request: NextRequest) {
   const auth = await getAuth(request);
@@ -56,5 +57,5 @@ export async function GET(request: NextRequest) {
     createdAt: r.created_at,
   }));
 
-  return NextResponse.json({ items: formatted, total: count });
+  return NextResponse.json(fixResponse({ items: formatted, total: count }));
 }

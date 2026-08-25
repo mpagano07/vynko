@@ -5,6 +5,7 @@ import { createActivityLog } from '@/lib/activity-log';
 import { PLAN_LIMITS } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import { validateProduct } from '@/lib/product-validation';
+import { fixResponse } from '@/lib/utils/encoding';
 
 export async function GET(request: Request) {
   const auth = await getAuth(request);
@@ -42,7 +43,7 @@ export async function GET(request: Request) {
     stock_data: undefined,
     price: p.price_cents != null ? p.price_cents / 100 : 0,
   })) || [];
-  return NextResponse.json(products);
+  return NextResponse.json(fixResponse(products));
 }
 
 export async function POST(request: Request) {

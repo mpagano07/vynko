@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { fixResponse } from '@/lib/utils/encoding';
 
 export async function GET(request: Request) {
   const auth = await getAuth(request);
@@ -15,7 +16,7 @@ export async function GET(request: Request) {
   const { data, error } = await query;
 
   if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
-  return NextResponse.json(data || []);
+  return NextResponse.json(fixResponse(data || []));
 }
 
 export async function POST(request: Request) {

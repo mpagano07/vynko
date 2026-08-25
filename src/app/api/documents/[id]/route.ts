@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import type { DocumentStatus } from '@/lib/types/document';
+import { fixResponse } from '@/lib/utils/encoding';
 
 export async function GET(
   request: Request,
@@ -20,7 +21,7 @@ export async function GET(
     .single();
 
   if (error) return NextResponse.json({ error: 'Documento no encontrado' }, { status: 404 });
-  return NextResponse.json(document);
+  return NextResponse.json(fixResponse(document));
 }
 
 export async function PATCH(

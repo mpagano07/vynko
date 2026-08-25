@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { fixResponse } from '@/lib/utils/encoding';
 
 export async function GET(request: Request) {
   const auth = await getAuth(request);
@@ -55,5 +56,5 @@ export async function GET(request: Request) {
     })
     .filter((o) => o.items.length > 0);
 
-  return NextResponse.json(result);
+  return NextResponse.json(fixResponse(result));
 }

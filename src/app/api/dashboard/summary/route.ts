@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { fixResponse } from '@/lib/utils/encoding';
 
 export const dynamic = 'force-dynamic';
 
@@ -96,12 +97,12 @@ export async function GET(request: Request) {
     const topCustomer = topCid ? { name: custRes.data?.name || '—', total: topCustomerTotal } : null;
     const topSupplier = topSid ? { name: suppRes.data?.name || '—' } : null;
 
-    return NextResponse.json({
+    return NextResponse.json(fixResponse({
       topProduct,
       topCustomer,
       lastPurchase,
       topSupplier,
-    });
+    }));
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Error processing summary';
     return NextResponse.json({ error: msg }, { status: 500 });

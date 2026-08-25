@@ -7,7 +7,6 @@ import { useRouter } from 'next/navigation';
 import { PLANS } from '@/lib/plans';
 import { isTrialExpired } from '@/lib/checkSubscription';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { hasStoredSession } from '@/lib/contexts/auth-context';
 
 import { formatARS } from '@/lib/utils/currency';
 import {
@@ -77,7 +76,7 @@ export default function LandingPage() {
               </div>
             </div>
             {isMounted && (<div className="flex items-center gap-3">
-              {hasStoredSession() || user ? (
+              {user ? (
                 <>
                   <Link
                     href="/dashboard"

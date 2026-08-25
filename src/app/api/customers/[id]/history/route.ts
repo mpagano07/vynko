@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { fixResponse } from '@/lib/utils/encoding';
 
 export async function GET(
   request: Request,
@@ -44,5 +45,5 @@ export async function GET(
     }),
   }));
 
-  return NextResponse.json({ sales: formatted, totalSpent: totalSpent / 100, visitCount });
+  return NextResponse.json(fixResponse({ sales: formatted, totalSpent: totalSpent / 100, visitCount }));
 }

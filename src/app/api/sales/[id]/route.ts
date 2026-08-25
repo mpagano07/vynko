@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { fixResponse } from '@/lib/utils/encoding';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await getAuth(request);
@@ -40,5 +41,5 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }),
   };
 
-  return NextResponse.json(result);
+  return NextResponse.json(fixResponse(result));
 }

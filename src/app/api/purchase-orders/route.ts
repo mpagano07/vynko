@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
+import { fixResponse } from '@/lib/utils/encoding';
 
 export async function GET(request: Request) {
   const auth = await getAuth(request);
@@ -46,7 +47,7 @@ export async function GET(request: Request) {
     };
   });
 
-  return NextResponse.json(result);
+  return NextResponse.json(fixResponse(result));
 }
 
 export async function POST(request: Request) {

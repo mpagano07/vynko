@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { fixResponse } from '@/lib/utils/encoding';
 
 export async function GET(
   request: Request,
@@ -39,7 +40,7 @@ export async function GET(
     }
 
     if (!data) {
-      return NextResponse.json({ product: null });
+      return NextResponse.json(fixResponse({ product: null }));
     }
 
     const { data: stockData } = await supabaseAdmin
@@ -53,7 +54,7 @@ export async function GET(
       return NextResponse.json({ product: null });
     }
 
-    return NextResponse.json({
+    return NextResponse.json(fixResponse({
       product: {
         ...data,
         price: data.price_cents != null ? data.price_cents / 100 : 0,
@@ -61,7 +62,7 @@ export async function GET(
         min_stock: stockData?.min_stock ?? 0,
         max_stock: stockData?.max_stock ?? 0,
       },
-    });
+    }));
   } catch (err) {
     console.error('Error in barcode lookup:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

@@ -3,6 +3,7 @@ import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
 import { reduceStockForSale, buildStockMovement } from '@/lib/stock';
+import { fixResponse } from '@/lib/utils/encoding';
 
 export async function GET(request: Request) {
   const auth = await getAuth(request);
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
     const { data: sales, error } = await query;
 
     if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
-    return NextResponse.json(sales ?? []);
+    return NextResponse.json(fixResponse(sales ?? []));
   }
 
   const days = searchParams.get('days') ? parseInt(searchParams.get('days')!, 10) : null;
@@ -80,9 +81,9 @@ export async function GET(request: Request) {
   });
 
   if (hasPagination) {
-    return NextResponse.json({ data: result, total: count ?? 0, page, limit });
+    return NextResponse.json(fixResponse({ data: result, total: count ?? 0, page, limit }));
   }
-  return NextResponse.json(result);
+  return NextResponse.json(fixResponse(result));
 }
 
 export async function POST(request: Request) {

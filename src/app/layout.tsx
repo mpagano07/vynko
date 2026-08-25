@@ -52,7 +52,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es">
-      <head />
       <body className="min-h-screen bg-gray-50 antialiased dark:bg-gray-950 font-sans">
         <AuthProvider>
           <TenantHeaderProvider>
