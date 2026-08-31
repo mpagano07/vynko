@@ -30,6 +30,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'El nombre del proveedor es requerido' }, { status: 400 });
     }
 
+    const { data: existing } = await supabaseAdmin
+      .from('suppliers')
+      .select('id')
+      .eq('tenant_id', auth.tenantId)
+      .ilike('name', body.name)
+      .maybeSingle();
+
+    if (existing) {
+      return NextResponse.json({ error: 'Ya existe un proveedor con ese nombre' }, { status: 409 });
+    }
+
     const { data, error } = await supabaseAdmin
       .from('suppliers')
       .insert({

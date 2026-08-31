@@ -46,6 +46,7 @@ export default function ProvidersPage() {
     notes: '',
   });
 
+  const [isSubmittingSupplier, setIsSubmittingSupplier] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [supplierIdToDelete, setSupplierIdToDelete] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -266,8 +267,10 @@ export default function ProvidersPage() {
       toast.error('El nombre del proveedor es requerido');
       return;
     }
+    if (isSubmittingSupplier) return;
 
     try {
+      setIsSubmittingSupplier(true);
       const { data: { session } } = await supabase.auth.getSession();
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -286,6 +289,8 @@ export default function ProvidersPage() {
       refreshSuppliers();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al guardar');
+    } finally {
+      setIsSubmittingSupplier(false);
     }
   };
 
@@ -580,8 +585,8 @@ export default function ProvidersPage() {
                 <Button type="button" variant="outline" onClick={() => setIsSupplierModalOpen(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit">
-                  {editingSupplier ? 'Guardar Cambios' : 'Crear Proveedor'}
+                <Button type="submit" disabled={isSubmittingSupplier}>
+                  {isSubmittingSupplier ? 'Guardando...' : editingSupplier ? 'Guardar Cambios' : 'Crear Proveedor'}
                 </Button>
               </div>
             </form>
