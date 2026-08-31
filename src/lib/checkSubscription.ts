@@ -32,6 +32,44 @@ export interface TenantSubscription {
   subscription_current_period_end?: string | null;
 }
 
+const PLAN_RANK: Record<string, number> = { enterprise: 4, business: 3, starter: 2, free: 1 };
+const STATUS_RANK: Record<string, number> = { active: 5, incomplete: 4, past_due: 3, canceled: 2, free: 1 };
+
+/**
+ * Consolidates the subscription of an owner across all of their branches
+ * (tenants). Every branch of the same owner shares a single subscription:
+ * the best plan/status wins and the earliest created_at (the first/payment
+ * date) is used as the reference date for the trial or renewal.
+ */
+export function consolidateOwnerSubscription(
+  tenants: TenantSubscription[] | null | undefined
+): TenantSubscription | null {
+  if (!tenants || tenants.length === 0) return null;
+
+  let best = tenants[0];
+  for (const t of tenants) {
+    const cur =
+      (STATUS_RANK[t.subscription_status || 'free'] || 0) + (PLAN_RANK[t.subscription_plan || 'free'] || 0);
+    const anchor =
+      (STATUS_RANK[best.subscription_status || 'free'] || 0) + (PLAN_RANK[best.subscription_plan || 'free'] || 0);
+    if (cur > anchor) best = t;
+  }
+
+  let earliestCreatedAt: string | null = null;
+  for (const t of tenants) {
+    if (t.created_at && (!earliestCreatedAt || new Date(t.created_at) < new Date(earliestCreatedAt))) {
+      earliestCreatedAt = t.created_at;
+    }
+  }
+
+  return {
+    subscription_status: best.subscription_status || 'free',
+    subscription_plan: best.subscription_plan || 'free',
+    subscription_current_period_end: best.subscription_current_period_end || null,
+    created_at: earliestCreatedAt || best.created_at || null,
+  };
+}
+
 export interface BlockedResult {
   blocked: true;
   reason: 'trial_expired' | 'payment_past_due';

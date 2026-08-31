@@ -237,7 +237,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             bestStatus = s;
             bestPlan = p;
             bestPeriodEnd = t.subscription_current_period_end || null;
-            bestCreatedAt = t.created_at || null;
+          }
+        }
+        // The owner shares one subscription across all branches: the first
+        // (earliest) created_at is the reference date for the trial/payment.
+        for (const t of tenantsList) {
+          if (t.created_at && (!bestCreatedAt || new Date(t.created_at) < new Date(bestCreatedAt))) {
+            bestCreatedAt = t.created_at;
           }
         }
 

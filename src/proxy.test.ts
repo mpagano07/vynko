@@ -7,7 +7,10 @@ import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
 
 vi.mock('@supabase/ssr', () => ({ createServerClient: vi.fn() }));
 vi.mock('@supabase/supabase-js', () => ({ createClient: vi.fn() }));
-vi.mock('@/lib/checkSubscription', () => ({ checkSubscriptionBlocked: vi.fn() }));
+vi.mock('@/lib/checkSubscription', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/lib/checkSubscription')>();
+  return { ...original, checkSubscriptionBlocked: vi.fn() };
+});
 
 const serverClientMock = vi.mocked(createServerClient);
 const adminClientMock = vi.mocked(createClient);
@@ -28,6 +31,7 @@ function makeAdminClient() {
       const builder = {
         select: vi.fn(() => builder),
         eq: vi.fn(() => builder),
+        in: vi.fn(() => builder),
         single: () => Promise.resolve(adminQueue.shift() ?? { data: null, error: null }),
         then: (resolve: (v: unknown) => unknown) =>
           Promise.resolve(adminQueue.shift() ?? { data: null, error: null }).then(resolve),
@@ -52,7 +56,7 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
 
   it('no redirige a onboarding si el usuario tiene una empresa', async () => {
     adminQueue.push({ data: [{ tenant_id: 't1' }], error: null });
-    adminQueue.push({ data: { subscription_status: 'active' }, error: null });
+    adminQueue.push({ data: [{ subscription_status: 'active' }], error: null });
 
     const res = await proxy(request('/dashboard'));
 
@@ -112,13 +116,30 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
       message: 'Tu período de prueba finalizó.',
     });
     adminQueue.push({ data: [{ tenant_id: 't1' }], error: null });
-    adminQueue.push({ data: { subscription_status: 'free', subscription_plan: 'starter' }, error: null });
+    adminQueue.push({ data: [{ subscription_status: 'free', subscription_plan: 'starter' }], error: null });
 
     const res = await proxy(request('/dashboard'));
 
     expect(res.status).toBe(307);
     expect(res.headers.get('location')).toContain('/billing');
     expect(res.headers.get('location')).toContain('blocked=trial_expired');
+  });
+
+  it('consolida la suscripción de todas las sucursales del dueño (no bloquea si hay una activa)', async () => {
+    subscriptionMock.mockImplementation(() => ({ blocked: false }));
+    adminQueue.push({ data: [{ tenant_id: 't1' }, { tenant_id: 't2' }], error: null });
+    adminQueue.push({
+      data: [
+        { subscription_status: 'free', subscription_plan: 'starter', created_at: '2026-06-10T00:00:00Z' },
+        { subscription_status: 'active', subscription_plan: 'business', created_at: '2026-07-26T00:00:00Z' },
+      ],
+      error: null,
+    });
+
+    const res = await proxy(request('/dashboard'));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('x-tenant-id')).toBe('t1');
   });
 
   it('no evalúa el bloqueo de suscripción en la página de billing', async () => {

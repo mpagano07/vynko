@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
-import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
+import { checkSubscriptionBlocked, consolidateOwnerSubscription, type TenantSubscription } from '@/lib/checkSubscription';
 
 const publicPaths = ['/login', '/auth', '/onboarding', '/accept-invite'];
 const billingPath = '/billing';
@@ -57,33 +57,34 @@ export async function proxy(request: NextRequest) {
     .select('tenant_id')
     .eq('user_id', user.id);
 
-  const tenantId = membershipError ? undefined : tenantUsers?.[0]?.tenant_id;
+  const tenantIds = tenantUsers?.map((tu) => tu.tenant_id) ?? [];
 
   if (membershipError) {
     console.warn('proxy: tenant_users check failed, failing open:', membershipError.message);
-  } else if (!tenantId) {
+  } else if (!tenantIds || tenantIds.length === 0) {
     return NextResponse.redirect(new URL('/onboarding', request.url));
   }
 
-  // Check subscription block (skip for billing page)
-  if (tenantId && !pathname.startsWith(billingPath)) {
-    const { data: tenant } = await supabaseAdmin
+  // Check subscription block (skip for billing page). Every branch of the same
+  // owner shares a single subscription, so the block is evaluated against the
+  // owner's consolidated subscription across all their tenants.
+  if (tenantIds.length > 0 && !pathname.startsWith(billingPath)) {
+    const { data: tenants } = await supabaseAdmin
       .from('tenants')
       .select('subscription_status, subscription_plan, created_at, subscription_current_period_end')
-      .eq('id', tenantId)
-      .single();
+      .in('id', tenantIds);
 
-    if (tenant) {
-      const result = checkSubscriptionBlocked(tenant);
-      if (result.blocked) {
-        const url = new URL(billingPath, request.url);
-        url.searchParams.set('blocked', result.reason);
-        return NextResponse.redirect(url);
-      }
+    const consolidated = consolidateOwnerSubscription(tenants as TenantSubscription[] | null);
+    const result = consolidated ? checkSubscriptionBlocked(consolidated) : null;
+
+    if (result?.blocked) {
+      const url = new URL(billingPath, request.url);
+      url.searchParams.set('blocked', result.reason);
+      return NextResponse.redirect(url);
     }
   }
 
-  if (tenantId) response.headers.set('x-tenant-id', tenantId);
+  if (tenantIds.length > 0) response.headers.set('x-tenant-id', tenantIds[0]);
   return response;
 }
 

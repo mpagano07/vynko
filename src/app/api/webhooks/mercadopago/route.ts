@@ -51,6 +51,10 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'No external reference' }, { status: 400 });
       }
 
+      // Every branch of the same owner shares a single subscription, so a
+      // change applies to all of the owner's branches (not just the paying one).
+      const ownerBranchIds: string[] = await resolveOwnerBranchIds(tenantId, [tenantId]);
+
       if (status === 'authorized') {
         const reason = preapproval.reason || '';
         let planToSet: 'starter' | 'business' | null = validRefPlan;
@@ -71,13 +75,13 @@ export async function POST(request: Request) {
         await supabaseAdmin
           .from('tenants')
           .update(updateData)
-          .eq('id', tenantId);
+          .in('id', ownerBranchIds);
 
         if (planToSet === 'business') {
           await supabaseAdmin
             .from('product_stock')
             .update({ active: true })
-            .eq('tenant_id', tenantId);
+            .in('tenant_id', ownerBranchIds);
         }
       } else if (status === 'cancelled') {
         const { data: tenantRow } = await supabaseAdmin
@@ -100,15 +104,15 @@ export async function POST(request: Request) {
         await supabaseAdmin
           .from('tenants')
           .update(updateData)
-          .eq('id', tenantId);
+          .in('id', ownerBranchIds);
       } else if (status === 'paused') {
         // Subscription paused by MercadoPago (e.g. failed payment attempts)
-        // Mark as past_due so the subscription gate blocks access.
+        // Mark as past_due so the subscription gate blocks access. Applies to
+        // all of the owner's branches (shared subscription).
         await supabaseAdmin
           .from('tenants')
           .update({ subscription_status: 'past_due' })
-          .eq('id', tenantId)
-          .eq('mercadopago_preapproval_id', id);
+          .in('id', ownerBranchIds);
       }
       // status === 'pending' -> no action needed (waiting for first payment)
     }
@@ -117,4 +121,35 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ received: true });
+}
+
+/**
+ * Resolves every branch (tenant) that belongs to the same owner of the given
+ * tenant so that subscription changes are applied across all of them. Falls
+ * back to just the given tenant if the owner cannot be determined.
+ */
+export async function resolveOwnerBranchIds(
+  tenantId: string,
+  fallback: string[] = [tenantId]
+): Promise<string[]> {
+  try {
+    const { data: owner } = await supabaseAdmin
+      .from('tenant_users')
+      .select('user_id')
+      .eq('tenant_id', tenantId)
+      .eq('role', 'owner')
+      .maybeSingle();
+
+    if (!owner?.user_id) return fallback;
+
+    const { data: branches } = await supabaseAdmin
+      .from('tenant_users')
+      .select('tenant_id')
+      .eq('user_id', owner.user_id);
+
+    if (!branches || branches.length === 0) return fallback;
+    return branches.map((b) => b.tenant_id);
+  } catch {
+    return fallback;
+  }
 }
