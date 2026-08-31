@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { PLANS } from '@/lib/plans';
 import { isTrialExpired } from '@/lib/checkSubscription';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { hasStoredSession } from '@/lib/contexts/auth-context';
 
 import { formatARS } from '@/lib/utils/currency';
 import {
@@ -41,6 +42,7 @@ export default function LandingPage() {
   }, []);
 
   const trialExpired = isTrialExpired(tenant);
+  const hasSession = hasStoredSession();
 
   const handleWaitlist = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,7 +78,7 @@ export default function LandingPage() {
               </div>
             </div>
             {isMounted && (<div className="flex items-center gap-3">
-              {user ? (
+              {user || hasSession ? (
                 <>
                   <Link
                     href="/dashboard"
