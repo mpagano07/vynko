@@ -34,6 +34,7 @@ export async function PATCH(
     for (const key of allowedFields) {
       if (body[key] !== undefined) updateData[key] = body[key];
     }
+    if (updateData.category_id === '') updateData.category_id = null;
     updateData.updated_at = new Date().toISOString();
 
     const { data, error } = await supabaseAdmin
