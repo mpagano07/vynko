@@ -55,21 +55,25 @@ export default function LossPreventionPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const fetchHistory = async (type?: string) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const headers: Record<string, string> = {};
-    if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-    const typeParam = type || typeFilter;
-    const url = typeParam === 'all'
-      ? `/api/stock-history?days=90&limit=200`
-      : `/api/stock-history?type=${typeParam}&days=90&limit=200`;
-    const res = await fetch(url, { headers });
-    if (res.ok) {
-      const data = await res.json();
-      setHistory(data.items || []);
-    } else {
-      const err = await res.json().catch(() => ({ error: 'Error de red' }));
-      console.error('Error fetching stock history:', err.error);
-      toast.error('Error al cargar historial: ' + err.error);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = {};
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+      const typeParam = type || typeFilter;
+      const url = typeParam === 'all'
+        ? `/api/stock-history?days=90&limit=200`
+        : `/api/stock-history?type=${typeParam}&days=90&limit=200`;
+      const res = await fetch(url, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setHistory(data.items || []);
+      } else {
+        const err = await res.json().catch(() => ({ error: 'Error de red' }));
+        console.error('Error fetching stock history:', err.error);
+        toast.error('Error al cargar historial: ' + err.error);
+      }
+    } catch {
+      toast.error('Error de conexión al cargar el historial');
     }
   };
 
@@ -87,23 +91,28 @@ export default function LossPreventionPage() {
     const qty = form.reason === 'found' || form.reason === 'correction' ? Math.abs(form.quantity) : -Math.abs(form.quantity);
 
     setSubmitting(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
 
-    const res = await fetch(`/api/products/${form.productId}/adjust`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ quantity: qty, reason: form.reason, notes: form.notes }),
-    });
-    const data = await res.json();
-    if (!res.ok) { toast.error(data.error || 'Error'); setSubmitting(false); return; }
+      const res = await fetch(`/api/products/${form.productId}/adjust`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ quantity: qty, reason: form.reason, notes: form.notes }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || 'Error'); return; }
 
-    toast.success(`Stock ajustado: ${qty > 0 ? '+' : ''}${qty} unidades`);
-    setShowForm(false);
-    setForm({ productId: '', quantity: 0, reason: 'damaged', notes: '' });
-    setSubmitting(false);
-    fetchHistory();
+      toast.success(`Stock ajustado: ${qty > 0 ? '+' : ''}${qty} unidades`);
+      setShowForm(false);
+      setForm({ productId: '', quantity: 0, reason: 'damaged', notes: '' });
+      fetchHistory();
+    } catch {
+      toast.error('Error de conexión al ajustar el stock');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const losses = history.filter((h) => h.quantity < 0);

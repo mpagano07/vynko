@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     if (!auth.allTenants) sQuery = sQuery.eq('tenant_id', tenantId);
     const { data: sales, error } = await sQuery;
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
 
     const dailyTotals: Record<string, number> = {};
     for (let i = 0; i < days; i++) {

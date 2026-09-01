@@ -115,7 +115,7 @@ describe('POST /api/tenants', () => {
     const res = await POST(makeRequest({ name: 'Sucursal 2' }));
     expect(res.status).toBe(500);
     const json = await res.json();
-    expect(json.error).toBe('insert fail');
+    expect(json.error).toBe('Ocurrio un error inesperado. Intenta de nuevo.');
   });
 
   it('devuelve 500 cuando falla el insert del tenant_users', async () => {
@@ -128,7 +128,7 @@ describe('POST /api/tenants', () => {
     const res = await POST(makeRequest({ name: 'Sucursal 2' }));
     expect(res.status).toBe(500);
     const json = await res.json();
-    expect(json.error).toBe('tu fail');
+    expect(json.error).toBe('Ocurrio un error inesperado. Intenta de nuevo.');
   });
 
   it('devuelve 500 ante un body inválido', async () => {

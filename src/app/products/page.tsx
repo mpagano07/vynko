@@ -34,8 +34,13 @@ import {
   Scan,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
+import { getTenantHeaders } from '@/lib/fetchWithTenant';
 import { filterProducts } from '@/lib/product-search';
 import { TransferInbox } from '@/components/transfers/TransferInbox';
+
+function marginPercent(price: number, cost: number): number {
+  return ((price - cost) / cost) * 100;
+}
 
 interface PriceAdjustSample {
   id: string;
@@ -397,7 +402,7 @@ export default function ProductsPage() {
         method,
         headers: {
           'Content-Type': 'application/json',
-          ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
+          ...getTenantHeaders(),
           ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
         },
         body: JSON.stringify({ ...productForm, image_url: imageUrl }),
@@ -434,7 +439,7 @@ export default function ProductsPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
+          ...getTenantHeaders(),
           ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
         },
         body: JSON.stringify(categoryForm),
@@ -464,9 +469,10 @@ export default function ProductsPage() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
+      const headers: Record<string, string> = {
+        ...getTenantHeaders(),
+      };
       if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-      if (tenantId) headers['x-tenant-id'] = tenantId;
 
       if (type === 'delete-product') {
         const res = await fetch(tenantId ? `/api/products/${id}?tenantId=${tenantId}` : `/api/products/${id}`, { method: 'DELETE', headers });
@@ -705,9 +711,9 @@ export default function ProductsPage() {
                       <td className="py-4 px-3">
                         {product.deposito || product.pasillo || product.estanteria ? (
                           <div className="text-xs text-gray-700 dark:text-gray-300 leading-tight whitespace-nowrap">
-                            <p>{product.deposito ? <>Dep: {product.deposito}</> : <span className="text-gray-300 dark:text-gray-600">Dep: —</span>}</p>
-                            <p className="mt-0.5">{product.pasillo ? <>Pas: {product.pasillo}</> : <span className="text-gray-300 dark:text-gray-600">Pas: —</span>}</p>
-                            <p className="mt-0.5">{product.estanteria ? <>Est: {product.estanteria}</> : <span className="text-gray-300 dark:text-gray-600">Est: —</span>}</p>
+                            <p>{product.deposito ? <>Depósito: {product.deposito}</> : <span className="text-gray-300 dark:text-gray-600">Depósito: —</span>}</p>
+                            <p className="mt-0.5">{product.pasillo ? <>Pasillo: {product.pasillo}</> : <span className="text-gray-300 dark:text-gray-600">Pasillo: —</span>}</p>
+                            <p className="mt-0.5">{product.estanteria ? <>Estantería: {product.estanteria}</> : <span className="text-gray-300 dark:text-gray-600">Estantería: —</span>}</p>
                           </div>
                         ) : (
                           <span className="text-xs text-gray-400 italic">—</span>
@@ -732,20 +738,21 @@ export default function ProductsPage() {
                         </div>
                         {product.cost != null && product.cost > 0 && product.price > 0 && (
                           <div className="text-xs text-gray-500 mt-0.5">
-                            Margen: <span className="font-medium text-emerald-600 dark:text-emerald-400">+{(((product.price - product.cost) / product.cost) * 100).toFixed(0)}%</span>
+                            Margen: <span className={`font-medium ${marginPercent(product.price, product.cost) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                              {marginPercent(product.price, product.cost) >= 0 ? '+' : ''}{marginPercent(product.price, product.cost).toFixed(0)}%
+                            </span>
                           </div>
                         )}
                       </td>
                       <td className="py-4 px-6 text-center">
                         <div className="flex items-center justify-center gap-2">
                           <span
-                            className={`inline-flex items-center justify-center w-10 h-10 rounded-full font-bold text-xs ${
-                              isCritical
+                            className={`inline-flex items-center justify-center w-10 h-10 rounded-full font-bold text-xs ${isCritical
                                 ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                                 : isLow
-                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                                : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                            }`}
+                                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                  : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                              }`}
                           >
                             {product.stock ?? 0}
                           </span>
@@ -952,10 +959,13 @@ export default function ProductsPage() {
                     <Input
                       type="text"
                       readOnly
-                      className="bg-gray-50 dark:bg-gray-800 cursor-not-allowed text-emerald-600 dark:text-emerald-400 font-medium"
+                      className={`bg-gray-50 dark:bg-gray-800 cursor-not-allowed font-medium ${productForm.cost > 0 && productForm.price > 0 && marginPercent(productForm.price, productForm.cost) >= 0
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-red-600 dark:text-red-400'
+                        }`}
                       value={
                         productForm.cost > 0 && productForm.price > 0
-                          ? `+${(((productForm.price - productForm.cost) / productForm.cost) * 100).toFixed(0)}%`
+                          ? `${marginPercent(productForm.price, productForm.cost) >= 0 ? '+' : ''}${marginPercent(productForm.price, productForm.cost).toFixed(0)}%`
                           : '—'
                       }
                     />
@@ -1165,11 +1175,10 @@ export default function ProductsPage() {
                           <td className="py-2 px-4 text-gray-500">{r.row}</td>
                           <td className="py-2 px-4 text-gray-900 dark:text-gray-100">{r.name || '—'}</td>
                           <td className="py-2 px-4">
-                            <span className={`font-medium ${
-                              r.status === 'created' ? 'text-emerald-600' :
-                              r.status === 'updated' ? 'text-blue-600' :
-                              'text-red-600'
-                            }`}>
+                            <span className={`font-medium ${r.status === 'created' ? 'text-emerald-600' :
+                                r.status === 'updated' ? 'text-blue-600' :
+                                  'text-red-600'
+                              }`}>
                               {r.status === 'created' ? 'Creado' : r.status === 'updated' ? 'Actualizado' : 'Omitido'}
                             </span>
                           </td>
@@ -1434,7 +1443,7 @@ export default function ProductsPage() {
         onConfirm={handleConfirmAction}
         title={
           confirmAction?.type === 'delete-product' ? 'Eliminar producto' :
-          'Eliminar categoría'
+            'Eliminar categoría'
         }
         message={
           confirmAction?.type === 'delete-product'
@@ -1444,7 +1453,7 @@ export default function ProductsPage() {
         variant="danger"
         confirmLabel={
           confirmAction?.type === 'delete-product' ? 'Eliminar producto' :
-          'Eliminar categoría'
+            'Eliminar categoría'
         }
       />
 

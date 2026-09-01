@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
+import { fixResponse } from '@/lib/utils/encoding';
 
 export async function GET(request: Request) {
   const auth = await getAuth(request);
@@ -15,8 +16,8 @@ export async function GET(request: Request) {
 
   const { data, error } = await query;
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data || []);
+  if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
+  return NextResponse.json(fixResponse(data || []));
 }
 
 export async function POST(request: Request) {
@@ -27,6 +28,17 @@ export async function POST(request: Request) {
     const body = await request.json();
     if (!body.name) {
       return NextResponse.json({ error: 'El nombre del proveedor es requerido' }, { status: 400 });
+    }
+
+    const { data: existing } = await supabaseAdmin
+      .from('suppliers')
+      .select('id')
+      .eq('tenant_id', auth.tenantId)
+      .ilike('name', body.name)
+      .maybeSingle();
+
+    if (existing) {
+      return NextResponse.json({ error: 'Ya existe un proveedor con ese nombre' }, { status: 409 });
     }
 
     const { data, error } = await supabaseAdmin
@@ -43,7 +55,7 @@ export async function POST(request: Request) {
       .select()
       .single();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
 
     await supabaseAdmin
       .from('providers')

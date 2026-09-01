@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { fixResponse } from '@/lib/utils/encoding';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,7 +38,7 @@ export async function GET(request: Request) {
       }));
 
     if (!criticalProducts || criticalProducts.length === 0) {
-      return NextResponse.json([]);
+      return NextResponse.json(fixResponse([]));
     }
 
     const productIds = criticalProducts.map(p => p.id);
@@ -118,7 +119,7 @@ export async function GET(request: Request) {
       return (a.daysLeft ?? 999) - (b.daysLeft ?? 999);
     });
 
-    return NextResponse.json(enriched);
+    return NextResponse.json(fixResponse(enriched));
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Error in stock analysis';
     return NextResponse.json({ error: msg }, { status: 500 });

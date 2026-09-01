@@ -17,17 +17,29 @@ export async function POST(request: Request) {
 
   const multiplier = 1 + percentage / 100;
 
-  let query = supabaseAdmin
-    .from('products')
-    .select('id, name, price_cents, cost');
+  const scopeTenantIds = auth.allTenants ? auth.tenantIds : [tenantId];
+  const { data: stockRows, error: stockError } = await supabaseAdmin
+    .from('product_stock')
+    .select('product_id')
+    .in('tenant_id', scopeTenantIds);
 
-  if (product_ids && product_ids.length > 0) {
-    query = query.in('id', product_ids);
+  if (stockError) { console.error('DB error:', stockError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
+
+  const tenantProductIds = new Set((stockRows ?? []).map((row) => row.product_id as string));
+  const allowedIds = product_ids && product_ids.length > 0
+    ? product_ids.filter((id) => tenantProductIds.has(id))
+    : Array.from(tenantProductIds);
+
+  if (allowedIds.length === 0) {
+    return NextResponse.json({ error: 'No hay productos' }, { status: 404 });
   }
 
-  const { data: products, error: fetchError } = await query;
+  const { data: products, error: fetchError } = await supabaseAdmin
+    .from('products')
+    .select('id, name, price_cents, cost')
+    .in('id', allowedIds);
 
-  if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 });
+  if (fetchError) { console.error('DB error:', fetchError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
   if (!products || products.length === 0) {
     return NextResponse.json({ error: 'No hay productos' }, { status: 404 });
   }
@@ -53,10 +65,11 @@ export async function POST(request: Request) {
     const { error: updateError } = await supabaseAdmin
       .from('products')
       .update(updateData)
-      .eq('id', update.id);
+      .eq('id', update.id)
+      .in('id', allowedIds);
 
     if (updateError) {
-      errors.push({ id: update.id, name: update.name, error: updateError.message });
+      errors.push({ id: update.id, name: update.name, error: 'Error al aplicar el precio' });
     }
   }
 

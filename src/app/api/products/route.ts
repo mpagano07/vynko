@@ -5,6 +5,7 @@ import { createActivityLog } from '@/lib/activity-log';
 import { PLAN_LIMITS } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import { validateProduct } from '@/lib/product-validation';
+import { fixResponse } from '@/lib/utils/encoding';
 
 export async function GET(request: Request) {
   const auth = await getAuth(request);
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
   q = q.eq('product_stock.active', true);
   const { data, error } = await q;
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
   }
   const products = data?.map((p) => ({
     ...p,
@@ -42,7 +43,7 @@ export async function GET(request: Request) {
     stock_data: undefined,
     price: p.price_cents != null ? p.price_cents / 100 : 0,
   })) || [];
-  return NextResponse.json(products);
+  return NextResponse.json(fixResponse(products));
 }
 
 export async function POST(request: Request) {
@@ -90,7 +91,7 @@ export async function POST(request: Request) {
     .insert(insertData)
     .select();
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
   }
   const created = data?.[0];
   if (created) {
@@ -108,7 +109,7 @@ export async function POST(request: Request) {
       });
     if (stockError) {
       await supabaseAdmin.from('products').delete().eq('id', created.id);
-      return NextResponse.json({ error: stockError.message }, { status: 400 });
+      { console.error('DB error:', stockError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
     }
 
     await createActivityLog({

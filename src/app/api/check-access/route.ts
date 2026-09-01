@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
+import {
+  checkSubscriptionBlocked,
+  consolidateOwnerSubscription,
+  type TenantSubscription,
+} from '@/lib/checkSubscription';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,13 +29,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ blocked: false });
   }
 
-  const { data: tenant } = await supabaseAdmin
+  const tenantIds = tu.map((t) => t.tenant_id);
+  const { data: tenants } = await supabaseAdmin
     .from('tenants')
     .select('subscription_status, subscription_plan, created_at, subscription_current_period_end')
-    .eq('id', tu[0].tenant_id)
-    .single();
+    .in('id', tenantIds);
 
-  const result = checkSubscriptionBlocked(tenant);
+  const consolidated = consolidateOwnerSubscription(tenants as TenantSubscription[] | null);
+  const result = consolidated ? checkSubscriptionBlocked(consolidated) : { blocked: false };
 
   return NextResponse.json(result);
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { fixResponse } from '@/lib/utils/encoding';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await getAuth(request);
@@ -22,7 +23,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .eq('tenant_id', auth.tenantId)
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 404 });
+  if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 404 }); }
 
   const s = sale as Record<string, unknown>;
   const customer = s.customer as Record<string, unknown> | undefined;
@@ -40,5 +41,5 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }),
   };
 
-  return NextResponse.json(result);
+  return NextResponse.json(fixResponse(result));
 }

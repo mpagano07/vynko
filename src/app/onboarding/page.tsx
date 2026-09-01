@@ -167,11 +167,12 @@ export default function OnboardingPage() {
 
         <form onSubmit={handleCreateCompany} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-2 text-gray-300">
+            <label htmlFor="company-name" className="block text-sm font-medium mb-2 text-gray-300">
               Nombre de la empresa
             </label>
             <Input
               type="text"
+              id="company-name"
               placeholder="Mi Tienda"
               value={formData.companyName}
               onChange={(e) =>
@@ -183,11 +184,12 @@ export default function OnboardingPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2 text-gray-300">
+            <label htmlFor="owner-name" className="block text-sm font-medium mb-2 text-gray-300">
               Tu nombre
             </label>
             <Input
               type="text"
+              id="owner-name"
               placeholder="Juan Pérez"
               value={formData.ownerName}
               onChange={(e) =>

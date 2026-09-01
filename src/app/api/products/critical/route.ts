@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { fixResponse } from '@/lib/utils/encoding';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +21,7 @@ export async function GET(request: Request) {
     productsQuery = productsQuery.eq('product_stock.active', true);
     const { data: products, error } = await productsQuery;
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
 
     const critical = (products ?? []).filter((p) => {
       const s = p.stock_data?.[0];
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
       min_stock: Number(p.stock_data?.[0]?.min_stock) || 0,
     }));
 
-    return NextResponse.json(critical);
+    return NextResponse.json(fixResponse(critical));
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Error in critical products';
     return NextResponse.json({ error: msg }, { status: 500 });

@@ -3,6 +3,8 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getAuth } from '@/lib/api-auth';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { formatARS } from '@/lib/utils/currency';
+import { rateLimit } from '@/lib/rate-limit';
+import { fixResponse } from '@/lib/utils/encoding';
 
 interface Prediction {
   productId: string;
@@ -25,15 +27,34 @@ export async function GET(request: Request) {
   const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
+  const limit = rateLimit(`ai:forecast:${auth.tenantId}`, 30, 60 * 1000);
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: 'Límite de consultas de pronóstico alcanzado. Esperá un momento.' },
+      { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } }
+    );
+  }
+
   const now = new Date();
   const thirtyDaysAgo = new Date(now);
   thirtyDaysAgo.setDate(now.getDate() - 30);
   const sixtyDaysAgo = new Date(now);
   sixtyDaysAgo.setDate(now.getDate() - 60);
 
-  const [productsData, stockData, saleItemsData, salesData, priorSaleItemsData, priorSalesData] = await Promise.all([
-    supabaseAdmin.from('products').select('id, name, price_cents, cost, category_id'),
-    supabaseAdmin.from('product_stock').select('product_id, stock, min_stock, max_stock').eq('tenant_id', auth.tenantId).eq('active', true),
+  const stockData = await supabaseAdmin
+    .from('product_stock')
+    .select('product_id, stock, min_stock, max_stock')
+    .eq('tenant_id', auth.tenantId)
+    .eq('active', true);
+
+  const productIds = ((stockData.data as unknown[] | null) ?? []).map(
+    (row) => (row as Record<string, unknown>).product_id as string
+  );
+
+  const [productsData, saleItemsData, salesData, priorSaleItemsData, priorSalesData] = await Promise.all([
+    productIds.length > 0
+      ? supabaseAdmin.from('products').select('id, name, price_cents, cost, category_id').in('id', productIds)
+      : Promise.resolve({ data: [] }),
     supabaseAdmin.from('sale_items').select(`
       product_id, quantity,
       sales!inner(tenant_id, created_at)
@@ -172,12 +193,12 @@ Dame un análisis breve (3-4 oraciones) en español destacando tendencias y reco
     }
   }
 
-  return NextResponse.json({
+  return NextResponse.json(fixResponse({
     predictions,
     topProducts,
     needsReorder,
     summary: {
-      totalProducts: productsData.data?.length || 0,
+      totalProducts: productIds.length,
       productsWithSales: predictions.length,
       totalSales30,
       totalTransactions30: totalTransactions,
@@ -190,5 +211,5 @@ Dame un análisis breve (3-4 oraciones) en español destacando tendencias y reco
       needsReorder: trendPct(needsReorder.length, priorNeedsReorderCount),
     },
     aiAnalysis,
-  });
+  }));
 }

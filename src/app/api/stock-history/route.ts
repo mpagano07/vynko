@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { fixResponse } from '@/lib/utils/encoding';
 
 export async function GET(request: NextRequest) {
   const auth = await getAuth(request);
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
   const { data, error, count } = await query;
   if (error) {
     console.error('stock-history GET error:', JSON.stringify(error));
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
   }
 
   // Fetch profile names separately (no FK between stock_history and profiles)
@@ -56,5 +57,5 @@ export async function GET(request: NextRequest) {
     createdAt: r.created_at,
   }));
 
-  return NextResponse.json({ items: formatted, total: count });
+  return NextResponse.json(fixResponse({ items: formatted, total: count }));
 }

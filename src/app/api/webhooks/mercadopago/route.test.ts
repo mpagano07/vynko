@@ -159,6 +159,45 @@ describe('POST /api/webhooks/mercadopago', () => {
     expect(stockData.active).toBe(true);
   });
 
+  it('propagates an authorized business plan to all of the owner\'s branches', async () => {
+    mockGetPreApprovalById.mockResolvedValue({
+      external_reference: 'tenant-1',
+      status: 'authorized',
+      reason: 'Suscripción Business - Vynko',
+      next_payment_date: '2026-09-19T00:00:00.000Z',
+    });
+
+    // resolveOwnerBranchIds queries tenant_users twice (owner + branches).
+    supabaseMock.__queue('tenant_users', { data: { user_id: 'owner-1' }, error: null });
+    supabaseMock.__queue('tenant_users', {
+      data: [{ tenant_id: 'tenant-1' }, { tenant_id: 'tenant-2' }, { tenant_id: 'tenant-3' }],
+      error: null,
+    });
+    supabaseMock.__queue('tenants', { data: null, error: null });
+
+    const req = makeWebhookRequest({
+      type: 'subscription_preapproval',
+      data: { id: 'preapproval-biz' },
+    });
+
+    await POST(req);
+
+    const tenantCall = supabaseMock.__calls.find(
+      (c) => c.table === 'tenants' && c.method === 'update'
+    );
+    expect(tenantCall).toBeDefined();
+    const updateData = tenantCall!.args[0] as Record<string, unknown>;
+    expect(updateData.subscription_status).toBe('active');
+    expect(updateData.subscription_plan).toBe('business');
+    // Second argument of update() is the filter builder; the .in() call lists all branches.
+    const inCall = supabaseMock.__calls.find(
+      (c) => c.table === 'tenants' && c.method === 'in'
+    );
+    expect(inCall).toBeDefined();
+    expect(inCall!.args[0]).toBe('id');
+    expect(inCall!.args[1]).toEqual(['tenant-1', 'tenant-2', 'tenant-3']);
+  });
+
   it('cancels subscription on cancelled status', async () => {
     mockGetPreApprovalById.mockResolvedValue({
       external_reference: 'tenant-1',

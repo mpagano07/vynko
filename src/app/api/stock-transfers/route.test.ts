@@ -261,7 +261,7 @@ describe('Stock Transfers API', () => {
       const res = await GET(makeGetRequest());
       expect(res.status).toBe(500);
       const json = await res.json();
-      expect(json.error).toBe('db down');
+      expect(json.error).toBe('Ocurrio un error inesperado. Intenta de nuevo.');
     });
   });
 });

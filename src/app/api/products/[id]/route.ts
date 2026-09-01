@@ -12,6 +12,18 @@ export async function PATCH(
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   try {
+    const scopeTenantIds = auth.allTenants ? auth.tenantIds : [auth.tenantId];
+    const { data: membership } = await supabaseAdmin
+      .from('product_stock')
+      .select('product_id')
+      .eq('product_id', id)
+      .in('tenant_id', scopeTenantIds)
+      .maybeSingle();
+
+    if (!membership) {
+      return NextResponse.json({ error: 'Producto no encontrado o sin permisos' }, { status: 403 });
+    }
+
     const body = await request.json();
     const allowedFields = [
       'category_id', 'sku', 'barcode', 'name', 'description',
@@ -22,6 +34,7 @@ export async function PATCH(
     for (const key of allowedFields) {
       if (body[key] !== undefined) updateData[key] = body[key];
     }
+    if (updateData.category_id === '') updateData.category_id = null;
     updateData.updated_at = new Date().toISOString();
 
     const { data, error } = await supabaseAdmin
@@ -32,7 +45,7 @@ export async function PATCH(
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
     }
     if (!data) {
       return NextResponse.json({ error: 'Producto no encontrado o sin permisos' }, { status: 403 });
@@ -56,7 +69,7 @@ export async function PATCH(
         }, { onConflict: 'product_id,tenant_id' });
 
       if (stockError) {
-        return NextResponse.json({ error: stockError.message }, { status: 400 });
+        { console.error('DB error:', stockError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
       }
     }
 
@@ -99,21 +112,31 @@ export async function DELETE(
   const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-  const { data: deleted } = await supabaseAdmin
-    .from('products')
-    .delete()
-    .eq('id', id)
-    .select('name')
+  const { data: stockRow, error: stockError } = await supabaseAdmin
+    .from('product_stock')
+    .update({ active: false, updated_at: new Date().toISOString() })
+    .eq('product_id', id)
+    .eq('tenant_id', auth.tenantId)
+    .select('id')
     .single();
 
-  if (!deleted) return NextResponse.json({ error: 'Producto no encontrado o sin permisos' }, { status: 403 });
+  if (stockError || !stockRow) {
+    return NextResponse.json({ error: 'Producto no encontrado o sin permisos' }, { status: 403 });
+  }
+
+  const { data: productName } = await supabaseAdmin
+    .from('products')
+    .select('name')
+    .eq('id', id)
+    .maybeSingle();
 
   await createActivityLog({
     tenantId: auth.tenantId,
     userId: auth.userId,
     action: 'deleted',
     entityType: 'product',
-    details: { name: deleted.name },
+    entityId: id,
+    details: { name: productName?.name ?? null },
   });
 
   return NextResponse.json({ success: true });

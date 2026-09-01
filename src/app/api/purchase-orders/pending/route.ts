@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { fixResponse } from '@/lib/utils/encoding';
 
 export async function GET(request: Request) {
   const auth = await getAuth(request);
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
     .in('status', ['draft', 'sent', 'partial'])
     .order('created_at', { ascending: false });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
 
   const result = (orders ?? [])
     .map((o: Record<string, unknown>) => {
@@ -55,5 +56,5 @@ export async function GET(request: Request) {
     })
     .filter((o) => o.items.length > 0);
 
-  return NextResponse.json(result);
+  return NextResponse.json(fixResponse(result));
 }

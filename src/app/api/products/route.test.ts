@@ -153,7 +153,7 @@ describe('POST /api/products', () => {
     const res = await POST(makeRequest({ name: 'Coca', price: 100 }));
     expect(res.status).toBe(400);
     const json = await res.json();
-    expect(json.error).toBe('constraint failed');
+    expect(json.error).toBe('Ocurrio un error inesperado. Intenta de nuevo.');
   });
 
   it('borra el producto y devuelve 400 cuando falla el insert del stock', async () => {
@@ -170,7 +170,7 @@ describe('POST /api/products', () => {
     const res = await POST(makeRequest({ name: 'Coca', sku: 'COC-1', price: 100, stock: 3 }));
     expect(res.status).toBe(400);
     const json = await res.json();
-    expect(json.error).toBe('stock error');
+    expect(json.error).toBe('Ocurrio un error inesperado. Intenta de nuevo.');
 
     const del = supabaseMock.__calls.find(
       (c) => c.table === 'products' && c.method === 'delete'
@@ -271,7 +271,7 @@ describe('GET /api/products', () => {
     const res = await GET(makeGetRequest());
     expect(res.status).toBe(500);
     const json = await res.json();
-    expect(json.error).toBe('db down');
+    expect(json.error).toBe('Ocurrio un error inesperado. Intenta de nuevo.');
   });
 
   it('devuelve un array vacío cuando no hay datos', async () => {

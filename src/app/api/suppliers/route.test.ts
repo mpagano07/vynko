@@ -83,6 +83,7 @@ describe('Suppliers API', () => {
     });
 
     it('creates supplier and records activity log (201)', async () => {
+      supabaseMock.__queue('suppliers', { data: null, error: null }); // duplicate check
       supabaseMock.__queue('suppliers', {
         data: { id: 's2', name: 'Macro', tenant_id: 'tenant-1' },
       });
@@ -140,15 +141,29 @@ describe('Suppliers API', () => {
     });
 
     it('returns 400 when the suppliers insert fails', async () => {
+      supabaseMock.__queue('suppliers', { data: null, error: null }); // duplicate check
       supabaseMock.__queue('suppliers', {
         data: null,
         error: { message: 'duplicate supplier' },
       });
+      supabaseMock.__queue('providers', { data: null, error: null });
 
       const res = await POST(makeRequest('POST', { name: 'Macro' }));
       expect(res.status).toBe(400);
       const json = await res.json();
-      expect(json.error).toBe('duplicate supplier');
+      expect(json.error).toBe('Ocurrio un error inesperado. Intenta de nuevo.');
+    });
+
+    it('returns 409 when a supplier with the same name exists for the tenant', async () => {
+      supabaseMock.__queue('suppliers', {
+        data: { id: 's-existing', name: 'Macro', tenant_id: 'tenant-1' },
+        error: null,
+      });
+
+      const res = await POST(makeRequest('POST', { name: 'Macro' }));
+      expect(res.status).toBe(409);
+      const json = await res.json();
+      expect(json.error).toBe('Ya existe un proveedor con ese nombre');
     });
   });
 });
@@ -165,6 +180,6 @@ describe('GET /api/suppliers error', () => {
     const res = await GET(makeRequest('GET'));
     expect(res.status).toBe(500);
     const json = await res.json();
-    expect(json.error).toBe('db down');
+    expect(json.error).toBe('Ocurrio un error inesperado. Intenta de nuevo.');
   });
 });

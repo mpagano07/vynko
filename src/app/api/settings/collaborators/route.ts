@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { PLAN_LIMITS } from '@/lib/plans';
+import { fixResponse } from '@/lib/utils/encoding';
 import type { PlanId } from '@/lib/plans';
 
 async function enforceUserLimit(tid: string): Promise<string | null> {
@@ -99,10 +100,10 @@ export async function GET(request: Request) {
       .in('tenant_id', ownerTenantIds)
       .is('accepted_at', null);
 
-    return NextResponse.json({
+    return NextResponse.json(fixResponse({
       collaborators,
       pendingInvitations: pendingInvitations || [],
-    });
+    }));
   } catch (err) {
     console.error('Error listing collaborators:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -264,7 +265,7 @@ export async function POST(request: Request) {
     );
 
     if (inviteError) {
-      return NextResponse.json({ error: inviteError.message }, { status: 500 });
+      { console.error('DB error:', inviteError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
     }
 
     const origin = new URL(request.url).origin;

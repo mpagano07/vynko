@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { fixResponse } from '@/lib/utils/encoding';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,9 +36,9 @@ export async function GET(request: Request) {
     if (entityType) query = query.eq('entity_type', entityType);
 
     const { data, error, count } = await query;
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
 
-    return NextResponse.json({ data: data || [], total: count || 0 });
+    return NextResponse.json(fixResponse({ data: data || [], total: count || 0 }));
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Error in activity logs';
     return NextResponse.json({ error: msg }, { status: 500 });

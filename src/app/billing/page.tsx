@@ -11,6 +11,7 @@ import { formatARS } from '@/lib/utils/currency';
 import { CreditCard, CheckCircle2, XCircle, Loader2, ArrowRight, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { getTenantHeaders } from '@/lib/fetchWithTenant';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function BillingPage() {
@@ -78,7 +79,7 @@ function BillingContent() {
     setCheckoutLoading(planId);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const headers: Record<string, string> = { 'Content-Type': 'application/json', ...getTenantHeaders() };
       if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
 
       const res = await fetch('/api/billing/create-checkout', {
@@ -353,8 +354,8 @@ function BillingContent() {
               </div>
 
               <ul className="space-y-2 flex-1 mb-6">
-                {plan.features.map((f, i) => (
-                  <li key={i} className={`flex items-start gap-2 text-sm ${f.included ? 'text-gray-600 dark:text-gray-400' : 'text-gray-400 dark:text-gray-600'}`}>
+                {plan.features.map((f) => (
+                  <li key={f.label} className={`flex items-start gap-2 text-sm ${f.included ? 'text-gray-600 dark:text-gray-400' : 'text-gray-400 dark:text-gray-600'}`}>
                     {f.included ? (
                       <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0 mt-0.5" />
                     ) : (

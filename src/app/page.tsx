@@ -42,6 +42,7 @@ export default function LandingPage() {
   }, []);
 
   const trialExpired = isTrialExpired(tenant);
+  const hasSession = hasStoredSession();
 
   const handleWaitlist = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,7 +78,7 @@ export default function LandingPage() {
               </div>
             </div>
             {isMounted && (<div className="flex items-center gap-3">
-              {hasStoredSession() || user ? (
+              {user || hasSession ? (
                 <>
                   <Link
                     href="/dashboard"

@@ -81,7 +81,7 @@ export async function POST(request: Request) {
       .update({ active: false })
       .in('id', toDeactivate);
     if (deactivateError) {
-      return NextResponse.json({ error: 'Error al desactivar productos: ' + deactivateError.message }, { status: 500 });
+      return NextResponse.json({ error: 'Error al desactivar productos' }, { status: 500 });
     }
   }
 
@@ -92,7 +92,7 @@ export async function POST(request: Request) {
       .eq('user_id', user.id)
       .in('tenant_id', extraTenantIds);
     if (tuError) {
-      return NextResponse.json({ error: 'Error al quitar sucursales: ' + tuError.message }, { status: 500 });
+      return NextResponse.json({ error: 'Error al quitar sucursales' }, { status: 500 });
     }
   }
 
@@ -102,7 +102,7 @@ export async function POST(request: Request) {
     .eq('tenant_id', mainTenant.id)
     .neq('role', 'owner');
   if (collabError) {
-    return NextResponse.json({ error: 'Error al quitar colaboradores: ' + collabError.message }, { status: 500 });
+    return NextResponse.json({ error: 'Error al quitar colaboradores' }, { status: 500 });
   }
 
   const { error: invError } = await supabaseAdmin
@@ -111,7 +111,7 @@ export async function POST(request: Request) {
     .eq('tenant_id', mainTenant.id)
     .is('accepted_at', null);
   if (invError) {
-    return NextResponse.json({ error: 'Error al quitar invitaciones: ' + invError.message }, { status: 500 });
+    return NextResponse.json({ error: 'Error al quitar invitaciones' }, { status: 500 });
   }
 
   const { error: planError } = await supabaseAdmin
@@ -124,7 +124,7 @@ export async function POST(request: Request) {
     })
     .eq('id', mainTenant.id);
   if (planError) {
-    return NextResponse.json({ error: planError.message }, { status: 500 });
+    { console.error('DB error:', planError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
   }
 
   const targetPlanConfig = PLANS[targetPlan];

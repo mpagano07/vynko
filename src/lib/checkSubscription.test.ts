@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { isTrialExpired, checkSubscriptionBlocked, TenantSubscription } from './checkSubscription';
+import { isTrialExpired, checkSubscriptionBlocked, consolidateOwnerSubscription, TenantSubscription } from './checkSubscription';
 
 describe('checkSubscription', () => {
   beforeEach(() => {
@@ -150,6 +150,41 @@ describe('checkSubscription', () => {
         subscription_plan: 'starter',
       };
       expect(checkSubscriptionBlocked(tenant)).toEqual({ blocked: false });
+    });
+  });
+
+  describe('consolidateOwnerSubscription', () => {
+    it('returns null for empty list', () => {
+      expect(consolidateOwnerSubscription([])).toBeNull();
+      expect(consolidateOwnerSubscription(null)).toBeNull();
+    });
+
+    it('picks the best plan/status across branches', () => {
+      const result = consolidateOwnerSubscription([
+        { subscription_status: 'free', subscription_plan: 'starter', created_at: '2026-06-10T00:00:00Z' },
+        { subscription_status: 'active', subscription_plan: 'business', created_at: '2026-07-26T00:00:00Z' },
+      ]);
+      expect(result).toMatchObject({
+        subscription_status: 'active',
+        subscription_plan: 'business',
+      });
+    });
+
+    it('uses the earliest created_at (first/payment date) across all branches', () => {
+      const result = consolidateOwnerSubscription([
+        { subscription_status: 'active', subscription_plan: 'business', created_at: '2026-07-26T00:00:00Z' },
+        { subscription_status: 'free', subscription_plan: 'starter', created_at: '2026-06-10T00:00:00Z' },
+      ]);
+      expect(result?.created_at).toBe('2026-06-10T00:00:00Z');
+    });
+
+    it('a block is evaluated against the consolidated owner subscription', () => {
+      const consolidated = consolidateOwnerSubscription([
+        { subscription_status: 'free', subscription_plan: 'starter', created_at: '2026-06-01T00:00:00Z' },
+        { subscription_status: 'active', subscription_plan: 'business', created_at: '2026-07-26T00:00:00Z' },
+      ]);
+      vi.setSystemTime(new Date('2026-08-11T12:00:00Z'));
+      expect(checkSubscriptionBlocked(consolidated)).toEqual({ blocked: false });
     });
   });
 });

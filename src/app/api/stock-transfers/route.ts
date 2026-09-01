@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
+import { fixResponse } from '@/lib/utils/encoding';
 
 export async function GET(request: Request) {
   const auth = await getAuth(request);
@@ -36,7 +37,7 @@ export async function GET(request: Request) {
 
   const { data, error } = await q;
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
   }
 
   const tenantIds = new Set<string>();
@@ -71,7 +72,7 @@ export async function GET(request: Request) {
     }),
   }));
 
-  return NextResponse.json(result);
+  return NextResponse.json(fixResponse(result));
 }
 
 export async function POST(request: Request) {
@@ -106,7 +107,7 @@ export async function POST(request: Request) {
     .single();
 
   if (transferError || !transfer) {
-    return NextResponse.json({ error: transferError?.message || 'Error al crear transferencia' }, { status: 400 });
+    return NextResponse.json({ error: transferError ? 'Error al crear la transferencia' : 'Error al crear transferencia' }, { status: 400 });
   }
 
   const transferItems = items.map((item: Record<string, unknown>) => ({
@@ -121,7 +122,7 @@ export async function POST(request: Request) {
 
   if (itemsError) {
     await supabaseAdmin.from('stock_transfers').delete().eq('id', transfer.id);
-    return NextResponse.json({ error: itemsError.message }, { status: 400 });
+    { console.error('DB error:', itemsError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
   }
 
   await createActivityLog({

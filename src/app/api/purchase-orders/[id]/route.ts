@@ -37,7 +37,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .select()
       .single();
 
-    if (poError) return NextResponse.json({ error: poError.message }, { status: 400 });
+    if (poError) { console.error('DB error:', poError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
 
     if (status === 'received') {
       const { data: items } = await supabaseAdmin
