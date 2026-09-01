@@ -42,7 +42,7 @@ export default function ForgotPasswordPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-900 p-8">
         <Card className="w-full max-w-md p-8 bg-gray-800 border border-gray-700">
           <div className="text-center">
-            <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} className="h-10 w-auto object-contain mx-auto mb-4" />
+            <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="128px" className="h-10 w-auto object-contain mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-white mb-2">Revisa tu email</h2>
             <p className="text-gray-400 mb-4">
               Te enviamos un link para restablecer tu contraseña a{' '}
@@ -63,7 +63,7 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-900 p-8">
       <Card className="w-full max-w-md p-8 bg-gray-800 border border-gray-700">
         <div className="mb-8 text-center">
-          <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} className="h-10 w-auto object-contain mx-auto mb-2" />
+          <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="128px" className="h-10 w-auto object-contain mx-auto mb-2" />
           <h1 className="text-2xl font-bold text-white mb-2">Recuperar contraseña</h1>
           <p className="text-gray-400">
             Ingresá tu email y te enviaremos un link para restablecer tu contraseña

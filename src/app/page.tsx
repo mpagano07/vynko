@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { PLANS } from '@/lib/plans';
@@ -10,19 +11,29 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { hasStoredSession } from '@/lib/contexts/auth-context';
 
 import { formatARS } from '@/lib/utils/currency';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
-} from 'recharts';
 
-const chartData = [
-  { name: 'Lun', ventas: 4200 },
-  { name: 'Mar', ventas: 3800 },
-  { name: 'Mié', ventas: 5100 },
-  { name: 'Jue', ventas: 4700 },
-  { name: 'Vie', ventas: 6300 },
-  { name: 'Sáb', ventas: 5500 },
-  { name: 'Dom', ventas: 4800 },
-];
+const DashboardPreviewChart = dynamic(() => import('@/components/landing/DashboardPreviewChart'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-full flex items-end gap-1 px-2">
+      {[
+        { name: 'Lun', ventas: 4200 },
+        { name: 'Mar', ventas: 3800 },
+        { name: 'Mié', ventas: 5100 },
+        { name: 'Jue', ventas: 4700 },
+        { name: 'Vie', ventas: 6300 },
+        { name: 'Sáb', ventas: 5500 },
+        { name: 'Dom', ventas: 4800 },
+      ].map((d) => (
+        <div
+          key={d.name}
+          className="flex-1 bg-cyan-900/40 rounded-t"
+          style={{ height: `${(d.ventas / 6300) * 100}%` }}
+        />
+      ))}
+    </div>
+  ),
+});
 
 export default function LandingPage() {
   const router = useRouter();
@@ -69,7 +80,7 @@ export default function LandingPage() {
           <div className="flex items-center justify-between h-20">
             <div className="flex items-center gap-8">
               <Link href="/" className="flex items-center">
-                <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} className="h-10 w-auto object-contain" />
+                <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="128px" className="h-10 w-auto object-contain" />
               </Link>
               <div className="hidden md:flex items-center gap-6">
                 <Link href="#features" className="text-sm text-gray-400 hover:text-white transition-colors">Características</Link>
@@ -181,17 +192,18 @@ export default function LandingPage() {
                 </div>
                 <div className="h-32">
                   {isMounted ? (
-                    <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={128}>
-                      <BarChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                        <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#6b7280' }} />
-                        <YAxis hide />
-                        <Bar dataKey="ventas" fill="#06b6d4" radius={[4, 4, 0, 0]} maxBarSize={24} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <DashboardPreviewChart />
                   ) : (
                     <div className="w-full h-full flex items-end gap-1 px-2">
-                      {chartData.map((d) => (
+                      {[
+                        { name: 'Lun', ventas: 4200 },
+                        { name: 'Mar', ventas: 3800 },
+                        { name: 'Mié', ventas: 5100 },
+                        { name: 'Jue', ventas: 4700 },
+                        { name: 'Vie', ventas: 6300 },
+                        { name: 'Sáb', ventas: 5500 },
+                        { name: 'Dom', ventas: 4800 },
+                      ].map((d) => (
                         <div
                           key={d.name}
                           className="flex-1 bg-cyan-900/40 rounded-t"
@@ -419,7 +431,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-2">
-              <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} className="h-12 w-auto object-contain" />
+              <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="128px" className="h-12 w-auto object-contain" />
             </div>
             <div className="flex items-center gap-6 text-sm text-gray-500">
               <Link href="/privacidad" className="hover:text-gray-300 transition-colors">Privacidad</Link>
