@@ -418,7 +418,7 @@ export function Sidebar() {
     return (
       <aside className="hidden md:flex flex-col w-64 h-screen bg-gray-900 text-white p-4 border-r border-gray-800">
         <div className="mb-4 flex justify-center">
-          <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} className="h-9 w-auto object-contain" />
+          <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="96px" className="h-9 w-auto object-contain" />
         </div>
         <div className="animate-pulse space-y-4">
           <div className="h-8 bg-gray-700 rounded" />
@@ -472,7 +472,7 @@ export function Sidebar() {
       >
         <div className="flex items-center justify-between mb-4">
           <div className="flex-1 flex justify-center">
-            <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} className="h-9 w-auto object-contain" />
+            <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="96px" className="h-9 w-auto object-contain" />
           </div>
           <button onClick={close} aria-label="Cerrar menú" className="p-1 rounded-md hover:bg-gray-800 text-gray-400">
             <X className="h-5 w-5" />
@@ -494,7 +494,7 @@ export function Sidebar() {
       <aside className="hidden md:flex flex-col w-64 h-screen bg-gray-900 text-white p-4 border-r border-gray-800">
         <div className="mb-2">
           <div className="flex justify-center">
-            <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} className="h-9 w-auto object-contain" />
+            <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="96px" className="h-9 w-auto object-contain" />
           </div>
           {tenants && tenants.length > 0 && (
             <div className="relative mt-2">

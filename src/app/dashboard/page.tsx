@@ -13,11 +13,48 @@ import {
 import { formatARS } from '@/lib/utils/currency';
 import Link from 'next/link';
 import dynamicImport from 'next/dynamic';
+import { LazyMount } from '@/components/ui/lazy-mount';
 
-const SalesChart = dynamicImport(() => import('./sales-chart'), { ssr: false, loading: () => <div className="h-24 bg-gray-100 dark:bg-gray-800 animate-pulse rounded" /> });
-const StockAndActivity = dynamicImport(() => import('./stock-and-activity'), { ssr: false, loading: () => <div className="space-y-4"><div className="h-10 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" /><div className="h-10 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" /></div> });
-const Suggestions = dynamicImport(() => import('./suggestions'), { ssr: false });
-const DashboardResumen = dynamicImport(() => import('./resumen'), { ssr: false });
+const chartSkeleton = (
+  <div className="h-24 bg-gray-100 dark:bg-gray-800 animate-pulse rounded" />
+);
+
+const stockSkeleton = (
+  <div className="space-y-4">
+    <div className="h-10 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
+    <div className="h-10 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
+  </div>
+);
+
+const resumenSkeleton = (
+  <div>
+    <h2 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Resumen</h2>
+    <Card className="p-4 space-y-3 h-full">
+      <div className="h-8 bg-gray-100 dark:bg-gray-800 rounded animate-pulse" />
+      <div className="h-8 bg-gray-100 dark:bg-gray-800 rounded animate-pulse" />
+      <div className="h-8 bg-gray-100 dark:bg-gray-800 rounded animate-pulse" />
+      <div className="h-8 bg-gray-100 dark:bg-gray-800 rounded animate-pulse" />
+    </Card>
+  </div>
+);
+
+const suggestionsSkeleton = (
+  <div className="pb-4">
+    <div className="flex items-center gap-1.5 mb-3">
+      <div className="h-3.5 w-3.5 bg-amber-500/30 rounded animate-pulse" />
+      <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+    </div>
+    <Card className="p-4 flex items-center justify-between gap-4">
+      <div className="h-4 w-2/3 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+      <div className="h-7 w-20 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+    </Card>
+  </div>
+);
+
+const SalesChart = dynamicImport(() => import('./sales-chart'), { ssr: false, loading: () => chartSkeleton });
+const StockAndActivity = dynamicImport(() => import('./stock-and-activity'), { ssr: false, loading: () => stockSkeleton });
+const Suggestions = dynamicImport(() => import('./suggestions'), { ssr: false, loading: () => suggestionsSkeleton });
+const DashboardResumen = dynamicImport(() => import('./resumen'), { ssr: false, loading: () => resumenSkeleton });
 
 interface MonthlyData {
   total: number;
@@ -438,19 +475,27 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      <StockAndActivity criticalProducts={criticalProducts} pendingOrders={pendingOrders} tenantId={tenant?.id ?? ''} allTenants={allTenants} />
+      <LazyMount fallback={stockSkeleton}>
+        <StockAndActivity criticalProducts={criticalProducts} pendingOrders={pendingOrders} tenantId={tenant?.id ?? ''} allTenants={allTenants} />
+      </LazyMount>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2">
           <Card className="p-4">
-            <SalesChart />
+            <LazyMount fallback={chartSkeleton}>
+              <SalesChart />
+            </LazyMount>
           </Card>
         </div>
 
-        <DashboardResumen tenantId={tenant?.id ?? ''} allTenants={allTenants} />
+        <LazyMount fallback={resumenSkeleton}>
+          <DashboardResumen tenantId={tenant?.id ?? ''} allTenants={allTenants} />
+        </LazyMount>
       </div>
 
-      <Suggestions />
+      <LazyMount fallback={suggestionsSkeleton}>
+        <Suggestions />
+      </LazyMount>
     </div>
   );
 }

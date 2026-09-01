@@ -144,7 +144,7 @@ export default function OnboardingPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-900">
         <Card className="w-full max-w-md p-8 bg-gray-800 border border-gray-700 text-center">
-          <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} className="h-10 w-auto object-contain mx-auto mb-4" />
+          <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="128px" className="h-10 w-auto object-contain mx-auto mb-4" />
           <div className="flex justify-center">
             <svg className="h-6 w-6 text-gray-400 animate-spin" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -161,7 +161,7 @@ export default function OnboardingPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-900">
       <Card className="w-full max-w-md p-8 bg-gray-800 border border-gray-700">
         <div className="mb-8 text-center">
-          <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} className="h-10 w-auto object-contain mx-auto mb-2" />
+          <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="128px" className="h-10 w-auto object-contain mx-auto mb-2" />
           <p className="text-gray-400">Configura tu empresa</p>
         </div>
 
