@@ -1,4 +1,4 @@
-import { test, expect, isProductVisibleInTable, createProductViaUI, cleanupSalesData } from './fixtures';
+import { test, expect, isProductVisibleInTable, cleanupSalesData } from './fixtures';
 import * as XLSX from 'xlsx';
 import * as fs from 'fs';
 import * as path from 'path';

@@ -53,6 +53,7 @@ export default function OnboardingPage() {
           // can create an infinite loop when the auth context failed to load
           // tenant data (e.g. cold start after deploy): dashboard sees
           // tenant=null → redirects here → we redirect back → repeat.
+          // eslint-disable-next-line @next/next/no-location-assign-relative-destination
           window.location.href = '/dashboard';
         } else {
           setChecking(false);

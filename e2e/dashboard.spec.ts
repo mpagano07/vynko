@@ -194,10 +194,6 @@ test.describe('Dashboard E2E', () => {
     // Branch B: nombre correcto y datos propios
     const dashNameB = await getDashboardTenantName(page);
     expect(dashNameB).toBe(branchB);
-
-    const kpiCardsB = page.locator('[class*="h-[104px]"]');
-    const ventasTextB = await kpiCardsB.nth(0).locator('p').filter({ hasText: /venta|\$/ }).first().textContent();
-
     // La venta de Branch A NO debería afectar a Branch B
     // Verificar en /products que el producto de prueba no existe en Branch B
     await page.goto('/products');
