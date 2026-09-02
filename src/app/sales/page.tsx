@@ -7,7 +7,11 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
-import { BarcodeScanner } from '@/components/scanner/BarcodeScanner';
+import dynamicImport from 'next/dynamic';
+const BarcodeScanner = dynamicImport(
+  () => import('@/components/scanner/BarcodeScanner').then((m) => ({ default: m.BarcodeScanner })),
+  { ssr: false }
+);
 import toast from 'react-hot-toast';
 import {
   ShoppingCart,
