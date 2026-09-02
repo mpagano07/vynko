@@ -487,7 +487,8 @@ export async function mockMercadoPagoCheckout(page: Page): Promise<string> {
  * Restaura el estado de billing del tenant de prueba vía service role.
  * Asegura que no queden suscripciones activas de MP tras los tests.
  */
-export async function cleanupBillingData(page: Page) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- page kept for API consistency with callers
+export async function cleanupBillingData(_page: Page) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
   if (!url || !key) return;

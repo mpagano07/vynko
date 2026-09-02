@@ -5,7 +5,11 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { getTenantHeaders } from '@/lib/fetchWithTenant';
-import { BarcodeScanner } from '@/components/scanner/BarcodeScanner';
+import dynamicImport from 'next/dynamic';
+const BarcodeScanner = dynamicImport(
+  () => import('@/components/scanner/BarcodeScanner').then((m) => ({ default: m.BarcodeScanner })),
+  { ssr: false }
+);
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';

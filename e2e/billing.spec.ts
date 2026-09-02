@@ -6,8 +6,6 @@ import {
 
 test.describe.configure({ mode: 'serial' });
 
-const E2E_USER_EMAIL = process.env.E2E_USER_EMAIL ?? '';
-
 test.describe('Facturación E2E', () => {
   test.afterAll(async ({ browser }) => {
     const context = await browser.newContext();
