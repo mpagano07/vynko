@@ -54,6 +54,7 @@ const navGroups: NavGroup[] = [
     label: 'Análisis',
     items: [
       { name: 'Pronóstico', href: '/forecast', requiredPlan: ['business', 'enterprise'], requiredRole: ['owner', 'manager'] },
+      { name: 'Antipérdidas', href: '/loss-prevention', requiredPlan: ALL_PLANS },
       { name: 'Historial', href: '/activity-logs', requiredPlan: ALL_PLANS, requiredRole: ['owner', 'manager'] },
     ],
   },
@@ -69,7 +70,6 @@ const navGroups: NavGroup[] = [
 const operacionesItems: NavItem[] = [
   { name: 'QR', href: '/codigos', requiredPlan: ALL_PLANS },
   { name: 'Escáner', href: '/scanning', requiredPlan: ALL_PLANS },
-  { name: 'Antipérdidas', href: '/loss-prevention', requiredPlan: ALL_PLANS },
 ];
 
 function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch }: { onNavClick?: () => void; tenantPlan?: string; userRole?: string | null; isBlocked?: boolean; multiBranch?: boolean }) {

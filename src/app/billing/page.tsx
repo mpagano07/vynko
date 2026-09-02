@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
+import { SupportModal } from '@/components/ui/support-modal';
 import { PLANS, PLAN_ORDER } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import { formatARS } from '@/lib/utils/currency';
@@ -47,6 +48,7 @@ function BillingContent() {
   const [cancelling, setCancelling] = useState(false);
   const [pendingDowngrade, setPendingDowngrade] = useState<string | null>(null);
   const [downgrading, setDowngrading] = useState(false);
+  const [showSupportModal, setShowSupportModal] = useState(false);
 
   useEffect(() => {
     if (!authLoading && role === 'member') router.replace('/dashboard');
@@ -415,7 +417,7 @@ function BillingContent() {
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white">¿Necesitás ayuda?</h3>
           <p className="text-xs text-gray-500 mt-0.5">Contactanos para consultas sobre facturación o para planes enterprise.</p>
         </div>
-        <Button variant="outline" onClick={() => window.open('mailto:support@vynko.app', '_blank')}>
+        <Button variant="outline" onClick={() => setShowSupportModal(true)}>
           Contactar soporte
         </Button>
       </Card>
@@ -442,6 +444,11 @@ function BillingContent() {
         loading={downgrading}
         onConfirm={handleDowngradeConfirm}
         onCancel={() => setPendingDowngrade(null)}
+      />
+
+      <SupportModal
+        open={showSupportModal}
+        onClose={() => setShowSupportModal(false)}
       />
     </div>
   );
