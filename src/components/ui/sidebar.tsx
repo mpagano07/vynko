@@ -107,7 +107,7 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch }
         if (visible.length === 0) return null;
         return (
           <div key={group.label} className="mb-1">
-            <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-widest">
+            <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
               {group.label}
             </p>
             {visible.map((item) => (
@@ -137,7 +137,7 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch }
 
       {visibleOperaciones.length > 0 && (
         <div className="mb-1">
-          <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-widest">
+          <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
             Operaciones
           </p>
           <button
@@ -436,7 +436,7 @@ export function Sidebar() {
       <div className="rounded-md bg-gray-800 p-3">
         <p className="text-xs text-gray-400">Usuario</p>
         <p className="text-sm font-medium truncate">{profile?.full_name || 'Sin nombre'}</p>
-        <p className="text-xs text-gray-500 truncate">{profile?.email || user?.email}</p>
+        <p className="text-xs text-gray-400 truncate">{profile?.email || user?.email}</p>
       </div>
       <button
         onClick={async () => {
