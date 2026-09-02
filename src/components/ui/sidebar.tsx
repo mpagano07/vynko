@@ -72,7 +72,9 @@ const operacionesItems: NavItem[] = [
   { name: 'Escáner', href: '/scanning', requiredPlan: ALL_PLANS },
 ];
 
-function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch }: { onNavClick?: () => void; tenantPlan?: string; userRole?: string | null; isBlocked?: boolean; multiBranch?: boolean }) {
+const ADMIN_EMAIL = 'matias.pagano07@gmail.com';
+
+function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, userEmail }: { onNavClick?: () => void; tenantPlan?: string; userRole?: string | null; isBlocked?: boolean; multiBranch?: boolean; userEmail?: string | null }) {
   const pathname = usePathname();
   const [operacionesOpen, setOperacionesOpen] = useState(false);
 
@@ -134,6 +136,30 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch }
           </div>
         );
       })}
+
+      {userEmail === ADMIN_EMAIL && (
+        <div className="mb-1">
+          <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+            Admin
+          </p>
+          {[{ name: 'Analytics', href: '/admin/analytics' }].map((item) => (
+            <Link
+              key={item.name}
+              href={item.href}
+              prefetch={false}
+              onClick={onNavClick}
+              className={cn(
+                'flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                pathname === item.href
+                  ? 'bg-gray-800 text-white'
+                  : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+              )}
+            >
+              <span>{item.name}</span>
+            </Link>
+          ))}
+        </div>
+      )}
 
       {visibleOperaciones.length > 0 && (
         <div className="mb-1">
@@ -484,7 +510,7 @@ export function Sidebar() {
           </div>
         )}
         <nav className="flex-1 space-y-2 overflow-y-auto">
-          <SidebarNav onNavClick={close} tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} />
+          <SidebarNav onNavClick={close} tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} userEmail={user?.email || profile?.email || null} />
         </nav>
         <TrialCounter tenant={tenant} />
         {userSection}
@@ -503,7 +529,7 @@ export function Sidebar() {
           )}
         </div>
         <nav className="flex-1 overflow-y-auto">
-          <SidebarNav tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} />
+          <SidebarNav tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} userEmail={user?.email || profile?.email || null} />
         </nav>
         <TrialCounter tenant={tenant} />
         {userSection}
