@@ -142,5 +142,13 @@ export async function POST(request: Request) {
     { console.error('DB error:', tenantUserError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
   }
 
+  await supabaseAdmin.from('analytics_events').insert({
+    event_type: 'signup',
+    user_email: user.email,
+    user_name: ownerName,
+    tenant_id: tenantId,
+    metadata: { plan: 'starter' },
+  });
+
   return NextResponse.json({ tenantId });
 }

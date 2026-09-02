@@ -83,6 +83,12 @@ export async function POST(request: Request) {
             .update({ active: true })
             .in('tenant_id', ownerBranchIds);
         }
+
+        await supabaseAdmin.from('analytics_events').insert({
+          event_type: 'payment',
+          tenant_id: tenantId,
+          metadata: { plan: planToSet ?? 'starter', preapproval_id: id },
+        });
       } else if (status === 'cancelled') {
         const { data: tenantRow } = await supabaseAdmin
           .from('tenants')
