@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff } from 'lucide-react';
+import { EmailVerificationModal } from '@/components/ui/email-verification-modal';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -21,6 +22,8 @@ export default function SignupPage() {
   const [confirmError, setConfirmError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [verificationOpen, setVerificationOpen] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState('');
 
   const validate = () => {
     let valid = true;
@@ -83,8 +86,8 @@ export default function SignupPage() {
         router.push('/dashboard');
         router.refresh();
       } else {
-        toast.success('Cuenta creada. Revisá tu email para confirmar el registro.');
-        router.push('/login');
+        setRegisteredEmail(email.trim());
+        setVerificationOpen(true);
       }
     } catch (error: unknown) {
       const maybeError = error as { message?: string };
@@ -253,6 +256,19 @@ export default function SignupPage() {
           </p>
         </div>
       </div>
+
+      <EmailVerificationModal
+        open={verificationOpen}
+        email={registeredEmail}
+        onClose={() => {
+          setVerificationOpen(false);
+          router.push('/login');
+        }}
+        onGoToLogin={() => {
+          setVerificationOpen(false);
+          router.push('/login');
+        }}
+      />
     </div>
   );
 }
