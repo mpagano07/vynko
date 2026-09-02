@@ -74,7 +74,7 @@ export default function TerminosPage() {
           <section className="bg-gray-900/50 border border-gray-800 rounded-xl p-6">
             <h2 className="text-xl font-semibold text-white mb-3">6. Soporte y Contacto</h2>
             <p>
-              Ante dudas sobre los términos de servicio, puedes dirigirte a nuestro equipo de soporte en: <span className="text-cyan-400 font-mono">soporte@vynko.app</span>
+              Ante dudas sobre los términos de servicio, puedes dirigirte a nuestro equipo de soporte en: <span className="text-cyan-400 font-mono">soporte@vynko.dev</span>
             </p>
           </section>
         </div>

@@ -6,7 +6,7 @@ import { TenantHeaderProvider } from '@/components/TenantHeaderProvider';
 import type { Metadata, Viewport } from 'next';
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://vynko.app'),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://vynko.dev'),
   title: {
     default: 'Vynko | Gestión de Stock y Ventas con IA',
     template: '%s | Vynko',
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Vynko | Gestión de Stock y Ventas con IA',
     description: 'Plataforma SaaS B2B de gestión inteligente de stock, ventas en punto de venta y control comercial para tu negocio.',
-    url: 'https://vynko.app',
+    url: 'https://vynko.dev',
     siteName: 'Vynko',
     locale: 'es_AR',
     type: 'website',

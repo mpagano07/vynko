@@ -71,7 +71,7 @@ export default function PrivacidadPage() {
           <section className="bg-gray-900/50 border border-gray-800 rounded-xl p-6">
             <h2 className="text-xl font-semibold text-white mb-3">5. Contacto</h2>
             <p>
-              Si tienes preguntas acerca de nuestra política de privacidad o deseas ejercer tus derechos sobre tus datos personales, puedes contactarnos en: <span className="text-cyan-400 font-mono">privacidad@vynko.app</span>
+              Si tienes preguntas acerca de nuestra política de privacidad o deseas ejercer tus derechos sobre tus datos personales, puedes contactarnos en: <span className="text-cyan-400 font-mono">privacidad@vynko.dev</span>
             </p>
           </section>
         </div>

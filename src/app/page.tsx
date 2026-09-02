@@ -461,7 +461,7 @@ export default function LandingPage() {
                   <p>En Vynko nos tomamos tu privacidad en serio. Recopilamos la información necesaria para operar la plataforma: datos de cuenta, perfil de negocio, productos, ventas y uso del servicio.</p>
                   <p>No vendemos tu información a terceros. Compartimos datos solo con proveedores esenciales (hosting, pagos) y cuando la ley lo requiere.</p>
                   <p>Usamos cifrado SSL/TLS y autenticación segura. Podés acceder, corregir o eliminar tus datos desde la configuración de tu cuenta en cualquier momento.</p>
-                  <p className="text-gray-500">Consultas: <span className="text-cyan-400">privacidad@vynko.app</span></p>
+                  <p className="text-gray-500">Consultas: <span className="text-cyan-400">privacidad@vynko.dev</span></p>
                 </>
               ) : (
                 <>
@@ -469,7 +469,7 @@ export default function LandingPage() {
                   <p>Sos responsable de mantener la confidencialidad de tu cuenta. Ofrecemos planes gratuitos y pagos procesados por Mercado Pago. Podés cancelar cuando quieras.</p>
                   <p>No está permitido usar la plataforma para actividades ilegales. Nos reservamos el derecho de suspender cuentas que violen estas reglas.</p>
                   <p>Podemos modificar estos términos; te notificaremos por correo. El uso continuado implica aceptación de los cambios.</p>
-                  <p className="text-gray-500">Consultas: <span className="text-cyan-400">legal@vynko.app</span></p>
+                  <p className="text-gray-500">Consultas: <span className="text-cyan-400">legal@vynko.dev</span></p>
                 </>
               )}
             </div>
