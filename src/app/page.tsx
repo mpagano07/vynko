@@ -9,6 +9,7 @@ import { PLANS } from '@/lib/plans';
 import { isTrialExpired } from '@/lib/checkSubscription';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { hasStoredSession } from '@/lib/contexts/auth-context';
+import { SALES_EMAIL } from '@/lib/tenant-config';
 
 import { formatARS } from '@/lib/utils/currency';
 
@@ -361,6 +362,8 @@ export default function LandingPage() {
                   <div className="mb-6">
                     {plan.comingSoon ? (
                       <span className="text-2xl font-semibold text-gray-500">Próximamente</span>
+                    ) : id === 'enterprise' ? (
+                      <span className="text-4xl font-extrabold">A medida</span>
                     ) : (
                       <>
                         <span className="text-4xl font-extrabold">{formatARS(plan.price)}</span>
@@ -388,6 +391,13 @@ export default function LandingPage() {
                     <span className="block text-center w-full py-3 rounded-lg font-semibold text-sm bg-gray-800 text-gray-500 border border-gray-700 cursor-not-allowed">
                       Próximamente
                     </span>
+                  ) : id === 'enterprise' ? (
+                    <a
+                      href={`mailto:${SALES_EMAIL}?subject=${encodeURIComponent('Cotización Plan Enterprise - Vynko')}`}
+                      className="block text-center w-full py-3 rounded-lg font-semibold text-sm transition-colors bg-amber-500 hover:bg-amber-400 text-black"
+                    >
+                      Pensado a tu medida
+                    </a>
                   ) : (
                     <Link
                       href={id === 'starter' && trialExpired ? '/billing' : '/auth/signup'}

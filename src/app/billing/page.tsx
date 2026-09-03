@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { SupportModal } from '@/components/ui/support-modal';
+import { SalesContactModal } from '@/components/ui/sales-contact-modal';
 import { PLANS, PLAN_ORDER } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import { formatARS } from '@/lib/utils/currency';
@@ -49,6 +50,7 @@ function BillingContent() {
   const [pendingDowngrade, setPendingDowngrade] = useState<string | null>(null);
   const [downgrading, setDowngrading] = useState(false);
   const [showSupportModal, setShowSupportModal] = useState(false);
+  const [showSalesModal, setShowSalesModal] = useState(false);
 
   useEffect(() => {
     if (!authLoading && role === 'member') router.replace('/dashboard');
@@ -72,6 +74,11 @@ function BillingContent() {
   const handleSubscribe = async (planId: string) => {
     const targetRank = PLAN_ORDER.indexOf(planId as PlanId);
     const currentRank = PLAN_ORDER.indexOf((currentPlanId as PlanId) || 'starter');
+
+    if (planId === 'enterprise') {
+      setShowSalesModal(true);
+      return;
+    }
 
     if (targetRank < currentRank) {
       setPendingDowngrade(planId);
@@ -371,9 +378,12 @@ function BillingContent() {
                 ))}
               </ul>
 
-              {plan.comingSoon ? (
-                <Button variant="outline" disabled className="w-full">
-                  Próximamente
+              {id === 'enterprise' ? (
+                <Button
+                  onClick={() => handleSubscribe('enterprise')}
+                  className="w-full bg-amber-500 text-black hover:bg-amber-400"
+                >
+                  Pensado a tu medida <ArrowRight className="h-4 w-4 ml-1" />
                 </Button>
               ) : (!isCurrent || !isPlanActive) && (
                 <Button
@@ -415,7 +425,7 @@ function BillingContent() {
       <Card className="p-6 flex items-center justify-between">
         <div>
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white">¿Necesitás ayuda?</h3>
-          <p className="text-xs text-gray-500 mt-0.5">Contactanos para consultas sobre facturación o para planes enterprise.</p>
+          <p className="text-xs text-gray-500 mt-0.5">Contactanos para consultas sobre facturación o cotizaciones de planes enterprise.</p>
         </div>
         <Button variant="outline" onClick={() => setShowSupportModal(true)}>
           Contactar soporte
@@ -449,6 +459,11 @@ function BillingContent() {
       <SupportModal
         open={showSupportModal}
         onClose={() => setShowSupportModal(false)}
+      />
+
+      <SalesContactModal
+        open={showSalesModal}
+        onClose={() => setShowSalesModal(false)}
       />
     </div>
   );

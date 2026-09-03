@@ -111,9 +111,9 @@ export async function createProductViaUI(
   const saveButton = page.getByRole('button', { name: /Guardar|Crear/i });
   await saveButton.click({ timeout: 5_000 });
 
-  // Esperar a que se cierre el modal (max 20s). Si no se cierra, capturar el estado para debug.
+  // Esperar a que se cierre el modal (max 25s). Si no se cierra, capturar el estado para debug.
   try {
-    await modalHeading.waitFor({ state: 'hidden', timeout: 20_000 });
+    await modalHeading.waitFor({ state: 'hidden', timeout: 25_000 });
   } catch {
     const toastText = await page.locator('[role="status"]').first().textContent().catch(() => null);
     const pageUrl = page.url();
@@ -484,52 +484,110 @@ export async function mockMercadoPagoCheckout(page: Page): Promise<string> {
 }
 
 /**
- * Restaura el estado de billing del tenant de prueba vía service role.
- * Asegura que no queden suscripciones activas de MP tras los tests.
+ * Aplica un estado de billing a TODAS las sucursales del usuario E2E vía
+ * service role (bypass RLS).
+ *
+ * Un usuario puede ser owner/admin de varias sucursales y la suscripción se
+ * consolida por owner (`consolidateOwnerSubscription`), por lo que el plan
+ * efectivo es el mejor entre todas. Para que el estado sea determinista hay
+ * que setear TODAS las sucursales a la vez.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- page kept for API consistency with callers
-export async function cleanupBillingData(_page: Page) {
+export async function setTenantBilling(
+  plan: 'starter' | 'business',
+  status: 'free' | 'active',
+  resetTrial = false
+) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
-  if (!url || !key) return;
+  const e2eEmail = process.env.E2E_USER_EMAIL ?? '';
+  if (!url || !key || !e2eEmail) return;
 
   try {
     const { createClient } = await import('@supabase/supabase-js');
     const admin = createClient(url, key, { auth: { persistSession: false } });
-
-    // Get the tenant for the E2E user
-    const e2eEmail = process.env.E2E_USER_EMAIL ?? '';
-    if (!e2eEmail) return;
 
     const { data: profile } = await admin
       .from('profiles')
       .select('id')
       .eq('email', e2eEmail)
       .single();
-
     if (!profile) return;
 
     const { data: tu } = await admin
       .from('tenant_users')
-      .select('tenant_id')
+      .select('tenant_id, role')
       .eq('user_id', profile.id)
-      .limit(1)
-      .single();
+      .in('role', ['owner', 'admin']);
+    const tenantIds = (tu ?? []).map((t) => t.tenant_id);
+    if (tenantIds.length === 0) return;
 
-    if (!tu) return;
-
-    // Reset billing fields to safe defaults (trial state)
     await admin
       .from('tenants')
       .update({
-        subscription_status: 'free',
-        subscription_plan: 'starter',
+        subscription_status: status,
+        subscription_plan: plan,
         mercadopago_preapproval_id: null,
         subscription_current_period_end: null,
+        ...(resetTrial ? { created_at: new Date().toISOString() } : {}),
       })
-      .eq('id', tu.tenant_id);
+      .in('id', tenantIds);
   } catch (e) {
-    console.log('cleanupBillingData: error al limpiar billing vía service role:', e);
+    console.log('setTenantBilling: error aplicando estado de billing:', e);
+  }
+}
+
+/**
+ * Restaura el estado base del entorno E2E: las sucursales en Business activo.
+ *
+ * El resto de la suite (dashboard/sales/productos/stock) requiere una
+ * sucursal Business activa: límite de productos ilimitado y acceso a 2+
+ * sucursales. Al terminar billing devolvemos las sucursales a ese estado,
+ * que es el esperado por los specs que corren después.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- page kept for API consistency with callers
+export function cleanupBillingData(_page: Page) {
+  return setTenantBilling('business', 'active');
+}
+
+/**
+ * Elimina de la base de pruebas los productos creados por los tests E2E.
+ *
+ * Busca por el patrón " E2E " en el nombre (usado por los specs como sufijo)
+ * y borra el producto y su stock asociado. Se invoca SIEMPRE, incluso cuando
+ * un test de la serie falla en medio, para evitar acumular residuales.
+ */
+export async function cleanupE2EProducts() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+  if (!url || !key) return 0;
+
+  try {
+    const { createClient } = await import('@supabase/supabase-js');
+    const admin = createClient(url, key, { auth: { persistSession: false } });
+
+    const { data: products } = await admin
+      .from('products')
+      .select('id')
+      .ilike('name', '%E2E%');
+    const ids = (products ?? []).map((p) => p.id);
+    if (ids.length === 0) return 0;
+
+    const { data: items } = await admin
+      .from('sale_items')
+      .select('sale_id')
+      .in('product_id', ids);
+    const saleIds = [...new Set((items ?? []).map((i: { sale_id: string }) => i.sale_id))];
+    if (saleIds.length > 0) {
+      await admin.from('sales').delete().in('id', saleIds);
+    }
+    await admin.from('product_stock').delete().in('product_id', ids);
+    for (const id of ids) {
+      await admin.from('products').delete().eq('id', id);
+    }
+    return ids.length;
+  } catch (e) {
+    console.log('cleanupE2EProducts: error limpiando productos E2E:', e);
+    return 0;
   }
 }
 

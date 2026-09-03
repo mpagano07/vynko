@@ -2,11 +2,21 @@ import {
   test,
   expect,
   cleanupBillingData,
+  setTenantBilling,
 } from './fixtures';
 
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Facturación E2E', () => {
+  // Billing requiere ver el plan no-activo para sus assertions (botón
+  // "Suscribirse"). Auto-preparamos el estado: todas las sucursales en
+  // starter/free con trial fresco (consolidación = starter).
+  test.beforeAll(async () => {
+    await setTenantBilling('starter', 'free', true);
+  });
+
+  // Al terminar, devolvemos el entorno a su estado base (Business activo),
+  // que es el que esperan los specs que corren después (dashboard/productos).
   test.afterAll(async ({ browser }) => {
     const context = await browser.newContext();
     const page = await context.newPage();
@@ -30,8 +40,8 @@ test.describe('Facturación E2E', () => {
     await expect(page.getByText(/\$.*19\.900/).first()).toBeVisible();
     await expect(page.getByText(/\$.*34\.900/).first()).toBeVisible();
 
-    // Enterprise dice "Próximamente"
-    await expect(page.getByText('Próximamente').first()).toBeVisible();
+    // Enterprise se posiciona como "A medida"
+    await expect(page.getByText('A medida').first()).toBeVisible();
 
     // At least one "Suscribirse" button exists
     await expect(page.getByRole('button', { name: /Suscribirse/ }).first()).toBeVisible();
@@ -218,14 +228,18 @@ test.describe('Facturación E2E', () => {
     await context.close();
   });
 
-  test('enterprise plan - botón deshabilitado', async ({ authenticatedPage: page }) => {
+  test('enterprise plan - CTA de contacto a ventas', async ({ authenticatedPage: page }) => {
     await page.goto('/billing');
     await page.waitForLoadState('networkidle');
 
-    // Enterprise should have a disabled "Próximamente" button in the grid
-    const disabledButton = page.locator('.grid').getByRole('button', { name: 'Próximamente' });
-    await expect(disabledButton).toBeVisible({ timeout: 10_000 });
-    await expect(disabledButton).toBeDisabled();
+    // Enterprise should show a "Pensado a tu medida" button in the grid
+    const salesButton = page.locator('.grid').getByRole('button', { name: 'Pensado a tu medida' });
+    await expect(salesButton).toBeVisible({ timeout: 10_000 });
+
+    // Clicking it opens the sales contact modal with the ventas email
+    await salesButton.click();
+    await expect(page.getByText('Plan Enterprise a medida')).toBeVisible();
+    await expect(page.getByText(/ventas@/)).toBeVisible();
   });
 
   test('billing page - link de soporte visible', async ({ authenticatedPage: page }) => {
@@ -237,7 +251,9 @@ test.describe('Facturación E2E', () => {
   });
 
   test('cleanup - restaurar estado del tenant', async ({ authenticatedPage: page }) => {
-    await cleanupBillingData(page);
+    // Resetear el estado de billing a starter/free (la consolidación por owner
+    // debe devolver starter tras limpiar todas las sucursales).
+    await setTenantBilling('starter', 'free', true);
 
     // Verify the tenant is back to free/starter state
     const response = await page.evaluate(async () => {

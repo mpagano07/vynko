@@ -113,9 +113,14 @@ async function runBackfill() {
   }
 
   const missing = (tenants || []).filter((t) => !t.mercadopago_preapproval_id);
+  const enterpriseSkip = missing.filter((t) => t.subscription_plan === 'enterprise');
+  const missingToFill = missing.filter((t) => t.subscription_plan !== 'enterprise');
   console.log(`\nBackfill: ${(tenants || []).length} tenants activos, ${missing.length} sin preapproval id guardado`);
+  if (enterpriseSkip.length) {
+    console.log(`  Omitiendo ${enterpriseSkip.length} enterprise (activados manualmente, sin preapproval MP)`);
+  }
 
-  if (missing.length === 0) {
+  if (missingToFill.length === 0) {
     console.log('No hay nada que backfillear.');
     return true;
   }
@@ -131,7 +136,7 @@ async function runBackfill() {
 
   let filled = 0;
   let notFound = 0;
-  for (const tenant of missing) {
+  for (const tenant of missingToFill) {
     const preapprovalId = byExternalRef.get(tenant.id);
     if (!preapprovalId) {
       notFound++;

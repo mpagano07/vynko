@@ -47,6 +47,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Plan inválido o no disponible' }, { status: 400 });
   }
 
+  // Enterprise se activa manualmente por ventas (cotización a medida), no vía
+  // Mercado Pago recurrente. Devolvemos una acción de contacto para que la UI
+  // muestre el CTA de ventas en lugar de redirigir a un checkout.
+  if (planConfig.id === 'enterprise') {
+    return NextResponse.json(
+      { error: 'El plan Enterprise se activa por ventas', needsSalesContact: true },
+      { status: 400 }
+    );
+  }
+
   const origin = process.env.NEXT_PUBLIC_APP_URL || request.headers.get('origin') || '';
 
   try {
