@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
-import { Users, CreditCard, TrendingUp, ArrowLeft } from 'lucide-react';
+import { Users, CreditCard, TrendingUp, ArrowLeft, Rocket } from 'lucide-react';
 import Link from 'next/link';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -15,9 +15,12 @@ const ADMIN_EMAIL = 'matias.pagano07@gmail.com';
 
 interface AnalyticsData {
   totalSignups: number;
+  totalActivated: number;
   totalPayments: number;
+  activationRate: number;
   conversionRate: number;
   signupsByMonth: { month: string; count: number }[];
+  activationsByMonth: { month: string; count: number }[];
   paymentsByMonth: { month: string; count: number }[];
   recentEvents: {
     id: string;
@@ -67,8 +70,8 @@ export default function AdminAnalyticsPage() {
       <div className="p-6 max-w-6xl mx-auto">
         <div className="animate-pulse space-y-6">
           <div className="h-8 w-48 bg-gray-200 dark:bg-gray-700 rounded" />
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[1, 2, 3].map((i) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+            {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} className="h-24 bg-gray-200 dark:bg-gray-700 rounded-lg" />
             ))}
           </div>
@@ -94,6 +97,7 @@ export default function AdminAnalyticsPage() {
   const chartData = data.signupsByMonth.map((s, i) => ({
     month: s.month,
     Registros: s.count,
+    Activados: data.activationsByMonth[i]?.count ?? 0,
     Pagos: data.paymentsByMonth[i]?.count ?? 0,
   }));
 
@@ -105,11 +109,11 @@ export default function AdminAnalyticsPage() {
         </Link>
         <div>
           <h1 className="text-2xl font-bold text-white">Analytics Admin</h1>
-          <p className="text-sm text-gray-400">Registros y pagos de la plataforma</p>
+          <p className="text-sm text-gray-400">Registros → Activados → Pagos</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         <Card className="p-5">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
@@ -118,6 +122,18 @@ export default function AdminAnalyticsPage() {
             <div>
               <p className="text-sm text-gray-400">Total registros</p>
               <p className="text-2xl font-bold text-white">{data.totalSignups}</p>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+              <Rocket className="h-5 w-5 text-orange-400" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-400">Total activados</p>
+              <p className="text-2xl font-bold text-white">{data.totalActivated}</p>
             </div>
           </div>
         </Card>
@@ -140,6 +156,18 @@ export default function AdminAnalyticsPage() {
               <TrendingUp className="h-5 w-5 text-amber-400" />
             </div>
             <div>
+              <p className="text-sm text-gray-400">Activación</p>
+              <p className="text-2xl font-bold text-white">{data.activationRate}%</p>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+              <TrendingUp className="h-5 w-5 text-purple-400" />
+            </div>
+            <div>
               <p className="text-sm text-gray-400">Conversión</p>
               <p className="text-2xl font-bold text-white">{data.conversionRate}%</p>
             </div>
@@ -148,9 +176,9 @@ export default function AdminAnalyticsPage() {
       </div>
 
       <Card className="p-5">
-        <h2 className="text-sm font-medium text-gray-300 mb-4">Registros vs Pagos por mes</h2>
-        {chartData.some((d) => d.Registros > 0 || d.Pagos > 0) ? (
-          <ResponsiveContainer width="100%" height={300}>
+        <h2 className="text-sm font-medium text-gray-300 mb-4">Registros vs Activados vs Pagos por mes</h2>
+        {chartData.some((d) => d.Registros > 0 || d.Activados > 0 || d.Pagos > 0) ? (
+          <ResponsiveContainer width="100%" height={300} minWidth={200} minHeight={128}>
             <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
               <XAxis dataKey="month" tick={{ fill: '#9CA3AF', fontSize: 12 }} />
@@ -161,6 +189,7 @@ export default function AdminAnalyticsPage() {
               />
               <Legend />
               <Bar dataKey="Registros" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="Activados" fill="#F97316" radius={[4, 4, 0, 0]} />
               <Bar dataKey="Pagos" fill="#22C55E" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
