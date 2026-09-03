@@ -12,6 +12,10 @@ export default defineConfig({
   // eliminar productos, ajustar stock), por lo que deben correr en serie
   // para ser deterministas. Con varios workers se pisan entre sí.
   workers: 1,
+  // Timeout por test: los specs mutan datos reales (crear productos, registrar
+  // ventas) y en serie bajo carga el servidor de dev puede tardar, sobre todo
+  // en el cierre del modal de creación. 60s evita flakes por timeout.
+  timeout: 60_000,
   reporter: 'html',
   use: {
     baseURL: 'http://localhost:3000',
@@ -23,6 +27,7 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], channel: 'chrome' },
     },
   ],
+  globalTeardown: './e2e/global-teardown.ts',
   webServer: {
     command: 'npm run dev',
     url: 'http://localhost:3000',

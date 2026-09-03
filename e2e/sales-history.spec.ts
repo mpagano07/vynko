@@ -113,11 +113,14 @@ test.describe('Historial de ventas E2E', () => {
     const rowCount = await rows.count();
     expect(rowCount).toBeGreaterThanOrEqual(2);
 
-    // Verificar que el historial contiene ambos totales (no asumimos orden)
+    // Verificar que el historial contiene la venta recién creada: 2 ítems y el
+    // total combinado. Los precios individuales solo aparecen en el detalle de la
+    // venta (verificado en el test "ver productos vendidos en el detalle"), no en
+    // el resumen de folios.
     const historyText = await page.locator('table').filter({ has: page.getByText('Folio') }).first().textContent();
-    expect(historyText).toContain(formatARSTest(PRICE_HIST1));
     expect(historyText).toContain(formatARSTest(PRICE_HIST1 + PRICE_HIST2));
-    expect(historyText).toContain('item(s)');
+    expect(historyText).toContain('2 item(s)');
+    expect(rows.filter({ hasText: '2 item(s)' }).first()).toBeVisible();
   });
 
   // ─── 4. Abrir detalle de venta ────────────────────────────

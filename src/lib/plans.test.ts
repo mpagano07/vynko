@@ -47,4 +47,14 @@ describe('plans configuration', () => {
       expect(limits.branches).toBeGreaterThan(0);
     });
   });
+
+  it('positions enterprise as a made-to-measure available plan', () => {
+    const enterprise = PLANS.enterprise;
+    expect(enterprise.comingSoon).toBeFalsy();
+    expect(enterprise.price).toBe(0);
+    expect(enterprise.features.length).toBeGreaterThan(0);
+    const labels = enterprise.features.map(f => f.label);
+    expect(labels).toContain('Módulos');
+    expect(labels).toContain('Integraciones');
+  });
 });
