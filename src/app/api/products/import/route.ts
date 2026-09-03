@@ -78,6 +78,10 @@ export async function POST(request: Request) {
       const stock = Number(row.stock) || 0;
       const min_stock = Number(row.min_stock) || 0;
       const max_stock = Number(row.max_stock) || 0;
+      const hasLocation = row.deposito !== undefined || row.pasillo !== undefined || row.estanteria !== undefined;
+      const deposito = String(row.deposito ?? '').trim() || null;
+      const pasillo = String(row.pasillo ?? '').trim() || null;
+      const estanteria = String(row.estanteria ?? '').trim() || null;
 
       const categoryName = String(row.category_name ?? '');
       if (categoryName.trim()) {
@@ -117,10 +121,13 @@ export async function POST(request: Request) {
         if (error) {
           results.push({ row: i + 1, status: 'skipped', name, error: 'Error al importar la fila' });
         } else {
+          const stockUpdate: Record<string, unknown> = { product_id: existingId, tenant_id: auth.tenantId, stock, min_stock, max_stock, active: true, updated_at: new Date().toISOString() };
+          if (hasLocation) stockUpdate.deposito = deposito;
+          if (hasLocation) stockUpdate.pasillo = pasillo;
+          if (hasLocation) stockUpdate.estanteria = estanteria;
           await supabaseAdmin
             .from('product_stock')
-            .upsert({ product_id: existingId, tenant_id: auth.tenantId, stock, min_stock, max_stock, active: true, updated_at: new Date().toISOString() },
-              { onConflict: 'product_id,tenant_id' });
+            .upsert(stockUpdate, { onConflict: 'product_id,tenant_id' });
           results.push({ row: i + 1, status: 'updated', name });
         }
       } else {
@@ -143,7 +150,7 @@ export async function POST(request: Request) {
         } else if (created) {
           await supabaseAdmin
             .from('product_stock')
-            .insert({ product_id: created.id, tenant_id: auth.tenantId, stock, min_stock, max_stock });
+            .insert({ product_id: created.id, tenant_id: auth.tenantId, stock, min_stock, max_stock, deposito, pasillo, estanteria });
           results.push({ row: i + 1, status: 'created', name });
         }
       }
