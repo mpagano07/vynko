@@ -4,12 +4,18 @@
 // suscripciones (preapprovals) activas. El monto nuevo empieza a
 // aplicarse al siguiente cobro recurrente.
 //
+// Antes de actualizar precios, verifica el estado real de cada
+// preapproval en MP. Si está cancelado/pausado, corrige la DB
+// automáticamente para evitar que usuarios dados de baja sigan
+// teniendo acceso.
+//
 // Uso:
 //   node scripts/update-prices.mjs                        usa los precios de src/lib/prices.json
-//   node scripts/update-prices.mjs --business=34900       sobreescribe el precio de un plan
+//   node scripts/update-prices.mjs --business=32900       sobreescribe el precio de un plan
 //   node scripts/update-prices.mjs --dry-run              muestra qué haría sin ejecutar cambios
 //   node scripts/update-prices.mjs --backfill             recupera los ids de preapproval
 //                                                         de clientes activos que no los tienen guardados
+//   node scripts/update-prices.mjs --skip-reconcile       salta la verificación de estado en MP
 //
 // Requiere: MERCADOPAGO_ACCESS_TOKEN, SUPABASE_SERVICE_ROLE_KEY y
 // NEXT_PUBLIC_SUPABASE_URL en .env.local
@@ -72,6 +78,7 @@ for (const plan of ['starter', 'business', 'enterprise']) {
 
 const dryRun = process.argv.includes('--dry-run');
 const backfill = process.argv.includes('--backfill');
+const skipReconcile = process.argv.includes('--skip-reconcile');
 
 // ---------- Programa ----------
 const supabase = createClient(supabaseUrl, serviceRoleKey, {
@@ -161,6 +168,92 @@ async function runBackfill() {
   return true;
 }
 
+// Verifica en Mercado Pago el estado real de cada preapproval de tenants
+// con subscription_status='active'. Si el preapproval está cancelado/pausado
+// en MP pero 'active' en la DB, corrige automáticamente la DB para evitar
+// que usuarios dados de baja sigan teniendo acceso.
+async function reconcileCancelledTenants() {
+  const { data: tenants, error } = await supabase
+    .from('tenants')
+    .select('id, name, subscription_plan, mercadopago_preapproval_id')
+    .eq('subscription_status', 'active')
+    .not('mercadopago_preapproval_id', 'is', null);
+
+  if (error) {
+    console.error('Error leyendo tenants para reconciliación:', error.message);
+    return 0;
+  }
+
+  const candidates = tenants || [];
+  if (candidates.length === 0) {
+    console.log('\nReconciliación: no hay tenants activos con preapproval id — nada que verificar.');
+    return 0;
+  }
+
+  console.log(`\nReconciliación: verificando estado real de ${candidates.length} preapproval(s) en Mercado Pago...`);
+
+  let reconciled = 0;
+  let errors = 0;
+
+  for (const tenant of candidates) {
+    const mpId = tenant.mercadopago_preapproval_id;
+    const label = `#${tenant.id} ${tenant.name} (${tenant.subscription_plan})`;
+
+    let mpStatus;
+    try {
+      const pa = await preApproval.get({ id: mpId });
+      mpStatus = pa.status;
+    } catch (err) {
+      errors++;
+      console.error(`  ERROR consultando ${label}: ${err.message || err}`);
+      continue;
+    }
+
+    // Solo nos importan estados que significan "ya no está autorizado".
+    // 'authorized' = todo bien, precio se actualiza después.
+    // Otros ('cancelled', 'paused', 'pending', etc.) = hay que corregir la DB.
+    if (mpStatus === 'authorized') {
+      // OK — el update de precios se encargará después.
+      continue;
+    }
+
+    console.log(`  ⚠ ${label}: preapproval ${mpStatus} en MP → corrigiendo DB`);
+
+    // Determinar plan de downgrade: business/enterprise → free, starter se queda como está
+    const downgradePlan = tenant.subscription_plan === 'business' || tenant.subscription_plan === 'enterprise'
+      ? 'free'
+      : tenant.subscription_plan;
+
+    const update = {
+      subscription_status: 'canceled',
+      mercadopago_preapproval_id: null,
+    };
+
+    if (downgradePlan !== tenant.subscription_plan) {
+      update.subscription_plan = downgradePlan;
+    }
+
+    if (dryRun) {
+      console.log(`    DRY-RUN: actualizaría ${label} a ${JSON.stringify(update)}`);
+    } else {
+      const { error: upErr } = await supabase
+        .from('tenants')
+        .update(update)
+        .eq('id', tenant.id);
+      if (upErr) {
+        errors++;
+        console.error(`    ERROR actualizando ${label}: ${upErr.message}`);
+      } else {
+        reconciled++;
+        console.log(`    ✓ ${label} → ${update.subscription_status}${update.subscription_plan ? ` / plan: ${update.subscription_plan}` : ''}`);
+      }
+    }
+  }
+
+  console.log(`\nReconciliación: ${reconciled} tenants corregidos | ${errors} errores${dryRun ? ' | DRY-RUN (no se modificó nada)' : ''}.`);
+  return reconciled;
+}
+
 async function main() {
   if (backfill) {
     await runBackfill();
@@ -173,6 +266,14 @@ async function main() {
     console.log(`  ${plan.padEnd(10)} ${prices[plan]}`);
   }
 
+  // Fase 1: Reconciliación — verificar estado real en MP y corregir la DB
+  if (!skipReconcile) {
+    await reconcileCancelledTenants();
+  } else {
+    console.log('\nReconciliación: omitida (--skip-reconcile)');
+  }
+
+  // Fase 2: Actualizar precios de suscripciones activas
   const { data: tenants, error } = await supabase
     .from('tenants')
     .select('id, name, subscription_plan, mercadopago_preapproval_id')
@@ -209,13 +310,30 @@ async function main() {
     const id = tenant.mercadopago_preapproval_id;
     const amount = prices[tenant.subscription_plan];
     const label = `#${tenant.id} ${tenant.name} (${tenant.subscription_plan})`;
-    console.log(`  -> ${label}: $${amount}`);
 
     if (dryRun) {
+      console.log(`  -> ${label}: $${amount}`);
       skipped++;
       continue;
     }
 
+    // Verificar estado actual antes de actualizar (red de seguridad)
+    let mpStatus;
+    try {
+      const pa = await preApproval.get({ id });
+      mpStatus = pa.status;
+    } catch (err) {
+      errors++;
+      console.error(`  ERROR verificando ${label}: ${err.message || err}`);
+      continue;
+    }
+
+    if (mpStatus !== 'authorized') {
+      console.log(`  ⚠ ${label}: preapproval ${mpStatus} en MP — saltando actualización`);
+      continue;
+    }
+
+    console.log(`  -> ${label}: $${amount}`);
     try {
       await preApproval.update({
         id,
