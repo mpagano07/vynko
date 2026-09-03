@@ -1,29 +1,27 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { createServerSupabaseClient, type ServerCookie } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
+
+interface ResponseCookieOptions {
+  maxAge?: number;
+  path?: string;
+  domain?: string;
+  sameSite?: 'lax' | 'strict' | 'none';
+  secure?: boolean;
+  httpOnly?: boolean;
+}
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
 
   if (code) {
-    const capturedHeaders: { name: string; value: string }[] = [];
+    const capturedCookies: ServerCookie[] = [];
 
     const supabase = await createServerSupabaseClient({
-      cookieSetAll: (cookies) => {
-        for (const c of cookies) {
-          const parts = [`${c.name}=${c.value}`];
-          if (c.maxAge !== undefined) parts.push(`Max-Age=${c.maxAge}`);
-          if (c.domain) parts.push(`Domain=${c.domain}`);
-          if (c.path) parts.push(`Path=${c.path}`);
-          if (c.sameSite) parts.push(`SameSite=${c.sameSite}`);
-          if (c.secure) parts.push('Secure');
-          if (c.httpOnly) parts.push('HttpOnly');
-          capturedHeaders.push({ name: 'Set-Cookie', value: parts.join('; ') });
-        }
-      },
+      cookieSetAll: (cookies) => capturedCookies.push(...cookies),
     });
 
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
@@ -43,9 +41,18 @@ export async function GET(request: Request) {
         }
       }
 
-      const response = NextResponse.redirect(redirectTo, 302);
-      for (const h of capturedHeaders) {
-        response.headers.append(h.name, h.value);
+      const response = NextResponse.redirect(redirectTo);
+      for (const c of capturedCookies) {
+        const opts = c.options as Partial<ResponseCookieOptions>;
+        if (c.value === '') {
+          response.cookies.delete({
+            name: c.name,
+            path: opts.path,
+            domain: opts.domain,
+          });
+        } else {
+          response.cookies.set(c.name, c.value, opts);
+        }
       }
       return response;
     } else {
