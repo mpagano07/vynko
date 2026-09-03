@@ -159,7 +159,7 @@ export default function ProductsPage() {
         minimo: 'min_stock', 'stock mínimo': 'min_stock', 'min stock': 'min_stock', min_stock: 'min_stock',
         maximo: 'max_stock', 'stock máximo': 'max_stock', 'max stock': 'max_stock', max_stock: 'max_stock',
         descripcion: 'description', description: 'description',
-        categoria: 'category_name', category: 'category_name',
+        categoria: 'category_name', 'categoría': 'category_name', category: 'category_name',
       };
 
       const cols = Object.keys(data[0]);

@@ -12,7 +12,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const [signupsResult, paymentsResult, recentResult] = await Promise.all([
+  const [signupsResult, paymentsResult, productsTenants, salesTenants, recentResult] = await Promise.all([
     supabaseAdmin
       .from('analytics_events')
       .select('id', { count: 'exact', head: true })
@@ -21,6 +21,13 @@ export async function GET() {
       .from('analytics_events')
       .select('id', { count: 'exact', head: true })
       .eq('event_type', 'payment'),
+    supabaseAdmin
+      .from('product_stock')
+      .select('tenant_id, created_at')
+      .eq('active', true),
+    supabaseAdmin
+      .from('sales')
+      .select('tenant_id, created_at'),
     supabaseAdmin
       .from('analytics_events')
       .select('*')
@@ -32,15 +39,34 @@ export async function GET() {
   const totalPayments = paymentsResult.count ?? 0;
   const conversionRate = totalSignups > 0 ? Math.round((totalPayments / totalSignups) * 100) : 0;
 
+  const activatedTenantIds = new Set<string>();
+  const firstActivityByTenant = new Map<string, Date>();
+  for (const row of productsTenants.data ?? []) {
+    activatedTenantIds.add(row.tenant_id);
+    const date = new Date(row.created_at);
+    const current = firstActivityByTenant.get(row.tenant_id);
+    if (!current || date < current) firstActivityByTenant.set(row.tenant_id, date);
+  }
+  for (const row of salesTenants.data ?? []) {
+    activatedTenantIds.add(row.tenant_id);
+    const date = new Date(row.created_at);
+    const current = firstActivityByTenant.get(row.tenant_id);
+    if (!current || date < current) firstActivityByTenant.set(row.tenant_id, date);
+  }
+  const totalActivated = activatedTenantIds.size;
+  const activationRate = totalSignups > 0 ? Math.round((totalActivated / totalSignups) * 100) : 0;
+
   const now = new Date();
   const signupsByMonth: { month: string; count: number }[] = [];
   const paymentsByMonth: { month: string; count: number }[] = [];
+  const activationsByMonth: { month: string; count: number }[] = [];
 
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const monthLabel = d.toLocaleDateString('es-AR', { month: 'short', year: '2-digit' });
     signupsByMonth.push({ month: monthLabel, count: 0 });
     paymentsByMonth.push({ month: monthLabel, count: 0 });
+    activationsByMonth.push({ month: monthLabel, count: 0 });
   }
 
   const { data: allEvents } = await supabaseAdmin
@@ -57,11 +83,20 @@ export async function GET() {
     }
   }
 
+  for (const date of firstActivityByTenant.values()) {
+    const monthLabel = date.toLocaleDateString('es-AR', { month: 'short', year: '2-digit' });
+    const bucket = activationsByMonth.find((b) => b.month === monthLabel);
+    if (bucket) bucket.count++;
+  }
+
   return NextResponse.json({
     totalSignups,
+    totalActivated,
     totalPayments,
+    activationRate,
     conversionRate,
     signupsByMonth,
+    activationsByMonth,
     paymentsByMonth,
     recentEvents: recentResult.data ?? [],
   });
