@@ -160,6 +160,8 @@ export default function ProductsPage() {
         maximo: 'max_stock', 'stock máximo': 'max_stock', 'max stock': 'max_stock', max_stock: 'max_stock',
         descripcion: 'description', description: 'description',
         categoria: 'category_name', 'categoría': 'category_name', category: 'category_name',
+        deposito: 'deposito', 'depósito': 'deposito', ubicacion: 'deposito', 'ubicación': 'deposito',
+        pasillo: 'pasillo', 'estanteria': 'estanteria', 'estantería': 'estanteria', estante: 'estanteria',
       };
 
       const cols = Object.keys(data[0]);
@@ -235,6 +237,9 @@ export default function ProductsPage() {
           'Stock': p.stock ?? 0,
           'Stock Mínimo': p.min_stock ?? 0,
           'Stock Máximo': p.max_stock ?? 0,
+          'Depósito': p.deposito || '',
+          'Pasillo': p.pasillo || '',
+          'Estantería': p.estanteria || '',
         };
       });
 
