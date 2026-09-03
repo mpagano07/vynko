@@ -15,8 +15,12 @@ export async function GET(request: Request) {
   if (todayOnly) {
     const tz = searchParams.get('tz') || 'UTC';
     const now = new Date();
-    const todayStartStr = now.toLocaleDateString('en-CA', { timeZone: tz }) + 'T00:00:00.000Z';
-    const todayStart = new Date(todayStartStr);
+    const todayStr = now.toLocaleDateString('en-CA', { timeZone: tz });
+    const [y, m, d] = todayStr.split('-').map(Number);
+    const noonUTC = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+    const fmtDate = (date: Date, timeZone: string) => new Date(date.toLocaleString('en-US', { timeZone }));
+    const offsetMs = fmtDate(noonUTC, tz).getTime() - fmtDate(noonUTC, 'UTC').getTime();
+    const todayStart = new Date(Date.UTC(y, m - 1, d, 0, 0, 0).valueOf() - offsetMs);
     let query = supabaseAdmin
       .from('sales')
       .select('id, total_cents, created_at')
