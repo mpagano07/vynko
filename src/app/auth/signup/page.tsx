@@ -120,7 +120,7 @@ export default function SignupPage() {
             <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="128px" className="h-10 w-auto object-contain" />
           </div>
           <p className="text-gray-400 text-lg leading-relaxed">
-            Gestioná tu stock, ventas y proveedores en un solo lugar con inteligencia artificial.
+            Gestioná tu stock, ventas y proveedores en un solo lugar.
           </p>
           <div className="mt-12 space-y-6">
             <div className="flex items-start gap-4">
@@ -141,7 +141,7 @@ export default function SignupPage() {
                 </svg>
               </div>
               <div>
-                <h3 className="text-white font-medium">Pronóstico con IA</h3>
+                <h3 className="text-white font-medium">Pronóstico</h3>
                 <p className="text-gray-500 text-sm">Predicciones de demanda y alertas de reposición</p>
               </div>
             </div>

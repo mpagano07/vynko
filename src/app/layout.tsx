@@ -8,7 +8,7 @@ import type { Metadata, Viewport } from 'next';
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://vynko.dev'),
   title: {
-    default: 'Vynko | Gestión de Stock y Ventas con IA',
+    default: 'Vynko | Gestión de Stock y Ventas',
     template: '%s | Vynko',
   },
   description: 'Plataforma SaaS B2B de gestión inteligente de stock, ventas en punto de venta, transferencia multi-sucursal y control comercial para tu negocio.',
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     apple: '/icons/icon-512.png',
   },
   openGraph: {
-    title: 'Vynko | Gestión de Stock y Ventas con IA',
+    title: 'Vynko | Gestión de Stock y Ventas',
     description: 'Plataforma SaaS B2B de gestión inteligente de stock, ventas en punto de venta y control comercial para tu negocio.',
     url: 'https://vynko.dev',
     siteName: 'Vynko',
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary',
-    title: 'Vynko | Gestión de Stock y Ventas con IA',
+    title: 'Vynko | Gestión de Stock y Ventas',
     description: 'Plataforma SaaS B2B de gestión inteligente de stock y ventas para negocios.',
     images: ['/icons/icon-512.png'],
   },

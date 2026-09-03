@@ -47,7 +47,7 @@ En `src/lib/prices.json`, actualizá el plan que quieras:
 ```json
 {
   "starter": 19900,
-  "business": 34900,
+  "business": 32900,
   "enterprise": 0
 }
 ```
