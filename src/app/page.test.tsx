@@ -5,10 +5,10 @@ import LandingPage from './page';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { hasStoredSession } from '@/lib/contexts/auth-context';
 
-const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }));
+const { pushMock, replaceMock } = vi.hoisted(() => ({ pushMock: vi.fn(), replaceMock: vi.fn() }));
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: pushMock }),
+  useRouter: () => ({ push: pushMock, replace: replaceMock }),
 }));
 
 vi.mock('next/link', () => ({
@@ -88,6 +88,7 @@ function makeUser(email: string) {
 describe('LandingPage navbar', () => {
   beforeEach(() => {
     pushMock.mockClear();
+    replaceMock.mockClear();
     authMock.mockReset();
     hasSessionMock.mockReset();
   });
@@ -154,6 +155,37 @@ describe('LandingPage navbar', () => {
     expect(getNavbar().getByRole('link', { name: 'Iniciar sesión' })).toHaveAttribute('href', '/login');
     expect(getNavbar().getByRole('link', { name: 'Comenzar gratis' })).toHaveAttribute('href', '/auth/signup');
     expect(getNavbar().queryByRole('button', { name: 'Cerrar sesión' })).not.toBeInTheDocument();
+  });
+
+  it('con usuario autenticado sin empresa, redirige a /onboarding (post-confirmación)', async () => {
+    hasSessionMock.mockReturnValue(true);
+    mockUseAuth({
+      user: makeUser('ana@tienda.com'),
+      profile: null,
+      loading: false,
+      tenants: [],
+      loadProfileAndTenant: vi.fn(),
+    });
+
+    render(<LandingPage />);
+
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('/onboarding'));
+  });
+
+  it('con usuario autenticado con empresa, redirige a /dashboard', async () => {
+    hasSessionMock.mockReturnValue(true);
+    mockUseAuth({
+      user: makeUser('ana@tienda.com'),
+      profile: null,
+      loading: false,
+      tenant: { id: 't1', name: 'Mi Tienda', slug: 'mi-tienda' },
+      tenants: [{ id: 't1', name: 'Mi Tienda', slug: 'mi-tienda' }],
+      loadProfileAndTenant: vi.fn(),
+    });
+
+    render(<LandingPage />);
+
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('/dashboard'));
   });
 
   it('al hacer click en Cerrar sesión desloguea y vuelve al index', async () => {

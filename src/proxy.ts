@@ -25,9 +25,17 @@ export async function proxy(request: NextRequest) {
       cookies: {
         getAll: () => request.cookies.getAll(),
         setAll: (cookiesToSet) => {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          );
+          cookiesToSet.forEach(({ name, value, options }) => {
+            // Session cookies: strip maxAge/expires when setting so the browser
+            // deletes them when fully closed. Deletions (empty value) keep the
+            // SDK's maxAge: 0 so the cookie is actually removed.
+            const sessionOptions = { ...options };
+            if (value) {
+              delete sessionOptions.maxAge;
+              delete sessionOptions.expires;
+            }
+            response.cookies.set(name, value, sessionOptions);
+          });
         },
       },
     }
