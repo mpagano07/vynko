@@ -12,7 +12,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const [signupsResult, paymentsResult, productsTenants, salesTenants, recentResult] = await Promise.all([
+  const [signupsResult, paymentsResult, firstActivityResult, recentResult] = await Promise.all([
     supabaseAdmin
       .from('analytics_events')
       .select('id', { count: 'exact', head: true })
@@ -22,12 +22,8 @@ export async function GET() {
       .select('id', { count: 'exact', head: true })
       .eq('event_type', 'payment'),
     supabaseAdmin
-      .from('product_stock')
-      .select('tenant_id, created_at')
-      .eq('active', true),
-    supabaseAdmin
-      .from('sales')
-      .select('tenant_id, created_at'),
+      .from('tenant_first_activity')
+      .select('tenant_id, first_activity'),
     supabaseAdmin
       .from('analytics_events')
       .select('*')
@@ -39,47 +35,42 @@ export async function GET() {
   const totalPayments = paymentsResult.count ?? 0;
   const conversionRate = totalSignups > 0 ? Math.round((totalPayments / totalSignups) * 100) : 0;
 
-  const activatedTenantIds = new Set<string>();
   const firstActivityByTenant = new Map<string, Date>();
-  for (const row of productsTenants.data ?? []) {
-    activatedTenantIds.add(row.tenant_id);
-    const date = new Date(row.created_at);
-    const current = firstActivityByTenant.get(row.tenant_id);
-    if (!current || date < current) firstActivityByTenant.set(row.tenant_id, date);
+  for (const row of firstActivityResult.data ?? []) {
+    firstActivityByTenant.set(row.tenant_id, new Date(row.first_activity));
   }
-  for (const row of salesTenants.data ?? []) {
-    activatedTenantIds.add(row.tenant_id);
-    const date = new Date(row.created_at);
-    const current = firstActivityByTenant.get(row.tenant_id);
-    if (!current || date < current) firstActivityByTenant.set(row.tenant_id, date);
-  }
-  const totalActivated = activatedTenantIds.size;
+  const totalActivated = firstActivityByTenant.size;
   const activationRate = totalSignups > 0 ? Math.round((totalActivated / totalSignups) * 100) : 0;
 
   const now = new Date();
-  const signupsByMonth: { month: string; count: number }[] = [];
-  const paymentsByMonth: { month: string; count: number }[] = [];
-  const activationsByMonth: { month: string; count: number }[] = [];
-
+  const monthLabels: string[] = [];
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const monthLabel = d.toLocaleDateString('es-AR', { month: 'short', year: '2-digit' });
-    signupsByMonth.push({ month: monthLabel, count: 0 });
-    paymentsByMonth.push({ month: monthLabel, count: 0 });
-    activationsByMonth.push({ month: monthLabel, count: 0 });
+    monthLabels.push(d.toLocaleDateString('es-AR', { month: 'short', year: '2-digit' }));
   }
+  const signupsByMonth = monthLabels.map((m) => ({ month: m, count: 0 }));
+  const paymentsByMonth = monthLabels.map((m) => ({ month: m, count: 0 }));
+  const activationsByMonth = monthLabels.map((m) => ({ month: m, count: 0 }));
 
-  const { data: allEvents } = await supabaseAdmin
-    .from('analytics_events')
-    .select('event_type, created_at');
-
-  if (allEvents) {
-    for (const event of allEvents) {
-      const d = new Date(event.created_at);
-      const monthLabel = d.toLocaleDateString('es-AR', { month: 'short', year: '2-digit' });
-      const target = event.event_type === 'signup' ? signupsByMonth : paymentsByMonth;
-      const bucket = target.find((b) => b.month === monthLabel);
-      if (bucket) bucket.count++;
+  const byMonth = new Map<string, { signup: number; payment: number }>();
+  const { data: eventsByMonth } = await supabaseAdmin
+    .from('analytics_events_by_month')
+    .select('month, event_type, event_count');
+  if (eventsByMonth) {
+    for (const e of eventsByMonth) {
+      const d = new Date(String(e.month) + 'T12:00:00');
+      const label = d.toLocaleDateString('es-AR', { month: 'short', year: '2-digit' });
+      const bucket = byMonth.get(label) ?? { signup: 0, payment: 0 };
+      if (e.event_type === 'signup') bucket.signup += Number(e.event_count) || 0;
+      else if (e.event_type === 'payment') bucket.payment += Number(e.event_count) || 0;
+      byMonth.set(label, bucket);
+    }
+  }
+  for (let i = 0; i < monthLabels.length; i++) {
+    const b = byMonth.get(monthLabels[i]);
+    if (b) {
+      signupsByMonth[i].count = b.signup;
+      paymentsByMonth[i].count = b.payment;
     }
   }
 

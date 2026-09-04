@@ -23,6 +23,16 @@ CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id
 CREATE INDEX IF NOT EXISTS idx_sale_items_product_id 
   ON sale_items (product_id);
 
+-- Índice para el filtro de status en las agregaciones mensuales/diarias
+-- (queries de /api/sales/monthly y /api/sales/summary filtran por status).
+CREATE INDEX IF NOT EXISTS idx_sales_status 
+  ON sales (status);
+
+-- Índice compuesto que permite a las agregaciones diarias usar el rango de
+-- fecha y el tenant a la vez, sin escanear toda la tabla.
+CREATE INDEX IF NOT EXISTS idx_sales_tenant_created_asc 
+  ON sales (tenant_id, created_at ASC);
+
 -- 3. Índices para historial de movimientos de stock
 CREATE INDEX IF NOT EXISTS idx_stock_history_tenant_created 
   ON stock_history (tenant_id, created_at DESC);

@@ -6,7 +6,7 @@ export async function GET(request: Request) {
   try {
     const auth = await getAuth(request);
     if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-    const tenantId = auth.tenantId;
+    const tenantId = auth.allTenants ? null : auth.tenantId;
 
     const { searchParams } = new URL(request.url);
     const daysParam = Number(searchParams.get('days')) || 7;
@@ -15,14 +15,20 @@ export async function GET(request: Request) {
     const since = new Date();
     since.setDate(since.getDate() - (days - 1));
     since.setHours(0, 0, 0, 0);
+    const sinceDay = since.toISOString().slice(0, 10);
 
+    // Lee la vista agregada sales_daily_totals (sum(total_cents) por día,
+    // calculado en la base). El filtro por tenant/date lo aplica el endpoint.
     let sQuery = supabaseAdmin
-      .from('sales')
-      .select('created_at, total_cents')
-      .gte('created_at', since.toISOString())
-      .order('created_at', { ascending: true });
+      .from('sales_daily_totals')
+      .select('day, total')
+      .gte('day', sinceDay);
     if (!auth.allTenants) sQuery = sQuery.eq('tenant_id', tenantId);
-    const { data: sales, error } = await sQuery;
+    const res = (await sQuery) as unknown as {
+      data: Array<{ day: string; total: number }> | null;
+      error: { message: string } | null;
+    };
+    const { data: grouped, error } = res;
 
     if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
 
@@ -34,10 +40,10 @@ export async function GET(request: Request) {
       dailyTotals[key] = 0;
     }
 
-    for (const sale of (sales ?? [])) {
-      const day = (sale.created_at as string).slice(0, 10);
+    for (const row of (grouped ?? [])) {
+      const day = String(row.day as string).slice(0, 10);
       if (dailyTotals[day] !== undefined) {
-        dailyTotals[day] += (sale.total_cents as number) || 0;
+        dailyTotals[day] += (row.total as number) || 0;
       }
     }
 

@@ -2,32 +2,52 @@ import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
+// Lee la vista agregada sales_monthly_totals (sum(total_cents) + count(*)
+// por mes, calculado en la base) en lugar de traer filas y sumar en JS.
+async function getMonthTotals(tenantId: string | null, monthStart: Date) {
+  const month = monthStart.toISOString().slice(0, 10);
+
+  let query = supabaseAdmin
+    .from('sales_monthly_totals')
+    .select('total, sale_count')
+    .eq('month', month);
+  if (tenantId) query = query.eq('tenant_id', tenantId);
+
+  const res = (await query) as unknown as {
+    data: Array<{ total: number; sale_count: number }> | null;
+    error: { message: string } | null;
+  };
+  const { data, error } = res;
+  if (error) return { error };
+  const row = data?.[0];
+  return {
+    total: (row?.total as number) || 0,
+    count: (row?.sale_count as number) || 0,
+  };
+}
+
 export async function GET(request: Request) {
   try {
     const auth = await getAuth(request);
     if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-    const tenantId = auth.tenantId;
+    const tenantId = auth.allTenants ? null : auth.tenantId;
 
     const now = new Date();
     const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
 
-    let tmQuery = supabaseAdmin.from('sales').select('total_cents').gte('created_at', thisMonthStart.toISOString()).eq('status', 'completed');
-    let pmQuery = supabaseAdmin.from('sales').select('total_cents').gte('created_at', prevMonthStart.toISOString()).lte('created_at', prevMonthEnd.toISOString()).eq('status', 'completed');
-    if (!auth.allTenants) {
-      tmQuery = tmQuery.eq('tenant_id', tenantId);
-      pmQuery = pmQuery.eq('tenant_id', tenantId);
-    }
-    const [thisMonthRes, prevMonthRes] = await Promise.all([tmQuery, pmQuery]);
+    const [thisMonth, prevMonth] = await Promise.all([
+      getMonthTotals(tenantId, thisMonthStart),
+      getMonthTotals(tenantId, prevMonthStart),
+    ]);
 
-    const thisMonthSales = thisMonthRes.data ?? [];
-    const prevMonthSales = prevMonthRes.data ?? [];
+    if (thisMonth.error) { console.error('DB error:', thisMonth.error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
+    if (prevMonth.error) { console.error('DB error:', prevMonth.error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
 
-    const thisTotal = thisMonthSales.reduce((sum, s) => sum + ((s.total_cents as number) || 0), 0) / 100;
-    const prevTotal = prevMonthSales.reduce((sum, s) => sum + ((s.total_cents as number) || 0), 0) / 100;
-    const thisCount = thisMonthSales.length;
-    const prevCount = prevMonthSales.length;
+    const thisTotal = thisMonth.total / 100;
+    const prevTotal = prevMonth.total / 100;
+    const thisCount = thisMonth.count;
+    const prevCount = prevMonth.count;
 
     const variationPercent = prevTotal > 0
       ? Math.round(((thisTotal - prevTotal) / prevTotal) * 100)

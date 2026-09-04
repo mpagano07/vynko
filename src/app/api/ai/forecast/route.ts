@@ -59,12 +59,15 @@ export async function GET(request: Request) {
       product_id, quantity,
       sales!inner(tenant_id, created_at)
     `).eq('sales.tenant_id', auth.tenantId).gte('sales.created_at', thirtyDaysAgo.toISOString()),
-    supabaseAdmin.from('sales').select('created_at, total_cents').eq('tenant_id', auth.tenantId).gte('created_at', thirtyDaysAgo.toISOString()),
+    supabaseAdmin.from('sales_daily_totals').select('total, sale_count').eq('tenant_id', auth.tenantId).gte('day', thirtyDaysAgo.toISOString().slice(0, 10)),
     supabaseAdmin.from('sale_items').select(`
       product_id, quantity,
       sales!inner(tenant_id, created_at)
     `).eq('sales.tenant_id', auth.tenantId).gte('sales.created_at', sixtyDaysAgo.toISOString()).lt('sales.created_at', thirtyDaysAgo.toISOString()),
-    supabaseAdmin.from('sales').select('created_at, total_cents').eq('tenant_id', auth.tenantId).gte('sales.created_at', sixtyDaysAgo.toISOString()).lt('sales.created_at', thirtyDaysAgo.toISOString()),
+    supabaseAdmin.from('sales_daily_totals').select('total, sale_count')
+      .eq('tenant_id', auth.tenantId)
+      .gte('day', sixtyDaysAgo.toISOString().slice(0, 10))
+      .lt('day', thirtyDaysAgo.toISOString().slice(0, 10)),
   ]);
 
   const stockMap = new Map<string, Record<string, unknown>>(
@@ -98,9 +101,12 @@ export async function GET(request: Request) {
 
   const totalSales30 = ((salesData.data as unknown[] | null) ?? []).reduce((sum: number, row) => {
     const s = row as Record<string, unknown>;
-    return sum + (Number(s.total_cents) || 0) / 100;
+    return sum + (Number(s.total) || 0);
+  }, 0) / 100;
+  const totalTransactions = ((salesData.data as unknown[] | null) ?? []).reduce((sum: number, row) => {
+    const s = row as Record<string, unknown>;
+    return sum + (Number(s.sale_count) || 0);
   }, 0);
-  const totalTransactions = (salesData.data as unknown[] | null)?.length || 0;
 
   const predictions: Prediction[] = Array.from(dailySales.entries())
     .map(([productId, stats]) => {
@@ -146,9 +152,12 @@ export async function GET(request: Request) {
   }
   const priorTotalSales = ((priorSalesData.data as unknown[] | null) ?? []).reduce((sum: number, row) => {
     const s = row as Record<string, unknown>;
-    return sum + (Number(s.total_cents) || 0) / 100;
+    return sum + (Number(s.total) || 0);
+  }, 0) / 100;
+  const priorTransactions = ((priorSalesData.data as unknown[] | null) ?? []).reduce((sum: number, row) => {
+    const s = row as Record<string, unknown>;
+    return sum + (Number(s.sale_count) || 0);
   }, 0);
-  const priorTransactions = (priorSalesData.data as unknown[] | null)?.length || 0;
   const priorProductsWithSales = priorDailySales.size;
 
   // Prior period reorder count (recompute with same logic)
