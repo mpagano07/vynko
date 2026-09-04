@@ -134,7 +134,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 // exists, and bound each attempt so a hung request can't leave `loading`
 // stuck forever.
 async function getSessionWithRetry(): Promise<Session | null> {
-  const TIMEOUT_MS = 12000;
+  const TIMEOUT_MS = 8000;
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) {
       await new Promise((r) => setTimeout(r, 1000));
@@ -288,6 +288,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
     const init = async () => {
+      // Session cookies are deleted by the browser on close, so a fresh start
+      // with no stored session means the previous one ended. Clear the residual
+      // tenant/activity state to begin clean instead of restoring stale cache.
+      if (!hasStoredSession()) {
+        clearStoredActiveTenantId();
+        clearLastActivity();
+      }
+
       // If the tab was closed longer than the inactivity window ago, expire
       // the session immediately instead of restoring it from cookies.
       const lastActivity = getLastActivity();
@@ -324,13 +332,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     init();
 
     // Safety fallback: if onAuthStateChange never fires, set loading to false
-    // after 30s so the user is not stuck forever.
+    // after 15s so the user is not stuck forever.
     fallbackTimer = setTimeout(() => {
       setLoading((prev) => {
         if (prev) return false;
         return prev;
       });
-    }, 30_000);
+    }, 15_000);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {

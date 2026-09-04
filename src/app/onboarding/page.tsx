@@ -174,6 +174,7 @@ export default function OnboardingPage() {
               onChange={(e) =>
                 setFormData({ ...formData, companyName: e.target.value })
               }
+              autoFocus
               required
               className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-500"
             />

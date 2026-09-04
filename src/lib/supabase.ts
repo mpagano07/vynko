@@ -25,8 +25,14 @@ export async function createServerSupabaseClient(opts?: CreateClientOptions) {
           return cookieStore.get(name)?.value;
         },
         set(name: string, value: string, options: CookieOptions) {
-          cookieStore.set(name, value, options);
-          opts?.cookieSetAll?.([{ name, value, options }]);
+          // Session cookies: strip maxAge/expires so the browser deletes them
+          // when fully closed. Removal (maxAge: 0) goes through `remove`, so
+          // it is not affected here.
+          const sessionOptions = { ...options };
+          delete sessionOptions.maxAge;
+          delete sessionOptions.expires;
+          cookieStore.set(name, value, sessionOptions);
+          opts?.cookieSetAll?.([{ name, value, options: sessionOptions }]);
         },
         remove(name: string, options: CookieOptions) {
           cookieStore.set(name, '', { ...options, maxAge: 0 });

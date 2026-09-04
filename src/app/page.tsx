@@ -3,12 +3,12 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { PLANS } from '@/lib/plans';
 import { isTrialExpired } from '@/lib/checkSubscription';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { hasStoredSession } from '@/lib/contexts/auth-context';
+import { hasStoredSession, type TenantInfo } from '@/lib/contexts/auth-context';
 import { SALES_EMAIL } from '@/lib/tenant-config';
 
 import { formatARS } from '@/lib/utils/currency';
@@ -38,7 +38,7 @@ const DashboardPreviewChart = dynamic(() => import('@/components/landing/Dashboa
 
 export default function LandingPage() {
   const router = useRouter();
-  const { user, profile, tenant, logout, loading: authLoading } = useAuth();
+  const { user, profile, tenant, tenants, logout, loading: authLoading, loadProfileAndTenant } = useAuth();
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState('');
   const [waitlistLoading, setWaitlistLoading] = useState(false);
@@ -46,6 +46,32 @@ export default function LandingPage() {
   const [isMounted, setIsMounted] = useState(false);
 
   const [modal, setModal] = useState<'privacidad' | 'terminos' | null>(null);
+
+  // After signup email confirmation the PKCE exchange completes on this page.
+  // Route authenticated users to the app instead of leaving them on the
+  // marketing landing (client-side navigation skips the middleware that would
+  // otherwise send no-tenant users to /onboarding).
+  const tenantRef = useRef<TenantInfo | null>(null);
+  const tenantsRef = useRef<TenantInfo[]>([]);
+  const redirectedRef = useRef(false);
+
+  useEffect(() => { tenantRef.current = tenant; }, [tenant]);
+  useEffect(() => { tenantsRef.current = tenants; }, [tenants]);
+  useEffect(() => { if (!user) redirectedRef.current = false; }, [user]);
+
+  useEffect(() => {
+    if (authLoading || !user || redirectedRef.current) return;
+    redirectedRef.current = true;
+    (async () => {
+      try {
+        await loadProfileAndTenant();
+      } catch {
+        // fall through with current state; the app's own guards redirect next
+      }
+      const hasTenants = !!tenantRef.current || tenantsRef.current.length > 0;
+      router.replace(hasTenants ? '/dashboard' : '/onboarding');
+    })();
+  }, [authLoading, user, loadProfileAndTenant, router]);
 
   useEffect(() => {
     // Inicialización única (evita mismatch de hidratación)
