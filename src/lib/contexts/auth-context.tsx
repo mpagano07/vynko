@@ -5,6 +5,16 @@ import { useSWRConfig } from 'swr';
 import { supabase } from '@/lib/supabaseClient';
 import type { Session, User } from '@supabase/supabase-js';
 import toast from 'react-hot-toast';
+import { clearAuthLinkErrorFromUrl, getAuthLinkErrorParams } from '@/lib/auth-link-error';
+
+// An expired or already-used email link leaves a Supabase auth error in the
+// URL (e.g. `?error=access_denied&error_code=otp_expired...`). It doesn't
+// block anything — the account works fine once confirmed — so don't alarm the
+// user, just silently clean the address bar.
+function clearStaleAuthLinkError() {
+  if (!getAuthLinkErrorParams()) return;
+  clearAuthLinkErrorFromUrl();
+}
 
 export interface UserProfile {
   id: string;
@@ -313,6 +323,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await loadProfileAndTenant();
           }
         } else if (!sessionViaEventRef.current) {
+          clearStaleAuthLinkError();
           setUser(null);
           setProfile(null);
           setTenant(null);
