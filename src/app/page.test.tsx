@@ -91,6 +91,7 @@ describe('LandingPage navbar', () => {
     replaceMock.mockClear();
     authMock.mockReset();
     hasSessionMock.mockReset();
+    window.history.pushState({}, '', '/');
   });
 
   it('con cookie de sesión y usuario aún cargando, muestra "Mi cuenta" y no el botón de logout vacío', () => {
@@ -158,6 +159,7 @@ describe('LandingPage navbar', () => {
   });
 
   it('con cookie de sesión, sin usuario y chequeo resuelto, redirige a /onboarding', async () => {
+    window.history.pushState({}, '', '/?code=confirm');
     hasSessionMock.mockReturnValue(true);
     mockUseAuth({ user: null, profile: null, loading: false, tenants: [] });
 
@@ -167,6 +169,7 @@ describe('LandingPage navbar', () => {
   });
 
   it('con usuario autenticado sin empresa, redirige a /onboarding (post-confirmación)', async () => {
+    window.history.pushState({}, '', '/?code=confirm');
     hasSessionMock.mockReturnValue(true);
     mockUseAuth({
       user: makeUser('ana@tienda.com'),
@@ -182,6 +185,7 @@ describe('LandingPage navbar', () => {
   });
 
   it('con usuario autenticado con empresa, redirige a /dashboard', async () => {
+    window.history.pushState({}, '', '/?code=confirm');
     hasSessionMock.mockReturnValue(true);
     mockUseAuth({
       user: makeUser('ana@tienda.com'),
@@ -195,6 +199,25 @@ describe('LandingPage navbar', () => {
     render(<LandingPage />);
 
     await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('/dashboard'));
+  });
+
+  it('usuario logueado que navega a la landing sin código de confirmación, ve la landing y NO redirige', async () => {
+    window.history.pushState({}, '', '/');
+    hasSessionMock.mockReturnValue(true);
+    mockUseAuth({
+      user: makeUser('ana@tienda.com'),
+      profile: null,
+      loading: false,
+      tenant: { id: 't1', name: 'Mi Tienda', slug: 'mi-tienda' },
+      tenants: [{ id: 't1', name: 'Mi Tienda', slug: 'mi-tienda' }],
+      loadProfileAndTenant: vi.fn(),
+    });
+
+    render(<LandingPage />);
+
+    expect(getNavbar().getByRole('link', { name: 'ana@tienda.com' })).toHaveAttribute('href', '/dashboard');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(replaceMock).not.toHaveBeenCalled();
   });
 
   it('al hacer click en Cerrar sesión desloguea y vuelve al index', async () => {
