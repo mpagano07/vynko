@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff } from 'lucide-react';
+import { authErrorMessage } from '@/lib/auth-errors';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,12 +66,7 @@ function LoginContent() {
 
       router.replace('/dashboard');
     } catch (error: unknown) {
-      const authError = error as { message?: string; code?: string };
-      if (authError?.code === 'invalid_credentials') {
-        toast.error('Email o contraseña incorrectos');
-      } else {
-        toast.error(authError?.message || 'Error al iniciar sesión');
-      }
+      toast.error(authErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -87,8 +83,7 @@ function LoginContent() {
       });
       if (error) throw error;
     } catch (error: unknown) {
-      const maybeError = error as { message?: string };
-      toast.error(maybeError?.message || 'Error al iniciar con Google');
+      toast.error(authErrorMessage(error));
       setLoading(false);
     }
   };

@@ -330,6 +330,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setTenants([]);
           setRole(null);
         }
+
+        // Safeguard para no quedar atrapados con loading=true si el evento de
+        // onAuthStateChange nunca llegó (ej: sesión restaurada desde cookies).
+        // Solo cuando ningún evento está manejando la carga: si el evento está
+        // en vuelo, él mismo resuelve loading recién después de cargar
+        // profile/tenant, evitando que el dashboard redirija a onboarding con
+        // tenant=null por una carrera.
+        if (mounted && !sessionViaEventRef.current) {
+          setLoading(false);
+        }
       } catch (err) {
         console.error('Auth initialization error:', err);
       }

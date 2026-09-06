@@ -10,6 +10,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff } from 'lucide-react';
 import { EmailVerificationModal } from '@/components/ui/email-verification-modal';
+import { authErrorMessage } from '@/lib/auth-errors';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -90,8 +91,7 @@ export default function SignupPage() {
         setVerificationOpen(true);
       }
     } catch (error: unknown) {
-      const maybeError = error as { message?: string };
-      toast.error(maybeError?.message || 'Error al crear cuenta');
+      toast.error(authErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -106,8 +106,7 @@ export default function SignupPage() {
       });
       if (error) throw error;
     } catch (error: unknown) {
-      const maybeError = error as { message?: string };
-      toast.error(maybeError?.message || 'Error al iniciar con Google');
+      toast.error(authErrorMessage(error));
       setLoading(false);
     }
   };
