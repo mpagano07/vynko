@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useProducts } from '@/lib/hooks/useProducts';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -38,7 +39,10 @@ interface StockAdjustment {
 }
 
 export default function LossPreventionPage() {
-  const { tenant } = useAuth();
+  const { tenant, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const plan = tenant?.subscription_plan || 'starter';
+  const isStarterPlan = plan === 'free' || plan === 'starter';
   const { products, isLoading: productsLoading } = useProducts(tenant?.id);
   const [loading, setLoading] = useState(true);
   const [history, setHistory] = useState<StockAdjustment[]>([]);
@@ -82,6 +86,15 @@ export default function LossPreventionPage() {
     if (!productsLoading) fetchHistory().finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productsLoading]);
+
+  // Antipérdidas es un feature del plan business (mismo guard que /forecast).
+  useEffect(() => {
+    if (!authLoading && isStarterPlan) {
+      router.replace('/dashboard');
+    }
+  }, [authLoading, isStarterPlan, router]);
+
+  if (authLoading || isStarterPlan) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

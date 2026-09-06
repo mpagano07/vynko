@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
@@ -429,8 +430,10 @@ function TransfersHistoryTab() {
 type Tab = 'activity' | 'transfers';
 
 export default function ActivityLogsPage() {
-  const { role, tenant, tenants } = useAuth();
+  const { role, tenant, tenants, loading: authLoading } = useAuth();
+  const router = useRouter();
   const plan = tenant?.subscription_plan || 'starter';
+  const isStarterPlan = plan === 'free' || plan === 'starter';
   const maxBranches = PLAN_LIMITS[plan as PlanId]?.branches ?? 1;
   const multiBranch = maxBranches > 1 && (tenants?.length || 0) > 1;
   const [logs, setLogs] = useState<ActivityLog[]>([]);
@@ -588,7 +591,17 @@ export default function ActivityLogsPage() {
     fetchLogs().finally(() => setLoading(false));
   }, [fetchLogs]);
 
+  // El historial completo es un feature del plan business. Redirige a los
+  // planes starter/free (mismo guard que /forecast).
+  useEffect(() => {
+    if (!authLoading && isStarterPlan) {
+      router.replace('/dashboard');
+    }
+  }, [authLoading, isStarterPlan, router]);
+
   const totalPages = Math.ceil(total / limit);
+
+  if (authLoading || isStarterPlan) return null;
 
   if (role !== 'owner' && role !== 'manager') {
     return (
