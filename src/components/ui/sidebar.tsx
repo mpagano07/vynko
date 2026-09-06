@@ -55,7 +55,7 @@ const navGroups: NavGroup[] = [
     items: [
       { name: 'Pronóstico', href: '/forecast', requiredPlan: ['business', 'enterprise'], requiredRole: ['owner', 'manager'] },
       { name: 'Antipérdidas', href: '/loss-prevention', requiredPlan: ALL_PLANS },
-      { name: 'Historial', href: '/activity-logs', requiredPlan: ALL_PLANS, requiredRole: ['owner', 'manager'] },
+      { name: 'Historial', href: '/activity-logs', requiredPlan: ['business', 'enterprise'], requiredRole: ['owner', 'manager'] },
     ],
   },
   {
