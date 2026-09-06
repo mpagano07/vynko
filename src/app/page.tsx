@@ -60,17 +60,31 @@ export default function LandingPage() {
   useEffect(() => { if (!user) redirectedRef.current = false; }, [user]);
 
   useEffect(() => {
-    if (authLoading || !user || redirectedRef.current) return;
-    redirectedRef.current = true;
-    (async () => {
-      try {
-        await loadProfileAndTenant();
-      } catch {
-        // fall through with current state; the app's own guards redirect next
-      }
-      const hasTenants = !!tenantRef.current || tenantsRef.current.length > 0;
-      router.replace(hasTenants ? '/dashboard' : '/onboarding');
-    })();
+    if (redirectedRef.current || authLoading) return;
+
+    if (user) {
+      redirectedRef.current = true;
+      (async () => {
+        try {
+          await loadProfileAndTenant();
+        } catch {
+          // fall through with current state; the app's own guards redirect next
+        }
+        const hasTenants = !!tenantRef.current || tenantsRef.current.length > 0;
+        router.replace(hasTenants ? '/dashboard' : '/onboarding');
+      })();
+      return;
+    }
+
+    // Safety net: the auth client can end up "settled logged-out" while a
+    // session cookie still exists (e.g. a failed token refresh after the email
+    // confirmation exchange). The user IS authenticated server-side, so don't
+    // leave them staring at the marketing navbar — /onboarding re-checks
+    // /api/session and bounces existing customers to /dashboard.
+    if (hasStoredSession()) {
+      redirectedRef.current = true;
+      router.replace('/onboarding');
+    }
   }, [authLoading, user, loadProfileAndTenant, router]);
 
   useEffect(() => {

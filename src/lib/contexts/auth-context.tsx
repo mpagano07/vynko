@@ -136,6 +136,12 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   ]);
 }
 
+// Upper bound for a single profile/tenant load. The /api/session request (and
+// the token refresh it may trigger) can hang on a cold serverless start, and
+// `authLoading` gates both the landing redirect and the dashboard gate: if it
+// stays true the app settles on "logged-in but stuck" until a manual reload.
+const PROFILE_LOAD_TIMEOUT_MS = 10_000;
+
 // When the app is opened after a long time the access token has expired, so
 // the first getSession() must hit the network to refresh it. If that request
 // transiently fails (flaky network, device just waking up, 5xx from the auth
@@ -284,8 +290,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     })();
 
-    activeFetchRef.current = promise;
-    return promise;
+    // Race the whole load against a timeout so `loading` can never get stuck
+    // (the init and onAuthStateChange paths both `await` this before clearing
+    // `authLoading`). The underlying promise keeps running in the background
+    // and applies its state whenever it finally settles.
+    activeFetchRef.current = withTimeout(promise, PROFILE_LOAD_TIMEOUT_MS).catch(
+      () => undefined
+    ) as Promise<void>;
+    return activeFetchRef.current;
   }, []);
 
   const switchTenant = useCallback(async (tenantId: string) => {

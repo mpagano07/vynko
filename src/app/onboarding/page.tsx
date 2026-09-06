@@ -10,6 +10,13 @@ import { Card } from '@/components/ui/card';
 import { useAuth } from '@/lib/hooks/useAuth';
 import toast from 'react-hot-toast';
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms)),
+  ]);
+}
+
 export default function OnboardingPage() {
   const router = useRouter();
   const { switchTenant } = useAuth();
@@ -36,12 +43,15 @@ export default function OnboardingPage() {
           return;
         }
 
-        const response = await fetch('/api/session', {
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-            'x-refresh-token': session.refresh_token ?? '',
-          },
-        });
+        const response = await withTimeout(
+          fetch('/api/session', {
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+              'x-refresh-token': session.refresh_token ?? '',
+            },
+          }),
+          10_000
+        );
         if (cancelled) return;
 
         const data = await response.json();
