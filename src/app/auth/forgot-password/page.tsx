@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
+import { authErrorMessage } from '@/lib/auth-errors';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -30,8 +31,7 @@ export default function ForgotPasswordPage() {
       setSubmitted(true);
       toast.success(data.message || 'Email de recuperación enviado');
     } catch (error: unknown) {
-      const maybeError = error as { message?: string };
-      toast.error(maybeError?.message || 'Error al enviar email');
+      toast.error(authErrorMessage(error));
     } finally {
       setLoading(false);
     }

@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { authErrorMessage } from '@/lib/auth-errors';
 
 function ResetPasswordContent() {
   const router = useRouter();
@@ -70,8 +71,7 @@ function ResetPasswordContent() {
       await supabase.auth.signOut({ scope: 'local' });
       router.push('/login');
     } catch (error: unknown) {
-      const maybeError = error as { message?: string };
-      toast.error(maybeError?.message || 'Error al actualizar contraseña');
+      toast.error(authErrorMessage(error));
     } finally {
       setLoading(false);
     }
