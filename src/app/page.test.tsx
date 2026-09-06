@@ -157,6 +157,15 @@ describe('LandingPage navbar', () => {
     expect(getNavbar().queryByRole('button', { name: 'Cerrar sesión' })).not.toBeInTheDocument();
   });
 
+  it('con cookie de sesión, sin usuario y chequeo resuelto, redirige a /onboarding', async () => {
+    hasSessionMock.mockReturnValue(true);
+    mockUseAuth({ user: null, profile: null, loading: false, tenants: [] });
+
+    render(<LandingPage />);
+
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('/onboarding'));
+  });
+
   it('con usuario autenticado sin empresa, redirige a /onboarding (post-confirmación)', async () => {
     hasSessionMock.mockReturnValue(true);
     mockUseAuth({
