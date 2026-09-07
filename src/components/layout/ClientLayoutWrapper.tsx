@@ -12,6 +12,7 @@ import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
 import { NetworkStatusNotifier } from '@/components/ui/NetworkStatusNotifier';
 
 const LazyToaster = dynamic(() => import('@/components/ui/lazy-toaster'), { ssr: false });
+const LazyInstallAppBanner = dynamic(() => import('@/components/ui/lazy-install-app-banner'), { ssr: false });
 
 // Stable header placeholder - same height as real header (h-14 = 56px) to prevent CLS
 const HeaderSkeleton = () => (
@@ -45,6 +46,21 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
       }
     }
   }, [loading, isPublicRoute, isBillingRoute, tenant, router]);
+
+  // Register the service worker so mobile browsers (Chrome/Android) treat the
+  // site as an installable PWA and show the "Add to Home Screen" banner.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!('serviceWorker' in navigator)) return;
+    const registerSW = async () => {
+      try {
+        await navigator.serviceWorker.register('/sw.js');
+      } catch (err) {
+        console.warn('Service worker registration failed', err);
+      }
+    };
+    void registerSW();
+  }, []);
 
   // Handle ChunkLoadError and network fetch failures on dynamic scripts
   useEffect(() => {
@@ -82,13 +98,14 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
   }, []);
 
   if (isPublicRoute) {
-    return <><NetworkStatusNotifier /><LazyToaster />{children}</>;
+    return <><NetworkStatusNotifier /><LazyToaster /><LazyInstallAppBanner />{children}</>;
   }
 
   return (
     <SidebarProvider>
       <NetworkStatusNotifier />
       <LazyToaster />
+      <LazyInstallAppBanner />
       {/* Outer container: flex-row on desktop, flex-col on mobile */}
       <div className="flex flex-row flex-1 min-h-screen w-full">
         {/* Sidebar: on mobile it's an absolutely positioned drawer, on desktop it's in-flow */}
