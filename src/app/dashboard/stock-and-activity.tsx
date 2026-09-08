@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, startTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/lib/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -80,11 +81,15 @@ export default function StockAndActivity({
   allTenants?: boolean;
 }) {
   const router = useRouter();
+  const { role } = useAuth();
   const [recentActivity, setRecentActivity] = useState<ActivityLog[]>([]);
   const [activityLoading, setActivityLoading] = useState(true);
   const [stockAnalysis, setStockAnalysis] = useState<{ id: string; lastSale: string | null }[]>([]);
 
   const criticalCount = criticalProducts.length;
+  // El Historial es solo para owner/manager (el API devuelve 403 si no);
+  // pedirlo igual genera ruido de 403 en la consola.
+  const canViewActivity = role === 'owner' || role === 'manager';
 
   const getHeaders = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -100,14 +105,17 @@ export default function StockAndActivity({
     (async () => {
       try {
         const headers = await getHeaders();
-        const [activityRes, stockRes] = await Promise.all([
-          fetch('/api/activity-logs?limit=5', { headers }),
+        const requests: [Promise<Response>, Promise<Response>?] = [
           fetch('/api/products/stock-analysis', { headers }),
-        ]);
+        ];
+        if (canViewActivity) {
+          requests.push(fetch('/api/activity-logs?limit=5', { headers }));
+        }
+        const [stockRes, activityRes] = await Promise.all(requests);
 
         if (cancelled) return;
 
-        if (activityRes.ok) {
+        if (activityRes?.ok) {
           const d = await activityRes.json();
           startTransition(() => setRecentActivity(d.data || []));
         }
@@ -122,7 +130,7 @@ export default function StockAndActivity({
       }
     })();
     return () => { cancelled = true; };
-  }, [tenantId, getHeaders, allTenants]);
+  }, [tenantId, getHeaders, allTenants, canViewActivity]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
