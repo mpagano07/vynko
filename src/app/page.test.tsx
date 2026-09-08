@@ -201,7 +201,7 @@ describe('LandingPage navbar', () => {
     await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('/dashboard'));
   });
 
-  it('usuario logueado que navega a la landing sin código de confirmación, ve la landing y NO redirige', async () => {
+  it('usuario logueado que navega a la landing sin código de confirmación, redirige a /dashboard', async () => {
     window.history.pushState({}, '', '/');
     hasSessionMock.mockReturnValue(true);
     mockUseAuth({
@@ -215,9 +215,7 @@ describe('LandingPage navbar', () => {
 
     render(<LandingPage />);
 
-    expect(getNavbar().getByRole('link', { name: 'ana@tienda.com' })).toHaveAttribute('href', '/dashboard');
-    await new Promise((r) => setTimeout(r, 50));
-    expect(replaceMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('/dashboard'));
   });
 
   it('al hacer click en Cerrar sesión desloguea y vuelve al index', async () => {
