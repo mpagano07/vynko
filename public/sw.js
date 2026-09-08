@@ -1,10 +1,11 @@
 // Vynko Service Worker - necesario para que el navegador (Chrome/Android)
 // considere la PWA como instalable y muestre el banner de "Agregar a pantalla
 // de inicio" / "Instalar". Estrategia: precache de precarga + runtime cache
-// de solo cache.
-const CACHE_NAME = 'vynko-assets-v1';
+// de solo cache de assets estaticos. Las peticiones a la API y con token
+// Authorization se excluyen para evitar leak de datos entre cuentas.
+const CACHE_NAME = 'vynko-assets-v2';
 
-self.addEventListener('install', (event) => {
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
@@ -29,7 +30,14 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Navegaciones: red estática -> cache
+  if (
+    url.pathname.startsWith('/api/') ||
+    url.pathname.startsWith('/auth/') ||
+    request.headers.get('Authorization')
+  ) {
+    return;
+  }
+
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request).catch(() => caches.match('/'))
@@ -37,7 +45,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Assets estáticos: cache-first con actualización en segundo plano
   event.respondWith(
     caches.open(CACHE_NAME).then(async (cache) => {
       const cached = await cache.match(request);
