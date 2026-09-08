@@ -17,10 +17,14 @@ export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [ownerName, setOwnerName] = useState('');
   const [loading, setLoading] = useState(false);
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [confirmError, setConfirmError] = useState('');
+  const [companyError, setCompanyError] = useState('');
+  const [ownerError, setOwnerError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [verificationOpen, setVerificationOpen] = useState(false);
@@ -31,6 +35,8 @@ export default function SignupPage() {
     setEmailError('');
     setPasswordError('');
     setConfirmError('');
+    setCompanyError('');
+    setOwnerError('');
 
     if (!email.trim()) {
       setEmailError('Ingresá tu email para continuar');
@@ -56,6 +62,16 @@ export default function SignupPage() {
       valid = false;
     }
 
+    if (!companyName.trim()) {
+      setCompanyError('Ingresá el nombre de tu empresa');
+      valid = false;
+    }
+
+    if (!ownerName.trim()) {
+      setOwnerError('Ingresá tu nombre');
+      valid = false;
+    }
+
     return valid;
   };
 
@@ -69,6 +85,15 @@ export default function SignupPage() {
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
+        options: {
+          data: {
+            company_name: companyName.trim(),
+            full_name: ownerName.trim(),
+          },
+          emailRedirectTo: `${window.location.origin}/auth/callback?company_name=${encodeURIComponent(
+            companyName.trim()
+          )}&full_name=${encodeURIComponent(ownerName.trim())}`,
+        },
       });
 
       if (error) throw error;
@@ -87,6 +112,9 @@ export default function SignupPage() {
         router.push('/dashboard');
         router.refresh();
       } else {
+        // Sin sesión hasta confirmar el email: nombre/empresa viajan en
+        // user_metadata (options.data) para que el server cree la empresa al
+        // confirmar. Solo mostramos el modal de verificación.
         setRegisteredEmail(email.trim());
         setVerificationOpen(true);
       }
@@ -169,6 +197,30 @@ export default function SignupPage() {
           <p className="text-gray-400 mb-8">Completá los datos para registrarte</p>
 
           <form onSubmit={handleSignup} noValidate className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1.5 text-gray-300">Tu nombre</label>
+              <Input
+                type="text"
+                name="ownerName"
+                placeholder="Juan Pérez"
+                value={ownerName}
+                onChange={(e) => { setOwnerName(e.target.value); setOwnerError(''); }}
+                className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+              />
+              {ownerError && <p className="text-xs text-red-400 mt-1">{ownerError}</p>}
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1.5 text-gray-300">Nombre de tu empresa</label>
+              <Input
+                type="text"
+                name="companyName"
+                placeholder="Mi Tienda"
+                value={companyName}
+                onChange={(e) => { setCompanyName(e.target.value); setCompanyError(''); }}
+                className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+              />
+              {companyError && <p className="text-xs text-red-400 mt-1">{companyError}</p>}
+            </div>
             <div>
               <label className="block text-sm font-medium mb-1.5 text-gray-300">Email</label>
               <Input

@@ -126,6 +126,8 @@ export default function DashboardPage() {
       // mandarlo a onboarding.
       switchTenant(tenants[0].id);
     } else {
+      // Sin sucursales: no aplicó en el callback (ej: registro por Google que
+      // aún no completó onboarding), así que va a crear su empresa/onboarding.
       router.replace('/onboarding');
     }
   }, [authLoading, isAuthenticated, tenant, allTenants, tenants, router, switchTenant]);

@@ -46,11 +46,6 @@ export default function LandingPage() {
   const [isMounted, setIsMounted] = useState(false);
 
   const [modal, setModal] = useState<'privacidad' | 'terminos' | null>(null);
-  // Solo el link de confirmación de email (PKCE, "/?code=...") completa el
-  // intercambio en esta página, y únicamente en ese flujo corresponde salir
-  // de la landing automáticamente. Un usuario ya logueado que entra a "/"
-  // quiere ver la landing, no ser rebotado al dashboard.
-  const [confirmationCode, setConfirmationCode] = useState<string | null>(null);
 
   const tenantRef = useRef<TenantInfo | null>(null);
   const tenantsRef = useRef<TenantInfo[]>([]);
@@ -59,14 +54,9 @@ export default function LandingPage() {
   useEffect(() => { tenantRef.current = tenant; }, [tenant]);
   useEffect(() => { tenantsRef.current = tenants; }, [tenants]);
   useEffect(() => { if (!user) redirectedRef.current = false; }, [user]);
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setConfirmationCode(new URLSearchParams(window.location.search).get('code'));
-  }, []);
 
   useEffect(() => {
-    if (!confirmationCode || redirectedRef.current || authLoading) return;
+    if (redirectedRef.current || authLoading) return;
 
     if (user) {
       redirectedRef.current = true;
@@ -91,7 +81,7 @@ export default function LandingPage() {
       redirectedRef.current = true;
       router.replace('/onboarding');
     }
-  }, [confirmationCode, authLoading, user, loadProfileAndTenant, router]);
+  }, [authLoading, user, loadProfileAndTenant, router]);
 
   useEffect(() => {
     // Inicialización única (evita mismatch de hidratación)
