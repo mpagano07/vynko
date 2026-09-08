@@ -182,6 +182,41 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+// Wipe every Supabase auth cookie from the browser. `signOut()` normally
+// clears them, but on flaky/slow networks it can leave stale `supabase.auth.token`
+// chunks behind, which would let a follow-up request authenticate as the previous
+// account (data leak between tenants). This is a belt-and-suspenders hard clear.
+export function clearSupabaseAuthCookies() {
+  if (typeof document === 'undefined') return;
+  try {
+    const names: string[] = [];
+    for (const c of document.cookie.split(';')) {
+      const name = c.split('=')[0]?.trim();
+      if (name && (name === 'supabase.auth.token' || name.startsWith('supabase.auth.token.'))) {
+        names.push(name);
+      }
+    }
+    for (const name of names) {
+      document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0; SameSite=Lax`;
+      document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0`;
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function clearStoredAuthStorage() {
+  clearStoredActiveTenantId();
+  clearLastActivity();
+  clearSupabaseAuthCookies();
+  try {
+    window.localStorage.removeItem('supabase.auth.token');
+    window.localStorage.removeItem('vynko_remember');
+  } catch {
+    // ignore
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { mutate: globalMutate } = useSWRConfig();
   const [user, setUser] = useState<User | null>(null);
@@ -341,6 +376,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setTenant(null);
           setTenants([]);
           setRole(null);
+          setAllTenants(false);
         }
 
         // Safeguard para no quedar atrapados con loading=true si el evento de
@@ -379,8 +415,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (session?.user) {
           sessionViaEventRef.current = true;
+          const userChanged = lastFetchedUserIdRef.current !== session.user.id;
           setUser(session.user);
-          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || lastFetchedUserIdRef.current !== session.user.id) {
+          if (userChanged) {
+            // New account in this SPA session: drop any cached data from the
+            // previous user so no stale rows are rendered under the new one.
+            activeFetchRef.current = null;
+            lastFetchedUserIdRef.current = null;
+            void globalMutate(() => true, undefined, { revalidate: false });
+          }
+          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || userChanged) {
             setLoading(true);
             await loadProfileAndTenant();
           }
@@ -391,7 +435,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setTenant(null);
           setTenants([]);
           setRole(null);
+          setAllTenants(false);
           lastFetchedUserIdRef.current = null;
+          activeFetchRef.current = null;
         }
 
         if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
@@ -405,7 +451,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe();
       if (fallbackTimer) clearTimeout(fallbackTimer);
     };
-  }, [loadProfileAndTenant]);
+  }, [loadProfileAndTenant, globalMutate]);
 
   const logout = async () => {
     await supabase.auth.signOut();
@@ -415,13 +461,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTenant(null);
     setTenants([]);
     setRole(null);
-    clearStoredActiveTenantId();
-    clearLastActivity();
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem('vynko_remember');
-    }
+    setAllTenants(false);
+    activeFetchRef.current = null;
     lastFetchedUserIdRef.current = null;
-    await globalMutate(() => true, undefined, { revalidate: false });
+    // Belt-and-suspenders: wipe every Supabase auth cookie explicitly.
+    // signOut() normally clears them but a flaky network can leave stale chunks.
+    clearStoredAuthStorage();
+    // Drop all SWR data immediately so the next login can't see prior tenant rows.
+    void globalMutate(() => true, undefined, { revalidate: false });
   };
 
   const logoutRef = useRef(logout);
@@ -472,7 +519,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     switchTenant,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  // Key the subtree by user id so all child components fully remount when the
+  // authenticated account changes. This guarantees no stale component-local
+  // state (e.g. useState, SWR per-component, useEffect-owned timers) from the
+  // previous user survives into the new session.
+  return (
+    <AuthContext.Provider value={value}>
+      <div key={user?.id ?? '__unauthenticated__'} className="contents">
+        {children}
+      </div>
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuthContext() {
