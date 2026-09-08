@@ -1,11 +1,36 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { formatARS } from '@/lib/utils/currency';
+
+// Recharts' ResponsiveContainer warns with width/height -1 when it mounts in
+// the same frame as its parent is being sized (typical on account remount).
+// Mount it only after the container has a real width to keep the console clean.
+function ChartFrame({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setWidth(el.offsetWidth);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref} className="h-24 w-full overflow-hidden">
+      {width > 0 ? children : null}
+    </div>
+  );
+}
 
 const PERIODS = [
   { label: '7d', days: 7 },
@@ -75,7 +100,7 @@ export default function SalesChart() {
           Sin ventas en este período.
         </div>
       ) : (
-        <div className="h-24 w-full overflow-hidden">
+        <ChartFrame>
           <ResponsiveContainer width="100%" height={96} minWidth={100}>
             <BarChart data={data} margin={{ top: 4, right: 12, left: -10, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
@@ -88,7 +113,7 @@ export default function SalesChart() {
               <Bar dataKey="total" fill="#6366f1" radius={[3, 3, 0, 0]} maxBarSize={32} />
             </BarChart>
           </ResponsiveContainer>
-        </div>
+        </ChartFrame>
       )}
     </div>
   );
