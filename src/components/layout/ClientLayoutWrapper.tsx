@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Sidebar } from '@/components/ui/sidebar';
@@ -26,6 +26,16 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const router = useRouter();
   const { tenant, loading } = useAuth();
+
+  // These components use `dynamic(..., { ssr: false })`, so the server
+  // renders nothing for them while a cached chunk resolves instantly on the
+  // client — that would trip a hydration mismatch at first paint. Render them
+  // only after mount so the server HTML matches the client's first render.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true);
+  }, []);
 
   const isPublicRoute = 
     pathname === '/' ||
@@ -98,14 +108,21 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
   }, []);
 
   if (isPublicRoute) {
-    return <><NetworkStatusNotifier /><LazyToaster /><LazyInstallAppBanner />{children}</>;
+    return (
+      <>
+        <NetworkStatusNotifier />
+        {mounted && <LazyToaster />}
+        {mounted && <LazyInstallAppBanner />}
+        {children}
+      </>
+    );
   }
 
   return (
     <SidebarProvider>
       <NetworkStatusNotifier />
-      <LazyToaster />
-      <LazyInstallAppBanner />
+      {mounted && <LazyToaster />}
+      {mounted && <LazyInstallAppBanner />}
       {/* Outer container: flex-row on desktop, flex-col on mobile */}
       <div className="flex flex-row flex-1 min-h-screen w-full">
         {/* Sidebar: on mobile it's an absolutely positioned drawer, on desktop it's in-flow */}

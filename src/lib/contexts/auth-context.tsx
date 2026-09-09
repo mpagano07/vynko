@@ -427,6 +427,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || userChanged) {
             setLoading(true);
             await loadProfileAndTenant();
+            // If a TOKEN_REFRESHED fired but we still have no profile, the
+            // refresh token likely expired server-side. Force logout so the
+            // user doesn't see a blank/loading screen.
+            if (event === 'TOKEN_REFRESHED' && !lastFetchedUserIdRef.current) {
+              void logoutRef.current();
+            }
           }
         } else {
           sessionViaEventRef.current = false;
@@ -454,7 +460,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadProfileAndTenant, globalMutate]);
 
   const logout = async () => {
-    await supabase.auth.signOut();
     sessionViaEventRef.current = false;
     setUser(null);
     setProfile(null);
@@ -464,11 +469,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAllTenants(false);
     activeFetchRef.current = null;
     lastFetchedUserIdRef.current = null;
-    // Belt-and-suspenders: wipe every Supabase auth cookie explicitly.
-    // signOut() normally clears them but a flaky network can leave stale chunks.
     clearStoredAuthStorage();
-    // Drop all SWR data immediately so the next login can't see prior tenant rows.
     void globalMutate(() => true, undefined, { revalidate: false });
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch {
+      // signOut is best-effort; state is already cleared above.
+    }
   };
 
   const logoutRef = useRef(logout);
