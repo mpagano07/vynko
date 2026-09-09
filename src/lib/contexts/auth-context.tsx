@@ -340,6 +340,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await loadProfileAndTenant();
   }, [loadProfileAndTenant]);
 
+  const logout = useCallback(async () => {
+    sessionViaEventRef.current = false;
+    setUser(null);
+    setProfile(null);
+    setTenant(null);
+    setTenants([]);
+    setRole(null);
+    setAllTenants(false);
+    activeFetchRef.current = null;
+    lastFetchedUserIdRef.current = null;
+    clearStoredAuthStorage();
+    void globalMutate(() => true, undefined, { revalidate: false });
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch {
+      // signOut is best-effort; state is already cleared above.
+    }
+  }, [globalMutate]);
+
   useEffect(() => {
     let mounted = true;
     let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -427,6 +446,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || userChanged) {
             setLoading(true);
             await loadProfileAndTenant();
+            // If a TOKEN_REFRESHED fired but we still have no profile, the
+            // refresh token likely expired server-side. Force logout so the
+            // user doesn't see a blank/loading screen.
+            if (event === 'TOKEN_REFRESHED' && !lastFetchedUserIdRef.current) {
+              void logout();
+            }
           }
         } else {
           sessionViaEventRef.current = false;
@@ -451,30 +476,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe();
       if (fallbackTimer) clearTimeout(fallbackTimer);
     };
-  }, [loadProfileAndTenant, globalMutate]);
-
-  const logout = async () => {
-    await supabase.auth.signOut();
-    sessionViaEventRef.current = false;
-    setUser(null);
-    setProfile(null);
-    setTenant(null);
-    setTenants([]);
-    setRole(null);
-    setAllTenants(false);
-    activeFetchRef.current = null;
-    lastFetchedUserIdRef.current = null;
-    // Belt-and-suspenders: wipe every Supabase auth cookie explicitly.
-    // signOut() normally clears them but a flaky network can leave stale chunks.
-    clearStoredAuthStorage();
-    // Drop all SWR data immediately so the next login can't see prior tenant rows.
-    void globalMutate(() => true, undefined, { revalidate: false });
-  };
-
-  const logoutRef = useRef(logout);
-  useEffect(() => {
-    logoutRef.current = logout;
-  });
+  }, [loadProfileAndTenant, globalMutate, logout]);
 
   // Log the user out automatically after 30 minutes of inactivity. The timer
   // is reset on any user interaction while there is an active session, and the
@@ -489,7 +491,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearTimeout(timer);
       timer = setTimeout(() => {
         clearLastActivity();
-        void logoutRef.current();
+        void logout();
         toast('Tu sesión expiró por inactividad. Iniciá sesión nuevamente.', {
           duration: 5000,
         });
@@ -503,7 +505,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearTimeout(timer);
       INACTIVITY_EVENTS.forEach((event) => window.removeEventListener(event, resetTimer));
     };
-  }, [user]);
+  }, [user, logout]);
 
   const value: AuthContextValue = {
     user,
