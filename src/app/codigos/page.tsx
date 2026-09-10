@@ -89,7 +89,7 @@ export default function CodigosPage() {
     a.click();
   }, [qrs]);
 
-  const handlePrint = useCallback(() => {
+  const handlePrint = () => {
     const cards = filtered.map((p) => {
       const qrUrl = qrs.get(p.id);
       const code = p.barcode || p.sku || p.id;
@@ -168,7 +168,7 @@ export default function CodigosPage() {
 </body>
 </html>`);
     printWindow.document.close();
-  }, [filtered, qrs]);
+  };
 
   return (
     <div className="space-y-6">
