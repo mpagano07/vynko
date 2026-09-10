@@ -159,18 +159,18 @@ function LockedNavItem({ item, compact = false, onNavClick }: { item: NavItem; c
             className="fixed z-[100] -translate-y-1/2"
             style={{ top: tooltip.top, left: tooltip.left }}
           >
-            <div className="absolute left-[-5px] top-1/2 h-2 w-2 -translate-y-1/2 rotate-45 border-b border-l border-gray-700 bg-gray-800" />
-            <div className="w-60 rounded-xl border border-amber-800/40 bg-gray-800 p-3.5 shadow-2xl shadow-black/60">
+            <div className="absolute left-[-5px] top-1/2 h-2 w-2 -translate-y-1/2 rotate-45 border-b border-l border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800" />
+            <div className="w-60 rounded-xl border border-amber-300/60 bg-white dark:border-amber-800/40 dark:bg-gray-800 p-3.5 shadow-2xl shadow-black/15 dark:shadow-black/60">
               <div className="flex items-center gap-1.5">
-                <Lock className="h-3.5 w-3.5 text-amber-400" />
-                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300">Business</span>
-                <span className="ml-auto flex items-center gap-0.5 text-[9px] font-bold text-amber-400/90">
+                <Lock className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-300">Business</span>
+                <span className="ml-auto flex items-center gap-0.5 text-[9px] font-bold text-amber-500 dark:text-amber-400/90">
                   <Sparkles className="h-3 w-3" />
                   Premium
                 </span>
               </div>
-              <p className="mt-1.5 text-xs font-bold text-white">{item.name}</p>
-              <p className="mt-1 text-[10px] leading-relaxed text-gray-400">
+              <p className="mt-1.5 text-xs font-bold text-gray-900 dark:text-white">{item.name}</p>
+              <p className="mt-1 text-[10px] leading-relaxed text-gray-500 dark:text-gray-400">
                 {LOCKED_ITEM_DESCRIPTIONS[item.href] ?? 'Disponible en el plan Business.'}
               </p>
               <button
@@ -226,7 +226,7 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
         if (visibleItems.length === 0) return null;
         return (
           <div key={group.label} className="mb-1">
-            <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+            <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
               {group.label}
             </p>
             {visibleItems.map(({ item, locked }) =>
@@ -241,8 +241,8 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
                   className={cn(
                     'flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors',
                     pathname === item.href
-                      ? 'bg-gray-800 text-white'
-                      : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                      ? 'bg-indigo-50 text-indigo-700 dark:bg-gray-800 dark:text-white font-semibold'
+                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white'
                   )}
                 >
                   <span>{item.name}</span>
@@ -260,7 +260,7 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
 
       {userEmail === ADMIN_EMAIL && (
         <div className="mb-1">
-          <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+          <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
             Admin
           </p>
           {[{ name: 'Analytics', href: '/admin/analytics' }].map((item) => (
@@ -272,8 +272,8 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
               className={cn(
                 'flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors',
                 pathname === item.href
-                  ? 'bg-gray-800 text-white'
-                  : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                  ? 'bg-indigo-50 text-indigo-700 dark:bg-gray-800 dark:text-white font-semibold'
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white'
               )}
             >
               <span>{item.name}</span>
@@ -284,7 +284,7 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
 
       {visibleOperaciones.length > 0 && (
         <div className="mb-1">
-          <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+          <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
             Operaciones
           </p>
           <button
@@ -292,8 +292,8 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
             className={cn(
               'flex items-center justify-between w-full rounded-md px-3 py-2 text-sm font-medium transition-colors',
               isOperacionesActive || operacionesOpen
-                ? 'bg-gray-800 text-white'
-                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                ? 'bg-indigo-50 text-indigo-700 dark:bg-gray-800 dark:text-white font-semibold'
+                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white'
             )}
           >
             <span className="flex items-center gap-2">
@@ -314,7 +314,7 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
             )}
           >
             <div className="overflow-hidden min-h-0">
-              <div className="ml-4 mt-1 space-y-1 border-l border-gray-700 pl-3">
+              <div className="ml-4 mt-1 space-y-1 border-l border-gray-200 dark:border-gray-700 pl-3">
                 {visibleOperaciones.map(({ item, locked }) =>
                   locked ? (
                     <LockedNavItem key={item.name} item={item} compact onNavClick={onNavClick} />
@@ -327,8 +327,8 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
                       className={cn(
                         'flex items-center justify-between rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
                         pathname === item.href
-                          ? 'bg-gray-800 text-white'
-                          : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                          ? 'bg-indigo-50 text-indigo-700 dark:bg-gray-800 dark:text-white font-semibold'
+                          : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'
                       )}
                     >
                       <span>{item.name}</span>
@@ -432,19 +432,19 @@ export function Sidebar() {
 
   const tenantSwitcherContent = (
     <>
-      <div className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg bg-gray-800/60 border border-gray-700/50 hover:bg-gray-700/60 transition-colors cursor-pointer"
+      <div className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700/50 hover:bg-gray-200/70 dark:hover:bg-gray-700/60 transition-colors cursor-pointer"
         onClick={() => setSwitcherOpen(!switcherOpen)}
       >
         <div className="w-6 h-6 rounded-md bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-          <span className="text-xs font-bold text-blue-400">{tenants.length > 1 && !tenant ? 'T' : (tenant?.name || 'T')[0].toUpperCase()}</span>
+          <span className="text-xs font-bold text-blue-500 dark:text-blue-400">{tenants.length > 1 && !tenant ? 'T' : (tenant?.name || 'T')[0].toUpperCase()}</span>
         </div>
-        <p className="text-sm font-semibold text-gray-200 truncate flex-1 text-left">{!tenant && tenants.length > 0 ? 'Todas las sucursales' : (tenant?.name || 'Seleccionar')}</p>
-        {switcherOpen ? <ChevronUp className="h-4 w-4 text-gray-400 flex-shrink-0" /> : <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />}
+        <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate flex-1 text-left">{!tenant && tenants.length > 0 ? 'Todas las sucursales' : (tenant?.name || 'Seleccionar')}</p>
+        {switcherOpen ? <ChevronUp className="h-4 w-4 text-gray-500 dark:text-gray-400 flex-shrink-0" /> : <ChevronDown className="h-4 w-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />}
       </div>
       {switcherOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => { setSwitcherOpen(false); setCreatingTenant(false); }} />
-          <div className="absolute left-0 right-0 mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-20 py-1 max-h-56 overflow-y-auto">
+          <div className="absolute left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-20 py-1 max-h-56 overflow-y-auto">
             <button
               onClick={() => {
                 if (!tenant || tenants.length > 1) {
@@ -452,18 +452,18 @@ export function Sidebar() {
                 }
                 setSwitcherOpen(false);
               }}
-              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-gray-700 transition-colors border-b border-gray-700 mb-1"
+              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-700 mb-1"
             >
-              <div className="w-5 h-5 rounded bg-gray-700 flex items-center justify-center flex-shrink-0">
-                <span className="text-[10px] font-bold text-blue-400">T</span>
+              <div className="w-5 h-5 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                <span className="text-[10px] font-bold text-blue-500 dark:text-blue-400">T</span>
               </div>
-              <span className="truncate flex-1 text-gray-200 font-medium">Todas las sucursales</span>
+              <span className="truncate flex-1 text-gray-800 dark:text-gray-200 font-medium">Todas las sucursales</span>
               {!tenant && (
-                <Check className="h-4 w-4 text-blue-400 flex-shrink-0" />
+                <Check className="h-4 w-4 text-blue-500 dark:text-blue-400 flex-shrink-0" />
               )}
             </button>
             {tenants.map((t) => (
-              <div key={t.id} className="group flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-gray-700 transition-colors">
+              <div key={t.id} className="group flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
                 {renamingTenantId === t.id ? (
                   <form
                     onSubmit={(e) => { e.preventDefault(); handleRename(t.id); }}
@@ -474,9 +474,9 @@ export function Sidebar() {
                       type="text"
                       value={renameValue}
                       onChange={(e) => setRenameValue(e.target.value)}
-                      className="flex-1 px-2 py-1 text-sm bg-gray-700 border border-gray-600 rounded text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="flex-1 px-2 py-1 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
-                    <button type="submit" className="p-1 text-blue-400 hover:text-blue-300">
+                    <button type="submit" className="p-1 text-blue-500 dark:text-blue-400 hover:text-blue-600">
                       <Check className="h-3.5 w-3.5" />
                     </button>
                   </form>
@@ -491,17 +491,17 @@ export function Sidebar() {
                       }}
                       className="flex items-center gap-2 flex-1 min-w-0"
                     >
-                      <div className="w-5 h-5 rounded bg-gray-700 flex items-center justify-center flex-shrink-0">
-                        <span className="text-[10px] font-bold text-gray-300">{(t.name || 'T')[0].toUpperCase()}</span>
+                      <div className="w-5 h-5 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                        <span className="text-[10px] font-bold text-gray-600 dark:text-gray-300">{(t.name || 'T')[0].toUpperCase()}</span>
                       </div>
-                      <span className="truncate flex-1 text-gray-200 text-left">{t.name}</span>
+                      <span className="truncate flex-1 text-gray-800 dark:text-gray-200 text-left">{t.name}</span>
                     </button>
                     {t.id === tenant?.id && (
-                      <Check className="h-4 w-4 text-blue-400 flex-shrink-0" />
+                      <Check className="h-4 w-4 text-blue-500 dark:text-blue-400 flex-shrink-0" />
                     )}
                     <button
                       onClick={(e) => { e.stopPropagation(); setRenamingTenantId(t.id); setRenameValue(t.name); }}
-                      className="p-1 text-gray-500 hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                      className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
                       title="Renombrar"
                     >
                       <Pencil className="h-3.5 w-3.5" />
@@ -510,7 +510,7 @@ export function Sidebar() {
                 )}
               </div>
             ))}
-            <div className="border-t border-gray-700 mt-1 pt-1">
+            <div className="border-t border-gray-100 dark:border-gray-700 mt-1 pt-1">
               {creatingTenant ? (
                 <form onSubmit={handleCreateTenant} className="px-3 py-2">
                   <input
@@ -519,7 +519,7 @@ export function Sidebar() {
                     value={newTenantName}
                     onChange={(e) => setNewTenantName(e.target.value)}
                     placeholder="Nombre de la sucursal"
-                    className="w-full px-2 py-1.5 text-sm bg-gray-700 border border-gray-600 rounded text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full px-2 py-1.5 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     disabled={creating}
                   />
                   <div className="flex gap-1.5 mt-1.5">
@@ -534,7 +534,7 @@ export function Sidebar() {
                       type="button"
                       onClick={() => { setCreatingTenant(false); setNewTenantName(''); }}
                       disabled={creating}
-                      className="px-2 py-1 text-xs font-medium text-gray-400 hover:text-gray-200 transition-colors"
+                      className="px-2 py-1 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
                     >
                       Cancelar
                     </button>
@@ -543,7 +543,7 @@ export function Sidebar() {
               ) : canAddBranch ? (
                 <button
                   onClick={() => setCreatingTenant(true)}
-                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-left text-gray-400 hover:text-gray-200 hover:bg-gray-700 transition-colors"
+                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-left text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 >
                   <Plus className="h-4 w-4" />
                   <span>Nueva sucursal</span>
@@ -551,7 +551,7 @@ export function Sidebar() {
               ) : (
                 <div className="px-3 py-2 text-xs text-gray-500">
                   Límite de {maxBranches} sucursal{maxBranches !== 1 ? 'es' : ''} alcanzado para tu plan ({currentPlan}).
-                  <Link href="/billing" className="text-blue-400 hover:text-blue-300 ml-1">Mejorar plan</Link>
+                  <Link href="/billing" className="text-blue-500 dark:text-blue-400 hover:underline ml-1">Mejorar plan</Link>
                 </div>
               )}
             </div>
@@ -567,14 +567,14 @@ export function Sidebar() {
 
   if (loading) {
     return (
-      <aside className="hidden md:flex flex-col w-64 h-screen bg-gray-900 text-white p-4 border-r border-gray-800">
+      <aside className="hidden md:flex flex-col w-64 h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white p-4 border-r border-gray-200 dark:border-gray-800">
         <div className="mb-4 flex justify-center">
-          <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="96px" className="h-9 w-auto object-contain" />
+          <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="96px" className="h-9 w-auto object-contain [filter:drop-shadow(0_0_1px_#000)_drop-shadow(0_0_1px_#000)_drop-shadow(0_0_0.5px_#000)] dark:[filter:none]" />
         </div>
         <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-700 rounded" />
-          <div className="h-8 bg-gray-700 rounded" />
-          <div className="h-8 bg-gray-700 rounded" />
+          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded" />
+          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded" />
+          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded" />
         </div>
       </aside>
     );
@@ -583,18 +583,18 @@ export function Sidebar() {
   const isBlocked = tenant ? checkSubscriptionBlocked(tenant).blocked : false;
 
   const userSection = (profile || user) ? (
-    <div className="border-t border-gray-700 pt-4 space-y-2">
-      <div className="rounded-md bg-gray-800 p-3">
-        <p className="text-xs text-gray-400">Usuario</p>
-        <p className="text-sm font-medium truncate">{profile?.full_name || 'Sin nombre'}</p>
-        <p className="text-xs text-gray-400 truncate">{profile?.email || user?.email}</p>
+    <div className="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-2">
+      <div className="rounded-md bg-gray-50 dark:bg-gray-800 p-3 border border-gray-200 dark:border-transparent">
+        <p className="text-xs text-gray-500 dark:text-gray-400">Usuario</p>
+        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{profile?.full_name || 'Sin nombre'}</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{profile?.email || user?.email}</p>
       </div>
       <button
         onClick={async () => {
           await logout();
           router.push('/login');
         }}
-        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-400 hover:text-red-400 hover:bg-gray-800 transition-colors"
+        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
       >
         <LogOut className="h-4 w-4" />
         Cerrar sesión
@@ -616,16 +616,16 @@ export function Sidebar() {
       {/* Mobile drawer */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex flex-col w-64 bg-gray-900 text-white p-4 border-r border-gray-800 md:hidden',
+          'fixed inset-y-0 left-0 z-50 flex flex-col w-64 bg-white dark:bg-gray-900 text-gray-900 dark:text-white p-4 border-r border-gray-200 dark:border-gray-800 md:hidden',
           'transition-transform duration-200 ease-out',
           isOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
         <div className="flex items-center justify-between mb-4">
           <div className="flex-1 flex justify-center">
-            <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="96px" className="h-9 w-auto object-contain" />
+            <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="96px" className="h-9 w-auto object-contain [filter:drop-shadow(0_0_1px_#000)_drop-shadow(0_0_1px_#000)_drop-shadow(0_0_0.5px_#000)] dark:[filter:none]" />
           </div>
-          <button onClick={close} aria-label="Cerrar menú" className="p-1 rounded-md hover:bg-gray-800 text-gray-400">
+          <button onClick={close} aria-label="Cerrar menú" className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -642,10 +642,10 @@ export function Sidebar() {
       </aside>
 
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex flex-col w-64 h-screen bg-gray-900 text-white p-4 border-r border-gray-800">
+      <aside className="hidden md:flex flex-col w-64 h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white p-4 border-r border-gray-200 dark:border-gray-800">
         <div className="mb-2">
           <div className="flex justify-center">
-            <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="96px" className="h-9 w-auto object-contain" />
+            <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="96px" className="h-9 w-auto object-contain [filter:drop-shadow(0_0_1px_#000)_drop-shadow(0_0_1px_#000)_drop-shadow(0_0_0.5px_#000)] dark:[filter:none]" />
           </div>
           {tenants && tenants.length > 0 && (
             <div className="relative mt-2">

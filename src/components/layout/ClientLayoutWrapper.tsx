@@ -72,19 +72,31 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
     void registerSW();
   }, []);
 
-  // Handle ChunkLoadError and network fetch failures on dynamic scripts
+  // Handle ChunkLoadError and network fetch failures on dynamic scripts.
+  // Only a real Next.js chunk failure warrants a full reload after a deploy.
+  // Generic cross-origin "Script error." events (extensions, third-party
+  // scripts) must NOT reload the app mid-navigation, and a cooldown stops the
+  // reload from looping if the chunk keeps failing.
   useEffect(() => {
+    let lastReloadAt = 0;
+    const RELOAD_COOLDOWN_MS = 15_000;
+
+    const reloadOnce = (reason: string) => {
+      const now = Date.now();
+      if (now - lastReloadAt < RELOAD_COOLDOWN_MS) return;
+      lastReloadAt = now;
+      console.warn(reason);
+      window.location.reload();
+    };
+
     const handleError = (event: ErrorEvent) => {
       const message = event.message || '';
-      if (
-        message.includes('ChunkLoadError') || 
+      const isNextChunkError =
+        message.includes('ChunkLoadError') ||
         message.includes('Loading chunk') ||
-        message.includes('Failed to fetch dynamically imported module') ||
-        message.includes('Script error.')
-      ) {
-        console.warn('Dynamic script load error detected. Reloading page to apply updates...', message);
-        window.location.reload();
-      }
+        message.includes('Failed to fetch dynamically imported module');
+      if (!isNextChunkError) return;
+      reloadOnce(`Dynamic script load error detected. Reloading page to apply updates... ${message}`);
     };
 
     const handleElementError = (event: Event) => {
@@ -92,8 +104,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
       if (target && (target.tagName === 'SCRIPT' || target.tagName === 'LINK')) {
         const src = (target as HTMLScriptElement).src || (target as HTMLLinkElement).href || '';
         if (src.includes('/_next/static/')) {
-          console.warn('Failed to load asset from Next.js static build. Reloading page to apply updates...', src);
-          window.location.reload();
+          reloadOnce(`Failed to load asset from Next.js static build. Reloading page to apply updates... ${src}`);
         }
       }
     };
@@ -127,12 +138,12 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
       <div className="flex flex-row flex-1 min-h-screen w-full">
         {/* Sidebar: on mobile it's an absolutely positioned drawer, on desktop it's in-flow */}
         <React.Suspense fallback={
-          <aside className="hidden md:flex flex-col w-64 h-screen bg-gray-900 border-r border-gray-800 flex-shrink-0 p-4">
-            <div className="mb-8 h-8 w-20 bg-gray-700 rounded animate-pulse" />
+          <aside className="hidden md:flex flex-col w-64 h-screen bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex-shrink-0 p-4">
+            <div className="mb-8 h-8 w-20 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
             <div className="space-y-3">
-              <div className="h-7 bg-gray-700 rounded animate-pulse" />
-              <div className="h-7 bg-gray-700 rounded animate-pulse" />
-              <div className="h-7 bg-gray-700 rounded animate-pulse" />
+              <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+              <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+              <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
             </div>
           </aside>
         }>

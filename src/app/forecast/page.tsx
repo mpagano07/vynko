@@ -188,23 +188,21 @@ export default function ForecastPage() {
       {/* Summary KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="p-5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Ventas 30 días</p>
-              <p className="text-2xl font-bold mt-1 text-gray-900 dark:text-white">{formatARS(data.summary.totalSales30)}</p>
-              <div className="flex items-center gap-2 mt-1">
-                <p className="text-xs text-gray-500">{data.summary.totalTransactions30} transacciones</p>
-                <TrendBadge value={data.trends?.totalSales ?? null} />
-              </div>
-            </div>
-            <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Ventas 30 días</p>
+            <div className="flex-shrink-0 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600">
               <DollarSign className="h-5 w-5" />
             </div>
           </div>
+          <p className="text-2xl font-bold mt-1 text-gray-900 dark:text-white">{formatARS(data.summary.totalSales30)}</p>
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-xs text-gray-500">{data.summary.totalTransactions30} transacciones</p>
+            <TrendBadge value={data.trends?.totalSales ?? null} />
+          </div>
         </Card>
         <Card className="p-5">
-          <div className="flex items-start justify-between">
-            <div>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Productos con ventas</p>
               <p className="text-2xl font-bold mt-1 text-gray-900 dark:text-white">{data.summary.productsWithSales}</p>
               <div className="flex items-center gap-2 mt-1">
@@ -212,28 +210,28 @@ export default function ForecastPage() {
                 <TrendBadge value={data.trends?.productsWithSales ?? null} />
               </div>
             </div>
-            <div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-blue-600">
+            <div className="flex-shrink-0 p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-blue-600">
               <Package className="h-5 w-5" />
             </div>
           </div>
         </Card>
         <Card className="p-5">
-          <div className="flex items-start justify-between">
-            <div>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Cobertura inventario</p>
               <p className="text-2xl font-bold mt-1 text-gray-900 dark:text-white">
                 {inventoryCoverageDays !== null ? `${inventoryCoverageDays} días` : '—'}
               </p>
               <p className="text-xs text-gray-500 mt-1">Stock actual vs demanda diaria</p>
             </div>
-            <div className="p-2.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600">
+            <div className="flex-shrink-0 p-2.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600">
               <ShieldCheck className="h-5 w-5" />
             </div>
           </div>
         </Card>
         <Card className="p-5">
-          <div className="flex items-start justify-between">
-            <div>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Top producto</p>
               <p className="text-lg font-bold mt-1 text-gray-900 dark:text-white truncate">
                 {data.topProducts[0]?.productName || '—'}
@@ -255,7 +253,7 @@ export default function ForecastPage() {
                 return null;
               })()}
             </div>
-            <div className="p-2.5 rounded-lg bg-purple-50 dark:bg-purple-950/30 text-purple-600">
+            <div className="flex-shrink-0 p-2.5 rounded-lg bg-purple-50 dark:bg-purple-950/30 text-purple-600">
               <TrendingUp className="h-5 w-5" />
             </div>
           </div>
