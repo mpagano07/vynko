@@ -8,7 +8,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import type { TenantInfo } from '@/lib/hooks/useAuth';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
 import { cn } from '@/lib/utils/cn';
-import { X, LogOut, Clock, AlertTriangle, ChevronDown, ChevronUp, Settings, Check, Plus, Loader2, Pencil } from 'lucide-react';
+import { X, LogOut, Clock, AlertTriangle, ChevronDown, ChevronUp, Settings, Check, Plus, Loader2, Pencil, Lock } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
 import { PLAN_LIMITS } from '@/lib/plans';
@@ -23,6 +23,11 @@ interface NavItem {
   requiredRole?: string[];
   requiredMultiBranch?: boolean;
   badge?: string;
+}
+
+interface FilterResult {
+  visible: boolean;
+  locked: boolean;
 }
 
 interface NavGroup {
@@ -76,19 +81,23 @@ const ADMIN_EMAIL = 'matias.pagano07@gmail.com';
 
 function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, userEmail }: { onNavClick?: () => void; tenantPlan?: string; userRole?: string | null; isBlocked?: boolean; multiBranch?: boolean; userEmail?: string | null }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [operacionesOpen, setOperacionesOpen] = useState(false);
 
   const effectivePlan = !tenantPlan || tenantPlan === 'free' ? 'starter' : tenantPlan;
 
-  const filterItem = (item: NavItem) => {
-    if (item.requiredPlan && !item.requiredPlan.includes(effectivePlan)) return false;
-    if (item.requiredRole && !item.requiredRole.includes(userRole || '')) return false;
-    if (item.requiredMultiBranch && !multiBranch) return false;
-    return true;
+  const filterItem = (item: NavItem): FilterResult => {
+    const roleBlocked = item.requiredRole && !item.requiredRole.includes(userRole || '');
+    const multiBranchBlocked = item.requiredMultiBranch && !multiBranch;
+    const planBlocked = item.requiredPlan && !item.requiredPlan.includes(effectivePlan);
+
+    if (roleBlocked || multiBranchBlocked) return { visible: false, locked: false };
+    if (planBlocked) return { visible: true, locked: true };
+    return { visible: true, locked: false };
   };
 
-  const visibleOperaciones = operacionesItems.filter(filterItem);
-  const isOperacionesActive = visibleOperaciones.some((item) => pathname === item.href);
+  const visibleOperaciones = operacionesItems.map((item) => ({ item, ...filterItem(item) })).filter((r) => r.visible);
+  const isOperacionesActive = visibleOperaciones.some((r) => pathname === r.item.href);
 
   return (
     <>
@@ -105,34 +114,50 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
       )}
 
       {navGroups.map((group) => {
-        const visible = group.items.filter(filterItem);
-        if (visible.length === 0) return null;
+        const visibleItems = group.items.map((item) => ({ item, ...filterItem(item) })).filter((r) => r.visible);
+        if (visibleItems.length === 0) return null;
         return (
           <div key={group.label} className="mb-1">
             <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
               {group.label}
             </p>
-            {visible.map((item) => (
-              <Link
-                key={item.name}
-                href={item.href}
-                prefetch={false}
-                onClick={onNavClick}
-                className={cn(
-                  'flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                  pathname === item.href
-                    ? 'bg-gray-800 text-white'
-                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                )}
-              >
-                <span>{item.name}</span>
-                {item.badge && (
-                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-800/40">
-                    {item.badge}
-                  </span>
-                )}
-              </Link>
-            ))}
+            {visibleItems.map(({ item, locked }) =>
+              locked ? (
+                <button
+                  key={item.name}
+                  onClick={() => {
+                    toast('Disponible en el plan Business. Actualizá tu plan para acceder.', { icon: '🔒' });
+                    onNavClick?.();
+                    router.push('/billing');
+                  }}
+                  title="Disponible en el plan Business"
+                  className="flex items-center justify-between w-full rounded-md px-3 py-2 text-sm font-medium text-gray-500 opacity-60 cursor-not-allowed"
+                >
+                  <span>{item.name}</span>
+                  <Lock className="h-3.5 w-3.5 text-gray-500" />
+                </button>
+              ) : (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  prefetch={false}
+                  onClick={onNavClick}
+                  className={cn(
+                    'flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                    pathname === item.href
+                      ? 'bg-gray-800 text-white'
+                      : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                  )}
+                >
+                  <span>{item.name}</span>
+                  {item.badge && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-800/40">
+                      {item.badge}
+                    </span>
+                  )}
+                </Link>
+              )
+            )}
           </div>
         );
       })}
@@ -194,27 +219,43 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
           >
             <div className="overflow-hidden min-h-0">
               <div className="ml-4 mt-1 space-y-1 border-l border-gray-700 pl-3">
-                {visibleOperaciones.map((item) => (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    prefetch={false}
-                    onClick={onNavClick}
-                    className={cn(
-                      'flex items-center justify-between rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-                      pathname === item.href
-                        ? 'bg-gray-800 text-white'
-                        : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-                    )}
-                  >
-                    <span>{item.name}</span>
-                    {item.badge && (
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-800/40">
-                        {item.badge}
-                      </span>
-                    )}
-                  </Link>
-                ))}
+                {visibleOperaciones.map(({ item, locked }) =>
+                  locked ? (
+                    <button
+                      key={item.name}
+                      onClick={() => {
+                        toast('Disponible en el plan Business. Actualizá tu plan para acceder.', { icon: '🔒' });
+                        onNavClick?.();
+                        router.push('/billing');
+                      }}
+                      title="Disponible en el plan Business"
+                      className="flex items-center justify-between w-full rounded-md px-3 py-1.5 text-sm font-medium text-gray-500 opacity-60 cursor-not-allowed"
+                    >
+                      <span>{item.name}</span>
+                      <Lock className="h-3.5 w-3.5 text-gray-500" />
+                    </button>
+                  ) : (
+                    <Link
+                      key={item.name}
+                      href={item.href}
+                      prefetch={false}
+                      onClick={onNavClick}
+                      className={cn(
+                        'flex items-center justify-between rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                        pathname === item.href
+                          ? 'bg-gray-800 text-white'
+                          : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                      )}
+                    >
+                      <span>{item.name}</span>
+                      {item.badge && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-800/40">
+                          {item.badge}
+                        </span>
+                      )}
+                    </Link>
+                  )
+                )}
               </div>
             </div>
           </div>
