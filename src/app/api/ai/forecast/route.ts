@@ -108,16 +108,18 @@ export async function GET(request: Request) {
     return sum + (Number(s.sale_count) || 0);
   }, 0);
 
-  const predictions: Prediction[] = Array.from(dailySales.entries())
-    .map(([productId, stats]) => {
-      const product = productMap.get(productId);
-      if (!product) return null;
-      const avgDaily = stats.totalQty / 30;
+  const predictions: Prediction[] = Array.from(productMap.entries())
+    .map(([productId, product]) => {
+      const stats = dailySales.get(productId);
+      const totalQty = stats?.totalQty ?? 0;
+      const activeDaysCount = stats?.daysWithSales.size ?? 0;
+      const avgDaily = totalQty / 30;
       const projectedMonthly = Math.round(avgDaily * 30);
+      const avgDailySales = Math.round(avgDaily * 10) / 10;
       const stock = Number(product.stock) || 0;
-      const daysUntilStockout = avgDaily > 0 ? Math.round(stock / avgDaily) : Infinity;
+      const daysUntilStockout = avgDailySales > 0 ? Math.round(stock / avgDailySales) : Infinity;
       const minStock = Number(product.min_stock) || 0;
-      const needsReorder = stock <= projectedMonthly * 0.5 || stock <= minStock;
+      const needsReorder = totalQty > 0 && (stock <= projectedMonthly * 0.5 || stock <= minStock);
 
       return {
         productId: String(product.id ?? ''),
@@ -127,19 +129,18 @@ export async function GET(request: Request) {
         maxStock: Number(product.max_stock) || 0,
         price: product.price_cents ? Number(product.price_cents) / 100 : 0,
         cost: Number(product.cost) || 0,
-        avgDailySales: Math.round(avgDaily * 10) / 10,
+        avgDailySales,
         projectedMonthlyDemand: projectedMonthly,
         daysUntilStockout: daysUntilStockout === Infinity ? null : daysUntilStockout,
         needsReorder,
         suggestedOrder: needsReorder ? Math.max(projectedMonthly * 2 - stock, projectedMonthly) : 0,
-        totalSoldLast30: stats.totalQty,
-        activeDays: stats.daysWithSales.size,
+        totalSoldLast30: totalQty,
+        activeDays: activeDaysCount,
       };
     })
-    .filter((p): p is Prediction => p !== null)
     .sort((a, b) => (b.avgDailySales || 0) - (a.avgDailySales || 0));
 
-  const topProducts = predictions.slice(0, 5);
+  const topProducts = predictions.filter((p) => p.totalSoldLast30 > 0).slice(0, 5);
   const needsReorder = predictions.filter((p) => p.needsReorder);
 
   // Prior period (30-60 days ago) computation
@@ -208,7 +209,7 @@ Dame un análisis breve (3-4 oraciones) en español destacando tendencias y reco
     needsReorder,
     summary: {
       totalProducts: productIds.length,
-      productsWithSales: predictions.length,
+      productsWithSales: predictions.filter((p) => p.totalSoldLast30 > 0).length,
       totalSales30,
       totalTransactions30: totalTransactions,
       needsReorderCount: needsReorder.length,
@@ -216,7 +217,7 @@ Dame un análisis breve (3-4 oraciones) en español destacando tendencias y reco
     trends: {
       totalSales: trendPct(totalSales30, priorTotalSales),
       transactions: trendPct(totalTransactions, priorTransactions),
-      productsWithSales: trendPct(predictions.length, priorProductsWithSales),
+      productsWithSales: trendPct(predictions.filter((p) => p.totalSoldLast30 > 0).length, priorProductsWithSales),
       needsReorder: trendPct(needsReorder.length, priorNeedsReorderCount),
     },
     aiAnalysis,
