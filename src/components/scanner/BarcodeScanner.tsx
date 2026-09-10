@@ -182,10 +182,20 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
 
       {status === 'scanning' && (
         <>
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div className="h-48 w-48 rounded-lg border-2 border-white/60" />
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center p-4">
+            <div className="relative h-52 w-64 max-w-[85vw] rounded-xl border border-cyan-400/30 bg-cyan-950/10 shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]">
+              {/* Corner brackets */}
+              <div className="absolute -top-0.5 -left-0.5 h-6 w-6 border-t-2 border-l-2 border-cyan-400 rounded-tl-lg" />
+              <div className="absolute -top-0.5 -right-0.5 h-6 w-6 border-t-2 border-r-2 border-cyan-400 rounded-tr-lg" />
+              <div className="absolute -bottom-0.5 -left-0.5 h-6 w-6 border-b-2 border-l-2 border-cyan-400 rounded-bl-lg" />
+              <div className="absolute -bottom-0.5 -right-0.5 h-6 w-6 border-b-2 border-r-2 border-cyan-400 rounded-br-lg" />
+              {/* Laser scanning line */}
+              <div className="absolute inset-x-2 top-1/2 h-0.5 -translate-y-1/2 bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.9)] animate-pulse" />
+            </div>
+            <p className="mt-4 px-3 py-1 rounded-full bg-black/75 backdrop-blur-sm text-xs font-medium text-cyan-200 border border-cyan-500/30">
+              Alineá el código de barras dentro del marco
+            </p>
           </div>
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent animate-pulse" />
         </>
       )}
     </div>

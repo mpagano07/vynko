@@ -91,6 +91,7 @@ export default function SalesPage() {
   } | null>(null);
   const cartRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const checkoutBtnRef = useRef<HTMLButtonElement>(null);
   const [showScanner, setShowScanner] = useState(false);
 
   const toggleSale = (id: string) => {
@@ -354,6 +355,40 @@ export default function SalesPage() {
     }
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Atajo F2 o Ctrl+K: enfocar buscador de productos
+      if (e.key === 'F2' || (e.ctrlKey && e.key.toLowerCase() === 'k')) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+        return;
+      }
+
+      // Atajo F4 o Ctrl+Enter: cobrar
+      if (e.key === 'F4' || (e.ctrlKey && e.key === 'Enter')) {
+        e.preventDefault();
+        checkoutBtnRef.current?.click();
+        return;
+      }
+
+      // Atajo Esc: limpiar búsqueda o cerrar scanner
+      if (e.key === 'Escape') {
+        if (showScanner) {
+          setShowScanner(false);
+          return;
+        }
+        if (productSearch) {
+          setProductSearch('');
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showScanner, productSearch]);
+
   if (!tenantId) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -405,6 +440,20 @@ export default function SalesPage() {
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
           Busca productos, arma el carrito y confirma la venta.
         </p>
+        <div className="flex flex-wrap items-center gap-2 mt-2.5">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+            <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-[11px] shadow-xs">F2</kbd>
+            Buscar producto
+          </span>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+            <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-[11px] shadow-xs">F4</kbd>
+            Finalizar cobro
+          </span>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+            <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-[11px] shadow-xs">Esc</kbd>
+            Limpiar búsqueda
+          </span>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -579,27 +628,27 @@ export default function SalesPage() {
                     <div className="flex items-center gap-1 ml-2">
                       <button
                         onClick={() => updateQuantity(item.product_id, -1)}
-                        className="p-2 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700"
+                        className="h-9 w-9 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-200 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-all"
                         aria-label={`Quitar una unidad de ${item.name}`}
                       >
-                        <Minus className="h-3 w-3" />
+                        <Minus className="h-4 w-4" />
                       </button>
-                      <span className="w-6 text-center text-sm font-medium text-gray-900 dark:text-gray-100">
+                      <span className="w-7 text-center text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                         {item.quantity}
                       </span>
                       <button
                         onClick={() => updateQuantity(item.product_id, 1)}
-                        className="p-2 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700"
+                        className="h-9 w-9 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-200 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-all"
                         aria-label={`Agregar una unidad de ${item.name}`}
                       >
-                        <Plus className="h-3 w-3" />
+                        <Plus className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => removeFromCart(item.product_id)}
-                        className="p-2 rounded text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 ml-1"
+                        className="h-9 w-9 flex items-center justify-center rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 ml-1 active:scale-95 transition-all"
                         aria-label={`Eliminar ${item.name} del carrito`}
                       >
-                        <Trash2 className="h-3 w-3" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
@@ -620,15 +669,16 @@ export default function SalesPage() {
 
                   <div className="flex items-center justify-between text-lg font-bold text-gray-900 dark:text-gray-100">
                     <span>Total</span>
-                    <span className="text-2xl text-indigo-600 dark:text-indigo-400">
+                    <span className="text-2xl text-indigo-600 dark:text-indigo-400 tabular-nums font-bold">
                       {formatARS(total)}
                     </span>
                   </div>
 
                   <Button
+                    ref={checkoutBtnRef}
                     onClick={handleCheckout}
                     disabled={isSubmitting}
-                    className="w-full flex items-center justify-center gap-2"
+                    className="w-full h-11 flex items-center justify-center gap-2 font-semibold shadow-xs active:scale-[0.99] transition-all"
                   >
                     {isSubmitting ? (
                       <>
@@ -639,6 +689,7 @@ export default function SalesPage() {
                       <>
                         <Check className="h-4 w-4" />
                         Finalizar venta
+                        <kbd className="ml-2 hidden sm:inline-block px-1.5 py-0.5 text-xs bg-indigo-700/80 dark:bg-indigo-600 text-white rounded font-mono">F4</kbd>
                       </>
                     )}
                   </Button>

@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { cn } from '@/lib/utils/cn';
 import { Menu, Building2 } from 'lucide-react';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 export function Header() {
   const pathname = usePathname();
@@ -24,7 +25,7 @@ export function Header() {
   }
 
   return (
-    <header className={cn('flex h-14 items-center justify-between bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-4')}>
+    <header className={cn('flex h-14 items-center justify-between bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4')}>
       <div className="flex items-center space-x-2">
         <button
           onClick={toggleSidebar}
@@ -36,12 +37,13 @@ export function Header() {
         {tenant && (
           <div className="hidden sm:flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 ml-1">
             <Building2 className="h-3.5 w-3.5" />
-            <span className="truncate max-w-[200px]">{tenant.name}</span>
+            <span className="truncate max-w-[200px] font-medium">{tenant.name}</span>
           </div>
         )}
       </div>
 
-      <div className="flex items-center space-x-1">
+      <div className="flex items-center space-x-2">
+        <ThemeToggle />
         {(profile || user) ? (
           <div className="relative">
             <button
