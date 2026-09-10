@@ -7,7 +7,7 @@ import { TenantHeaderProvider } from '@/components/TenantHeaderProvider';
 import type { Metadata, Viewport } from 'next';
 
 const inter = Inter({
-  subsets: ['latin'],
+  subsets: ['latin', 'latin-ext'],
   variable: '--font-sans',
   display: 'swap',
 });
@@ -60,6 +60,7 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
+        <meta charSet="utf-8" />
         <script
           dangerouslySetInnerHTML={{
             __html: `

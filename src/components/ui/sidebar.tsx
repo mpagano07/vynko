@@ -159,18 +159,18 @@ function LockedNavItem({ item, compact = false, onNavClick }: { item: NavItem; c
             className="fixed z-[100] -translate-y-1/2"
             style={{ top: tooltip.top, left: tooltip.left }}
           >
-            <div className="absolute left-[-5px] top-1/2 h-2 w-2 -translate-y-1/2 rotate-45 border-b border-l border-gray-700 bg-gray-800" />
-            <div className="w-60 rounded-xl border border-amber-800/40 bg-gray-800 p-3.5 shadow-2xl shadow-black/60">
+            <div className="absolute left-[-5px] top-1/2 h-2 w-2 -translate-y-1/2 rotate-45 border-b border-l border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800" />
+            <div className="w-60 rounded-xl border border-amber-300/60 bg-white dark:border-amber-800/40 dark:bg-gray-800 p-3.5 shadow-2xl shadow-black/15 dark:shadow-black/60">
               <div className="flex items-center gap-1.5">
-                <Lock className="h-3.5 w-3.5 text-amber-400" />
-                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300">Business</span>
-                <span className="ml-auto flex items-center gap-0.5 text-[9px] font-bold text-amber-400/90">
+                <Lock className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-300">Business</span>
+                <span className="ml-auto flex items-center gap-0.5 text-[9px] font-bold text-amber-500 dark:text-amber-400/90">
                   <Sparkles className="h-3 w-3" />
                   Premium
                 </span>
               </div>
-              <p className="mt-1.5 text-xs font-bold text-white">{item.name}</p>
-              <p className="mt-1 text-[10px] leading-relaxed text-gray-400">
+              <p className="mt-1.5 text-xs font-bold text-gray-900 dark:text-white">{item.name}</p>
+              <p className="mt-1 text-[10px] leading-relaxed text-gray-500 dark:text-gray-400">
                 {LOCKED_ITEM_DESCRIPTIONS[item.href] ?? 'Disponible en el plan Business.'}
               </p>
               <button
@@ -569,7 +569,7 @@ export function Sidebar() {
     return (
       <aside className="hidden md:flex flex-col w-64 h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white p-4 border-r border-gray-200 dark:border-gray-800">
         <div className="mb-4 flex justify-center">
-          <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="96px" className="h-9 w-auto object-contain dark:filter-none filter invert contrast-150" />
+          <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="96px" className="h-9 w-auto object-contain [filter:drop-shadow(0_0_1px_#000)_drop-shadow(0_0_1px_#000)_drop-shadow(0_0_0.5px_#000)] dark:[filter:none]" />
         </div>
         <div className="animate-pulse space-y-4">
           <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded" />
@@ -623,7 +623,7 @@ export function Sidebar() {
       >
         <div className="flex items-center justify-between mb-4">
           <div className="flex-1 flex justify-center">
-            <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="96px" className="h-9 w-auto object-contain dark:filter-none filter invert contrast-150" />
+            <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="96px" className="h-9 w-auto object-contain [filter:drop-shadow(0_0_1px_#000)_drop-shadow(0_0_1px_#000)_drop-shadow(0_0_0.5px_#000)] dark:[filter:none]" />
           </div>
           <button onClick={close} aria-label="Cerrar menú" className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400">
             <X className="h-5 w-5" />
@@ -645,7 +645,7 @@ export function Sidebar() {
       <aside className="hidden md:flex flex-col w-64 h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white p-4 border-r border-gray-200 dark:border-gray-800">
         <div className="mb-2">
           <div className="flex justify-center">
-            <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="96px" className="h-9 w-auto object-contain dark:filter-none filter invert contrast-150" />
+            <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="96px" className="h-9 w-auto object-contain [filter:drop-shadow(0_0_1px_#000)_drop-shadow(0_0_1px_#000)_drop-shadow(0_0_0.5px_#000)] dark:[filter:none]" />
           </div>
           {tenants && tenants.length > 0 && (
             <div className="relative mt-2">

@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useProducts } from '@/lib/hooks/useProducts';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
+import { fixResponse } from '@/lib/utils/encoding';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -44,7 +45,7 @@ export default function CodigosPage() {
         .select('id, name')
         .eq('tenant_id', tenantId)
         .order('name');
-      if (data) setCategories(data);
+      if (data) setCategories(fixResponse(data));
     })();
   }, [tenantId]);
 
@@ -89,8 +90,85 @@ export default function CodigosPage() {
   }, [qrs]);
 
   const handlePrint = useCallback(() => {
-    window.print();
-  }, []);
+    const cards = filtered.map((p) => {
+      const qrUrl = qrs.get(p.id);
+      const code = p.barcode || p.sku || p.id;
+      if (!qrUrl) return '';
+      return `
+        <div class="qr-card">
+          <img src="${qrUrl}" alt="QR ${p.name}" width="120" height="120" />
+          <p class="qr-name">${p.name.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+          <p class="qr-code">${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+        </div>
+      `;
+    }).join('');
+
+    const printWindow = window.open('', '_blank', 'width=800,height=600');
+    if (!printWindow) return;
+
+    printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Códigos QR - Vynko</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #fff;
+      color: #000;
+      padding: 12px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    .qr-card {
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      break-inside: avoid;
+    }
+    .qr-card img { width: 120px; height: 120px; }
+    .qr-name {
+      font-size: 11px;
+      font-weight: 600;
+      text-align: center;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 100%;
+    }
+    .qr-code {
+      font-size: 9px;
+      color: #6b7280;
+      font-family: monospace;
+      text-align: center;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 100%;
+    }
+    @media print {
+      @page { margin: 0.5cm; }
+      body { padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="grid">${cards}</div>
+  <script>
+    window.onafterprint = function() { window.close(); };
+    setTimeout(function() { window.print(); }, 300);
+  <\/script>
+</body>
+</html>`);
+    printWindow.document.close();
+  }, [filtered, qrs]);
 
   return (
     <div className="space-y-6">
@@ -153,15 +231,15 @@ export default function CodigosPage() {
           <p className="text-sm text-gray-500 mt-1">No hay productos que coincidan con la búsqueda.</p>
         </div>
       ) : (
-        <Card className="border border-gray-100 dark:border-gray-800 print:border-none print:shadow-none">
-          <div ref={printRef} className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 p-4 print:grid-cols-4">
+        <Card className="border border-gray-100 dark:border-gray-800">
+          <div ref={printRef} className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 p-4">
             {paginatedProducts.map((p) => {
               const qrUrl = qrs.get(p.id);
               const code = p.barcode || p.sku || p.id;
               return (
-                <Card key={p.id} className="p-4 flex flex-col items-center gap-3 border border-gray-100 dark:border-gray-800 print:border print:border-gray-300 print:shadow-none print:break-inside-avoid">
+                <Card key={p.id} className="p-4 flex flex-col items-center gap-3 border border-gray-100 dark:border-gray-800">
                   {qrUrl ? (
-                    <Image src={qrUrl} alt={`QR ${p.name}`} width={300} height={300} className="w-32 h-32 print:w-28 print:h-28" unoptimized />
+                    <Image src={qrUrl} alt={`QR ${p.name}`} width={300} height={300} className="w-32 h-32" unoptimized />
                   ) : (
                     <div className="w-32 h-32 flex items-center justify-center text-gray-300">
                       <Loader2 className="h-6 w-6 animate-spin" />
@@ -179,7 +257,7 @@ export default function CodigosPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => downloadQR(p.id, code)}
-                    className="w-full flex items-center justify-center gap-1.5 print:hidden"
+                    className="w-full flex items-center justify-center gap-1.5"
                   >
                     <Download className="h-3.5 w-3.5" />
                     Descargar
@@ -190,7 +268,7 @@ export default function CodigosPage() {
           </div>
 
           {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-gray-100 dark:border-gray-800 px-6 py-4 print:hidden">
+            <div className="flex items-center justify-between border-t border-gray-100 dark:border-gray-800 px-6 py-4">
               <span className="text-xs text-gray-500">
                 Página <strong>{currentPage}</strong> de <strong>{totalPages}</strong>
               </span>
@@ -238,13 +316,6 @@ export default function CodigosPage() {
           )}
         </Card>
       )}
-
-      <style>{`
-        @media print {
-          body { background: white; }
-          @page { margin: 0.5cm; }
-        }
-      `}</style>
     </div>
   );
 }
