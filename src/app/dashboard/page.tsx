@@ -506,6 +506,7 @@ export default function DashboardPage() {
           pendingOrders={pendingOrders}
           tenantId={tenant?.id ?? ''}
           allTenants={allTenants}
+          loading={productsLoading}
           onboarding={{
             hasProducts: productCount > 0,
             hasSales: !!monthlyData && monthlyData.saleCount > 0,
