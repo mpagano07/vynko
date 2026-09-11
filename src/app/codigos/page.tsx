@@ -6,6 +6,7 @@ import { useProducts } from '@/lib/hooks/useProducts';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
 import { fixResponse } from '@/lib/utils/encoding';
+import { matchesQuery } from '@/lib/utils/text';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -68,8 +69,10 @@ export default function CodigosPage() {
   }, [products]);
 
   const filtered = (products || []).filter((p) => {
-    const q = searchTerm.toLowerCase();
-    const matchesSearch = !q || p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q) || p.barcode?.toLowerCase().includes(q);
+    const matchesSearch = !searchTerm ||
+      matchesQuery(p.name, searchTerm) ||
+      matchesQuery(p.sku, searchTerm) ||
+      matchesQuery(p.barcode, searchTerm);
     const matchesCat = selectedCategoryId === 'all' || p.category_id === selectedCategoryId;
     return matchesSearch && matchesCat;
   });

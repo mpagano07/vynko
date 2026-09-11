@@ -93,6 +93,12 @@ function mockSuccessfulEndpoints() {
         ],
       });
     }
+    if (url.includes('/api/products')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => [{ id: 'p1', name: 'Coca', stock: 2, min_stock: 5 }],
+      });
+    }
     return Promise.resolve({ ok: false, json: async () => ({}) });
   });
 }
@@ -250,6 +256,6 @@ describe('DashboardPage: desglose multi-sucursal', () => {
     expect(centralRow).toBeTruthy();
     expect(norteRow).toBeTruthy();
 
-    expect(fetchHandler).toHaveBeenCalledTimes(8); // 4 endpoints x 2 sucursales
+    expect(fetchHandler).toHaveBeenCalledTimes(10); // 5 endpoints x 2 sucursales
   });
 });

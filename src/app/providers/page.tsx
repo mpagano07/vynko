@@ -25,6 +25,7 @@ import type { Supplier, PurchaseOrder } from '@/lib/types/supplier';
 import type { CommercialDocument } from '@/lib/types/document';
 import type { Product } from '@/lib/types/product';
 import { formatARS } from '@/lib/utils/currency';
+import { matchesQuery } from '@/lib/utils/text';
 
 export default function ProvidersPage() {
   const router = useRouter();
@@ -238,9 +239,9 @@ export default function ProvidersPage() {
   };
 
   const filteredSuppliers = suppliers.filter((s) =>
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.contact_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.email?.toLowerCase().includes(searchTerm.toLowerCase())
+    matchesQuery(s.name, searchTerm) ||
+    matchesQuery(s.contact_name, searchTerm) ||
+    matchesQuery(s.email, searchTerm)
   );
 
   const openSupplierModal = (supplier: Supplier | null = null) => {
