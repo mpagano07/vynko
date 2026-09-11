@@ -440,7 +440,7 @@ export default function SalesPage() {
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
           Busca productos, arma el carrito y confirma la venta.
         </p>
-        <div className="flex flex-wrap items-center gap-2 mt-2.5">
+        <div className="hidden md:flex flex-wrap items-center gap-2 mt-2.5">
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
             <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-[11px] shadow-xs">F2</kbd>
             Buscar producto
