@@ -129,6 +129,15 @@ export function hasStoredSession(): boolean {
   }
 }
 
+function sameTenantsList(a: TenantInfo[] | null, b: TenantInfo[]): boolean {
+  if (!a) return false;
+  if (a.length !== b.length) return false;
+  return a.every((t, i) => {
+    const u = b[i];
+    return u && t.id === u.id && t.name === u.name && t.subscription_plan === u.subscription_plan && t.subscription_status === u.subscription_status;
+  });
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
     promise,
@@ -229,6 +238,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const activeFetchRef = useRef<Promise<void> | null>(null);
   const lastFetchedUserIdRef = useRef<string | null>(null);
+  // Snapshot de los últimos datos aplicados al estado. Sirve para comparar antes
+  // de setState y así no recrear referencias de `tenants`/`tenant`/`profile`
+  // cuando los datos no cambiaron (p.ej. al volver a la pestaña el navegador
+  // re-emite SIGNED_IN/TOKEN_REFRESHED con el mismo usuario).
+  const lastLoadedRef = useRef<{
+    profileId: string | null;
+    profileEmail: string | null;
+    tenantId: string | null;
+    tenantName: string | null;
+    tenantPlan: string | null;
+    tenantStatus: string | null;
+    role: string | null;
+    allTenants: boolean;
+    tenants: TenantInfo[];
+  } | null>(null);
   // True once a session has been established through onAuthStateChange. Guards
   // the initial getSessionWithRetry() against clobbering that session when it
   // finally resolves (e.g. after timing out on a stale-cookie refresh that the
@@ -309,6 +333,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           };
         }
 
+        const appliedTenant = isAll ? null : currentTenant;
+        const nextSnapshot = {
+          profileId: (data.profile as UserProfile | null)?.id ?? null,
+          profileEmail: (data.profile as UserProfile | null)?.email ?? null,
+          tenantId: appliedTenant?.id ?? null,
+          tenantName: appliedTenant?.name ?? null,
+          tenantPlan: appliedTenant?.subscription_plan ?? null,
+          tenantStatus: appliedTenant?.subscription_status ?? null,
+          role: (data.role as string | null) ?? null,
+          allTenants: isAll,
+          tenants: tenantsList,
+        };
+
+        const sameData =
+          lastLoadedRef.current &&
+          lastLoadedRef.current.profileId === nextSnapshot.profileId &&
+          lastLoadedRef.current.profileEmail === nextSnapshot.profileEmail &&
+          lastLoadedRef.current.tenantId === nextSnapshot.tenantId &&
+          lastLoadedRef.current.tenantName === nextSnapshot.tenantName &&
+          lastLoadedRef.current.tenantPlan === nextSnapshot.tenantPlan &&
+          lastLoadedRef.current.tenantStatus === nextSnapshot.tenantStatus &&
+          lastLoadedRef.current.role === nextSnapshot.role &&
+          lastLoadedRef.current.allTenants === nextSnapshot.allTenants &&
+          sameTenantsList(lastLoadedRef.current.tenants, nextSnapshot.tenants);
+
+        if (sameData) {
+          // Los datos ya estaban aplicados al estado; no recrear referencias
+          // de arrays/objetos o los efectos de las páginas (que dependen de
+          // `tenants`, `tenant`...) volverían a disparar sus fetches.
+          lastFetchedUserIdRef.current = session.user.id;
+          return;
+        }
+        lastLoadedRef.current = nextSnapshot;
+
         setProfile(data.profile);
         setTenant(isAll ? null : currentTenant);
         setTenants(tenantsList);
@@ -350,6 +408,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAllTenants(false);
     activeFetchRef.current = null;
     lastFetchedUserIdRef.current = null;
+    lastLoadedRef.current = null;
     clearStoredAuthStorage();
     void globalMutate(() => true, undefined, { revalidate: false });
     try {
@@ -443,13 +502,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             lastFetchedUserIdRef.current = null;
             void globalMutate(() => true, undefined, { revalidate: false });
           }
-          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || userChanged) {
+          // Al volver a la pestaña del navegador, Supabase puede re-emitir
+          // SIGNED_IN/INITIAL_SESSION/TOKEN_REFRESHED con la MISMA sesión (el
+          // usuario no cambió). Solo se hace el load completo cuando realmente
+          // hubo un cambio de cuenta o aún no se cargó el perfil/tenant.
+          const needReload = userChanged || !lastFetchedUserIdRef.current;
+          if (needReload) {
             setLoading(true);
             await loadProfileAndTenant();
-            // If a TOKEN_REFRESHED fired but we still have no profile, the
-            // refresh token likely expired server-side. Force logout so the
-            // user doesn't see a blank/loading screen.
-            if (event === 'TOKEN_REFRESHED' && !lastFetchedUserIdRef.current) {
+            // Si tras el reload seguimos sin perfil y la sesión aún no es
+            // válida, forzar logout en lugar de dejar la pantalla en blanco.
+            if (!lastFetchedUserIdRef.current && event === 'TOKEN_REFRESHED') {
               void logout();
             }
           }
@@ -462,6 +525,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setRole(null);
           setAllTenants(false);
           lastFetchedUserIdRef.current = null;
+          lastLoadedRef.current = null;
           activeFetchRef.current = null;
         }
 
