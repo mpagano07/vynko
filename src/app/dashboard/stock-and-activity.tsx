@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Clock } from 'lucide-react';
+import OnboardingChecklist from '@/components/dashboard/OnboardingChecklist';
 
 function timeAgo(dateStr: string): string {
   const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
@@ -74,11 +75,18 @@ export default function StockAndActivity({
   pendingOrders,
   tenantId,
   allTenants,
+  onboarding,
 }: {
   criticalProducts: CriticalProduct[];
   pendingOrders: PendingOrder[];
   tenantId: string;
   allTenants?: boolean;
+  onboarding?: {
+    hasProducts: boolean;
+    hasSales: boolean;
+    hasAlerts: boolean;
+    userId?: string;
+  };
 }) {
   const router = useRouter();
   const { role } = useAuth();
@@ -131,6 +139,42 @@ export default function StockAndActivity({
     })();
     return () => { cancelled = true; };
   }, [tenantId, getHeaders, allTenants, canViewActivity]);
+
+  const activityPanel = (
+    <div>
+      <h2 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Actividad reciente</h2>
+      {activityLoading ? (
+        <div className="space-y-2">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-10 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
+          ))}
+        </div>
+      ) : recentActivity.length === 0 ? (
+        <Card className="p-6 flex items-center gap-3">
+          <Clock className="h-4 w-4 text-gray-400" />
+          <p className="text-sm text-gray-500">Sin actividad</p>
+        </Card>
+      ) : (
+        <div className="space-y-1">
+          {recentActivity.slice(0, 5).map((log) => {
+            const info = actionInfo(log.action, log.entity_type, log.details || {});
+            return (
+              <div key={log.id} className="flex items-start gap-2.5 py-2 px-2 rounded-lg">
+                <span className="text-sm mt-px">{info.emoji}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium text-gray-900 dark:text-white">{info.label}</p>
+                  {info.detail && (
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{info.detail}</p>
+                  )}
+                </div>
+                <span className="text-[10px] text-gray-400 whitespace-nowrap mt-0.5">{timeAgo(log.created_at)}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -225,36 +269,17 @@ export default function StockAndActivity({
       </div>
 
       <div>
-        <h2 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Actividad reciente</h2>
-        {activityLoading ? (
-          <div className="space-y-2">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-10 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
-            ))}
-          </div>
-        ) : recentActivity.length === 0 ? (
-          <Card className="p-6 flex items-center gap-3">
-            <Clock className="h-4 w-4 text-gray-400" />
-            <p className="text-sm text-gray-500">Sin actividad</p>
-          </Card>
+        {onboarding ? (
+          <OnboardingChecklist
+            hasProducts={onboarding.hasProducts}
+            hasSales={onboarding.hasSales}
+            hasAlerts={onboarding.hasAlerts}
+            hasPendingOrders={pendingOrders.length > 0}
+            userId={onboarding.userId}
+            fallback={activityPanel}
+          />
         ) : (
-          <div className="space-y-1">
-            {recentActivity.slice(0, 5).map((log) => {
-              const info = actionInfo(log.action, log.entity_type, log.details || {});
-              return (
-                <div key={log.id} className="flex items-start gap-2.5 py-2 px-2 rounded-lg">
-                  <span className="text-sm mt-px">{info.emoji}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-gray-900 dark:text-white">{info.label}</p>
-                    {info.detail && (
-                      <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{info.detail}</p>
-                    )}
-                  </div>
-                  <span className="text-[10px] text-gray-400 whitespace-nowrap mt-0.5">{timeAgo(log.created_at)}</span>
-                </div>
-              );
-            })}
-          </div>
+          activityPanel
         )}
       </div>
     </div>

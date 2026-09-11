@@ -14,7 +14,6 @@ import { formatARS } from '@/lib/utils/currency';
 import Link from 'next/link';
 import dynamicImport from 'next/dynamic';
 import { LazyMount } from '@/components/ui/lazy-mount';
-import OnboardingChecklist from '@/components/dashboard/OnboardingChecklist';
 
 const chartSkeleton = (
   <div className="h-24 bg-gray-100 dark:bg-gray-800 animate-pulse rounded" />
@@ -365,16 +364,6 @@ export default function DashboardPage() {
         )}
       </Link>
 
-      {!isLoading && (
-        <OnboardingChecklist
-          hasProducts={productCount > 0}
-          hasSales={!!monthlyData && monthlyData.saleCount > 0}
-          hasAlerts={alertsConfigured}
-          hasPendingOrders={pendingOrders.length > 0}
-          userId={profile?.id}
-        />
-      )}
-
       {loadError && !isLoading && (
         <div className="flex items-center justify-between px-4 py-3 rounded-lg border border-red-300 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 text-sm">
           <span className="text-red-700 dark:text-red-300">
@@ -512,7 +501,18 @@ export default function DashboardPage() {
       )}
 
       <LazyMount fallback={stockSkeleton}>
-        <StockAndActivity criticalProducts={criticalProducts} pendingOrders={pendingOrders} tenantId={tenant?.id ?? ''} allTenants={allTenants} />
+        <StockAndActivity
+          criticalProducts={criticalProducts}
+          pendingOrders={pendingOrders}
+          tenantId={tenant?.id ?? ''}
+          allTenants={allTenants}
+          onboarding={{
+            hasProducts: productCount > 0,
+            hasSales: !!monthlyData && monthlyData.saleCount > 0,
+            hasAlerts: alertsConfigured,
+            userId: profile?.id,
+          }}
+        />
       </LazyMount>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">

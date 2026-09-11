@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Settings, User, Building2, Loader2, Save, KeyRound, Users, Mail, X, Shield, ShieldCheck, FileText, MapPin, Palette } from 'lucide-react';
+import { Settings, User, Building2, Loader2, Save, KeyRound, Users, Mail, X, Shield, ShieldCheck, FileText, MapPin, Palette, ListChecks } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Select } from '@/components/ui/select';
 import toast from 'react-hot-toast';
@@ -441,6 +441,31 @@ export default function SettingsPage() {
                 <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Tema</span>
               </div>
               <ThemeToggle />
+            </div>
+          </Card>
+
+          <Card className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ListChecks className="h-5 w-5 text-cyan-500" />
+                <div>
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Guía de primeros pasos</span>
+                  <p className="text-[11px] text-gray-400">Mostrar la guía de configuración en el panel de control.</p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!user?.id}
+                onClick={() => {
+                  try {
+                    localStorage.setItem(`vynko_onboarding_force_show_${user!.id}`, 'true');
+                  } catch { /* noop */ }
+                  toast.success('Guía reactivada. Volvé al dashboard.');
+                }}
+              >
+                Mostrar
+              </Button>
             </div>
           </Card>
         </div>

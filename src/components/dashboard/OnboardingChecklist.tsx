@@ -10,6 +10,7 @@ interface OnboardingChecklistProps {
   hasAlerts: boolean;
   hasPendingOrders: boolean;
   userId?: string;
+  fallback?: React.ReactNode;
 }
 
 interface Step {
@@ -22,17 +23,32 @@ interface Step {
 }
 
 const DISMISS_KEY = 'vynko_onboarding_dismissed';
+const FORCE_SHOW_KEY = 'vynko_onboarding_force_show';
 
-export default function OnboardingChecklist({ hasProducts, hasSales, hasAlerts, hasPendingOrders, userId }: OnboardingChecklistProps) {
-  const dismissKey = userId ? `${DISMISS_KEY}_${userId}` : DISMISS_KEY;
-  const [dismissed, setDismissed] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    try {
-      return localStorage.getItem(dismissKey) === 'true';
-    } catch { return false; }
-  });
+function readDismissed(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === 'true';
+  } catch { return false; }
+}
+
+export default function OnboardingChecklist({ hasProducts, hasSales, hasAlerts, hasPendingOrders, userId, fallback }: OnboardingChecklistProps) {
+  const dismissKey = userId ? `${DISMISS_KEY}_${userId}` : null;
+  const forceShowKey = userId ? `${FORCE_SHOW_KEY}_${userId}` : null;
+
+  const [dismissed, setDismissed] = useState<boolean>(false);
+  const [forceShow, setForceShow] = useState<boolean>(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDismissed(dismissKey ? readDismissed(dismissKey) : false);
+  }, [dismissKey]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setForceShow(forceShowKey ? readDismissed(forceShowKey) : false);
+  }, [forceShowKey]);
 
   useEffect(() => {
     if (!confirmOpen) return;
@@ -91,13 +107,15 @@ export default function OnboardingChecklist({ hasProducts, hasSales, hasAlerts, 
   const allDone = completedCount === steps.length;
   const progress = Math.round((completedCount / steps.length) * 100);
 
-  if (dismissed || allDone) return null;
+  if ((dismissed || allDone) && !forceShow) return fallback ?? null;
 
   const handleAccept = () => {
     setConfirmOpen(false);
     setDismissed(true);
+    setForceShow(false);
     try {
-      localStorage.setItem(dismissKey, 'true');
+      if (dismissKey) localStorage.setItem(dismissKey, 'true');
+      if (forceShowKey) localStorage.removeItem(forceShowKey);
     } catch { /* noop */ }
   };
 
