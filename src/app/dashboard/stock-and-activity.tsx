@@ -76,6 +76,7 @@ export default function StockAndActivity({
   tenantId,
   allTenants,
   onboarding,
+  loading,
 }: {
   criticalProducts: CriticalProduct[];
   pendingOrders: PendingOrder[];
@@ -87,6 +88,7 @@ export default function StockAndActivity({
     hasAlerts: boolean;
     userId?: string;
   };
+  loading?: boolean;
 }) {
   const router = useRouter();
   const { role } = useAuth();
@@ -276,6 +278,7 @@ export default function StockAndActivity({
             hasAlerts={onboarding.hasAlerts}
             hasPendingOrders={pendingOrders.length > 0}
             userId={onboarding.userId}
+            loading={loading}
             fallback={activityPanel}
           />
         ) : (

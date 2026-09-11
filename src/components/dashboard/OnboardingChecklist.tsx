@@ -10,6 +10,7 @@ interface OnboardingChecklistProps {
   hasAlerts: boolean;
   hasPendingOrders: boolean;
   userId?: string;
+  loading?: boolean;
   fallback?: React.ReactNode;
 }
 
@@ -31,24 +32,25 @@ function readDismissed(key: string): boolean {
   } catch { return false; }
 }
 
-export default function OnboardingChecklist({ hasProducts, hasSales, hasAlerts, hasPendingOrders, userId, fallback }: OnboardingChecklistProps) {
+export default function OnboardingChecklist({ hasProducts, hasSales, hasAlerts, hasPendingOrders, userId, loading, fallback }: OnboardingChecklistProps) {
   const dismissKey = userId ? `${DISMISS_KEY}_${userId}` : null;
   const forceShowKey = userId ? `${FORCE_SHOW_KEY}_${userId}` : null;
 
-  const [dismissed, setDismissed] = useState<boolean>(false);
-  const [forceShow, setForceShow] = useState<boolean>(false);
+  const [prevDismissKey, setPrevDismissKey] = useState<string | null>(dismissKey);
+  const [prevForceShowKey, setPrevForceShowKey] = useState<string | null>(forceShowKey);
+  const [dismissed, setDismissed] = useState<boolean>(() => dismissKey ? readDismissed(dismissKey) : false);
+  const [forceShow, setForceShow] = useState<boolean>(() => forceShowKey ? readDismissed(forceShowKey) : false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+  if (prevDismissKey !== dismissKey) {
+    setPrevDismissKey(dismissKey);
     setDismissed(dismissKey ? readDismissed(dismissKey) : false);
-  }, [dismissKey]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+  }
+  if (prevForceShowKey !== forceShowKey) {
+    setPrevForceShowKey(forceShowKey);
     setForceShow(forceShowKey ? readDismissed(forceShowKey) : false);
-  }, [forceShowKey]);
+  }
 
   useEffect(() => {
     if (!confirmOpen) return;
@@ -107,6 +109,7 @@ export default function OnboardingChecklist({ hasProducts, hasSales, hasAlerts, 
   const allDone = completedCount === steps.length;
   const progress = Math.round((completedCount / steps.length) * 100);
 
+  if (loading) return fallback ?? null;
   if ((dismissed || allDone) && !forceShow) return fallback ?? null;
 
   const handleAccept = () => {
