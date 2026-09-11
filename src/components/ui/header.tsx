@@ -6,7 +6,6 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { cn } from '@/lib/utils/cn';
 import { Menu, Building2 } from 'lucide-react';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
-import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 export function Header() {
   const pathname = usePathname();
@@ -43,7 +42,6 @@ export function Header() {
       </div>
 
       <div className="flex items-center space-x-2">
-        <ThemeToggle />
         {(profile || user) ? (
           <div className="relative">
             <button
