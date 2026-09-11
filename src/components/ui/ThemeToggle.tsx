@@ -30,26 +30,30 @@ export function ThemeToggle({ className }: { className?: string }) {
 
   if (!mounted) {
     return (
-      <div className={cn('h-9 w-9 rounded-lg border border-gray-200 dark:border-gray-800 bg-transparent', className)} />
+      <div className={cn('h-6 w-11 rounded-full bg-gray-200 dark:bg-gray-700', className)} />
     );
   }
 
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={theme === 'dark'}
       onClick={toggleTheme}
-      aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-      title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
       className={cn(
-        'relative inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors',
+        'relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2',
+        theme === 'dark' ? 'bg-indigo-600' : 'bg-gray-300',
         className
       )}
     >
-      {theme === 'dark' ? (
-        <Sun className="h-4 w-4 text-amber-400 transition-transform rotate-0 scale-100" />
-      ) : (
-        <Moon className="h-4 w-4 text-gray-700 transition-transform rotate-0 scale-100" />
-      )}
+      <Sun className="absolute left-1 h-3.5 w-3.5 text-amber-400" />
+      <Moon className="absolute right-1 h-3.5 w-3.5 text-gray-600" />
+      <span
+        className={cn(
+          'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md ring-0 transition-transform duration-300 ease-in-out',
+          theme === 'dark' ? 'translate-x-[22px]' : 'translate-x-[2px]'
+        )}
+      />
     </button>
   );
 }

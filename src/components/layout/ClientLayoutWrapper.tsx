@@ -59,30 +59,13 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
 
   // Register the service worker so mobile browsers (Chrome/Android) treat the
   // site as an installable PWA and show the "Add to Home Screen" banner.
-  // Si un navegador tenía el SW anterior cacheando una UI vieja, `clients.claim()`
-  // del sw.js dispara `controllerchange` al tomar control y recargamos una sola
-  // vez para servirse siempre del build recién desplegado. Sin esto, un usuario
-  // que quedó con el SW anterior veía botones inertes (UI sin hidratar).
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (!('serviceWorker' in navigator)) return;
 
-    let reloadedOnControl = false;
-
     const registerSW = async () => {
       try {
         await navigator.serviceWorker.register('/sw.js');
-        // Solo para navegadores que YA tenían un SW controlando (UI vieja
-        // cachada). Al activarse el SW nuevo, `clients.claim()` dispara
-        // `controllerchange` y recargamos una sola vez para servir el build
-        // recién desplegado. La primera visita (sin SW previo) no recarga.
-        if (navigator.serviceWorker.controller) {
-          navigator.serviceWorker.addEventListener('controllerchange', () => {
-            if (reloadedOnControl) return;
-            reloadedOnControl = true;
-            window.location.reload();
-          });
-        }
       } catch (err) {
         console.warn('Service worker registration failed', err);
       }
