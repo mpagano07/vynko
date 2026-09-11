@@ -1,3 +1,5 @@
+import { matchesQuery } from '@/lib/utils/text';
+
 export type StockFilter = 'all' | 'critical' | 'low' | 'normal';
 
 export interface SearchableProduct {
@@ -16,11 +18,10 @@ export interface ProductFilters {
 }
 
 export function matchesSearch(product: SearchableProduct, searchTerm: string): boolean {
-  const term = searchTerm.toLowerCase();
   return Boolean(
-    product.name?.toLowerCase().includes(term) ||
-      product.sku?.toLowerCase().includes(term) ||
-      product.barcode?.toLowerCase().includes(term)
+    matchesQuery(product.name, searchTerm) ||
+      matchesQuery(product.sku, searchTerm) ||
+      matchesQuery(product.barcode, searchTerm)
   );
 }
 

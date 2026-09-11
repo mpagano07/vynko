@@ -14,6 +14,7 @@ import { formatARS } from '@/lib/utils/currency';
 import Link from 'next/link';
 import dynamicImport from 'next/dynamic';
 import { LazyMount } from '@/components/ui/lazy-mount';
+import OnboardingChecklist from '@/components/dashboard/OnboardingChecklist';
 
 const chartSkeleton = (
   <div className="h-24 bg-gray-100 dark:bg-gray-800 animate-pulse rounded" />
@@ -115,6 +116,8 @@ export default function DashboardPage() {
   const [perTenant, setPerTenant] = useState<Record<string, PerTenantData>>({});
   const [loadError, setLoadError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [productCount, setProductCount] = useState(0);
+  const [alertsConfigured, setAlertsConfigured] = useState(false);
 
   useEffect(() => {
     if (authLoading || !isAuthenticated) return;
@@ -157,13 +160,16 @@ export default function DashboardPage() {
           let allPrevTotal = 0;
           let allCritical: { id: string; name: string; stock: number; min_stock: number }[] = [];
           let allPending: PendingOrder[] = [];
+          let totalProductCount = 0;
+          let alertsConfiguredCount = 0;
 
           for (const t of tenants) {
-            const [sales, monthly, critical, pending] = await Promise.all([
+            const [sales, monthly, critical, pending, products] = await Promise.all([
               fetchWithTenant(`/api/sales?today=true&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, t.id),
               fetchWithTenant('/api/sales/monthly', t.id),
               fetchWithTenant('/api/products/critical', t.id),
               fetchWithTenant('/api/purchase-orders/pending', t.id),
+              fetchWithTenant('/api/products', t.id),
             ]);
             if (!sales || !monthly || !critical || !pending) failed = true;
 
@@ -172,6 +178,10 @@ export default function DashboardPage() {
             const md = monthly as MonthlyData | null;
             const cp = (critical as CriticalProduct[] || []);
             const po = (pending as PendingOrder[] || []);
+            if (Array.isArray(products)) {
+              totalProductCount += products.length;
+              alertsConfiguredCount += products.filter((p) => (p.min_stock ?? 0) > 0 || (p.max_stock ?? 0) > 0).length;
+            }
 
             allSalesTotal += todayTotal;
             allSalesCount += saleCount;
@@ -206,6 +216,8 @@ export default function DashboardPage() {
               });
               setCriticalProducts(allCritical);
               setPendingOrders(allPending);
+              setProductCount(totalProductCount);
+              setAlertsConfigured(alertsConfiguredCount > 0);
               setProductsLoading(false);
             });
           }
@@ -214,15 +226,27 @@ export default function DashboardPage() {
           const headers: Record<string, string> = {};
           if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
 
-          const [salesRes, monthlyRes, criticalRes, pendingRes] = await Promise.all([
+          const [salesRes, monthlyRes, criticalRes, pendingRes, productsRes] = await Promise.all([
             fetch(`/api/sales?today=true&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, { headers }),
             fetch('/api/sales/monthly', { headers }),
             fetch('/api/products/critical', { headers }),
             fetch('/api/purchase-orders/pending', { headers }),
+            fetch('/api/products', { headers }),
           ]);
 
           if (cancelled) return;
           if (!salesRes.ok || !monthlyRes.ok || !criticalRes.ok || !pendingRes.ok) failed = true;
+
+          if (productsRes.ok) {
+            const prods = await productsRes.json();
+            const list = Array.isArray(prods) ? prods as Record<string, unknown>[] : [];
+            if (!cancelled) {
+              startTransition(() => {
+                setProductCount(list.length);
+                setAlertsConfigured(list.some((p) => Number(p.min_stock) > 0 || Number(p.max_stock) > 0));
+              });
+            }
+          }
 
           if (salesRes.ok) {
             const sales: Record<string, unknown>[] = await salesRes.json();
@@ -340,6 +364,16 @@ export default function DashboardPage() {
           </span>
         )}
       </Link>
+
+      {!isLoading && (
+        <OnboardingChecklist
+          hasProducts={productCount > 0}
+          hasSales={!!monthlyData && monthlyData.saleCount > 0}
+          hasAlerts={alertsConfigured}
+          hasPendingOrders={pendingOrders.length > 0}
+          userId={profile?.id}
+        />
+      )}
 
       {loadError && !isLoading && (
         <div className="flex items-center justify-between px-4 py-3 rounded-lg border border-red-300 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 text-sm">

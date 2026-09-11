@@ -23,6 +23,7 @@ import {
   X,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
+import { matchesQuery } from '@/lib/utils/text';
 import type {
   CommercialDocument,
   DocumentType,
@@ -208,9 +209,9 @@ export default function DocumentosPage() {
     return documents.filter(doc => {
       const matchesType = doc.document_type === typeFilter;
       const matchesSearch = !search ||
-        doc.customer_name.toLowerCase().includes(search.toLowerCase()) ||
-        String(doc.document_number).includes(search) ||
-        doc.supplier_name?.toLowerCase().includes(search.toLowerCase());
+        matchesQuery(doc.customer_name, search) ||
+        matchesQuery(String(doc.document_number), search) ||
+        matchesQuery(doc.supplier_name, search);
       const matchesStatus = statusFilter === 'all' || doc.status === statusFilter;
       return matchesType && matchesSearch && matchesStatus;
     });
@@ -219,8 +220,8 @@ export default function DocumentosPage() {
   const filteredOrders = useMemo(() => {
     return purchaseOrders.filter(order => {
       const matchesSearch = !search ||
-        order.supplier_name?.toLowerCase().includes(search.toLowerCase()) ||
-        order.id.toLowerCase().includes(search.toLowerCase());
+        matchesQuery(order.supplier_name, search) ||
+        matchesQuery(order.id, search);
       const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
       return matchesSearch && matchesStatus;
     });

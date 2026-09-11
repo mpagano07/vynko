@@ -15,6 +15,7 @@ import {
   Loader2, Search, X, CalendarDays, ClipboardList, BarChart3
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
+import { matchesQuery } from '@/lib/utils/text';
 
 const reasonOptions = [
   { value: 'damaged', label: 'Dañado', color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30' },
@@ -147,7 +148,7 @@ export default function LossPreventionPage() {
   ).sort(([, a], [, b]) => b - a).slice(0, 5);
 
   const filtered = history.filter(h =>
-    !search || h.productName.toLowerCase().includes(search.toLowerCase())
+    !search || matchesQuery(h.productName, search)
   );
 
   return (

@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import { getTenantHeaders } from '@/lib/fetchWithTenant';
+import { matchesQuery } from '@/lib/utils/text';
 import type { Customer } from '@/lib/types/sale';
 
 interface CartItem {
@@ -166,9 +167,9 @@ export default function SalesPage() {
 
   const filteredProducts = products.filter(
     (p) =>
-      p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-      (p.barcode && p.barcode.includes(productSearch)) ||
-      (p.sku && p.sku.toLowerCase().includes(productSearch.toLowerCase()))
+      matchesQuery(p.name, productSearch) ||
+      matchesQuery(p.barcode, productSearch) ||
+      matchesQuery(p.sku, productSearch)
   );
 
   const sortedProducts = useMemo(() => {

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { Search, Plus, Edit, Trash2, Users, X, Loader2, ShoppingBag, DollarSign, CalendarDays } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
+import { matchesQuery } from '@/lib/utils/text';
 import toast from 'react-hot-toast';
 
 interface Customer {
@@ -149,9 +150,9 @@ export default function CustomersPage() {
   };
 
   const filtered = customers.filter(c =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.email?.toLowerCase().includes(search.toLowerCase()) ||
-    c.phone?.includes(search)
+    matchesQuery(c.name, search) ||
+    matchesQuery(c.email, search) ||
+    matchesQuery(c.phone, search)
   );
 
   return (

@@ -36,6 +36,7 @@ import {
 import { formatARS } from '@/lib/utils/currency';
 import { getTenantHeaders } from '@/lib/fetchWithTenant';
 import { filterProducts } from '@/lib/product-search';
+import { matchesQuery } from '@/lib/utils/text';
 import { TransferInbox } from '@/components/transfers/TransferInbox';
 
 function marginPercent(price: number, cost: number): number {
@@ -1531,14 +1532,13 @@ function NewTransferModal({
 
   const searchResults = React.useMemo(() => {
     if (!searchTerm.trim()) return [];
-    const term = searchTerm.toLowerCase();
     const alreadyAdded = new Set(items.map(i => i.product_id));
     return allProducts.filter(p => {
       if (alreadyAdded.has(p.id)) return false;
       return (
-        p.name?.toLowerCase().includes(term) ||
-        p.sku?.toLowerCase().includes(term) ||
-        p.barcode?.toLowerCase().includes(term)
+        matchesQuery(p.name, searchTerm) ||
+        matchesQuery(p.sku, searchTerm) ||
+        matchesQuery(p.barcode, searchTerm)
       );
     }).slice(0, 8);
   }, [searchTerm, allProducts, items]);

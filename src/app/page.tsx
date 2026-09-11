@@ -13,6 +13,24 @@ import { SALES_EMAIL } from '@/lib/tenant-config';
 
 import { formatARS } from '@/lib/utils/currency';
 
+const DemoSales = dynamic(() => import('@/components/landing/DemoSales'), {
+  ssr: false,
+  loading: () => (
+    <div className="bg-gray-900/80 border border-gray-800 rounded-2xl p-12 text-center">
+      <div className="h-8 w-48 bg-gray-800 animate-pulse rounded mx-auto" />
+    </div>
+  ),
+});
+
+const ROICalculator = dynamic(() => import('@/components/landing/ROICalculator'), {
+  ssr: false,
+  loading: () => (
+    <div className="bg-gray-900/80 border border-gray-800 rounded-2xl p-12 text-center">
+      <div className="h-8 w-48 bg-gray-800 animate-pulse rounded mx-auto" />
+    </div>
+  ),
+});
+
 const DashboardPreviewChart = dynamic(() => import('@/components/landing/DashboardPreviewChart'), {
   ssr: false,
   loading: () => (
@@ -260,6 +278,23 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Interactive Demo Section */}
+      <section className="py-20 bg-gray-900/30" id="demo">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-medium mb-4">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              Prueba ahora — sin registro
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-bold">Probá Vynko <span className="text-cyan-400">en acción</span></h2>
+            <p className="mt-4 text-gray-400 max-w-lg mx-auto">Sumá productos al carrito, simulá una venta y experimentá la interfaz. Sin crear cuenta, sin compromiso.</p>
+          </div>
+          <div className="max-w-5xl mx-auto">
+            <DemoSales />
+          </div>
+        </div>
+      </section>
+
       {/* Comparison Section */}
       <section className="py-20" id="features">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -335,6 +370,19 @@ export default function LandingPage() {
                 <p className="text-sm text-gray-400 leading-relaxed">{f.desc}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ROI Calculator Section */}
+      <section className="py-20 bg-gray-950" id="roi">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl font-bold">¿Cuánto <span className="text-cyan-400">podés ahorrar</span>?</h2>
+            <p className="mt-4 text-gray-400">Ingresá los datos de tu negocio y calculá el impacto real.</p>
+          </div>
+          <div className="max-w-4xl mx-auto">
+            <ROICalculator />
           </div>
         </div>
       </section>
@@ -520,6 +568,19 @@ export default function LandingPage() {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Sticky Mobile CTA */}
+      {isMounted && !user && !hasSession && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden border-t border-gray-800/50 bg-gray-950/95 backdrop-blur-xl px-4 py-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+          <Link
+            href="/auth/signup"
+            className="flex items-center justify-center gap-2 w-full py-3.5 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl text-sm transition-colors shadow-lg shadow-cyan-500/20"
+          >
+            Comenzar gratis — 45 días de prueba
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+          </Link>
         </div>
       )}
     </div>
