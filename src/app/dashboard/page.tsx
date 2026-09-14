@@ -316,7 +316,7 @@ export default function DashboardPage() {
   const tenantName = allTenants ? 'Todas las sucursales' : tenant?.name;
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6 max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 min-h-[48px]">
         <div>
           <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
