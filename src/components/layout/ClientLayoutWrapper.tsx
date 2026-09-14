@@ -139,7 +139,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
       <div className="flex flex-row flex-1 min-h-screen w-full">
         {/* Sidebar: on mobile it's an absolutely positioned drawer, on desktop it's in-flow */}
         <React.Suspense fallback={
-          <aside className="hidden md:flex flex-col w-64 h-screen bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex-shrink-0 p-4">
+          <aside className="hidden md:flex flex-col w-[207px] h-screen bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex-shrink-0 p-2">
             <div className="mb-8 h-8 w-20 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
             <div className="space-y-3">
               <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />

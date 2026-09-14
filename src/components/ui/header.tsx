@@ -4,13 +4,14 @@ import { useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { cn } from '@/lib/utils/cn';
-import { Menu, Building2 } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
+import { TenantSwitcher } from '@/components/ui/tenant-switcher';
 
 export function Header() {
   const pathname = usePathname();
   const router = useRouter();
-  const { profile, tenant, user, logout } = useAuth();
+  const { profile, tenants, user, logout } = useAuth();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const { toggle: toggleSidebar } = useSidebar();
 
@@ -33,10 +34,9 @@ export function Header() {
         >
           <Menu className="h-5 w-5 text-gray-500 dark:text-gray-400" />
         </button>
-        {tenant && (
-          <div className="hidden sm:flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 ml-1">
-            <Building2 className="h-3.5 w-3.5" />
-            <span className="truncate max-w-[200px] font-medium">{tenant.name}</span>
+        {tenants && tenants.length > 0 && (
+          <div className="ml-1 min-w-0">
+            <TenantSwitcher />
           </div>
         )}
       </div>
@@ -47,7 +47,7 @@ export function Header() {
             <button
               onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
               aria-label="Menú de usuario"
-              className="flex items-center space-x-2 rounded-lg p-2 hover:bg-gray-100 dark:hover:bg-gray-800"
+              className={cn('flex items-center space-x-2 rounded-lg p-2 hover:bg-gray-100 dark:hover:bg-gray-800', isUserMenuOpen && 'relative z-50')}
             >
               <div className="w-8 h-8 bg-blue-500 dark:bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
                 {(profile?.full_name || user?.email || 'U').charAt(0).toUpperCase()}
@@ -58,7 +58,9 @@ export function Header() {
             </button>
 
             {isUserMenuOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setIsUserMenuOpen(false)} />
+                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
                 <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
                   <p className="text-sm font-medium text-gray-900 dark:text-white">
                     {profile?.full_name || 'Sin nombre'}
@@ -67,6 +69,15 @@ export function Header() {
                     {profile?.email || user?.email}
                   </p>
                 </div>
+                <button
+                  onClick={() => {
+                    setIsUserMenuOpen(false);
+                    router.push('/billing');
+                  }}
+                  className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  Planes
+                </button>
                 <button
                   onClick={() => {
                     setIsUserMenuOpen(false);
@@ -85,7 +96,8 @@ export function Header() {
                 >
                   Cerrar sesión
                 </button>
-              </div>
+                </div>
+              </>
             )}
           </div>
         ) : null}
