@@ -31,6 +31,7 @@ vi.mock('recharts', async () => {
     YAxis: Null,
     CartesianGrid: Null,
     Tooltip: Null,
+    Cell: Null,
   };
 });
 
@@ -62,6 +63,7 @@ const prediction = (overrides: Record<string, unknown>) => ({
   daysUntilStockout: null,
   needsReorder: false,
   suggestedOrder: 0,
+  suggestedOrder15: 0,
   totalSoldLast30: 0,
   activeDays: 0,
   price: 100,
@@ -76,9 +78,10 @@ const a = prediction({
   minStock: 5,
   avgDailySales: 5,
   projectedMonthlyDemand: 150,
-  daysUntilStockout: null,
+  daysUntilStockout: 1,
   needsReorder: true,
   suggestedOrder: 298,
+  suggestedOrder15: 73,
   totalSoldLast30: 150,
   activeDays: 30,
 });
@@ -119,11 +122,21 @@ const payload = {
   predictions: [a, b, c, d],
   topProducts: [a, b],
   needsReorder: [a],
+  upcomingStockout: [
+    { productId: 'p1', productName: 'Top', currentStock: 2, daysUntilStockout: 1 },
+    { productId: 'p2', productName: 'Medio', currentStock: 20, daysUntilStockout: 40 },
+  ],
   summary: {
     totalSales30: 50000,
     totalTransactions30: 200,
     productsWithSales: 3,
     totalProducts: 4,
+    needsReorderCount: 1,
+    stockoutRiskCount: 1,
+    deadStockCount: 1,
+    immobilizedCapital: 50,
+    purchaseSuggestion15: 3650,
+    stockEffectivenessPct: 75,
   },
   trends: null,
   aiAnalysis: null,
@@ -148,22 +161,31 @@ describe('ForecastPage', () => {
     mockAuth();
   });
 
-  it('muestra "de X registrados" únicamente los productos que vendieron', async () => {
+  it('muestra las métricas de acción: sugerencia de compra, quiebre, capital y efectividad', async () => {
     render(<ForecastPage />);
+    await screen.findByText('Efectividad del stock');
 
-    expect(await screen.findByText('de 4 registrados')).toBeInTheDocument();
-    const kpi = screen.getByText('de 4 registrados').parentElement!.parentElement!;
-    expect(within(kpi).getByText('3')).toBeInTheDocument();
+    // Efectividad del stock: "3" y "de 4" son nodos de texto separados por el span
+    expect(screen.getByText('de 4')).toBeInTheDocument();
+
+    // Próximo a agotarse: panel con 2 productos
+    const panel = screen.getByText('Próximo a agotarse').closest('div') as HTMLElement;
+    expect(within(panel).getByText('Top')).toBeInTheDocument();
+    expect(within(panel).getByText('Medio')).toBeInTheDocument();
+    expect(within(panel).getByText(/— quedan 2 u/)).toBeInTheDocument();
+    expect(within(panel).getByText(/— quedan 20 u/)).toBeInTheDocument();
   });
 
   it('marca como "Sin movimiento" solo a los que vendieron 0 y muestra "—"/"<0.1" en demanda', async () => {
     render(<ForecastPage />);
-    await screen.findByText('de 4 registrados');
+    await screen.findByText('Efectividad del stock');
+
+    fireEvent.click(screen.getByRole('button', { name: /Todos4/ }));
 
     const table = productsTable();
 
     const lentoRow = within(table).getByText('Lento').closest('tr')!;
-    expect(within(lentoRow).getAllByText('—')).toHaveLength(2); // demanda y cobertura
+    expect(within(lentoRow).getAllByText('—')).toHaveLength(4); // demanda, cobertura, cantidad a pedir y acción
     expect(within(lentoRow).getByText('Sin movimiento')).toBeInTheDocument();
 
     const microRow = within(table).getByText('Micro').closest('tr')!;
@@ -174,7 +196,7 @@ describe('ForecastPage', () => {
 
   it('muestra el conteo correcto de cada pestaña del filtro', async () => {
     render(<ForecastPage />);
-    await screen.findByText('de 4 registrados');
+    await screen.findByText('Efectividad del stock');
 
     expect(screen.getByRole('button', { name: /Todos4/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /En riesgo1/ })).toBeInTheDocument();
@@ -184,7 +206,7 @@ describe('ForecastPage', () => {
 
   it('el filtro "Sin movimiento" lista solo productos con cero ventas', async () => {
     render(<ForecastPage />);
-    await screen.findByText('de 4 registrados');
+    await screen.findByText('Efectividad del stock');
 
     fireEvent.click(screen.getByRole('button', { name: /Sin movimiento1/ }));
 
@@ -196,7 +218,7 @@ describe('ForecastPage', () => {
 
   it('"Alta demanda" y "Sin movimiento" no se solapan', async () => {
     render(<ForecastPage />);
-    await screen.findByText('de 4 registrados');
+    await screen.findByText('Efectividad del stock');
 
     fireEvent.click(screen.getByRole('button', { name: /Alta demanda1/ }));
 
@@ -212,7 +234,7 @@ describe('ForecastPage', () => {
 
   it('"En riesgo" excluye productos sin ventas aunque estén bajo el mínimo', async () => {
     render(<ForecastPage />);
-    await screen.findByText('de 4 registrados');
+    await screen.findByText('Efectividad del stock');
 
     fireEvent.click(screen.getByRole('button', { name: /En riesgo1/ }));
 
@@ -220,5 +242,18 @@ describe('ForecastPage', () => {
     await waitFor(() => expect(within(table).getByText('Top')).toBeInTheDocument());
     // Lento está por debajo del mínimo (1 < 5) pero no vendió: no debe entrar en "En riesgo"
     expect(within(table).queryByText('Lento')).not.toBeInTheDocument();
+  });
+
+  it('muestra la columna "Cantidad a pedir" y el botón "Crear orden" para productos con sugerencia', async () => {
+    render(<ForecastPage />);
+    await screen.findByText('Efectividad del stock');
+
+    // Tab "En riesgo" muestra Top que tiene suggestedOrder15=73
+    const table = productsTable();
+    expect(within(table).getByText('73 u.')).toBeInTheDocument();
+    expect(within(table).getByRole('link', { name: /Crear orden/ })).toHaveAttribute(
+      'href',
+      '/providers?create_po=1&productId=p1&qty=73',
+    );
   });
 });

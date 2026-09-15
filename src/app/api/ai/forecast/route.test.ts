@@ -127,6 +127,7 @@ describe('GET /api/ai/forecast', () => {
       daysUntilStockout: null,
       needsReorder: false,
       suggestedOrder: 0,
+      suggestedOrder15: 0,
     });
 
     expect(json.summary.totalProducts).toBe(3);
@@ -184,5 +185,75 @@ describe('GET /api/ai/forecast', () => {
     expect(json.trends.totalSales).toBe(25);
     expect(json.trends.productsWithSales).toBe(100); // 2 ahora vs 0 en el período anterior
     expect(json.aiAnalysis).toBe('Análisis de prueba');
+  });
+
+  it('exponen los KPIs de acción (sugerencia 15 días, quiebre, capital inmovilizado, efectividad)', async () => {
+    queueForecastData();
+    const res = await GET(makeRequest());
+    const json = await res.json();
+
+    const byId = (id: string) =>
+      json.predictions.find((p: { productId: string }) => p.productId === id);
+
+    // p1: demanda 10u/30d = 0.333/día; sugerido 15 días = ceil(5) - stock 3 = 2
+    expect(byId('p1').suggestedOrder15).toBe(2);
+    // p2 y p3: sin ventas o stock suficiente -> 0
+    expect(byId('p2').suggestedOrder15).toBe(0);
+    expect(byId('p3').suggestedOrder15).toBe(0);
+
+    // Sugerencia de compra = Σ sugerido15 * costo = 2 * 90 = 180
+    expect(json.summary.purchaseSuggestion15).toBe(180);
+
+    // Cobertura p1 = 10 días (> 7), p2/p3 sin quiebre -> riesgo 0
+    expect(json.summary.stockoutRiskCount).toBe(0);
+
+    // Capital inmovilizado: p2 (sin ventas) = 2 u * 40 = 80
+    expect(json.summary.deadStockCount).toBe(1);
+    expect(json.summary.immobilizedCapital).toBe(80);
+
+    // Efectividad del stock: 2 / 3 con ventas = 67%
+    expect(json.summary.stockEffectivenessPct).toBe(67);
+
+    // Próximo a agotarse: solo p1 tiene cobertura finita (10 días)
+    expect(json.upcomingStockout).toHaveLength(1);
+    expect(json.upcomingStockout[0]).toMatchObject({
+      productId: 'p1',
+      productName: 'Top',
+      currentStock: 3,
+      daysUntilStockout: 10,
+    });
+  });
+
+  it('cuenta en riesgo de quiebre los productos que se agotan en <= 7 días', async () => {
+    supabaseMock.__queue('product_stock', {
+      data: [{ product_id: 'p1', stock: 1, min_stock: 0, max_stock: 30 }],
+    });
+    supabaseMock.__queue('products', {
+      data: [{ id: 'p1', name: 'Top', price_cents: 10000, cost: 90, category_id: null }],
+    });
+    supabaseMock.__queue('sale_items', {
+      data: [
+        saleItem('p1', 5, '01'),
+        saleItem('p1', 5, '02'),
+        saleItem('p1', 5, '03'),
+        saleItem('p1', 5, '04'),
+        saleItem('p1', 5, '05'),
+      ],
+    });
+    supabaseMock.__queue('sales_daily_totals', {
+      data: [{ total: 10000, sale_count: 5 }],
+    });
+    supabaseMock.__queue('sale_items', { data: [] });
+    supabaseMock.__queue('sales_daily_totals', {
+      data: [{ total: 8000, sale_count: 3 }],
+    });
+
+    const res = await GET(makeRequest());
+    const json = await res.json();
+
+    // p1: 25u/30d = 0.83/día; stock 1 -> 1/0.8 = 1 día -> en riesgo
+    expect(json.predictions[0].daysUntilStockout).toBe(1);
+    expect(json.summary.stockoutRiskCount).toBe(1);
+    expect(json.upcomingStockout).toHaveLength(1);
   });
 });

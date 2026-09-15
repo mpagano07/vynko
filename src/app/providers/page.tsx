@@ -27,6 +27,8 @@ import type { Product } from '@/lib/types/product';
 import { formatARS } from '@/lib/utils/currency';
 import { matchesQuery } from '@/lib/utils/text';
 
+const PO_INTENT_KEY = 'create_po_intent';
+
 export default function ProvidersPage() {
   const router = useRouter();
   const { tenant, allTenants } = useAuth();
@@ -71,19 +73,46 @@ export default function ProvidersPage() {
   const [poItems, setPoItems] = useState<{ product_id: string; quantity: number; unit_cost: number }[]>([]);
   const [isSubmittingPo, setIsSubmittingPo] = useState(false);
   const [poStatus, setPoStatus] = useState<'draft' | 'sent'>('draft');
+  const pendingPoItemRef = useRef<{ productId: string; qty: number } | null>(null);
 
   useEffect(() => {
+    const readIntent = () => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('create_po') === '1') {
+        return {
+          supplierId: params.get('supplier_id'),
+          productId: params.get('productId'),
+          qty: Number(params.get('qty')) || 0,
+        };
+      }
+      try {
+        const stored = window.sessionStorage.getItem(PO_INTENT_KEY);
+        return stored
+          ? (JSON.parse(stored) as { supplierId: string | null; productId: string | null; qty: number })
+          : null;
+      } catch {
+        return null;
+      }
+    };
+
     const params = new URLSearchParams(window.location.search);
+    const intent = readIntent();
+    if (!intent) return;
+
     if (params.get('create_po') === '1') {
-      const supplierId = params.get('supplier_id');
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (supplierId) setPoSupplierId(supplierId);
-      setIsPoModalOpen(true);
       const url = new URL(window.location.href);
       url.searchParams.delete('create_po');
       url.searchParams.delete('supplier_id');
+      url.searchParams.delete('productId');
+      url.searchParams.delete('qty');
       window.history.replaceState({}, '', url.toString());
+      window.sessionStorage.setItem(PO_INTENT_KEY, JSON.stringify(intent));
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (intent.supplierId) setPoSupplierId(intent.supplierId);
+    const productId = intent.productId;
+    if (productId && intent.qty > 0) pendingPoItemRef.current = { productId, qty: intent.qty };
+    setIsPoModalOpen(true);
   }, []);
 
   useEffect(() => {
@@ -105,6 +134,14 @@ export default function ProvidersPage() {
       if (prodRes.ok) {
         const allProducts: Product[] = await prodRes.json();
         setProducts(allProducts.filter(p => p.is_active !== false));
+        const pending = pendingPoItemRef.current;
+        if (pending) {
+          const product = allProducts.find((p) => p.id === pending.productId);
+          pendingPoItemRef.current = null;
+          if (product) {
+            setPoItems((prev) => [...prev, { product_id: product.id, quantity: pending.qty, unit_cost: product.cost || 0 }]);
+          }
+        }
       }
     })().catch(console.error).finally(() => {
       if (!cancelled) setLoading(false);
@@ -188,6 +225,12 @@ export default function ProvidersPage() {
     0
   );
 
+  const closePoModal = () => {
+    setIsPoModalOpen(false);
+    resetPoForm();
+    window.sessionStorage.removeItem(PO_INTENT_KEY);
+  };
+
   const handleCreatePo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!poSupplierId) {
@@ -227,8 +270,7 @@ export default function ProvidersPage() {
       if (!res.ok) throw new Error(data.error || 'Error al crear el pedido');
 
       toast.success('Pedido creado exitosamente');
-      setIsPoModalOpen(false);
-      resetPoForm();
+      closePoModal();
 
       router.push(`/documentos?type=orden_compra&selected=${data.id}`);
     } catch (err: unknown) {
@@ -600,7 +642,7 @@ export default function ProvidersPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
           <Card className="w-full max-w-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
             <button
-              onClick={() => { setIsPoModalOpen(false); resetPoForm(); }}
+              onClick={closePoModal}
               className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
             >
               <X className="h-5 w-5" />
@@ -760,7 +802,7 @@ export default function ProvidersPage() {
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
-                <Button type="button" variant="outline" onClick={() => { setIsPoModalOpen(false); resetPoForm(); }}>
+                <Button type="button" variant="outline" onClick={closePoModal}>
                   Cancelar
                 </Button>
                 <Button type="submit" disabled={isSubmittingPo}>

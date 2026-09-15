@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   TrendingUp, Plus, ShoppingCart, Package,
-  ArrowUpRight, ArrowDownRight, Minus, Building2,
+  ArrowUpRight, ArrowDownRight, Minus, Building2, AlertTriangle,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import Link from 'next/link';
@@ -297,22 +297,6 @@ export default function DashboardPage() {
   const todaySalesCount = salesData?.saleCount ?? 0;
   const hasSalesToday = todaySalesCount > 0;
 
-  let statusMessage = '';
-  let statusColor = '';
-  if (isLoading) {
-    statusMessage = 'Cargando estado del negocio...';
-    statusColor = 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800';
-  } else if (!hasSalesToday) {
-    statusMessage = 'Hoy todavía no registraste ventas.';
-    statusColor = 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/30';
-  } else if (criticalCount > 0) {
-    statusMessage = `Tenés ${criticalCount} producto${criticalCount !== 1 ? 's' : ''} con stock crítico.`;
-    statusColor = 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/30';
-  } else {
-    statusMessage = 'Todo está funcionando correctamente.';
-    statusColor = 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/30';
-  }
-
   const tenantName = allTenants ? 'Todas las sucursales' : tenant?.name;
 
   return (
@@ -348,26 +332,11 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <Link
-        href={criticalCount > 0 ? '/products' : !hasSalesToday ? '/sales' : '#'}
-        prefetch={false}
-        className={`flex items-center justify-between px-4 py-2.5 rounded-lg border text-sm transition-opacity hover:opacity-80 ${statusColor}`}
-      >
-        <div className="flex items-center gap-2">
-          <span className="text-lg">{statusMessage.includes('rojo') ? '🔴' : statusMessage.includes('crítico') ? '🟡' : statusMessage.includes('Cargando') ? '⚪' : '🟢'}</span>
-          <span className="font-medium text-gray-800 dark:text-gray-200">{statusMessage}</span>
-        </div>
-        {!isLoading && (criticalCount > 0 || !hasSalesToday) && (
-          <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400 whitespace-nowrap ml-4">
-            Ver detalle →
-          </span>
-        )}
-      </Link>
-
       {loadError && !isLoading && (
-        <div className="flex items-center justify-between px-4 py-3 rounded-lg border border-red-300 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 text-sm">
-          <span className="text-red-700 dark:text-red-300">
-            Hubo un problema de conexión al cargar los datos. Los valores mostrados pueden estar incompletos.
+        <div role="alert" className="flex items-center justify-between gap-3 px-4 py-3 rounded-lg border border-red-300 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 text-sm">
+          <span className="flex items-center gap-2 text-red-700 dark:text-red-300">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+            <span>Hubo un problema de conexión al cargar los datos. Los valores mostrados pueden estar incompletos.</span>
           </span>
           <Button size="sm" variant="outline" onClick={() => setReloadKey((k) => k + 1)}>
             Reintentar
