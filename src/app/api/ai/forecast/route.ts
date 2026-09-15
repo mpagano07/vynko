@@ -19,6 +19,7 @@ interface Prediction {
   daysUntilStockout: number | null;
   needsReorder: boolean;
   suggestedOrder: number;
+  suggestedOrder15: number;
   totalSoldLast30: number;
   activeDays: number;
 }
@@ -120,6 +121,7 @@ export async function GET(request: Request) {
       const daysUntilStockout = avgDailySales > 0 ? Math.round(stock / avgDailySales) : Infinity;
       const minStock = Number(product.min_stock) || 0;
       const needsReorder = totalQty > 0 && (stock <= projectedMonthly * 0.5 || stock <= minStock);
+      const suggestedOrder15 = totalQty > 0 ? Math.max(Math.ceil(avgDaily * 15) - stock, 0) : 0;
 
       return {
         productId: String(product.id ?? ''),
@@ -134,6 +136,7 @@ export async function GET(request: Request) {
         daysUntilStockout: daysUntilStockout === Infinity ? null : daysUntilStockout,
         needsReorder,
         suggestedOrder: needsReorder ? Math.max(projectedMonthly * 2 - stock, projectedMonthly) : 0,
+        suggestedOrder15,
         totalSoldLast30: totalQty,
         activeDays: activeDaysCount,
       };
@@ -142,6 +145,24 @@ export async function GET(request: Request) {
 
   const topProducts = predictions.filter((p) => p.totalSoldLast30 > 0).slice(0, 5);
   const needsReorder = predictions.filter((p) => p.needsReorder);
+
+  const productsWithSales = predictions.filter((p) => p.totalSoldLast30 > 0).length;
+  const stockoutRisk = predictions.filter((p) => p.daysUntilStockout !== null && p.daysUntilStockout <= 7);
+  const deadStock = predictions.filter((p) => p.totalSoldLast30 === 0);
+  const immobilizedCapital = deadStock.reduce((s, p) => s + p.currentStock * p.cost, 0);
+  const purchaseSuggestion15 = predictions.reduce((s, p) => s + p.suggestedOrder15 * p.cost, 0);
+  const stockEffectivenessPct =
+    productIds.length > 0 ? Math.round((productsWithSales / productIds.length) * 100) : null;
+  const upcomingStockout = predictions
+    .filter((p) => p.daysUntilStockout !== null && p.daysUntilStockout > 0)
+    .sort((a, b) => (a.daysUntilStockout ?? Infinity) - (b.daysUntilStockout ?? Infinity))
+    .slice(0, 5)
+    .map((p) => ({
+      productId: p.productId,
+      productName: p.productName,
+      currentStock: p.currentStock,
+      daysUntilStockout: p.daysUntilStockout,
+    }));
 
   // Prior period (30-60 days ago) computation
   const priorDailySales = new Map<string, number>();
@@ -207,17 +228,23 @@ Dame un análisis breve (3-4 oraciones) en español destacando tendencias y reco
     predictions,
     topProducts,
     needsReorder,
+    upcomingStockout,
     summary: {
       totalProducts: productIds.length,
-      productsWithSales: predictions.filter((p) => p.totalSoldLast30 > 0).length,
+      productsWithSales,
       totalSales30,
       totalTransactions30: totalTransactions,
       needsReorderCount: needsReorder.length,
+      stockoutRiskCount: stockoutRisk.length,
+      deadStockCount: deadStock.length,
+      immobilizedCapital,
+      purchaseSuggestion15,
+      stockEffectivenessPct,
     },
     trends: {
       totalSales: trendPct(totalSales30, priorTotalSales),
       transactions: trendPct(totalTransactions, priorTransactions),
-      productsWithSales: trendPct(predictions.filter((p) => p.totalSoldLast30 > 0).length, priorProductsWithSales),
+      productsWithSales: trendPct(productsWithSales, priorProductsWithSales),
       needsReorder: trendPct(needsReorder.length, priorNeedsReorderCount),
     },
     aiAnalysis,

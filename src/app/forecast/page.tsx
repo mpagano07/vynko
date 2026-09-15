@@ -4,9 +4,9 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, TrendingUp, TrendingDown, AlertTriangle, Package, DollarSign, BarChart3, Sparkles, Lightbulb, ShieldCheck, Filter, ExternalLink } from 'lucide-react';
+import { Loader2, TrendingUp, AlertTriangle, ShoppingCart, Banknote, Activity, BarChart3, Sparkles, Flame, Filter, ExternalLink } from 'lucide-react';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useRouter } from 'next/navigation';
@@ -22,33 +22,24 @@ interface Prediction {
   daysUntilStockout: number | null;
   needsReorder: boolean;
   suggestedOrder: number;
+  suggestedOrder15: number;
   totalSoldLast30: number;
   activeDays: number;
   price: number;
   cost: number;
 }
 
+interface UpcomingStockout {
+  productId: string;
+  productName: string;
+  currentStock: number;
+  daysUntilStockout: number | null;
+}
+
 function formatDailyDemand(p: Prediction): string {
   if (p.totalSoldLast30 === 0) return '—';
   if (p.avgDailySales === 0) return '<0.1';
   return String(p.avgDailySales);
-}
-
-function TrendBadge({ value }: { value: number | null }) {
-  if (value === null) return null;
-  const isUp = value > 0;
-  const isDown = value < 0;
-  if (!isUp && !isDown) return null;
-  return (
-    <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold rounded-full px-1.5 py-0.5 ${
-      isUp
-        ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-400'
-        : 'text-rose-600 bg-rose-50 dark:bg-rose-950/30 dark:text-rose-400'
-    }`}>
-      {isUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-      {isUp ? '+' : ''}{value}%
-    </span>
-  );
 }
 
 export default function ForecastPage() {
@@ -59,11 +50,18 @@ export default function ForecastPage() {
     predictions: Prediction[];
     topProducts: Prediction[];
     needsReorder: Prediction[];
+    upcomingStockout: UpcomingStockout[];
     summary: {
       totalSales30: number;
       totalTransactions30: number;
       productsWithSales: number;
       totalProducts: number;
+      needsReorderCount: number;
+      stockoutRiskCount: number;
+      deadStockCount: number;
+      immobilizedCapital: number;
+      purchaseSuggestion15: number;
+      stockEffectivenessPct: number | null;
     };
     trends: {
       totalSales: number | null;
@@ -75,7 +73,7 @@ export default function ForecastPage() {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filterTab, setFilterTab] = useState<'todos' | 'riesgo' | 'alta' | 'sin'>('todos');
+  const [filterTab, setFilterTab] = useState<'todos' | 'riesgo' | 'alta' | 'sin'>('riesgo');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
 
@@ -137,27 +135,31 @@ export default function ForecastPage() {
     );
   }
 
-  const chartData = data.topProducts.map((p) => ({
-    name: p.productName.length > 12 ? p.productName.slice(0, 12) + '...' : p.productName,
-    'Venta diaria': p.avgDailySales,
-    'Demanda proyectada': p.projectedMonthlyDemand / 30,
-  }));
-
-  const criticalStockout = data.predictions.filter(
-    (p) => p.daysUntilStockout !== null && p.daysUntilStockout <= 7
-  );
   const totalDailySales = data.predictions.reduce((s, p) => s + p.avgDailySales, 0);
-  const top3Sales = data.topProducts.slice(0, 3).reduce((s, p) => s + p.avgDailySales, 0);
-  const top3Pct = totalDailySales > 0 ? Math.round((top3Sales / totalDailySales) * 100) : 0;
   const avgDailyAll = (() => {
     const withSales = data.predictions.filter((p) => p.totalSoldLast30 > 0);
     return withSales.length > 0 ? totalDailySales / withSales.length : 0;
   })();
 
-  const totalStock = data.predictions.reduce((s, p) => s + p.currentStock, 0);
-  const inventoryCoverageDays = totalDailySales > 0 ? Math.round(totalStock / totalDailySales) : null;
-  const totalReorderCost = data.needsReorder.reduce((s, p) => s + (p.suggestedOrder * p.cost), 0);
-  const growingProducts = data.predictions.filter((p) => p.activeDays >= 20).length;
+  const s = data.summary;
+  const noRotationPct = s.stockEffectivenessPct !== null ? 100 - s.stockEffectivenessPct : null;
+
+  let nEnRiesgo = 0;
+  let nReponer = 0;
+  let nInmovilizado = 0;
+  let nSaludable = 0;
+  for (const p of data.predictions) {
+    if (p.totalSoldLast30 === 0) { nInmovilizado += 1; continue; }
+    if ((p.daysUntilStockout !== null && p.daysUntilStockout <= 7) || p.currentStock <= p.minStock) { nEnRiesgo += 1; continue; }
+    if (p.needsReorder) { nReponer += 1; continue; }
+    nSaludable += 1;
+  }
+  const inventoryDistribution = [
+    { name: 'En riesgo', count: nEnRiesgo, color: '#ef4444' },
+    { name: 'Reponer', count: nReponer, color: '#f59e0b' },
+    { name: 'Sin rotación', count: nInmovilizado, color: '#9ca3af' },
+    { name: 'Saludable', count: nSaludable, color: '#10b981' },
+  ];
 
   const filteredPredictions = data.predictions.filter((p) => {
     if (filterTab === 'todos') return true;
@@ -167,7 +169,7 @@ export default function ForecastPage() {
     return true;
   });
 
-  const isPaginated = filterTab === 'todos' && filteredPredictions.length > PAGE_SIZE;
+  const isPaginated = filteredPredictions.length > PAGE_SIZE;
   const totalPages = isPaginated ? Math.ceil(filteredPredictions.length / PAGE_SIZE) : 1;
   const displayedPredictions = isPaginated
     ? filteredPredictions.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -181,80 +183,74 @@ export default function ForecastPage() {
         </div>
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Pronóstico de Demanda</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Proyecciones basadas en los últimos 30 días de ventas</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Planeá tus compras: qué reponer, cuánto gastar y qué productos te están haciendo perder plata.
+          </p>
         </div>
       </div>
 
-      {/* Summary KPIs */}
+      {/* KPIs orientados a la acción */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="p-5">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Ventas 30 días</p>
-            <div className="flex-shrink-0 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600">
-              <DollarSign className="h-5 w-5" />
+            <p className="text-xs font-medium uppercase tracking-wider text-gray-400">Sugerencia de compra</p>
+            <div className="flex-shrink-0 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400">
+              <ShoppingCart className="h-5 w-5" />
             </div>
           </div>
-          <p className="text-2xl font-bold mt-1 text-gray-900 dark:text-white">{formatARS(data.summary.totalSales30)}</p>
-          <div className="flex items-center gap-2 mt-1">
-            <p className="text-xs text-gray-500">{data.summary.totalTransactions30} transacciones</p>
-            <TrendBadge value={data.trends?.totalSales ?? null} />
-          </div>
+          <p className="text-2xl font-bold mt-1 text-gray-900 dark:text-white">
+            {s.purchaseSuggestion15 > 0 ? formatARS(s.purchaseSuggestion15) : '—'}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">Para cubrir los próximos 15 días</p>
         </Card>
+
         <Card className="p-5">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Productos con ventas</p>
-              <p className="text-2xl font-bold mt-1 text-gray-900 dark:text-white">{data.summary.productsWithSales}</p>
-              <div className="flex items-center gap-2 mt-1">
-                <p className="text-xs text-gray-500">de {data.summary.totalProducts} registrados</p>
-                <TrendBadge value={data.trends?.productsWithSales ?? null} />
-              </div>
+              <p className="text-xs font-medium uppercase tracking-wider text-gray-400">Riesgo de quiebre</p>
+              <p className={`text-2xl font-bold mt-1 ${s.stockoutRiskCount > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-gray-900 dark:text-white'}`}>
+                {s.stockoutRiskCount}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                {s.stockoutRiskCount === 1 ? 'Se agota' : 'Se agotan'} en menos de 7 días
+              </p>
             </div>
-            <div className="flex-shrink-0 p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-blue-600">
-              <Package className="h-5 w-5" />
+            <div className="flex-shrink-0 p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400">
+              <AlertTriangle className="h-5 w-5" />
             </div>
           </div>
         </Card>
+
         <Card className="p-5">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Cobertura inventario</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-gray-400">Capital inmovilizado</p>
               <p className="text-2xl font-bold mt-1 text-gray-900 dark:text-white">
-                {inventoryCoverageDays !== null ? `${inventoryCoverageDays} días` : '—'}
+                {s.immobilizedCapital > 0 ? formatARS(s.immobilizedCapital) : '—'}
               </p>
-              <p className="text-xs text-gray-500 mt-1">Stock actual vs demanda diaria</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {s.deadStockCount} producto{s.deadStockCount === 1 ? '' : 's'} sin rotación (+30 días)
+              </p>
             </div>
-            <div className="flex-shrink-0 p-2.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600">
-              <ShieldCheck className="h-5 w-5" />
+            <div className="flex-shrink-0 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400">
+              <Banknote className="h-5 w-5" />
             </div>
           </div>
         </Card>
+
         <Card className="p-5">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Top producto</p>
-              <p className="text-lg font-bold mt-1 text-gray-900 dark:text-white truncate">
-                {data.topProducts[0]?.productName || '—'}
+              <p className="text-xs font-medium uppercase tracking-wider text-gray-400">Efectividad del stock</p>
+              <p className="text-2xl font-bold mt-1 text-gray-900 dark:text-white">
+                {s.productsWithSales} <span className="text-base font-semibold text-gray-400">de {s.totalProducts}</span>
               </p>
-              <p className="text-xs text-gray-500 mt-1">{data.topProducts[0]?.avgDailySales || 0} unidades/día</p>
-              {(() => {
-                const top = data.topProducts[0]?.avgDailySales || 0;
-                const avg = avgDailyAll;
-                if (avg > 0) {
-                  const pct = Math.round(((top - avg) / avg) * 100);
-                  if (pct > 0) {
-                    return (
-                      <span className="inline-flex items-center gap-1 mt-1.5 text-[11px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-400 rounded-full px-2 py-0.5">
-                        ⬆ +{pct}% vs promedio
-                      </span>
-                    );
-                  }
-                }
-                return null;
-              })()}
+              <p className="text-xs text-gray-500 mt-1">
+                {noRotationPct !== null ? `${noRotationPct}% del stock no rota` : 'Sin datos'}
+              </p>
             </div>
-            <div className="flex-shrink-0 p-2.5 rounded-lg bg-purple-50 dark:bg-purple-950/30 text-purple-600">
-              <TrendingUp className="h-5 w-5" />
+            <div className="flex-shrink-0 p-2.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400">
+              <Activity className="h-5 w-5" />
             </div>
           </div>
         </Card>
@@ -273,88 +269,74 @@ export default function ForecastPage() {
         </Card>
       )}
 
-      {/* Top Products Chart + Resumen Inteligente */}
+      {/* Distribución del inventario + Próximo a agotarse */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
         <Card className="p-5 lg:col-span-3">
           <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-emerald-500" />
-            Top 5 Productos por Demanda Diaria
+            Distribución del inventario
           </h2>
           <div className="h-40">
             <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={160}>
-              <BarChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+              <BarChart data={inventoryDistribution} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke="#9ca3af" />
-                <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" />
+                <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" allowDecimals={false} />
                 <Tooltip
-                  formatter={(value: unknown) => [Number(value).toFixed(1), 'Unidades/día']}
+                  formatter={(value: unknown) => [`${value} productos`, 'Cantidad']}
                   contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '12px' }}
                 />
-                <Bar dataKey="Venta diaria" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={40} />
+                <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={60}>
+                  {inventoryDistribution.map((d) => (
+                    <Cell key={d.name} fill={d.color} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-[11px] text-gray-500 dark:text-gray-400">
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500" /> En riesgo</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Reponer</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-gray-400" /> Sin rotación</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Saludable</span>
           </div>
         </Card>
 
         <Card className="p-5 lg:col-span-2 flex flex-col justify-between">
           <div>
             <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-              <Lightbulb className="h-5 w-5 text-amber-500" />
-              Resumen Inteligente
+              <Flame className="h-5 w-5 text-rose-500" />
+              Próximo a agotarse
             </h2>
-            <div className="space-y-3 text-sm">
-              {criticalStockout.length > 0 ? (
-                <div className="flex items-center gap-2.5">
-                  <span className="text-base">🔴</span>
-                  <span className="text-gray-700 dark:text-gray-300">
-                    <strong className="text-rose-600 dark:text-rose-400">{criticalStockout.length}</strong> {criticalStockout.length === 1 ? 'producto se agota' : 'productos se agotan'} esta semana
-                  </span>
-                </div>
-              ) : data.needsReorder.length === 0 ? (
-                <div className="flex items-center gap-2.5">
-                  <span className="text-base">🟢</span>
-                  <span className="text-gray-700 dark:text-gray-300">Inventario saludable, sin stock crítico</span>
-                </div>
-              ) : null}
-              {data.needsReorder.length > 0 && (
-                <div className="flex items-center gap-2.5">
-                  <span className="text-base">⚠️</span>
-                  <span className="text-gray-700 dark:text-gray-300">
-                    <strong className="text-amber-600 dark:text-amber-400">{data.needsReorder.length}</strong> {data.needsReorder.length === 1 ? 'producto requiere' : 'productos requieren'} reposición
-                  </span>
-                </div>
-              )}
-              {growingProducts > 0 && (
-                <div className="flex items-center gap-2.5">
-                  <span className="text-base">📈</span>
-                  <span className="text-gray-700 dark:text-gray-300">
-                    <strong className="text-blue-600 dark:text-blue-400">{growingProducts}</strong> {growingProducts === 1 ? 'producto está' : 'productos están'} en constante demanda
-                  </span>
-                </div>
-              )}
-              {top3Pct >= 50 && (
-                <div className="flex items-center gap-2.5">
-                  <span className="text-base">🏆</span>
-                  <span className="text-gray-700 dark:text-gray-300">
-                    Top 3 concentra el <strong className="text-violet-600 dark:text-violet-400">{top3Pct}%</strong> de las ventas
-                  </span>
-                </div>
-              )}
-              {totalReorderCost > 0 && (
-                <div className="flex items-center gap-2.5">
-                  <span className="text-base">💰</span>
-                  <span className="text-gray-700 dark:text-gray-300">
-                    Inversión recomendada: <strong className="text-gray-900 dark:text-white">{formatARS(totalReorderCost)}</strong>
-                  </span>
-                </div>
-              )}
-            </div>
+            {data.upcomingStockout.length === 0 ? (
+              <div className="flex items-center gap-2.5 text-sm">
+                <span className="text-base">🎉</span>
+                <span className="text-gray-700 dark:text-gray-300">Sin productos próximos a agotarse</span>
+              </div>
+            ) : (
+              <div className="space-y-3 text-sm">
+                {data.upcomingStockout.map((p, i) => (
+                  <div key={p.productId} className="flex items-center gap-2.5">
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 text-[11px] font-bold flex items-center justify-center">
+                      {i + 1}
+                    </span>
+                    <span className="text-gray-700 dark:text-gray-300">
+                      <strong className="text-gray-900 dark:text-white">{p.productName}</strong>{' '}
+                      — quedan {p.currentStock} u.
+                      {p.daysUntilStockout !== null && (
+                        <> → se agota en <strong className="text-rose-600 dark:text-rose-400">{p.daysUntilStockout} días</strong></>
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </Card>
       </div>
 
       {/* Products needing reorder */}
-      {data.needsReorder.length > 0 && (
+      {data.needsReorder.length > 0 && data.needsReorder.some((p) => p.suggestedOrder15 > 0) && (
         <Card className="overflow-hidden border border-gray-100 dark:border-gray-800 p-0">
           <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800">
             <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -369,15 +351,14 @@ export default function ForecastPage() {
                   <th className="py-3 px-6">Producto</th>
                   <th className="py-3 px-6 text-center">Stock actual</th>
                   <th className="py-3 px-6 text-center">Venta diaria</th>
-                  <th className="py-3 px-6 text-center">Proyección mensual</th>
                   <th className="py-3 px-6 text-center">Días hasta agotar</th>
-                  <th className="py-3 px-6 text-center">Sugerido a ordenar</th>
+                  <th className="py-3 px-6 text-center">Cantidad a pedir</th>
                   <th className="py-3 px-6 text-center">Costo estimado</th>
                   <th className="py-3 px-6 text-center">Acción</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
-                {data.needsReorder.map((p) => (
+                {data.needsReorder.filter((p) => p.suggestedOrder15 > 0).map((p) => (
                   <tr key={p.productId} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
                     <td className="py-3 px-6 font-semibold text-gray-900 dark:text-gray-100">{p.productName}</td>
                     <td className="py-3 px-6 text-center">
@@ -386,7 +367,6 @@ export default function ForecastPage() {
                       </span>
                     </td>
                     <td className="py-3 px-6 text-center text-gray-600">{formatDailyDemand(p)}</td>
-                    <td className="py-3 px-6 text-center text-gray-600">{p.projectedMonthlyDemand} u.</td>
                     <td className="py-3 px-6 text-center">
                       {p.daysUntilStockout !== null ? (
                         <span className={p.daysUntilStockout <= 7 ? 'text-rose-600 font-semibold' : 'text-gray-600'}>
@@ -396,13 +376,13 @@ export default function ForecastPage() {
                         <span className="text-gray-400">—</span>
                       )}
                     </td>
-                    <td className="py-3 px-6 text-center font-semibold text-indigo-600">{p.suggestedOrder} u.</td>
+                    <td className="py-3 px-6 text-center font-semibold text-indigo-600">{p.suggestedOrder15} u.</td>
                     <td className="py-3 px-6 text-center font-semibold text-gray-900 dark:text-white">
-                      {p.cost > 0 ? formatARS(p.suggestedOrder * p.cost) : '—'}
+                      {p.cost > 0 ? formatARS(p.suggestedOrder15 * p.cost) : '—'}
                     </td>
                     <td className="py-3 px-6 text-center">
                       <a
-                        href={`/providers?productId=${p.productId}&qty=${p.suggestedOrder}`}
+                        href={`/providers?create_po=1&productId=${p.productId}&qty=${p.suggestedOrder15}`}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
                       >
                         Crear orden
@@ -426,8 +406,8 @@ export default function ForecastPage() {
           </h2>
           <div className="flex gap-1.5">
             {([
-              { key: 'todos', label: 'Todos', count: data.predictions.length },
               { key: 'riesgo', label: 'En riesgo', count: data.predictions.filter((p) => p.totalSoldLast30 > 0 && (p.needsReorder || p.currentStock <= p.minStock)).length },
+              { key: 'todos', label: 'Todos', count: data.predictions.length },
               { key: 'alta', label: 'Alta demanda', count: data.predictions.filter((p) => avgDailyAll > 0 && p.avgDailySales > avgDailyAll).length },
               { key: 'sin', label: 'Sin movimiento', count: data.predictions.filter((p) => p.totalSoldLast30 === 0).length },
             ] as const).map((tab) => (
@@ -459,7 +439,9 @@ export default function ForecastPage() {
                   <th className="py-3 px-6 text-center">Stock</th>
                   <th className="py-3 px-6 text-center">Demanda/día</th>
                   <th className="py-3 px-6 text-center">Cobertura</th>
+                  <th className="py-3 px-6 text-center">Cantidad a pedir</th>
                   <th className="py-3 px-6 text-center">Estado</th>
+                  <th className="py-3 px-6 text-center">Acción</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
@@ -474,6 +456,13 @@ export default function ForecastPage() {
                     <td className="py-3 px-6 text-center text-gray-600">{formatDailyDemand(p)}</td>
                     <td className="py-3 px-6 text-center text-gray-600">
                       {p.daysUntilStockout !== null ? `${p.daysUntilStockout}d` : '—'}
+                    </td>
+                    <td className="py-3 px-6 text-center">
+                      {p.suggestedOrder15 > 0 ? (
+                        <span className="font-semibold text-indigo-600">{p.suggestedOrder15} u.</span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
                     </td>
                     <td className="py-3 px-6 text-center">
                       {p.totalSoldLast30 === 0 ? (
@@ -492,6 +481,19 @@ export default function ForecastPage() {
                         <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-400 rounded-full px-2 py-0.5">
                           Saludable
                         </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-6 text-center">
+                      {p.suggestedOrder15 > 0 ? (
+                        <a
+                          href={`/providers?create_po=1&productId=${p.productId}&qty=${p.suggestedOrder15}`}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition-colors whitespace-nowrap"
+                        >
+                          Crear orden
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      ) : (
+                        <span className="text-gray-300 dark:text-gray-600 text-xs">—</span>
                       )}
                     </td>
                   </tr>

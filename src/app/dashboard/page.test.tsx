@@ -192,10 +192,12 @@ describe('DashboardPage: carga de datos de un tenant', () => {
     expect(screen.getByRole('heading', { name: 'Hola, Ana 👋' })).toBeInTheDocument();
     expect(screen.getByText('Central')).toBeInTheDocument();
 
-    expect(await screen.findByText('Tenés 1 producto con stock crítico.')).toBeInTheDocument();
+    expect(await screen.findByText('productos por reponer')).toBeInTheDocument();
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('Stock bajo')).toBeInTheDocument();
+    expect(screen.queryByText(/Tenés \d+ productos? con stock crítico\./)).not.toBeInTheDocument();
     expect(screen.getByText('+25%')).toBeInTheDocument();
     expect(screen.getByText('2 ventas')).toBeInTheDocument();
-    expect(screen.getByText('productos por reponer')).toBeInTheDocument();
 
     const authHeaderCalls = fetchHandler.mock.calls.filter(([, init]) => {
       const headers = (init as RequestInit | undefined)?.headers as Record<string, string> | undefined;
@@ -214,8 +216,9 @@ describe('DashboardPage: carga de datos de un tenant', () => {
 
     render(<DashboardPage />);
 
-    expect(await screen.findByText('Hoy todavía no registraste ventas.')).toBeInTheDocument();
-    expect(screen.getByText('Sin ventas')).toBeInTheDocument();
+    expect(await screen.findByText('Sin ventas hoy')).toBeInTheDocument();
+    expect(screen.getByText('Registra tu primera venta')).toBeInTheDocument();
+    expect(screen.queryByText('Hoy todavía no registraste ventas.')).not.toBeInTheDocument();
   });
 });
 
@@ -247,7 +250,9 @@ describe('DashboardPage: desglose multi-sucursal', () => {
     expect(await screen.findByText('Desglose por sucursal')).toBeInTheDocument();
 
     // sumas agregadas: 2 ventas de hoy por sucursal (12500 + 7500) => hoy $200 total
-    expect(screen.getByText('Tenés 2 productos con stock crítico.')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('productos por reponer')).toBeInTheDocument();
+    expect(screen.queryByText(/Tenés \d+ productos? con stock crítico\./)).not.toBeInTheDocument();
 
     // filas del desglose: cada sucursal con sus métricas
     const rows = screen.getAllByRole('row');

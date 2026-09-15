@@ -227,8 +227,13 @@ export default function StockAndActivity({
 
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-medium text-gray-900 dark:text-white">Alertas de stock</h2>
-          {criticalCount > 5 && (
-            <span className="text-xs text-indigo-600 dark:text-indigo-400">Ver todas →</span>
+          {criticalCount > 3 && (
+            <button
+              onClick={() => router.push('/products')}
+              className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+            >
+              Ver todas ({criticalCount}) →
+            </button>
           )}
         </div>
         {criticalCount === 0 ? (
@@ -240,7 +245,7 @@ export default function StockAndActivity({
           </Card>
         ) : (
           <div className="space-y-2">
-            {criticalProducts.slice(0, 5).map((product) => {
+            {criticalProducts.slice(0, 3).map((product) => {
               const analysis = stockAnalysis.find(s => s.id === product.id);
               const lastSaleText = analysis?.lastSale ? timeAgo(analysis.lastSale) : null;
               return (
