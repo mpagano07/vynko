@@ -256,4 +256,30 @@ describe('GET /api/ai/forecast', () => {
     expect(json.summary.stockoutRiskCount).toBe(1);
     expect(json.upcomingStockout).toHaveLength(1);
   });
+
+  it('excluye de "Próximo a agotarse" productos con cobertura mayor a 15 días', async () => {
+    supabaseMock.__queue('product_stock', {
+      data: [{ product_id: 'p1', stock: 50, min_stock: 0, max_stock: 200 }],
+    });
+    supabaseMock.__queue('products', {
+      data: [{ id: 'p1', name: 'Amplio', price_cents: 10000, cost: 90, category_id: null }],
+    });
+    supabaseMock.__queue('sale_items', {
+      data: [saleItem('p1', 2, '01')],
+    });
+    supabaseMock.__queue('sales_daily_totals', {
+      data: [{ total: 10000, sale_count: 1 }],
+    });
+    supabaseMock.__queue('sale_items', { data: [] });
+    supabaseMock.__queue('sales_daily_totals', {
+      data: [{ total: 8000, sale_count: 3 }],
+    });
+
+    const res = await GET(makeRequest());
+    const json = await res.json();
+
+    // p1: 2u/30d = 0.1/día (mostrado); stock 50 -> cobertura ~500 días -> excluido
+    expect(json.predictions[0].daysUntilStockout).toBe(500);
+    expect(json.upcomingStockout).toHaveLength(0);
+  });
 });

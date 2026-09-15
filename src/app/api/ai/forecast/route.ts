@@ -154,7 +154,7 @@ export async function GET(request: Request) {
   const stockEffectivenessPct =
     productIds.length > 0 ? Math.round((productsWithSales / productIds.length) * 100) : null;
   const upcomingStockout = predictions
-    .filter((p) => p.daysUntilStockout !== null && p.daysUntilStockout > 0)
+    .filter((p) => p.daysUntilStockout !== null && p.daysUntilStockout > 0 && p.daysUntilStockout <= 15)
     .sort((a, b) => (a.daysUntilStockout ?? Infinity) - (b.daysUntilStockout ?? Infinity))
     .slice(0, 5)
     .map((p) => ({
