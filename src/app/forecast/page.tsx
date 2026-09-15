@@ -315,87 +315,32 @@ export default function ForecastPage() {
               </div>
             ) : (
               <div className="space-y-3 text-sm">
-                {data.upcomingStockout.map((p, i) => (
-                  <div key={p.productId} className="flex items-center gap-2.5">
-                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 text-[11px] font-bold flex items-center justify-center">
-                      {i + 1}
-                    </span>
-                    <span className="text-gray-700 dark:text-gray-300">
-                      <strong className="text-gray-900 dark:text-white">{p.productName}</strong>{' '}
-                      — quedan {p.currentStock} u.
-                      {p.daysUntilStockout !== null && (
-                        <> → se agota en <strong className="text-rose-600 dark:text-rose-400">{p.daysUntilStockout} días</strong></>
-                      )}
-                    </span>
-                  </div>
-                ))}
+                {data.upcomingStockout.map((p, i) => {
+                  const urgent = p.daysUntilStockout !== null && p.daysUntilStockout <= 7;
+                  return (
+                    <div key={p.productId} className="flex items-center gap-2.5">
+                      <span className={`flex-shrink-0 w-5 h-5 rounded-full text-[11px] font-bold flex items-center justify-center ${
+                        urgent
+                          ? 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400'
+                          : 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400'
+                      }`}>
+                        {i + 1}
+                      </span>
+                      <span className="text-gray-700 dark:text-gray-300">
+                        <strong className="text-gray-900 dark:text-white">{p.productName}</strong>{' '}
+                        — quedan {p.currentStock} u.
+                        {p.daysUntilStockout !== null && (
+                          <> → se agota en <strong className={urgent ? 'text-rose-600 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}>{p.daysUntilStockout} días</strong></>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
         </Card>
       </div>
-
-      {/* Products needing reorder */}
-      {data.needsReorder.length > 0 && data.needsReorder.some((p) => p.suggestedOrder15 > 0) && (
-        <Card className="overflow-hidden border border-gray-100 dark:border-gray-800 p-0">
-          <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-500" />
-              Productos que necesitan reposición
-            </h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  <th className="py-3 px-6">Producto</th>
-                  <th className="py-3 px-6 text-center">Stock actual</th>
-                  <th className="py-3 px-6 text-center">Venta diaria</th>
-                  <th className="py-3 px-6 text-center">Días hasta agotar</th>
-                  <th className="py-3 px-6 text-center">Cantidad a pedir</th>
-                  <th className="py-3 px-6 text-center">Costo estimado</th>
-                  <th className="py-3 px-6 text-center">Acción</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
-                {data.needsReorder.filter((p) => p.suggestedOrder15 > 0).map((p) => (
-                  <tr key={p.productId} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
-                    <td className="py-3 px-6 font-semibold text-gray-900 dark:text-gray-100">{p.productName}</td>
-                    <td className="py-3 px-6 text-center">
-                      <span className={`inline-flex font-bold ${p.currentStock <= p.minStock ? 'text-rose-600' : 'text-amber-600'}`}>
-                        {p.currentStock}
-                      </span>
-                    </td>
-                    <td className="py-3 px-6 text-center text-gray-600">{formatDailyDemand(p)}</td>
-                    <td className="py-3 px-6 text-center">
-                      {p.daysUntilStockout !== null ? (
-                        <span className={p.daysUntilStockout <= 7 ? 'text-rose-600 font-semibold' : 'text-gray-600'}>
-                          {p.daysUntilStockout} días
-                        </span>
-                      ) : (
-                        <span className="text-gray-400">—</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-6 text-center font-semibold text-indigo-600">{p.suggestedOrder15} u.</td>
-                    <td className="py-3 px-6 text-center font-semibold text-gray-900 dark:text-white">
-                      {p.cost > 0 ? formatARS(p.suggestedOrder15 * p.cost) : '—'}
-                    </td>
-                    <td className="py-3 px-6 text-center">
-                      <a
-                        href={`/providers?create_po=1&productId=${p.productId}&qty=${p.suggestedOrder15}`}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
-                      >
-                        Crear orden
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
 
       {/* Filtered predictions */}
       <Card className="overflow-hidden border border-gray-100 dark:border-gray-800 p-0">

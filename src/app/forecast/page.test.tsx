@@ -124,7 +124,7 @@ const payload = {
   needsReorder: [a],
   upcomingStockout: [
     { productId: 'p1', productName: 'Top', currentStock: 2, daysUntilStockout: 1 },
-    { productId: 'p2', productName: 'Medio', currentStock: 20, daysUntilStockout: 40 },
+    { productId: 'p2', productName: 'Medio', currentStock: 20, daysUntilStockout: 10 },
   ],
   summary: {
     totalSales30: 50000,
@@ -255,5 +255,14 @@ describe('ForecastPage', () => {
       'href',
       '/providers?create_po=1&productId=p1&qty=73',
     );
+  });
+
+  it('"Próximo a agotarse" pinta en rojo solo lo urgente (<= 7 días)', async () => {
+    render(<ForecastPage />);
+    await screen.findByText('Efectividad del stock');
+
+    const panel = screen.getByText('Próximo a agotarse').closest('div') as HTMLElement;
+    expect(within(panel).getByText('1 días').className).toContain('text-rose-600');
+    expect(within(panel).getByText('10 días').className).toContain('text-amber-600');
   });
 });
