@@ -4,6 +4,7 @@ import { Inter } from 'next/font/google';
 import { ClientLayoutWrapper } from '@/components/layout/ClientLayoutWrapper';
 import { AuthProvider } from '@/lib/contexts/auth-context';
 import { TenantHeaderProvider } from '@/components/TenantHeaderProvider';
+import { AppProviders } from '@/components/AppProviders';
 import type { Metadata, Viewport } from 'next';
 
 const inter = Inter({
@@ -80,13 +81,15 @@ export default function RootLayout({
         />
       </head>
       <body className={`${inter.variable} min-h-screen bg-gray-50 antialiased dark:bg-gray-950 font-sans`}>
-        <AuthProvider>
-          <TenantHeaderProvider>
-            <ClientLayoutWrapper>
-              {children}
-            </ClientLayoutWrapper>
-          </TenantHeaderProvider>
-        </AuthProvider>
+        <AppProviders>
+          <AuthProvider>
+            <TenantHeaderProvider>
+              <ClientLayoutWrapper>
+                {children}
+              </ClientLayoutWrapper>
+            </TenantHeaderProvider>
+          </AuthProvider>
+        </AppProviders>
       </body>
     </html>
   );
