@@ -229,7 +229,7 @@ export default function StockAndActivity({
           <h2 className="text-sm font-medium text-gray-900 dark:text-white">Alertas de stock</h2>
           {criticalCount > 3 && (
             <button
-              onClick={() => router.push('/products')}
+              onClick={() => router.push('/products?stock=critical')}
               className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
             >
               Ver todas ({criticalCount}) →
@@ -264,7 +264,11 @@ export default function StockAndActivity({
                     size="sm"
                     variant="outline"
                     className="h-7 px-2.5 text-xs flex-shrink-0 ml-3"
-                    onClick={() => router.push('/products')}
+                    onClick={() =>
+                      router.push(
+                        `/providers?create_po=1&productId=${product.id}&qty=${Math.max(product.min_stock - product.stock, 1)}`
+                      )
+                    }
                   >
                     Surtir
                   </Button>

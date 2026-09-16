@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useProducts } from '@/lib/hooks/useProducts';
 import { useCategories } from '@/lib/hooks/useCategories';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -61,6 +61,7 @@ export default function ProductsPage() {
   const { tenant, tenants } = useAuth();
   const tenantId = tenant?.id ?? null;
   const router = useRouter();
+  const searchParams = useSearchParams();
   const multiBranch = (tenants?.length || 0) > 1;
   const { products, isLoading: productsLoading, mutate: mutateProducts } = useProducts(tenantId);
   const { categories, mutate: mutateCategories } = useCategories(tenantId);
@@ -68,7 +69,10 @@ export default function ProductsPage() {
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState('all');
-  const [stockFilter, setStockFilter] = useState<'all' | 'critical' | 'low' | 'normal'>('all');
+  const [stockFilter, setStockFilter] = useState<'all' | 'critical' | 'low' | 'normal'>(() => {
+    const s = searchParams?.get('stock');
+    return s === 'critical' || s === 'low' || s === 'normal' ? s : 'all';
+  });
 
   // Product Modal State
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
