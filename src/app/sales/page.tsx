@@ -34,6 +34,8 @@ import {
   List,
   Percent,
   TriangleAlert,
+  Printer,
+  MessageCircle,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import { getTenantHeaders } from '@/lib/fetchWithTenant';
@@ -121,6 +123,29 @@ function StockBadge({ product }: { product: ProductOption }) {
       Stock: {product.stock}
     </span>
   );
+}
+
+function saleToReceipt(sale: SaleRecord, customers: Customer[]): ReceiptSale {
+  const cust = customers.find((c) => c.name === sale.customer_name);
+  return {
+    id: sale.id,
+    created_at: sale.created_at,
+    total_cents: sale.total_cents,
+    discount_cents: sale.discount_cents ?? 0,
+    surcharge_cents: sale.surcharge_cents ?? 0,
+    amount_paid_cents: sale.amount_paid_cents ?? sale.total_cents,
+    change_cents: sale.change_cents ?? 0,
+    payment_method: sale.payment_method ?? 'cash',
+    customer_name: sale.customer_name ?? null,
+    customer_phone: cust?.phone ?? null,
+    notes: null,
+    items: (sale.items ?? []).map((item) => ({
+      product_name: item.product_name ?? 'Producto',
+      quantity: item.quantity,
+      unit_price_cents: item.unit_price_cents,
+      subtotal_cents: item.subtotal_cents,
+    })),
+  };
 }
 
 export default function SalesPage() {
@@ -1159,6 +1184,38 @@ export default function SalesPage() {
                                         <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                                           {getPaymentMethodLabel(sale.payment_method)}
                                         </span>
+                                      </div>
+                                      <div className="flex items-center justify-end gap-2 mt-3">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setLastSale(saleToReceipt(sale, customers));
+                                            window.setTimeout(() => window.print(), 200);
+                                          }}
+                                          className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md text-xs font-semibold text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
+                                          title="Reimprimir el ticket"
+                                        >
+                                          <Printer className="h-3.5 w-3.5" />
+                                          Reimprimir
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            const receipt = saleToReceipt(sale, customers);
+                                            window.open(
+                                              buildWhatsAppUrl(receipt, tenant as ReceiptTenant),
+                                              '_blank',
+                                              'noopener,noreferrer'
+                                            );
+                                          }}
+                                          className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md text-xs font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
+                                          title="Reenviar el ticket por WhatsApp"
+                                        >
+                                          <MessageCircle className="h-3.5 w-3.5" />
+                                          WhatsApp
+                                        </button>
                                       </div>
                                       <p className="text-xl font-bold text-green-600 dark:text-green-400 mt-2">
                                         {formatARS(sale.total_cents / 100)}
