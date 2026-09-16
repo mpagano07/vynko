@@ -38,6 +38,7 @@ const DUMMY_PRODUCTS: DemoProduct[] = [
   { id: '4', name: 'Manteca 200g', price: 900, cost: 540, stock: 3, minStock: 12, maxStock: 50, sku: 'MAN-200', barcode: '7790004004', category: 'Lácteos', categoryColor: '#3b82f6', deposito: '1', pasillo: 'B', estanteria: '3' },
   { id: '5', name: 'Azúcar 1kg', price: 1100, cost: 680, stock: 80, minStock: 20, maxStock: 100, sku: 'AZU-1K', barcode: '7790005005', category: 'Almacén', categoryColor: '#10b981', deposito: '2', pasillo: 'D', estanteria: '2' },
   { id: '6', name: 'Aceite de Oliva 500ml', price: 3500, cost: 2400, stock: 22, minStock: 8, maxStock: 40, sku: 'ACE-500', barcode: '7790006006', category: 'Almacén', categoryColor: '#10b981', deposito: '2', pasillo: 'D', estanteria: '4' },
+  { id: '7', name: 'Gaseosa Cola 1.5L', price: 1900, cost: 1150, stock: 36, minStock: 15, maxStock: 60, sku: 'GAS-CO', barcode: '7790007007', category: 'Bebidas', categoryColor: '#f59e0b', deposito: '1', pasillo: 'A', estanteria: '3' },
   { id: '8', name: 'Jugo de Naranja 1L', price: 1400, cost: 890, stock: 2, minStock: 10, maxStock: 45, sku: 'JUG-NR', barcode: '7790008008', category: 'Bebidas', categoryColor: '#f59e0b', deposito: '1', pasillo: 'A', estanteria: '1' },
   { id: '10', name: 'Harina 000 1kg', price: 750, cost: 410, stock: 55, minStock: 25, maxStock: 120, sku: 'HAR-000', barcode: '7790010010', category: 'Almacén', categoryColor: '#10b981', deposito: '2', pasillo: 'D', estanteria: '1' },
 ];

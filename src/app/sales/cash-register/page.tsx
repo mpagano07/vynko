@@ -27,6 +27,8 @@ import {
 } from '@/lib/payment-methods';
 import { cn } from '@/lib/utils/cn';
 
+const CASH_METHODS = PAYMENT_METHODS.filter((m) => m.id !== 'mercadopago');
+
 interface CashMovement {
   id: string;
   amount_cents: number;
@@ -99,13 +101,9 @@ export default function CashRegisterPage() {
   const [movementBusy, setMovementBusy] = useState(false);
 
   const [arqueoOpen, setArqueoOpen] = useState(false);
-  const [counted, setCounted] = useState<Record<PaymentMethodId, string>>({
-    cash: '',
-    transfer: '',
-    debit: '',
-    credit: '',
-    mercadopago: '',
-  });
+  const [counted, setCounted] = useState<Record<PaymentMethodId, string>>(
+    Object.fromEntries(CASH_METHODS.map((m) => [m.id, ''])) as Record<PaymentMethodId, string>
+  );
   const [arqueoNotes, setArqueoNotes] = useState('');
   const [closing, setClosing] = useState(false);
   const [report, setReport] = useState<CloseReport | null>(null);
@@ -198,7 +196,7 @@ export default function CashRegisterPage() {
     try {
       const data = await apiPost(`/api/cash-register/${openSession.id}/close`, {
         counted: Object.fromEntries(
-          PAYMENT_METHODS.map((m) => [m.id, parseAmount(counted[m.id])])
+          CASH_METHODS.map((m) => [m.id, parseAmount(counted[m.id])])
         ),
         notes: arqueoNotes.trim() || null,
       });
@@ -278,7 +276,7 @@ export default function CashRegisterPage() {
                     if (expected) {
                       setCounted(
                         Object.fromEntries(
-                          PAYMENT_METHODS.map((m) => [m.id, String((expected[m.id] ?? 0) / 100)])
+                          CASH_METHODS.map((m) => [m.id, String((expected[m.id] ?? 0) / 100)])
                         ) as Record<PaymentMethodId, string>
                       );
                     }
@@ -326,7 +324,7 @@ export default function CashRegisterPage() {
                 Esperado por medio (hasta ahora)
               </h2>
               <div className="space-y-2">
-                {PAYMENT_METHODS.map((method) => (
+                {CASH_METHODS.map((method) => (
                   <div
                     key={method.id}
                     className="flex items-center justify-between text-sm py-1.5 border-b border-gray-100 dark:border-gray-800 last:border-0"
@@ -549,7 +547,7 @@ function ReportPanel({ report, onClose }: { report: CloseReport; onClose: () => 
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-            {PAYMENT_METHODS.map((method) => {
+            {CASH_METHODS.map((method) => {
               const d = report.difference_by_method[method.id] ?? 0;
               return (
                 <tr key={method.id}>
@@ -719,7 +717,7 @@ function ArqueoModal({
             Contá el dinero real en caja por medio y confirmá el cierre. La comparación con lo esperado se muestra al final.
           </p>
           <div className="space-y-2.5">
-            {PAYMENT_METHODS.map((method) => (
+            {CASH_METHODS.map((method) => (
               <div key={method.id} className="flex items-center gap-3">
                 <span className="w-32 text-sm text-gray-700 dark:text-gray-300">{method.label}</span>
                 <input

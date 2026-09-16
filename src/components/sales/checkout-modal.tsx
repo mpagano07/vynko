@@ -59,6 +59,8 @@ const METHOD_ICONS: Record<PaymentMethodId, typeof Banknote> = {
   mercadopago: Wallet,
 };
 
+const CHECKOUT_METHODS = PAYMENT_METHODS.filter((m) => m.id !== 'mercadopago');
+
 function parseAmount(raw: string): number {
   const normalized = raw.trim().replace(/\./g, '').replace(',', '.');
   if (!normalized) return 0;
@@ -258,7 +260,7 @@ export function CheckoutModal({
 
       if (isTyping || !selectedLine) return;
 
-      const method = PAYMENT_METHODS.find(
+      const method = CHECKOUT_METHODS.find(
         (m) => m.hotkey.toLowerCase() === e.key.toLowerCase()
       );
       if (method) {
@@ -370,7 +372,7 @@ export function CheckoutModal({
                   className="rounded-lg bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 p-3"
                 >
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    {PAYMENT_METHODS.map((method) => {
+                    {CHECKOUT_METHODS.map((method) => {
                       const Icon = METHOD_ICONS[method.id];
                       const active = line.method === method.id;
                       return (
@@ -421,26 +423,36 @@ export function CheckoutModal({
                     <div>
                       {isCash ? (
                         <>
-                          <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
-                            {split ? (
-                              <>
-                                Cubre del total:{' '}
-                                <span className="font-semibold text-gray-900 dark:text-gray-100 tabular-nums">
-                                  {formatARS(allocationCents / 100)}
-                                </span>
-                              </>
-                            ) : (
-                              'Pago total en efectivo'
-                            )}
-                          </p>
-                          {pct !== 0 && (
-                            <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
-                              Ajuste {pct > 0 ? '+' : ''}
-                              {pct}% ={' '}
-                              <span className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">
-                                {formatARS(netCents / 100)}
-                              </span>
+                          <label
+                            htmlFor={`received-${line.id}`}
+                            className="text-[11px] font-medium text-gray-500 dark:text-gray-400"
+                          >
+                            Recibido
+                          </label>
+                          <input
+                            id={`received-${line.id}`}
+                            ref={firstAmountRef}
+                            type="text"
+                            inputMode="decimal"
+                            autoComplete="off"
+                            value={line.received}
+                            onChange={(e) => updateLine(line.id, { received: groupThousands(e.target.value) })}
+                            onFocus={() => setActiveLineId(line.id)}
+                            aria-label="Monto abonado"
+                            className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-base font-semibold tabular-nums text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                          />
+                          {shortReceived ? (
+                            <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-red-600 dark:text-red-400">
+                              <TriangleAlert className="h-3.5 w-3.5 shrink-0" />
+                              Faltan {formatARS(Math.max(0, netCents - Math.round(parseAmount(line.received) * 100)) / 100)}
                             </p>
+                          ) : (
+                            changeCents > 0 && (
+                              <p className="mt-1 flex items-center gap-1 text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                                Vuelto: {formatARS(changeCents / 100)}
+                              </p>
+                            )
                           )}
                         </>
                       ) : isFlex ? (
@@ -487,50 +499,42 @@ export function CheckoutModal({
                       )}
                     </div>
 
-                    {isCash ? (
-                      <div>
-                        <label
-                          htmlFor={`received-${line.id}`}
-                          className="text-[11px] font-medium text-gray-500 dark:text-gray-400"
-                        >
-                          Recibido
-                        </label>
-                        <input
-                          id={`received-${line.id}`}
-                          ref={firstAmountRef}
-                          type="text"
-                          inputMode="decimal"
-                          autoComplete="off"
-                          value={line.received}
-                          onChange={(e) => updateLine(line.id, { received: groupThousands(e.target.value) })}
-                          onFocus={() => setActiveLineId(line.id)}
-                          aria-label="Monto abonado"
-                          className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-base font-semibold tabular-nums text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
-                        />
-                        {shortReceived ? (
-                          <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-red-600 dark:text-red-400">
-                            <TriangleAlert className="h-3.5 w-3.5 shrink-0" />
-                            Faltan {formatARS(Math.max(0, netCents - Math.round(parseAmount(line.received) * 100)) / 100)}
+                    <div className="flex flex-col justify-start">
+                      {isCash ? (
+                        <>
+                          <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                            {split ? (
+                              <>
+                                Cubre del total:{' '}
+                                <span className="font-semibold text-gray-900 dark:text-gray-100 tabular-nums">
+                                  {formatARS(allocationCents / 100)}
+                                </span>
+                              </>
+                            ) : (
+                              'Pago total en efectivo'
+                            )}
                           </p>
-                        ) : (
-                          changeCents > 0 && (
-                            <p className="mt-1 flex items-center gap-1 text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                              <CheckCircle2 className="h-4 w-4 shrink-0" />
-                              Vuelto: {formatARS(changeCents / 100)}
+                          {pct !== 0 && (
+                            <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                              Ajuste {pct > 0 ? '+' : ''}
+                              {pct}% ={' '}
+                              <span className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                                {formatARS(netCents / 100)}
+                              </span>
                             </p>
-                          )
-                        )}
-                      </div>
-                    ) : (
-                      <div className="flex items-end gap-1 pb-1">
-                        <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                          Se cobrará{' '}
-                          <span className="font-bold text-gray-900 dark:text-gray-100 tabular-nums">
-                            {formatARS(netCents / 100)}
-                          </span>
-                        </p>
-                      </div>
-                    )}
+                          )}
+                        </>
+                      ) : (
+                        <div className="flex items-end gap-1 pb-1">
+                          <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                            Se cobrará{' '}
+                            <span className="font-bold text-gray-900 dark:text-gray-100 tabular-nums">
+                              {formatARS(netCents / 100)}
+                            </span>
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -638,11 +642,16 @@ export function CheckoutModal({
           )}
 
           <p className="text-center text-[11px] text-gray-400 dark:text-gray-500">
-            Atajos: <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 font-mono">E</kbd> Efectivo ·{' '}
-            <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 font-mono">T</kbd> Transferencia ·{' '}
-            <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 font-mono">D</kbd> Débito ·{' '}
-            <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 font-mono">C</kbd> Crédito ·{' '}
-            <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 font-mono">M</kbd> Mercado Pago
+            Atajos:{' '}
+            {CHECKOUT_METHODS.map((m, i) => (
+              <span key={m.id}>
+                {i > 0 && ' · '}
+                <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 font-mono">
+                  {m.hotkey}
+                </kbd>{' '}
+                {m.label}
+              </span>
+            ))}
           </p>
         </div>
       </div>
