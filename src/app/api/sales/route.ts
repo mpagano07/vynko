@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
 import { reduceStockForSale, buildStockMovement } from '@/lib/stock';
 import { fixResponse } from '@/lib/utils/encoding';
+import { isPaymentMethodId, normalizeCheckoutSettings } from '@/lib/payment-methods';
 
 export async function GET(request: Request) {
   const auth = await getAuth(request);
@@ -94,13 +95,42 @@ export async function POST(request: Request) {
   const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
+  const [{ data: tenantRow }, { data: openSession }] = await Promise.all([
+    supabaseAdmin.from('tenants').select('settings').eq('id', auth.tenantId).maybeSingle(),
+    supabaseAdmin
+      .from('cash_register_sessions')
+      .select('id')
+      .eq('tenant_id', auth.tenantId)
+      .eq('status', 'open')
+      .maybeSingle(),
+  ]);
+  const checkoutSettings = normalizeCheckoutSettings(
+    (tenantRow?.settings as Record<string, unknown> | undefined)?.checkout
+  );
+  const sessionId = openSession?.id ?? null;
+
   try {
     const body = await request.json();
-    const { customer_id, notes, items } = body as {
+    const { customer_id, notes, items, payment_method = 'cash', amount_paid, discount_percent = 0, surcharge_percent = 0, payments } = body as {
       customer_id?: string;
       notes?: string;
       items: { product_id: string; quantity: number }[];
+      payment_method?: string;
+      amount_paid?: number | null;
+      discount_percent?: number | null;
+      surcharge_percent?: number | null;
+      payments?: { method: string; amount: number; received?: number | null }[];
     };
+
+    if (!isPaymentMethodId(payment_method)) {
+      return NextResponse.json({ error: 'Medio de pago inválido' }, { status: 400 });
+    }
+
+    const discountPct = Math.max(0, Number(discount_percent) || 0);
+    const surchargePct = Math.max(0, Number(surcharge_percent) || 0);
+    if (discountPct > 100 || surchargePct > 100) {
+      return NextResponse.json({ error: 'El descuento o recargo no puede superar el 100%' }, { status: 400 });
+    }
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: 'La venta debe tener al menos un producto' }, { status: 400 });
@@ -150,7 +180,93 @@ export async function POST(request: Request) {
       return { product_id: item.product_id, quantity, unit_price_cents, subtotal_cents, product_name: product.name };
     });
 
-    const total_cents = saleItems.reduce((sum, item) => sum + item.subtotal_cents, 0);
+    const subtotal_cents = saleItems.reduce((sum, item) => sum + item.subtotal_cents, 0);
+    const discount_cents = Math.round((subtotal_cents * discountPct) / 100);
+    const surcharge_cents = Math.round((subtotal_cents * surchargePct) / 100);
+    const total_cents = Math.max(0, subtotal_cents - discount_cents + surcharge_cents);
+
+    interface ResolvedPayment {
+    method: string;
+    allocation_cents: number;
+    amount_cents: number;
+    received_cents: number;
+    change_cents: number;
+  }
+  const resolvedPayments: ResolvedPayment[] = [];
+
+  const isSplit = Array.isArray(payments) && payments.length > 0;
+
+  if (isSplit) {
+    let allocationSum = 0;
+    for (const p of payments) {
+      if (!isPaymentMethodId(p.method)) {
+        return NextResponse.json({ error: `Medio de pago inválido: ${p.method}` }, { status: 400 });
+      }
+      const allocationCents = Math.max(0, Math.round(Number(p.amount) * 100));
+      if (!(allocationCents > 0)) {
+        return NextResponse.json({ error: 'Cada medio de pago debe tener un monto mayor a 0' }, { status: 400 });
+      }
+      allocationSum += allocationCents;
+    }
+    if (Math.abs(allocationSum - total_cents) > 1) {
+      return NextResponse.json(
+        { error: `El reparto del pago no cubre el total ($${(total_cents / 100).toFixed(2)} vs $${(allocationSum / 100).toFixed(2)})` },
+        { status: 400 }
+      );
+    }
+
+    for (const p of payments) {
+      const method = p.method as keyof typeof checkoutSettings.payment_adjustments;
+      const allocationCents = Math.max(0, Math.round(Number(p.amount) * 100));
+      const adjustmentPct = checkoutSettings.payment_adjustments[method];
+      const amountCents = Math.round((allocationCents * (100 + adjustmentPct)) / 100);
+      let receivedCents = amountCents;
+      let changeCents = 0;
+      if (method === 'cash' && p.received != null) {
+        receivedCents = Math.max(0, Math.round(Number(p.received) * 100));
+      }
+      if (receivedCents < amountCents) {
+        return NextResponse.json(
+          { error: `El monto recibido para ${method} no puede ser menor al total del medio` },
+          { status: 400 }
+        );
+      }
+      changeCents = receivedCents - amountCents;
+      resolvedPayments.push({ method, allocation_cents: allocationCents, amount_cents: amountCents, received_cents: receivedCents, change_cents: changeCents });
+    }
+  } else {
+    if (!isPaymentMethodId(payment_method)) {
+      return NextResponse.json({ error: 'Medio de pago inválido' }, { status: 400 });
+    }
+    const amountPaidRaw = Number(amount_paid ?? total_cents / 100);
+    const amountPaidCents = Math.max(0, Math.round(amountPaidRaw * 100));
+    const changeCents = Math.max(0, amountPaidCents - total_cents);
+
+    if (payment_method !== 'cash' && amountPaidCents < total_cents) {
+      return NextResponse.json({ error: 'El monto cobrado no puede ser menor al total de la venta' }, { status: 400 });
+    }
+
+    resolvedPayments.push({
+      method: payment_method,
+      allocation_cents: total_cents,
+      amount_cents: total_cents,
+      received_cents: amountPaidCents,
+      change_cents: changeCents,
+    });
+  }
+
+  const finalTotalCents = isSplit
+    ? resolvedPayments.reduce((sum, p) => sum + p.amount_cents, 0)
+    : total_cents;
+  const amountPaidCents = resolvedPayments.reduce((sum, p) => sum + p.received_cents, 0);
+  const changeCents = resolvedPayments.reduce((sum, p) => sum + p.change_cents, 0);
+  const primaryMethod = resolvedPayments[0].method;
+  const paymentRows = resolvedPayments.map((p) => ({
+    method: p.method,
+    amount_cents: p.amount_cents,
+    received_cents: p.received_cents,
+    change_cents: p.change_cents,
+  }));
 
     const decrementStockAtomic = async (
       productId: string,
@@ -218,15 +334,36 @@ export async function POST(request: Request) {
         .insert({
           tenant_id: auth.tenantId,
           customer_id: customer_id || null,
-          total_cents,
+          total_cents: finalTotalCents,
           status: 'completed',
           notes: notes || null,
           sold_by: auth.userId,
+          payment_method: primaryMethod,
+          amount_paid_cents: amountPaidCents,
+          change_cents: changeCents,
+          discount_cents,
+          surcharge_cents,
+          session_id: sessionId,
         })
         .select()
         .single();
 
       if (saleError) throw new Error('No se pudo registrar la venta');
+
+      const paymentsWithSaleId = paymentRows.map((p) => ({
+        sale_id: sale.id,
+        tenant_id: auth.tenantId,
+        ...p,
+      }));
+
+      const { error: paymentsError } = await supabaseAdmin
+        .from('sale_payments')
+        .insert(paymentsWithSaleId);
+
+      if (paymentsError) {
+        await supabaseAdmin.from('sales').delete().eq('id', sale.id);
+        throw new Error('No se pudieron guardar los pagos de la venta');
+      }
 
       const itemsWithSaleId = saleItems.map((item) => ({
         sale_id: sale.id,
@@ -267,10 +404,25 @@ export async function POST(request: Request) {
         action: 'created',
         entityType: 'sale',
         entityId: sale.id,
-        details: { total_cents, items_count: saleItems.length, products: detail, folio: sale.id.slice(0, 8) },
+        details: { total_cents: finalTotalCents, items_count: saleItems.length, products: detail, folio: sale.id.slice(0, 8), payment_method: primaryMethod },
       });
 
-      return NextResponse.json({ ...sale, items: itemsWithSaleId }, { status: 201 });
+      return NextResponse.json(
+        {
+          ...sale,
+          items: itemsWithSaleId,
+          payments: paymentsWithSaleId,
+          adjustments_applied: isSplit
+            ? Object.fromEntries(
+                resolvedPayments.map((p) => [
+                  p.method,
+                  checkoutSettings.payment_adjustments[p.method as keyof typeof checkoutSettings.payment_adjustments],
+                ])
+              )
+            : {},
+        },
+        { status: 201 }
+      );
     } catch (err: unknown) {
       for (const item of decremented) {
         await incrementStockAtomic(item.product_id, item.quantity);

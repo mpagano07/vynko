@@ -8,10 +8,16 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Settings, User, Building2, Loader2, Save, KeyRound, Users, Mail, X, Shield, ShieldCheck, FileText, MapPin, Palette, ListChecks } from 'lucide-react';
+import { Settings, User, Building2, Loader2, Save, KeyRound, Users, Mail, X, Shield, ShieldCheck, FileText, MapPin, Palette, ListChecks, Percent, Ticket } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Select } from '@/components/ui/select';
 import toast from 'react-hot-toast';
+import {
+  PAYMENT_METHODS,
+  DEFAULT_CHECKOUT_SETTINGS,
+  normalizeCheckoutSettings,
+  type PaymentAdjustments,
+} from '@/lib/payment-methods';
 
 interface Collaborator {
   user_id: string;
@@ -61,6 +67,15 @@ export default function SettingsPage() {
     confirmPassword: '',
   });
   const [savingPassword, setSavingPassword] = useState(false);
+
+  const [checkoutForm, setCheckoutForm] = useState<PaymentAdjustments>(
+    DEFAULT_CHECKOUT_SETTINGS.payment_adjustments
+  );
+  const [checkoutPaperSize, setCheckoutPaperSize] = useState<'58mm' | '80mm'>('58mm');
+  const [checkoutShowReceipt, setCheckoutShowReceipt] = useState(true);
+  const [checkoutSynced, setCheckoutSynced] = useState(false);
+  const [savingCheckout, setSavingCheckout] = useState(false);
+  const [canEditCheckout, setCanEditCheckout] = useState(false);
 
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([]);
@@ -143,6 +158,66 @@ export default function SettingsPage() {
     }
     fetchCollaborators();
   }, []);
+
+  useEffect(() => {
+    if (!tenant || checkoutSynced) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch('/api/settings/checkout', {
+          headers: session?.access_token
+            ? { Authorization: `Bearer ${session.access_token}` }
+            : {},
+        });
+        const data = await res.json();
+        if (!res.ok || cancelled) return;
+        const settings = normalizeCheckoutSettings(data.settings);
+        setCheckoutForm(settings.payment_adjustments);
+        setCheckoutPaperSize(settings.paper_size);
+        setCheckoutShowReceipt(settings.show_receipt);
+        setCanEditCheckout(data.canEdit === true);
+      } catch {
+        // silent
+      } finally {
+        if (!cancelled) setCheckoutSynced(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tenant, checkoutSynced]);
+
+  const handleSaveCheckout = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canEditCheckout) return;
+    setSavingCheckout(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/settings/checkout', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({
+          payment_adjustments: checkoutForm,
+          paper_size: checkoutPaperSize,
+          show_receipt: checkoutShowReceipt,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Error al guardar la configuración');
+        return;
+      }
+      toast.success('Configuración de cobro guardada');
+    } catch {
+      toast.error('Error al guardar la configuración');
+    } finally {
+      setSavingCheckout(false);
+    }
+  }, [canEditCheckout, checkoutForm, checkoutPaperSize, checkoutShowReceipt]);
 
   const handleInvite = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -700,6 +775,95 @@ export default function SettingsPage() {
           </Card>
         </div>
       </div>
+      <Card className="p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Ticket className="h-5 w-5 text-indigo-500" />
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Cobro y ticket</h2>
+          {!canEditCheckout && (
+            <span className="ml-auto text-xs text-gray-400">Solo el propietario o manager puede editar</span>
+          )}
+        </div>
+
+        <form onSubmit={handleSaveCheckout} className="space-y-4">
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+              <Percent className="h-3 w-3" />
+              Ajustes por medio de pago
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {PAYMENT_METHODS.map((method) => (
+                <div
+                  key={method.id}
+                  className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2"
+                >
+                  <span className="text-sm text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                    {method.label}
+                    <span className="text-[10px] text-gray-400">[{method.hotkey}]</span>
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      type="number"
+                      min={-100}
+                      max={100}
+                      step={0.5}
+                      value={checkoutForm[method.id]}
+                      disabled={!canEditCheckout || savingCheckout}
+                      onChange={(e) => {
+                        const value = e.target.value === '' ? 0 : Number(e.target.value);
+                        setCheckoutForm((prev) => ({
+                          ...prev,
+                          [method.id]: Number.isFinite(value) ? value : 0,
+                        }));
+                      }}
+                      className="w-20 text-right"
+                    />
+                    <span className="text-xs text-gray-500">%</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 mt-2">
+              Negativo = descuento (ej. -10 para 10% off), positivo = recargo. Se aplican automáticamente al cobrar según el medio utilizado.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-end gap-6">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                Tamaño de ticket
+              </label>
+              <Select
+                disabled={!canEditCheckout || savingCheckout}
+                value={checkoutPaperSize}
+                onChange={(e) => setCheckoutPaperSize(e.target.value as '58mm' | '80mm')}
+                className="w-48"
+              >
+                <option value="58mm">58mm (térmico)</option>
+                <option value="80mm">80mm</option>
+              </Select>
+            </div>
+
+            <label className="flex items-center gap-2 pb-2.5">
+              <input
+                type="checkbox"
+                disabled={!canEditCheckout || savingCheckout}
+                checked={checkoutShowReceipt}
+                onChange={(e) => setCheckoutShowReceipt(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span className="text-sm text-gray-700 dark:text-gray-300">Mostrar ticket al finalizar la venta</span>
+            </label>
+
+            <Button type="submit" disabled={!canEditCheckout || savingCheckout}>
+              {savingCheckout ? (
+                <><Loader2 className="h-4 w-4 animate-spin mr-1" />Guardando...</>
+              ) : (
+                <><Save className="h-4 w-4 mr-1" />Guardar cambios</>
+              )}
+            </Button>
+          </div>
+        </form>
+      </Card>
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
           <Users className="h-5 w-5 text-green-500" />
