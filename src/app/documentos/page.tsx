@@ -853,50 +853,49 @@ export default function DocumentosPage() {
         </Button>
       </div>
 
-      <Card className="border border-gray-100 dark:border-gray-800">
-        <div className="p-4 border-b border-gray-100 dark:border-gray-800">
-          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-gray-500">Tipo:</span>
-              {Object.entries(DOCUMENT_TYPE_LABELS).map(([key, label]) => (
-                <button
-                  key={key}
-                  onClick={() => { setTypeFilter(key as DocumentType); setCurrentPage(1); setShowCreateForm(false); }}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    typeFilter === key
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                <Input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="Buscar..."
-                  value={search}
-                  onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
-                  className="pl-9 w-48"
-                />
-              </div>
-              <Select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="w-36">
-                <option value="all">Todos</option>
-                {isPoTab
-                  ? ['draft', 'sent', 'partial', 'received', 'cancelled'].map(s => (
-                      <option key={s} value={s}>{PO_STATUS_LABELS[s]}</option>
-                    ))
-                  : VALID_STATUSES_PER_TYPE[typeFilter].map(status => (
-                      <option key={status} value={status}>{DOCUMENT_STATUS_LABELS[status]}</option>
-                    ))
-                }
-              </Select>
-            </div>
+      <Card className="p-4 border border-gray-100 dark:border-gray-800">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+            <Input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Buscar..."
+              value={search}
+              onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
+              className="pl-9 w-48"
+            />
           </div>
+          <Select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="w-36">
+            <option value="all">Todos</option>
+            {isPoTab
+              ? ['draft', 'sent', 'partial', 'received', 'cancelled'].map(s => (
+                  <option key={s} value={s}>{PO_STATUS_LABELS[s]}</option>
+                ))
+              : VALID_STATUSES_PER_TYPE[typeFilter].map(status => (
+                  <option key={status} value={status}>{DOCUMENT_STATUS_LABELS[status]}</option>
+                ))
+            }
+          </Select>
+        </div>
+      </Card>
+
+      <Card className="overflow-hidden border border-gray-100 dark:border-gray-800 p-0">
+        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-gray-500">Tipo:</span>
+          {Object.entries(DOCUMENT_TYPE_LABELS).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => { setTypeFilter(key as DocumentType); setCurrentPage(1); setShowCreateForm(false); }}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                typeFilter === key
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         {loading ? (
@@ -1364,14 +1363,14 @@ export default function DocumentosPage() {
                 disabled={currentPage === totalPages}
                 onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
               >
-                Siguiente
+Siguiente
               </Button>
             </div>
           </div>
         )}
       </Card>
 
-      {/* Document Create Modal */}
+{/* Document Create Modal */}
       {showCreateForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
           <Card className="w-full max-w-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative flex flex-col max-h-[90vh]">

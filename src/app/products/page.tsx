@@ -146,6 +146,8 @@ function ProductsPageContent() {
   // Price Adjustment State
   const [isPriceAdjustModalOpen, setIsPriceAdjustModalOpen] = useState(false);
   const [priceAdjustPercentage, setPriceAdjustPercentage] = useState('');
+  const [priceAdjustScope, setPriceAdjustScope] = useState<'all' | 'category'>('all');
+  const [priceAdjustCategoryId, setPriceAdjustCategoryId] = useState('');
   const [priceAdjusting, setPriceAdjusting] = useState(false);
   const [priceAdjustResult, setPriceAdjustResult] = useState<{
     percentage: number; total: number; updated: number; sample?: PriceAdjustSample[]; errors?: string[];
@@ -280,6 +282,10 @@ function ProductsPageContent() {
   const handlePriceAdjust = async () => {
     const pct = parseFloat(priceAdjustPercentage);
     if (isNaN(pct) || pct <= 0) { toast.error('Ingresá un porcentaje válido'); return; }
+    if (priceAdjustScope === 'category' && !priceAdjustCategoryId) {
+      toast.error('Seleccioná una categoría');
+      return;
+    }
     setPriceAdjusting(true);
     setPriceAdjustResult(null);
 
@@ -291,7 +297,10 @@ function ProductsPageContent() {
           'Content-Type': 'application/json',
           ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
         },
-        body: JSON.stringify({ percentage: pct }),
+        body: JSON.stringify({
+          percentage: pct,
+          category_id: priceAdjustScope === 'category' ? priceAdjustCategoryId : undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al ajustar precios');
@@ -554,7 +563,7 @@ function ProductsPageContent() {
                     Categorías
                   </button>
                   <button
-                    onClick={() => { setIsPriceAdjustModalOpen(true); setPriceAdjustResult(null); setPriceAdjustPercentage(''); setIsActionsMenuOpen(false); }}
+                    onClick={() => { setIsPriceAdjustModalOpen(true); setPriceAdjustResult(null); setPriceAdjustPercentage(''); setPriceAdjustScope('all'); setPriceAdjustCategoryId(''); setIsActionsMenuOpen(false); }}
                     className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                   >
                     <Percent className="h-4 w-4 text-amber-500 shrink-0" />
@@ -1287,7 +1296,7 @@ function ProductsPageContent() {
             </button>
 
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Ajustar precios</h2>
-            <p className="text-sm text-gray-500 mb-6">Aumentá el precio y costo de todos los productos por porcentaje.</p>
+            <p className="text-sm text-gray-500 mb-6">Aumentá el precio y costo de los productos por porcentaje.</p>
 
             {priceAdjustResult ? (
               <div className="space-y-4">
@@ -1297,6 +1306,7 @@ function ProductsPageContent() {
                   </p>
                   <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
                     Aumento del {priceAdjustResult.percentage}% aplicado
+                    {priceAdjustCategoryId ? ` a la categoría "${categories.find((c) => c.id === priceAdjustCategoryId)?.name ?? ''}"` : ' a todos los productos'}
                   </p>
                 </div>
                 {priceAdjustResult.errors && priceAdjustResult.errors.length > 0 && (
@@ -1324,6 +1334,48 @@ function ProductsPageContent() {
             ) : (
               <div className="space-y-4">
                 <div>
+                  <label className="block text-sm font-medium mb-1.5 text-gray-300">Alcance del ajuste</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPriceAdjustScope('all')}
+                      className={`flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-colors ${
+                        priceAdjustScope === 'all'
+                          ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 font-medium'
+                          : 'border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                      }`}
+                    >
+                      <Package className="h-4 w-4 shrink-0" />
+                      Todos
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPriceAdjustScope('category')}
+                      className={`flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-colors ${
+                        priceAdjustScope === 'category'
+                          ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 font-medium'
+                          : 'border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                      }`}
+                    >
+                      <FolderKanban className="h-4 w-4 shrink-0" />
+                      Por categoría
+                    </button>
+                  </div>
+                </div>
+
+                {priceAdjustScope === 'category' && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5 text-gray-300">Categoría</label>
+                    <Select value={priceAdjustCategoryId} onChange={(e) => setPriceAdjustCategoryId(e.target.value)} className="bg-gray-800 border-gray-700 text-white">
+                      <option value="">Seleccionar categoría...</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
+
+                <div>
                   <label className="block text-sm font-medium mb-1.5 text-gray-300">Porcentaje de aumento (%)</label>
                   <div className="relative">
                     <Input
@@ -1338,7 +1390,9 @@ function ProductsPageContent() {
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">%</span>
                   </div>
                   <p className="text-xs text-gray-500 mt-1.5">
-                    Se aplicará a precio de venta y costo de todos los productos.
+                    {priceAdjustScope === 'all'
+                      ? 'Se aplicará a precio de venta y costo de todos los productos.'
+                      : 'Se aplicará a precio de venta y costo de los productos de la categoría seleccionada.'}
                   </p>
                 </div>
                 <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">

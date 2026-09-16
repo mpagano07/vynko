@@ -9,7 +9,11 @@ export async function POST(request: Request) {
   const tenantId = auth.tenantId;
 
   const body = await request.json();
-  const { percentage, product_ids } = body as { percentage: number; product_ids?: string[] };
+  const { percentage, product_ids, category_id } = body as {
+    percentage: number;
+    product_ids?: string[];
+    category_id?: string | null;
+  };
 
   if (percentage === undefined || typeof percentage !== 'number' || percentage <= 0) {
     return NextResponse.json({ error: 'Porcentaje inválido' }, { status: 400 });
@@ -34,10 +38,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No hay productos' }, { status: 404 });
   }
 
-  const { data: products, error: fetchError } = await supabaseAdmin
+  let productsQuery = supabaseAdmin
     .from('products')
-    .select('id, name, price_cents, cost')
+    .select('id, name, price_cents, cost, category_id')
     .in('id', allowedIds);
+
+  if (category_id) {
+    productsQuery = productsQuery.eq('category_id', category_id);
+  }
+
+  const { data: products, error: fetchError } = await productsQuery;
 
   if (fetchError) { console.error('DB error:', fetchError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }
   if (!products || products.length === 0) {
@@ -78,7 +88,7 @@ export async function POST(request: Request) {
     userId: auth.userId,
     action: 'adjusted',
     entityType: 'product',
-    details: { percentage, total: updates.length, updated: updates.length - errors.length },
+    details: { percentage, total: updates.length, updated: updates.length - errors.length, category_id: category_id ?? null },
   });
 
   return NextResponse.json({

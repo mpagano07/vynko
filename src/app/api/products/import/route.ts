@@ -5,6 +5,12 @@ import { createActivityLog } from '@/lib/activity-log';
 import { PLAN_LIMITS } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 
+const CATEGORY_COLOR_PALETTE = [
+  '#8b5cf6', '#06b6d4', '#f97316', '#ec4899', '#22c55e',
+  '#eab308', '#ef4444', '#3b82f6', '#14b8a6', '#a855f7',
+  '#f43f5e', '#0ea5e9', '#84cc16', '#d946ef', '#10b981',
+];
+
 async function resolveCategory(tenantId: string, name: string): Promise<string | null> {
   if (!name?.trim()) return null;
 
@@ -17,9 +23,19 @@ async function resolveCategory(tenantId: string, name: string): Promise<string |
 
   if (existing) return existing.id;
 
+  const { data: existingColors } = await supabaseAdmin
+    .from('categories')
+    .select('color')
+    .eq('tenant_id', tenantId)
+    .not('color', 'is', null);
+
+  const usedColors = new Set((existingColors ?? []).map((c) => c.color as string));
+  const color = CATEGORY_COLOR_PALETTE.find((c) => !usedColors.has(c))
+    ?? CATEGORY_COLOR_PALETTE[usedColors.size % CATEGORY_COLOR_PALETTE.length];
+
   const { data: created, error } = await supabaseAdmin
     .from('categories')
-    .insert({ tenant_id: tenantId, name: name.trim() })
+    .insert({ tenant_id: tenantId, name: name.trim(), color })
     .select('id')
     .single();
 
