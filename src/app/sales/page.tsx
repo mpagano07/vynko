@@ -38,6 +38,7 @@ import {
   MessageCircle,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
+import { cn } from '@/lib/utils/cn';
 import { getTenantHeaders } from '@/lib/fetchWithTenant';
 import { matchesQuery } from '@/lib/utils/text';
 import type { Customer } from '@/lib/types/sale';
@@ -165,6 +166,8 @@ export default function SalesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSalesList, setShowSalesList] = useState(false);
   const [expandedSales, setExpandedSales] = useState<Set<string>>(new Set());
+  const [waTargetId, setWaTargetId] = useState<string | null>(null);
+  const [waPhone, setWaPhone] = useState('');
   const [productSearch, setProductSearch] = useState('');
   const [productPage, setProductPage] = useState(1);
   const PRODUCTS_PER_PAGE = 10;
@@ -205,6 +208,23 @@ export default function SalesPage() {
       else next.add(id);
       return next;
     });
+  };
+
+  const resendWhatsApp = (sale: SaleRecord, phoneRaw: string) => {
+    const phone = (phoneRaw || '').replace(/\D/g, '');
+    if (!phone) {
+      toast.error('Ingresá el número de WhatsApp');
+      return;
+    }
+    const receipt = saleToReceipt(sale, customers);
+    receipt.customer_phone = phone;
+    window.open(
+      buildWhatsAppUrl(receipt, tenant as ReceiptTenant),
+      '_blank',
+      'noopener,noreferrer'
+    );
+    setWaTargetId(null);
+    setWaPhone('');
   };
 
   useEffect(() => {
@@ -1203,20 +1223,72 @@ export default function SalesPage() {
                                           type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            const receipt = saleToReceipt(sale, customers);
-                                            window.open(
-                                              buildWhatsAppUrl(receipt, tenant as ReceiptTenant),
-                                              '_blank',
-                                              'noopener,noreferrer'
-                                            );
+                                            if (waTargetId === sale.id) {
+                                              setWaTargetId(null);
+                                              setWaPhone('');
+                                              return;
+                                            }
+                                            const cust = customers.find((c) => c.name === sale.customer_name);
+                                            setWaPhone(cust?.phone ?? '');
+                                            setWaTargetId(sale.id);
                                           }}
-                                          className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md text-xs font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
+                                          className={cn(
+                                            'inline-flex items-center gap-1.5 px-3 h-9 rounded-md text-xs font-semibold border transition-colors',
+                                            waTargetId === sale.id
+                                              ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500'
+                                              : 'border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30'
+                                          )}
                                           title="Reenviar el ticket por WhatsApp"
                                         >
                                           <MessageCircle className="h-3.5 w-3.5" />
-                                          WhatsApp
+                                          {waTargetId === sale.id ? 'Cancelar' : 'WhatsApp'}
                                         </button>
                                       </div>
+                                      {waTargetId === sale.id && (
+                                        <div
+                                          className="flex items-center gap-2 mt-2"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <input
+                                            type="tel"
+                                            inputMode="numeric"
+                                            autoComplete="off"
+                                            autoFocus
+                                            value={waPhone}
+                                            onChange={(e) => setWaPhone(e.target.value.replace(/\D/g, ''))}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                resendWhatsApp(sale, waPhone);
+                                              }
+                                              if (e.key === 'Escape') {
+                                                setWaTargetId(null);
+                                                setWaPhone('');
+                                              }
+                                            }}
+                                            placeholder="1122223333"
+                                            aria-label="Número de WhatsApp"
+                                            className="flex h-9 min-w-0 flex-1 rounded-md border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold tabular-nums text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => resendWhatsApp(sale, waPhone)}
+                                            className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
+                                          >
+                                            Enviar
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setWaTargetId(null);
+                                              setWaPhone('');
+                                            }}
+                                            className="inline-flex items-center px-3 h-9 rounded-md text-xs font-medium text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                          >
+                                            Cancelar
+                                          </button>
+                                        </div>
+                                      )}
                                       <p className="text-xl font-bold text-green-600 dark:text-green-400 mt-2">
                                         {formatARS(sale.total_cents / 100)}
                                       </p>
