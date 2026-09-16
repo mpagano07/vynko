@@ -641,6 +641,32 @@ export function getCartItem(page: Page, productName: string) {
 }
 
 /**
+ * Completa el flujo de cobro del modal de /sales: selecciona el medio de pago
+ * y confirma. En efectivo el "Monto abonado" ya viene precargado con el total,
+ * así que alcanza con confirmar.
+ */
+export async function completeCheckout(
+  page: Page,
+  method: 'cash' | 'transfer' | 'debit' | 'credit' | 'mercadopago' = 'cash'
+) {
+  const modal = page.getByRole('dialog', { name: 'Cobrar venta' });
+  await modal.waitFor({ state: 'visible', timeout: 10_000 });
+
+  const labels: Record<string, string> = {
+    transfer: 'Transferencia',
+    debit: 'Débito',
+    credit: 'Crédito',
+    mercadopago: 'Mercado Pago',
+  };
+
+  if (method !== 'cash') {
+    await modal.getByRole('button', { name: new RegExp(labels[method]) }).click();
+  }
+
+  await modal.getByRole('button', { name: /Confirmar pago/i }).click();
+}
+
+/**
  * Abre la sección colapsable "Últimas Ventas" de /sales y espera a que cargue
  * la primera fila del historial.
  */

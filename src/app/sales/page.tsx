@@ -30,11 +30,28 @@ import {
   ChevronRight,
   Scan,
   X,
+  LayoutGrid,
+  List,
+  Percent,
+  TriangleAlert,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import { getTenantHeaders } from '@/lib/fetchWithTenant';
 import { matchesQuery } from '@/lib/utils/text';
 import type { Customer } from '@/lib/types/sale';
+import { CheckoutModal, type CheckoutPayload } from '@/components/sales/checkout-modal';
+import {
+  PrintReceipt,
+  buildWhatsAppUrl,
+  type ReceiptSale,
+  type ReceiptTenant,
+} from '@/components/sales/receipt-modal';
+import {
+  DEFAULT_CHECKOUT_SETTINGS,
+  normalizeCheckoutSettings,
+  type CheckoutSettings,
+} from '@/lib/payment-methods';
+import { getPaymentMethodLabel } from '@/lib/payment-methods';
 
 interface CartItem {
   product_id: string;
@@ -50,6 +67,7 @@ interface ProductOption {
   name: string;
   price: number;
   stock: number;
+  min_stock?: number;
   barcode?: string;
   sku?: string;
 }
@@ -58,8 +76,51 @@ interface SaleRecord {
   id: string;
   total_cents: number;
   customer_name?: string;
+  payment_method?: string;
+  amount_paid_cents?: number;
+  change_cents?: number;
+  discount_cents?: number;
+  surcharge_cents?: number;
   created_at: string;
   items: { id: string; product_id: string; product_name?: string; quantity: number; unit_price_cents: number; subtotal_cents: number }[];
+}
+
+type ProductView = 'grid' | 'list';
+
+type StockLevel = 'out' | 'critical' | 'low' | 'ok';
+
+function getStockLevel(stock: number, minStock: number): StockLevel {
+  if (stock <= 0) return 'out';
+  if (minStock > 0) {
+    if (stock <= minStock) return 'critical';
+    if (stock <= Math.ceil(minStock * 1.5)) return 'low';
+  }
+  return 'ok';
+}
+
+function StockBadge({ product }: { product: ProductOption }) {
+  const level = getStockLevel(product.stock, product.min_stock ?? 0);
+  if (level === 'critical') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 px-2 py-0.5 text-[11px] font-bold whitespace-nowrap">
+        <TriangleAlert className="h-3 w-3" />
+        Stock crítico · {product.stock}
+      </span>
+    );
+  }
+  if (level === 'low') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-0.5 text-[11px] font-bold whitespace-nowrap">
+        <TriangleAlert className="h-3 w-3" />
+        Stock bajo · {product.stock}
+      </span>
+    );
+  }
+  return (
+    <span className="text-xs text-gray-400 dark:text-gray-500 font-medium whitespace-nowrap">
+      Stock: {product.stock}
+    </span>
+  );
 }
 
 export default function SalesPage() {
@@ -82,6 +143,23 @@ export default function SalesPage() {
   const [productSearch, setProductSearch] = useState('');
   const [productPage, setProductPage] = useState(1);
   const PRODUCTS_PER_PAGE = 10;
+  const LIST_PER_PAGE = 30;
+  const [productView, setProductView] = useState<ProductView>(() => {
+    if (typeof window !== 'undefined') {
+      return window.localStorage.getItem('vynko:sales-view') === 'list' ? 'list' : 'grid';
+    }
+    return 'grid';
+  });
+  const [discountPercent, setDiscountPercent] = useState(0);
+  const [surchargePercent, setSurchargePercent] = useState(0);
+  const [showAdjustments, setShowAdjustments] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [checkoutSettings, setCheckoutSettings] = useState<CheckoutSettings>(DEFAULT_CHECKOUT_SETTINGS);
+  const [lastSale, setLastSale] = useState<ReceiptSale | null>(null);
+  const [paperSize] = useState<'58mm' | '80mm'>(() => {
+    if (typeof window === 'undefined') return '58mm';
+    return window.localStorage.getItem('vynko:paper-size') === '80mm' ? '80mm' : '58mm';
+  });
   const [flyAnim, setFlyAnim] = useState<{
     id: string;
     name: string;
@@ -162,6 +240,24 @@ export default function SalesPage() {
   }, [tenantId]);
 
   useEffect(() => {
+    if (!tenantId) return;
+    let cancelled = false;
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers = {
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        ...getTenantHeaders(),
+      };
+      const res = await fetch('/api/settings/checkout', { headers });
+      if (!res.ok || cancelled) return;
+      const data = await res.json();
+      if (cancelled) return;
+      setCheckoutSettings(normalizeCheckoutSettings(data?.checkout));
+    })().catch((err) => console.error('Error loading checkout settings:', err));
+    return () => { cancelled = true; };
+  }, [tenantId]);
+
+  useEffect(() => {
     searchInputRef.current?.focus();
   }, []);
 
@@ -185,11 +281,20 @@ export default function SalesPage() {
     return [...filteredProducts].sort((a, b) => (saleCount.get(b.id) || 0) - (saleCount.get(a.id) || 0));
   }, [filteredProducts, sales]);
 
-  const totalProductPages = Math.ceil(sortedProducts.length / PRODUCTS_PER_PAGE);
+  const productsPerPage = productView === 'list' ? LIST_PER_PAGE : PRODUCTS_PER_PAGE;
+  const totalProductPages = Math.ceil(sortedProducts.length / productsPerPage);
   const paginatedProducts = sortedProducts.slice(
-    (productPage - 1) * PRODUCTS_PER_PAGE,
-    productPage * PRODUCTS_PER_PAGE
+    (productPage - 1) * productsPerPage,
+    productPage * productsPerPage
   );
+
+  const changeView = (view: ProductView) => {
+    setProductView(view);
+    setProductPage(1);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('vynko:sales-view', view);
+    }
+  };
 
   const addToCart = (product: ProductOption) => {
     setCart((prev) => {
@@ -265,6 +370,7 @@ export default function SalesPage() {
           name: p.name,
           price: p.price,
           stock: p.stock ?? 0,
+          min_stock: p.min_stock ?? 0,
           barcode: p.barcode,
           sku: p.sku,
         };
@@ -299,10 +405,22 @@ export default function SalesPage() {
     setCart((prev) => prev.filter((item) => item.product_id !== productId));
   };
 
-  const total = cart.reduce((sum, item) => sum + item.subtotal, 0);
+  const subtotal = cart.reduce((sum, item) => sum + item.subtotal, 0);
+  const discount = Math.round(subtotal * discountPercent) / 100;
+  const surcharge = Math.round(subtotal * surchargePercent) / 100;
+  const total = Math.max(0, subtotal - discount + surcharge);
 
-  const handleCheckout = async () => {
+  const openCheckout = () => {
     if (cart.length === 0) {
+      toast.error('Agrega al menos un producto a la venta');
+      return;
+    }
+    setCheckoutOpen(true);
+  };
+
+  const handleConfirmCheckout = async ({ payments, primary, change, printReceipt, whatsappPhone }: CheckoutPayload) => {
+    if (cart.length === 0) {
+      setCheckoutOpen(false);
       toast.error('Agrega al menos un producto a la venta');
       return;
     }
@@ -321,6 +439,9 @@ export default function SalesPage() {
         body: JSON.stringify({
           customer_id: selectedCustomerId || null,
           notes: notes || null,
+          payments,
+          discount_percent: discountPercent,
+          surcharge_percent: surchargePercent,
           items: cart.map((item) => ({
             product_id: item.product_id,
             quantity: item.quantity,
@@ -331,10 +452,52 @@ export default function SalesPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al registrar la venta');
 
-      toast.success('Venta registrada exitosamente');
+      toast.success(
+        `Venta registrada exitosamente${change > 0 ? ` · Vuelto ${formatARS(change)}` : ''}`
+      );
       setCart([]);
       setNotes('');
       setSelectedCustomerId('');
+      setDiscountPercent(0);
+      setSurchargePercent(0);
+      setShowAdjustments(false);
+      setCheckoutOpen(false);
+
+      if (printReceipt || whatsappPhone) {
+        const items = cart.map((item) => ({
+          product_name: item.name,
+          quantity: item.quantity,
+          unit_price_cents: Math.round(item.price * 100),
+          subtotal_cents: Math.round(item.subtotal * 100),
+        }));
+        const sale: ReceiptSale = {
+          id: data.id ?? '',
+          created_at: data.created_at ?? new Date().toISOString(),
+          total_cents: data.total_cents ?? Math.round(total * 100),
+          discount_cents: data.discount_cents ?? 0,
+          surcharge_cents: data.surcharge_cents ?? 0,
+          amount_paid_cents: data.amount_paid_cents ?? 0,
+          change_cents: data.change_cents ?? Math.round(change * 100),
+          payment_method: data.payment_method ?? primary,
+          customer_name: null,
+          customer_phone: whatsappPhone || null,
+          notes: notes || null,
+          items,
+          payments: data.payments ?? [],
+          adjustments_applied: data.adjustments_applied ?? {},
+        };
+        setLastSale(sale);
+        if (whatsappPhone) {
+          window.open(
+            buildWhatsAppUrl(sale, tenant as ReceiptTenant),
+            '_blank',
+            'noopener,noreferrer'
+          );
+        }
+        if (printReceipt) {
+          window.setTimeout(() => window.print(), 250);
+        }
+      }
 
       const { data: { session: s2 } } = await supabase.auth.getSession();
       const h2 = {
@@ -358,6 +521,9 @@ export default function SalesPage() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Si el modal de cobro está abierto, las teclas las maneja el modal
+      if (checkoutOpen) return;
+
       // Atajo F2 o Ctrl+K: enfocar buscador de productos
       if (e.key === 'F2' || (e.ctrlKey && e.key.toLowerCase() === 'k')) {
         e.preventDefault();
@@ -366,10 +532,33 @@ export default function SalesPage() {
         return;
       }
 
-      // Atajo F4 o Ctrl+Enter: cobrar
+      // Atajo F4 o Ctrl+Enter: abrir el flujo de cobro
       if (e.key === 'F4' || (e.ctrlKey && e.key === 'Enter')) {
         e.preventDefault();
-        checkoutBtnRef.current?.click();
+        if (cart.length === 0) {
+          toast.error('Agrega al menos un producto a la venta');
+          return;
+        }
+        setCheckoutOpen(true);
+        return;
+      }
+
+      // Atajo Supr (Delete): cancelar carrito
+      if (e.key === 'Delete') {
+        const target = e.target as HTMLElement | null;
+        const isTyping = Boolean(
+          target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+        );
+        if (isTyping) return;
+        if (cart.length === 0) return;
+        e.preventDefault();
+        setCart([]);
+        setNotes('');
+        setSelectedCustomerId('');
+        setDiscountPercent(0);
+        setSurchargePercent(0);
+        setShowAdjustments(false);
+        toast.success('Carrito cancelado');
         return;
       }
 
@@ -388,7 +577,7 @@ export default function SalesPage() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showScanner, productSearch]);
+  }, [showScanner, productSearch, checkoutOpen, cart.length]);
 
   if (!tenantId) {
     return (
@@ -454,6 +643,10 @@ export default function SalesPage() {
             <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-[11px] shadow-xs">Esc</kbd>
             Limpiar búsqueda
           </span>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+            <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-[11px] shadow-xs">Supr</kbd>
+            Cancelar carrito
+          </span>
         </div>
       </div>
 
@@ -494,53 +687,130 @@ export default function SalesPage() {
             </Card>
           ) : (
             <>
-              <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 px-1">
+              <div className="flex items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400 px-1">
                 <span>
-                  Mostrando {((productPage - 1) * PRODUCTS_PER_PAGE) + 1}–{Math.min(productPage * PRODUCTS_PER_PAGE, sortedProducts.length)} de {sortedProducts.length} productos
+                  Mostrando {((productPage - 1) * productsPerPage) + 1}–{Math.min(productPage * productsPerPage, sortedProducts.length)} de {sortedProducts.length} productos
                 </span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {paginatedProducts.map((product) => {
-                const inCart = cart.some((item) => item.product_id === product.id);
-                return (
+                <div className="flex items-center gap-1 shrink-0" role="group" aria-label="Modo de vista">
                   <button
-                    key={product.id}
-                    onClick={(e) => handleAddToCart(product, e)}
-                    disabled={product.stock <= 0}
-                    className={`relative text-left p-4 rounded-lg border transition-all ${
-                      product.stock <= 0
-                        ? 'border-gray-200 dark:border-gray-700 opacity-50 cursor-not-allowed'
-                        : inCart
-                          ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20 shadow-sm'
-                          : 'border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-600 hover:shadow-sm bg-white dark:bg-gray-900'
+                    type="button"
+                    onClick={() => changeView('grid')}
+                    aria-pressed={productView === 'grid'}
+                    title="Vista de tarjetas"
+                    className={`p-1.5 rounded-md border transition-colors ${
+                      productView === 'grid'
+                        ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30'
+                        : 'border-gray-200 dark:border-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
                     }`}
                   >
-                    {inCart && (
-                      <div className="absolute top-2 right-2 flex items-center gap-1 bg-green-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                        <Check className="h-2.5 w-2.5" />
-                        Agregado
+                    <LayoutGrid className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => changeView('list')}
+                    aria-pressed={productView === 'list'}
+                    title="Vista de lista compacta"
+                    className={`p-1.5 rounded-md border transition-colors ${
+                      productView === 'list'
+                        ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30'
+                        : 'border-gray-200 dark:border-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                    }`}
+                  >
+                    <List className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              {productView === 'grid' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {paginatedProducts.map((product) => {
+                  const inCart = cart.some((item) => item.product_id === product.id);
+                  return (
+                    <button
+                      key={product.id}
+                      onClick={(e) => handleAddToCart(product, e)}
+                      disabled={product.stock <= 0}
+                      className={`relative text-left p-4 rounded-lg border transition-all ${
+                        product.stock <= 0
+                          ? 'border-gray-200 dark:border-gray-700 opacity-50 cursor-not-allowed'
+                          : inCart
+                            ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20 shadow-sm'
+                            : 'border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-600 hover:shadow-sm bg-white dark:bg-gray-900'
+                      }`}
+                    >
+                      {inCart && (
+                        <div className="absolute top-2 right-2 flex items-center gap-1 bg-green-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                          <Check className="h-2.5 w-2.5" />
+                          Agregado
+                        </div>
+                      )}
+                      <div className="font-semibold text-gray-900 dark:text-gray-100 text-sm pr-16">
+                        {product.name}
+                      </div>
+                    <div className="flex items-center justify-between gap-2 mt-1">
+                      <span className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
+                        {formatARS(product.price)}
+                      </span>
+                      <StockBadge product={product} />
+                    </div>
+                    {(product.barcode || product.sku) && (
+                      <div className="text-[10px] text-gray-400 font-mono mt-1">
+                        {product.barcode || product.sku}
                       </div>
                     )}
-                    <div className="font-semibold text-gray-900 dark:text-gray-100 text-sm">
-                      {product.name}
-                    </div>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
-                      {formatARS(product.price)}
-                    </span>
-                    <span className={`text-xs ${product.stock <= (product.stock > 5 ? 5 : 0) ? 'text-red-500' : 'text-gray-400'}`}>
-                      Stock: {product.stock}
-                    </span>
-                  </div>
-                  {(product.barcode || product.sku) && (
-                    <div className="text-[10px] text-gray-400 font-mono mt-1">
-                      {product.barcode || product.sku}
-                    </div>
-                  )}
-                </button>
-              );
-              })}
-              </div>
+                  </button>
+                );
+                })}
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        <th className="py-2.5 px-3">Producto</th>
+                        <th className="py-2.5 px-3 text-right hidden sm:table-cell">Precio</th>
+                        <th className="py-2.5 px-3 text-right">Stock</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
+                      {paginatedProducts.map((product) => {
+                        const inCart = cart.some((item) => item.product_id === product.id);
+                        return (
+                          <tr key={product.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
+                            <td className="py-1.5 px-3">
+                              <button
+                                type="button"
+                                onClick={(e) => handleAddToCart(product, e)}
+                                disabled={product.stock <= 0}
+                                className="flex flex-col items-start text-left w-full disabled:opacity-50"
+                              >
+                                <span className={`flex items-center gap-1.5 font-medium text-gray-900 dark:text-gray-100 ${inCart ? 'text-green-600 dark:text-green-400' : ''}`}>
+                                  {product.name}
+                                  {inCart && <Check className="h-3.5 w-3.5" />}
+                                </span>
+                                {(product.barcode || product.sku) && (
+                                  <span className="text-[10px] text-gray-400 font-mono">
+                                    {product.barcode || product.sku}
+                                  </span>
+                                )}
+                              </button>
+                            </td>
+                            <td className="py-1.5 px-3 text-right font-semibold text-indigo-600 dark:text-indigo-400 tabular-nums hidden sm:table-cell">
+                              {formatARS(product.price)}
+                            </td>
+                            <td className="py-1.5 px-3 text-right">
+                              <div className="flex justify-end">
+                                <StockBadge product={product} />
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
               {totalProductPages > 1 && (
                 <div className="flex items-center justify-between pt-2">
                   <button
@@ -668,16 +938,90 @@ export default function SalesPage() {
                     onChange={(e) => setNotes(e.target.value)}
                   />
 
-                  <div className="flex items-center justify-between text-lg font-bold text-gray-900 dark:text-gray-100">
-                    <span>Total</span>
-                    <span className="text-2xl text-indigo-600 dark:text-indigo-400 tabular-nums font-bold">
-                      {formatARS(total)}
-                    </span>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAdjustments((v) => !v)}
+                      className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                    >
+                      <Percent className="h-3.5 w-3.5" />
+                      Descuento / Recargo
+                      {showAdjustments ? (
+                        <ChevronUp className="h-3 w-3" />
+                      ) : (
+                        <ChevronDown className="h-3 w-3" />
+                      )}
+                    </button>
+                    {showAdjustments && (
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+                        <label className="block">
+                          <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                            Descuento %
+                          </span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={discountPercent}
+                            onChange={(e) =>
+                              setDiscountPercent(Math.min(100, Math.max(0, Number(e.target.value) || 0)))
+                            }
+                            aria-label="Descuento porcentual"
+                            className="flex h-9 w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                            Recargo %
+                          </span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={surchargePercent}
+                            onChange={(e) =>
+                              setSurchargePercent(Math.min(100, Math.max(0, Number(e.target.value) || 0)))
+                            }
+                            aria-label="Recargo porcentual"
+                            className="flex h-9 w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
+                      <span>Subtotal</span>
+                      <span className="tabular-nums">{formatARS(subtotal)}</span>
+                    </div>
+                    {(discount > 0 || surcharge > 0) && (
+                      <>
+                        {discount > 0 && (
+                          <div className="flex items-center justify-between text-sm text-emerald-600 dark:text-emerald-400">
+                            <span>Descuento ({discountPercent}%)</span>
+                            <span className="tabular-nums">-{formatARS(discount)}</span>
+                          </div>
+                        )}
+                        {surcharge > 0 && (
+                          <div className="flex items-center justify-between text-sm text-amber-600 dark:text-amber-400">
+                            <span>Recargo ({surchargePercent}%)</span>
+                            <span className="tabular-nums">+{formatARS(surcharge)}</span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    <div className="flex items-center justify-between text-lg font-bold text-gray-900 dark:text-gray-100 pt-0.5">
+                      <span>Total</span>
+                      <span className="text-2xl text-indigo-600 dark:text-indigo-400 tabular-nums font-bold">
+                        {formatARS(total)}
+                      </span>
+                    </div>
                   </div>
 
                   <Button
                     ref={checkoutBtnRef}
-                    onClick={handleCheckout}
+                    onClick={openCheckout}
                     disabled={isSubmitting}
                     className="w-full h-11 flex items-center justify-center gap-2 font-semibold shadow-xs active:scale-[0.99] transition-all"
                   >
@@ -740,6 +1084,7 @@ export default function SalesPage() {
                       <th className="py-3 px-4">Folio</th>
                       <th className="py-3 px-4">Cliente</th>
                       <th className="py-3 px-4">Productos</th>
+                      <th className="py-3 px-4">Pago</th>
                       <th className="py-3 px-4 text-right">Total</th>
                       <th className="py-3 px-4 text-right">Fecha</th>
                     </tr>
@@ -767,6 +1112,9 @@ export default function SalesPage() {
                           <td className="py-3 px-4 text-gray-500 text-xs">
                             {sale.items?.length || 0} item(s)
                           </td>
+                          <td className="py-3 px-4 text-xs text-gray-500 dark:text-gray-400">
+                            {getPaymentMethodLabel(sale.payment_method)}
+                          </td>
                           <td className="py-3 px-4 text-right font-semibold text-green-600 dark:text-green-400">
                             {formatARS(sale.total_cents / 100)}
                           </td>
@@ -782,7 +1130,7 @@ export default function SalesPage() {
                         </tr>
                         {expandedSales.has(sale.id) && (
                           <tr>
-                            <td colSpan={6} className="p-0">
+                            <td colSpan={7} className="p-0">
                               <div className="border-l-4 border-l-indigo-500 bg-indigo-50 dark:bg-indigo-950/20 mx-4 my-2 rounded-lg overflow-hidden">
                                 <div className="px-6 py-4">
                                   <div className="flex items-start justify-between mb-4">
@@ -804,12 +1152,32 @@ export default function SalesPage() {
                                       </p>
                                     </div>
                                     <div className="text-right">
-                                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400">
-                                        Completada
-                                      </span>
+                                      <div className="flex items-center justify-end gap-1.5">
+                                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400">
+                                          Completada
+                                        </span>
+                                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                                          {getPaymentMethodLabel(sale.payment_method)}
+                                        </span>
+                                      </div>
                                       <p className="text-xl font-bold text-green-600 dark:text-green-400 mt-2">
                                         {formatARS(sale.total_cents / 100)}
                                       </p>
+                                      {(sale.discount_cents ?? 0) > 0 && (
+                                        <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+                                          Descuento: -{formatARS((sale.discount_cents ?? 0) / 100)}
+                                        </p>
+                                      )}
+                                      {(sale.surcharge_cents ?? 0) > 0 && (
+                                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                                          Recargo: +{formatARS((sale.surcharge_cents ?? 0) / 100)}
+                                        </p>
+                                      )}
+                                      {(sale.change_cents ?? 0) > 0 && (
+                                        <p className="text-xs text-gray-500 mt-1">
+                                          Abonado: {formatARS((sale.amount_paid_cents ?? 0) / 100)} · Vuelto: {formatARS((sale.change_cents ?? 0) / 100)}
+                                        </p>
+                                      )}
                                     </div>
                                   </div>
 
@@ -896,6 +1264,29 @@ export default function SalesPage() {
           </div>
         )}
       </Card>
+
+      {checkoutOpen && (
+        <CheckoutModal
+          total={total}
+          subtotal={subtotal}
+          discount={discount}
+          surcharge={surcharge}
+          adjustments={checkoutSettings.payment_adjustments}
+          submitting={isSubmitting}
+          defaultPrint={checkoutSettings.show_receipt !== false}
+          defaultPhone={customers.find((c) => c.id === selectedCustomerId)?.phone}
+          onClose={() => setCheckoutOpen(false)}
+          onConfirm={handleConfirmCheckout}
+        />
+      )}
+
+      {lastSale && (
+        <PrintReceipt
+          sale={lastSale}
+          tenant={tenant as ReceiptTenant}
+          paperSize={paperSize}
+        />
+      )}
 
       {showScanner && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">

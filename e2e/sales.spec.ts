@@ -8,6 +8,7 @@ import {
   formatARSTest,
   addProductToCart,
   getCartItem,
+  completeCheckout,
   getNewestSaleRowText,
   openSalesHistory,
   cleanupSalesData,
@@ -114,6 +115,7 @@ test.describe('Ventas E2E', () => {
 
     // Confirmar venta
     await page.getByRole('button', { name: 'Finalizar venta' }).click();
+    await completeCheckout(page);
     await expect(page.locator('[role="status"]').filter({ hasText: 'Venta registrada exitosamente' }).first()).toBeVisible({ timeout: 15_000 });
 
     // El carrito queda vacío
@@ -149,6 +151,7 @@ test.describe('Ventas E2E', () => {
     await expect(page.locator('span.text-2xl.text-indigo-600')).toHaveText(formatARSTest(PRICE_UNICO + PRICE_MULTI));
 
     await page.getByRole('button', { name: 'Finalizar venta' }).click();
+    await completeCheckout(page);
     await expect(page.locator('[role="status"]').filter({ hasText: 'Venta registrada exitosamente' }).first()).toBeVisible({ timeout: 15_000 });
 
     // Stock: Unico 13 - 1 = 12, Multi 10 - 1 = 9
@@ -239,6 +242,7 @@ test.describe('Ventas E2E', () => {
     await expect(page.locator('span.text-2xl.text-indigo-600')).toHaveText(formatARSTest(PRICE_ESCASO));
 
     await page.getByRole('button', { name: 'Finalizar venta' }).click();
+    await completeCheckout(page);
     await expect(page.locator('[role="status"]').filter({ hasText: 'Venta registrada exitosamente' }).first()).toBeVisible({ timeout: 15_000 });
 
     // Stock 1 -> 0, badge crítico

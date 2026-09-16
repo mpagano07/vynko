@@ -41,6 +41,7 @@ const navGroups: NavGroup[] = [
     items: [
       { name: 'Dashboard', href: '/dashboard', requiredPlan: ALL_PLANS },
       { name: 'Ventas', href: '/sales', requiredPlan: ALL_PLANS },
+      { name: 'Caja', href: '/sales/cash-register', requiredPlan: ALL_PLANS },
     ],
   },
   {

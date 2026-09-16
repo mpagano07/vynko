@@ -193,6 +193,99 @@ describe('POST /api/sales', () => {
     expect(res.status).toBe(401);
   });
 
+  it('aplica descuento, recargo y guarda el medio de pago con vuelto', async () => {
+    supabaseMock.__queue('products', {
+      data: [{ id: 'p1', name: 'Coca', price: 2, price_cents: 200 }],
+    });
+    supabaseMock.__queue('product_stock', { data: [{ product_id: 'p1', stock: 10 }] });
+    supabaseMock.__queue('product_stock', { data: { id: 'ps1', stock: 10 } });
+    supabaseMock.__queue('product_stock', { data: [{ id: 'ps1' }] });
+    supabaseMock.__queue('sales', { data: { id: 'sale-4' } });
+    supabaseMock.__queue('sale_items', { data: null, error: null });
+    supabaseMock.__queue('stock_history', { data: null, error: null });
+
+    const res = await POST(
+      makeRequest({
+        items: [{ product_id: 'p1', quantity: 2 }],
+        payment_method: 'mercadopago',
+        amount_paid: 400,
+        discount_percent: 10,
+        surcharge_percent: 5,
+      })
+    );
+    expect(res.status).toBe(201);
+
+    const saleInsert = supabaseMock.__calls.find(
+      (c) => c.table === 'sales' && c.method === 'insert'
+    );
+    expect(saleInsert?.args[0]).toMatchObject({
+      total_cents: 380,
+      payment_method: 'mercadopago',
+      discount_cents: 40,
+      surcharge_cents: 20,
+      amount_paid_cents: 40000,
+      change_cents: 39620,
+    });
+  });
+
+  it('calcula vuelto en efectivo cuando el cliente paga de más', async () => {
+    supabaseMock.__queue('products', {
+      data: [{ id: 'p1', name: 'Coca', price: 2, price_cents: 200 }],
+    });
+    supabaseMock.__queue('product_stock', { data: [{ product_id: 'p1', stock: 10 }] });
+    supabaseMock.__queue('product_stock', { data: { id: 'ps1', stock: 10 } });
+    supabaseMock.__queue('product_stock', { data: [{ id: 'ps1' }] });
+    supabaseMock.__queue('sales', { data: { id: 'sale-5' } });
+    supabaseMock.__queue('sale_items', { data: null, error: null });
+    supabaseMock.__queue('stock_history', { data: null, error: null });
+
+    const res = await POST(
+      makeRequest({
+        items: [{ product_id: 'p1', quantity: 1 }],
+        payment_method: 'cash',
+        amount_paid: 500,
+      })
+    );
+    expect(res.status).toBe(201);
+
+    const saleInsert = supabaseMock.__calls.find(
+      (c) => c.table === 'sales' && c.method === 'insert'
+    );
+    expect(saleInsert?.args[0]).toMatchObject({
+      total_cents: 200,
+      payment_method: 'cash',
+      amount_paid_cents: 50000,
+      change_cents: 49800,
+    });
+  });
+
+  it('rechaza un medio de pago inválido', async () => {
+    const res = await POST(
+      makeRequest({ items: [{ product_id: 'p1', quantity: 1 }], payment_method: 'bitcoin' })
+    );
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe('Medio de pago inválido');
+  });
+
+  it('rechaza un pago menor al total para medios no efectivo', async () => {
+    supabaseMock.__queue('products', {
+      data: [{ id: 'p1', name: 'Coca', price: 2, price_cents: 200 }],
+    });
+    supabaseMock.__queue('product_stock', { data: [{ product_id: 'p1', stock: 10 }] });
+
+    const res = await POST(
+      makeRequest({
+        items: [{ product_id: 'p1', quantity: 1 }],
+        payment_method: 'credit',
+        amount_paid: 1,
+      })
+    );
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe('El monto cobrado no puede ser menor al total de la venta');
+  });
+
   it('borra la venta y devuelve 400 cuando falla el insert de sale_items', async () => {
     supabaseMock.__queue('products', {
       data: [{ id: 'p1', name: 'Coca', price: 2, price_cents: 200 }],
@@ -222,6 +315,160 @@ describe('POST /api/sales', () => {
     );
     expect(delEq?.args[1]).toBe('sale-9');
     expect(createActivityLog).not.toHaveBeenCalled();
+  });
+
+  it('aplica pagos divididos con ajustes automáticos por medio y vuelto', async () => {
+    supabaseMock.__queue('tenants', {
+      data: {
+        settings: {
+          checkout: {
+            payment_adjustments: { cash: -10, transfer: 0, debit: 0, credit: 5, mercadopago: 0 },
+          },
+        },
+      },
+    });
+    supabaseMock.__queue('cash_register_sessions', { data: { id: 'session-1' } });
+    supabaseMock.__queue('products', {
+      data: [{ id: 'p1', name: 'Coca', price: 2, price_cents: 200 }],
+    });
+    supabaseMock.__queue('product_stock', { data: [{ product_id: 'p1', stock: 10 }] });
+    supabaseMock.__queue('product_stock', { data: { id: 'ps1', stock: 10 } });
+    supabaseMock.__queue('product_stock', { data: [{ id: 'ps1' }] });
+    supabaseMock.__queue('sales', { data: { id: 'sale-split' } });
+    supabaseMock.__queue('sale_payments', { data: null, error: null });
+    supabaseMock.__queue('sale_items', { data: null, error: null });
+    supabaseMock.__queue('stock_history', { data: null, error: null });
+
+    const res = await POST(
+      makeRequest({
+        items: [{ product_id: 'p1', quantity: 2 }],
+        payments: [
+          { method: 'cash', amount: 2, received: 2.5 },
+          { method: 'transfer', amount: 2 },
+        ],
+      })
+    );
+    expect(res.status).toBe(201);
+
+    const saleInsert = supabaseMock.__calls.find(
+      (c) => c.table === 'sales' && c.method === 'insert'
+    );
+    expect(saleInsert?.args[0]).toMatchObject({
+      total_cents: 380,
+      payment_method: 'cash',
+      amount_paid_cents: 450,
+      change_cents: 70,
+      session_id: 'session-1',
+    });
+
+    const paymentsInsert = supabaseMock.__calls.find(
+      (c) => c.table === 'sale_payments' && c.method === 'insert'
+    );
+    expect(paymentsInsert?.args[0]).toEqual([
+      {
+        sale_id: 'sale-split',
+        tenant_id: 'tenant-1',
+        method: 'cash',
+        amount_cents: 180,
+        received_cents: 250,
+        change_cents: 70,
+      },
+      {
+        sale_id: 'sale-split',
+        tenant_id: 'tenant-1',
+        method: 'transfer',
+        amount_cents: 200,
+        received_cents: 200,
+        change_cents: 0,
+      },
+    ]);
+  });
+
+  it('aplica el ajuste automático a un solo medio de pago', async () => {
+    supabaseMock.__queue('tenants', {
+      data: {
+        settings: {
+          checkout: {
+            payment_adjustments: { cash: -10, transfer: 0, debit: 0, credit: 0, mercadopago: 0 },
+          },
+        },
+      },
+    });
+    supabaseMock.__queue('cash_register_sessions', { data: null });
+    supabaseMock.__queue('products', {
+      data: [{ id: 'p1', name: 'Coca', price: 2, price_cents: 200 }],
+    });
+    supabaseMock.__queue('product_stock', { data: [{ product_id: 'p1', stock: 10 }] });
+    supabaseMock.__queue('product_stock', { data: { id: 'ps1', stock: 10 } });
+    supabaseMock.__queue('product_stock', { data: [{ id: 'ps1' }] });
+    supabaseMock.__queue('sales', { data: { id: 'sale-adj' } });
+    supabaseMock.__queue('sale_items', { data: null, error: null });
+    supabaseMock.__queue('stock_history', { data: null, error: null });
+
+    const res = await POST(
+      makeRequest({
+        items: [{ product_id: 'p1', quantity: 2 }],
+        payments: [{ method: 'cash', amount: 4 }],
+      })
+    );
+    expect(res.status).toBe(201);
+
+    const saleInsert = supabaseMock.__calls.find(
+      (c) => c.table === 'sales' && c.method === 'insert'
+    );
+    expect(saleInsert?.args[0]).toMatchObject({ total_cents: 360 });
+
+    const paymentsInsert = supabaseMock.__calls.find(
+      (c) => c.table === 'sale_payments' && c.method === 'insert'
+    );
+    const paymentRows = (paymentsInsert?.args[0] ?? []) as Array<Record<string, unknown>>;
+    expect(paymentRows[0]).toMatchObject({
+      method: 'cash',
+      amount_cents: 360,
+      received_cents: 360,
+      change_cents: 0,
+    });
+  });
+
+  it('rechaza un reparto que no cubre el total de la venta', async () => {
+    supabaseMock.__queue('tenants', { data: { settings: { checkout: {} } } });
+    supabaseMock.__queue('cash_register_sessions', { data: null });
+    supabaseMock.__queue('products', {
+      data: [{ id: 'p1', name: 'Coca', price: 2, price_cents: 200 }],
+    });
+    supabaseMock.__queue('product_stock', { data: [{ product_id: 'p1', stock: 10 }] });
+
+    const res = await POST(
+      makeRequest({
+        items: [{ product_id: 'p1', quantity: 2 }],
+        payments: [
+          { method: 'cash', amount: 1 },
+          { method: 'transfer', amount: 1 },
+        ],
+      })
+    );
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toContain('El reparto del pago no cubre el total');
+  });
+
+  it('rechaza un monto recibido menor al total del medio de pago', async () => {
+    supabaseMock.__queue('tenants', { data: { settings: { checkout: {} } } });
+    supabaseMock.__queue('cash_register_sessions', { data: null });
+    supabaseMock.__queue('products', {
+      data: [{ id: 'p1', name: 'Coca', price: 2, price_cents: 200 }],
+    });
+    supabaseMock.__queue('product_stock', { data: [{ product_id: 'p1', stock: 10 }] });
+
+    const res = await POST(
+      makeRequest({
+        items: [{ product_id: 'p1', quantity: 2 }],
+        payments: [{ method: 'cash', amount: 4, received: 1 }],
+      })
+    );
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toContain('no puede ser menor al total del medio');
   });
 });
 
