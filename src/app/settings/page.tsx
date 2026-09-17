@@ -8,7 +8,9 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Settings, User, Building2, Loader2, Save, KeyRound, Users, Mail, X, Shield, ShieldCheck, FileText, MapPin, Palette, ListChecks, Percent, Ticket } from 'lucide-react';
+import { Tabs, TabPanel } from '@/components/ui/tabs';
+import { EditCollaboratorModal } from '@/components/ui/edit-collaborator-modal';
+import { Settings, User, Building2, Loader2, Save, KeyRound, Users, Mail, X, Shield, ShieldCheck, FileText, MapPin, Palette, ListChecks, Percent, Ticket, Pencil, HelpCircle, RefreshCw } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Select } from '@/components/ui/select';
 import toast from 'react-hot-toast';
@@ -34,9 +36,29 @@ interface PendingInvitation {
   role: string;
 }
 
+function capitalizeWords(value: string): string {
+  return value.replace(/(^|\s)(\p{L})/gu, (_, pre: string, ch: string) => pre + ch.toUpperCase());
+}
+
+function formatCuit(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 10) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}-${digits.slice(2, 10)}-${digits.slice(10)}`;
+}
+
+function formatPhone(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 12);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6)}`;
+}
+
 export default function SettingsPage() {
   const { user, profile, tenant, tenants, role, loading: authLoading } = useAuth();
   const router = useRouter();
+
+  const [activeTab, setActiveTab] = useState('perfil');
 
   const [profileForm, setProfileForm] = useState({ full_name: '' });
   const [profileSynced, setProfileSynced] = useState(false);
@@ -75,6 +97,7 @@ export default function SettingsPage() {
   const [checkoutShowReceipt, setCheckoutShowReceipt] = useState(true);
   const [checkoutSynced, setCheckoutSynced] = useState(false);
   const [savingCheckout, setSavingCheckout] = useState(false);
+  const [savingTicket, setSavingTicket] = useState(false);
   const [canEditCheckout, setCanEditCheckout] = useState(false);
 
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
@@ -84,8 +107,11 @@ export default function SettingsPage() {
   const [inviteRole, setInviteRole] = useState('member');
   const [inviteName, setInviteName] = useState('');
   const [inviting, setInviting] = useState(false);
+  const [resendingInvite, setResendingInvite] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [selectedTenantIds, setSelectedTenantIds] = useState<string[]>([]);
+  const [editingCollab, setEditingCollab] = useState<Collaborator | null>(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   useEffect(() => {
     if (tenants.length > 0 && selectedTenantIds.length === 0) {
@@ -188,36 +214,53 @@ export default function SettingsPage() {
     };
   }, [tenant, checkoutSynced]);
 
+  const saveCheckoutConfig = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/settings/checkout', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      },
+      body: JSON.stringify({
+        payment_adjustments: checkoutForm,
+        paper_size: checkoutPaperSize,
+        show_receipt: checkoutShowReceipt,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Error al guardar la configuración');
+    }
+  }, [checkoutForm, checkoutPaperSize, checkoutShowReceipt]);
+
   const handleSaveCheckout = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canEditCheckout) return;
     setSavingCheckout(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/settings/checkout', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
-        body: JSON.stringify({
-          payment_adjustments: checkoutForm,
-          paper_size: checkoutPaperSize,
-          show_receipt: checkoutShowReceipt,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || 'Error al guardar la configuración');
-        return;
-      }
-      toast.success('Configuración de cobro guardada');
-    } catch {
-      toast.error('Error al guardar la configuración');
+      await saveCheckoutConfig();
+      toast.success('Ajustes por medio de pago guardados');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error al guardar la configuración');
     } finally {
       setSavingCheckout(false);
     }
-  }, [canEditCheckout, checkoutForm, checkoutPaperSize, checkoutShowReceipt]);
+  }, [canEditCheckout, saveCheckoutConfig]);
+
+  const handleSaveTicket = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canEditCheckout) return;
+    setSavingTicket(true);
+    try {
+      await saveCheckoutConfig();
+      toast.success('Configuración de ticket guardada');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error al guardar la configuración');
+    } finally {
+      setSavingTicket(false);
+    }
+  }, [canEditCheckout, saveCheckoutConfig]);
 
   const handleInvite = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -253,7 +296,7 @@ export default function SettingsPage() {
         setPendingInvitations((prev) => [...prev, { id: 'pending', email: data.email, role: inviteRole }]);
       } else {
         toast.success('Colaborador agregado');
-        setCollaborators((prev) => [...prev, data.collaborator]);
+        setCollaborators((prev) => [...prev, { ...data.collaborator, tenants: tenants.filter(t => targetTenantIds.includes(t.id)) }]);
       }
       setInviteEmail('');
       setInviteName('');
@@ -263,6 +306,36 @@ export default function SettingsPage() {
       setInviting(false);
     }
   }, [inviteEmail, inviteRole, inviteName, selectedTenantIds, tenants]);
+
+  const handleResendInvite = useCallback(async (inv: PendingInvitation) => {
+    setResendingInvite(inv.email);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/settings/collaborators', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({
+          email: inv.email,
+          role: inv.role === 'manager' ? 'manager' : 'member',
+          full_name: null,
+          tenant_ids: [],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Error al reenviar la invitación');
+        return;
+      }
+      toast.success('Invitación reenviada por email');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error al reenviar la invitación');
+    } finally {
+      setResendingInvite(null);
+    }
+  }, []);
 
   const handleRemove = useCallback(async (tenantUsersId: string | undefined, userId: string) => {
     if (!tenantUsersId) return;
@@ -405,6 +478,53 @@ export default function SettingsPage() {
     }
   }, [passwordForm]);
 
+  const handleUpdateCollab = useCallback(async (collab: Collaborator, payload: { role: string; tenant_ids: string[] }) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/settings/collaborators/${collab.user_id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Error al actualizar');
+        return;
+      }
+
+      toast.success('Colaborador actualizado');
+      const allTenants = tenants.map(t => ({ id: t.id, name: t.name }));
+      setCollaborators((prev) => prev.map((c) => {
+        if (c.user_id !== collab.user_id) return c;
+        const current = c.tenants || [];
+        const nextTenants = allTenants.filter(t => payload.tenant_ids.includes(t.id));
+        const fullTenants = [
+          ...nextTenants.map(nt => current.find(ct => ct.id === nt.id) || nt),
+        ];
+        return {
+          ...c,
+          role: (payload.role as Collaborator['role']),
+          tenants: fullTenants,
+        };
+      }));
+      setEditModalOpen(false);
+      setEditingCollab(null);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error al actualizar');
+    }
+  }, [tenants]);
+
+  const tabs = [
+    { id: 'perfil', label: 'Mi Perfil', icon: <User className="h-4 w-4" /> },
+    { id: 'empresa', label: 'Datos de Empresa', icon: <Building2 className="h-4 w-4" /> },
+    { id: 'colaboradores', label: 'Colaboradores', icon: <Users className="h-4 w-4" /> },
+    { id: 'preferencias', label: 'Preferencias', icon: <Ticket className="h-4 w-4" /> },
+  ];
+
   if (authLoading || role === 'member') return null;
 
   return (
@@ -419,132 +539,118 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-6">
-          <Card className="p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <User className="h-5 w-5 text-blue-500" />
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Perfil</h2>
-            </div>
+      <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
-            <form onSubmit={handleSaveProfile} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                  Email
-                </label>
-                <Input
-                  type="email"
-                  value={user?.email || ''}
-                  disabled
-                  className="bg-gray-50 dark:bg-gray-900/50"
-                />
-                <p className="text-xs text-gray-400 mt-1">El email no se puede modificar</p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                  Nombre completo
-                </label>
-                <Input
-                  type="text"
-                  required
-                  placeholder="Tu nombre"
-                  value={profileForm.full_name}
-                  onChange={(e) => setProfileForm({ ...profileForm, full_name: e.target.value })}
-                />
-              </div>
-
-              <Button type="submit" disabled={savingProfile}>
-                {savingProfile ? (
-                  <><Loader2 className="h-4 w-4 animate-spin mr-1" />Guardando...</>
-                ) : (
-                  <><Save className="h-4 w-4 mr-1" />Guardar cambios</>
-                )}
-              </Button>
-            </form>
-          </Card>
-
-          <Card className="p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <KeyRound className="h-5 w-5 text-amber-500" />
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Cambiar contraseña</h2>
-            </div>
-
-            <form onSubmit={handleChangePassword} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                  Nueva contraseña
-                </label>
-                <Input
-                  type="password"
-                  required
-                  minLength={6}
-                  placeholder="Mínimo 6 caracteres"
-                  value={passwordForm.newPassword}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                  Confirmar contraseña
-                </label>
-                <Input
-                  type="password"
-                  required
-                  minLength={6}
-                  placeholder="Repite la contraseña"
-                  value={passwordForm.confirmPassword}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                />
-              </div>
-
-              <Button type="submit" disabled={savingPassword}>
-                {savingPassword ? (
-                  <><Loader2 className="h-4 w-4 animate-spin mr-1" />Actualizando...</>
-                ) : (
-                  <><KeyRound className="h-4 w-4 mr-1" />Actualizar contraseña</>
-                )}
-              </Button>
-            </form>
-          </Card>
-
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Palette className="h-5 w-5 text-purple-500" />
-                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Tema</span>
-              </div>
-              <ThemeToggle />
-            </div>
-          </Card>
-
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <ListChecks className="h-5 w-5 text-cyan-500" />
-                <div>
-                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Guía de primeros pasos</span>
-                  <p className="text-[11px] text-gray-400">Mostrar la guía de configuración en el panel de control.</p>
+      <TabPanel id="perfil" activeTab={activeTab}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            <div className="space-y-6">
+              <Card className="p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <User className="h-5 w-5 text-blue-500" />
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Perfil</h2>
                 </div>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!user?.id}
-                onClick={() => {
-                  try {
-                    localStorage.setItem(`vynko_onboarding_force_show_${user!.id}`, 'true');
-                  } catch { /* noop */ }
-                  toast.success('Guía reactivada. Volvé al dashboard.');
-                }}
-              >
-                Mostrar
-              </Button>
-            </div>
-          </Card>
-        </div>
 
+                <form onSubmit={handleSaveProfile} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Email
+                    </label>
+                    <Input
+                      type="email"
+                      value={user?.email || ''}
+                      disabled
+                      className="bg-gray-50 dark:bg-gray-900/50"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">El email no se puede modificar</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Nombre completo
+                    </label>
+                    <Input
+                      type="text"
+                      required
+                      placeholder="Tu nombre"
+                      value={profileForm.full_name}
+                      onChange={(e) => setProfileForm({ ...profileForm, full_name: e.target.value })}
+                    />
+                  </div>
+
+                  <Button type="submit" disabled={savingProfile}>
+                    {savingProfile ? (
+                      <><Loader2 className="h-4 w-4 animate-spin mr-1" />Guardando...</>
+                    ) : (
+                      <><Save className="h-4 w-4 mr-1" />Guardar cambios</>
+                    )}
+                  </Button>
+                </form>
+              </Card>
+            </div>
+
+            <div className="space-y-6">
+              <Card className="p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <KeyRound className="h-5 w-5 text-amber-500" />
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Cambiar contraseña</h2>
+                </div>
+
+                <form onSubmit={handleChangePassword} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Contraseña actual
+                    </label>
+                    <Input
+                      type="password"
+                      required
+                      placeholder="Tu contraseña actual"
+                      value={passwordForm.currentPassword}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Nueva contraseña
+                    </label>
+                    <Input
+                      type="password"
+                      required
+                      minLength={6}
+                      placeholder="Mínimo 6 caracteres"
+                      value={passwordForm.newPassword}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Confirmar contraseña
+                    </label>
+                    <Input
+                      type="password"
+                      required
+                      minLength={6}
+                      placeholder="Repite la contraseña"
+                      value={passwordForm.confirmPassword}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                    />
+                  </div>
+
+                  <Button type="submit" disabled={savingPassword}>
+                    {savingPassword ? (
+                      <><Loader2 className="h-4 w-4 animate-spin mr-1" />Actualizando...</>
+                    ) : (
+                      <><KeyRound className="h-4 w-4 mr-1" />Actualizar contraseña</>
+                    )}
+                  </Button>
+                </form>
+              </Card>
+            </div>
+          </div>
+      </TabPanel>
+
+      <TabPanel id="empresa" activeTab={activeTab}>
         <div className="space-y-6">
           <Card className="p-6">
             <div className="flex items-center gap-2 mb-4">
@@ -558,7 +664,7 @@ export default function SettingsPage() {
             <form onSubmit={handleSaveTenant} className="space-y-4">
               <div className="border-b border-gray-100 dark:border-gray-800 pb-4 mb-4">
                 <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Información General</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                       Nombre de la empresa
@@ -578,7 +684,18 @@ export default function SettingsPage() {
                       type="text"
                       placeholder="11-1234-5678"
                       value={tenantForm.business_phone}
-                      onChange={(e) => setTenantForm({ ...tenantForm, business_phone: e.target.value })}
+                      onChange={(e) => setTenantForm({ ...tenantForm, business_phone: formatPhone(e.target.value) })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Email de contacto
+                    </label>
+                    <Input
+                      type="email"
+                      placeholder="empresa@ejemplo.com"
+                      value={tenantForm.business_email}
+                      onChange={(e) => setTenantForm({ ...tenantForm, business_email: e.target.value })}
                     />
                   </div>
                 </div>
@@ -621,7 +738,7 @@ export default function SettingsPage() {
                       type="text"
                       placeholder="XX-XXXXXXXX-X"
                       value={tenantForm.cuit}
-                      onChange={(e) => setTenantForm({ ...tenantForm, cuit: e.target.value })}
+                      onChange={(e) => setTenantForm({ ...tenantForm, cuit: formatCuit(e.target.value) })}
                     />
                   </div>
                   <div>
@@ -650,6 +767,7 @@ export default function SettingsPage() {
                       value={tenantForm.punto_venta}
                       onChange={(e) => setTenantForm({ ...tenantForm, punto_venta: parseInt(e.target.value) || 1 })}
                     />
+                    <p className="text-xs text-gray-400 mt-1">Corresponde al punto de venta de esta sucursal</p>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
@@ -689,7 +807,7 @@ export default function SettingsPage() {
                       type="text"
                       placeholder="Calle y número"
                       value={tenantForm.business_address}
-                      onChange={(e) => setTenantForm({ ...tenantForm, business_address: e.target.value })}
+                      onChange={(e) => setTenantForm({ ...tenantForm, business_address: capitalizeWords(e.target.value) })}
                     />
                   </div>
                   <div>
@@ -700,7 +818,7 @@ export default function SettingsPage() {
                       type="text"
                       placeholder="Ciudad"
                       value={tenantForm.business_city}
-                      onChange={(e) => setTenantForm({ ...tenantForm, business_city: e.target.value })}
+                      onChange={(e) => setTenantForm({ ...tenantForm, business_city: capitalizeWords(e.target.value) })}
                     />
                   </div>
                   <div>
@@ -752,18 +870,6 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                  Email de contacto
-                </label>
-                <Input
-                  type="email"
-                  placeholder="empresa@ejemplo.com"
-                  value={tenantForm.business_email}
-                  onChange={(e) => setTenantForm({ ...tenantForm, business_email: e.target.value })}
-                />
-              </div>
-
               <Button type="submit" disabled={savingTenant}>
                 {savingTenant ? (
                   <><Loader2 className="h-4 w-4 animate-spin mr-1" />Guardando...</>
@@ -774,283 +880,424 @@ export default function SettingsPage() {
             </form>
           </Card>
         </div>
-      </div>
-      <Card className="p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Ticket className="h-5 w-5 text-indigo-500" />
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Cobro y ticket</h2>
-          {!canEditCheckout && (
-            <span className="ml-auto text-xs text-gray-400">Solo el propietario o manager puede editar</span>
-          )}
-        </div>
+      </TabPanel>
 
-        <form onSubmit={handleSaveCheckout} className="space-y-4">
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
-              <Percent className="h-3 w-3" />
-              Ajustes por medio de pago
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {PAYMENT_METHODS.map((method) => (
-                <div
-                  key={method.id}
-                  className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2"
-                >
-                  <span className="text-sm text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
-                    {method.label}
-                    <span className="text-[10px] text-gray-400">[{method.hotkey}]</span>
-                  </span>
-                  <div className="flex items-center gap-1.5">
+      <TabPanel id="colaboradores" activeTab={activeTab}>
+        <div className="space-y-6">
+          <Card className="p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Users className="h-5 w-5 text-green-500" />
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Colaboradores</h2>
+              {tenant && (
+                <span className="ml-auto text-xs text-gray-400">{loadingCollaborators ? '...' : `${collaborators.length} miembro${collaborators.length !== 1 ? 's' : ''}`}</span>
+              )}
+            </div>
+
+            {loadingCollaborators ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {collaborators.map((c) => (
+                  <div
+                    key={c.user_id}
+                    className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="h-9 w-9 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-sm font-medium text-indigo-600 dark:text-indigo-300 flex-shrink-0">
+                        {(c.full_name || c.email || '?').charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                          {c.full_name || 'Sin nombre'}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate">{c.email}</p>
+                        {c.tenants && c.tenants.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {c.tenants.map((t) => (
+                              <span key={t.id} className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
+                                {t.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                      {c.role === 'owner' ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-1 rounded-full">
+                          <ShieldCheck className="h-3 w-3" />
+                          Propietario
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-full whitespace-nowrap">
+                          <Shield className="h-3 w-3" />
+                          {c.role === 'manager' ? 'Manager' : 'Miembro'}
+                        </span>
+                      )}
+
+                      {isOwner && c.role !== 'owner' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setEditingCollab(c);
+                            setEditModalOpen(true);
+                          }}
+                          aria-label={`Editar ${c.full_name || c.email}`}
+                          title="Editar rol y sucursales"
+                          className="text-gray-500 hover:text-indigo-600 hover:border-indigo-400 dark:hover:text-indigo-400"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      )}
+
+                      {isOwner && c.role !== 'owner' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRemove(c.tenant_users_ids?.[0], c.user_id)}
+                          disabled={removingId === c.tenant_users_ids?.[0]}
+                          className="border-transparent text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        >
+                          {removingId === c.tenant_users_ids?.[0] ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <X className="h-4 w-4" />
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {collaborators.length === 0 && (
+                  <p className="text-sm text-gray-500 text-center py-4">
+                    No hay colaboradores
+                  </p>
+                )}
+              </div>
+            )}
+
+            {pendingInvitations.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <p className="text-xs font-semibold text-amber-600 uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <Mail className="h-3 w-3" />
+                  Invitaciones pendientes
+                </p>
+                <div className="space-y-2">
+                  {pendingInvitations.map((inv, idx) => (
+                    <div key={inv.id || idx} className="flex items-center justify-between p-2 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="h-8 w-8 rounded-full bg-amber-200 dark:bg-amber-800 flex items-center justify-center text-sm font-medium text-amber-700 dark:text-amber-300 flex-shrink-0">
+                          {(inv.email || '?').charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm text-amber-800 dark:text-amber-200 truncate">{inv.email}</p>
+                          <p className="text-xs text-amber-600 dark:text-amber-400">
+                            Pendiente — {inv.role === 'manager' ? 'Manager' : 'Miembro'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                        <span className="text-xs text-amber-500 italic">Esperando registro</span>
+                        {isOwner && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={resendingInvite === inv.email}
+                            onClick={() => handleResendInvite(inv)}
+                          >
+                            {resendingInvite === inv.email ? (
+                              <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />Reenviando...</>
+                            ) : (
+                              <><RefreshCw className="h-3.5 w-3.5 mr-1" />Reenviar</>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {isOwner && !canInvite && (
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-500">
+                Tu plan actual (Starter) incluye 1 usuario.{' '}
+                <Link href="/billing" className="text-indigo-500 hover:underline">Mejorá tu plan para invitar colaboradores</Link>.
+              </div>
+            )}
+
+            {isOwner && canInvite && (
+              <form onSubmit={handleInvite} className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 space-y-4">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Invitar colaborador
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Nombre
+                    </label>
                     <Input
-                      type="number"
-                      min={-100}
-                      max={100}
-                      step={0.5}
-                      value={checkoutForm[method.id]}
-                      disabled={!canEditCheckout || savingCheckout}
-                      onChange={(e) => {
-                        const value = e.target.value === '' ? 0 : Number(e.target.value);
-                        setCheckoutForm((prev) => ({
-                          ...prev,
-                          [method.id]: Number.isFinite(value) ? value : 0,
-                        }));
-                      }}
-                      className="w-20 text-right"
+                      type="text"
+                      placeholder="Nombre"
+                      value={inviteName}
+                      onChange={(e) => setInviteName(e.target.value)}
                     />
-                    <span className="text-xs text-gray-500">%</span>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      Email
+                    </label>
+                    <Input
+                      type="email"
+                      required
+                      placeholder="Email del usuario"
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-1">
+                      Rol
+                      <span
+                        className="inline-flex cursor-help text-gray-400"
+                        title="Miembro: puede cobrar y ver ventas. Manager: además gestiona precios, productos y configuración de cobro. Propietario: control total de la empresa."
+                      >
+                        <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                      </span>
+                    </label>
+                    <select
+                      value={inviteRole}
+                      onChange={(e) => setInviteRole(e.target.value)}
+                      className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                    >
+                      <option value="member">Miembro</option>
+                      <option value="manager">Manager</option>
+                    </select>
                   </div>
                 </div>
-              ))}
-            </div>
-            <p className="text-xs text-gray-400 mt-2">
-              Negativo = descuento (ej. -10 para 10% off), positivo = recargo. Se aplican automáticamente al cobrar según el medio utilizado.
-            </p>
-          </div>
 
-          <div className="flex flex-wrap items-end gap-6">
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                Tamaño de ticket
-              </label>
-              <Select
-                disabled={!canEditCheckout || savingCheckout}
-                value={checkoutPaperSize}
-                onChange={(e) => setCheckoutPaperSize(e.target.value as '58mm' | '80mm')}
-                className="w-48"
-              >
-                <option value="58mm">58mm (térmico)</option>
-                <option value="80mm">80mm</option>
-              </Select>
-            </div>
-
-            <label className="flex items-center gap-2 pb-2.5">
-              <input
-                type="checkbox"
-                disabled={!canEditCheckout || savingCheckout}
-                checked={checkoutShowReceipt}
-                onChange={(e) => setCheckoutShowReceipt(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-              />
-              <span className="text-sm text-gray-700 dark:text-gray-300">Mostrar ticket al finalizar la venta</span>
-            </label>
-
-            <Button type="submit" disabled={!canEditCheckout || savingCheckout}>
-              {savingCheckout ? (
-                <><Loader2 className="h-4 w-4 animate-spin mr-1" />Guardando...</>
-              ) : (
-                <><Save className="h-4 w-4 mr-1" />Guardar cambios</>
-              )}
-            </Button>
-          </div>
-        </form>
-      </Card>
-      <Card className="p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Users className="h-5 w-5 text-green-500" />
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Colaboradores</h2>
-          {tenant && (
-            <span className="ml-auto text-xs text-gray-400">{loadingCollaborators ? '...' : `${collaborators.length} miembro${collaborators.length !== 1 ? 's' : ''}`}</span>
-          )}
-        </div>
-
-        {loadingCollaborators ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {collaborators.map((c) => (
-              <div
-                key={c.user_id}
-                className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700"
-              >
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="h-9 w-9 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-sm font-medium text-indigo-600 dark:text-indigo-300 flex-shrink-0">
-                    {(c.full_name || c.email || '?').charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                      {c.full_name || 'Sin nombre'}
-                    </p>
-                    <p className="text-xs text-gray-500 truncate">{c.email}</p>
-                    {c.tenants && c.tenants.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {c.tenants.map((t) => (
-                          <span key={t.id} className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
-                            {t.name}
-                          </span>
-                        ))}
-                      </div>
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                  <p className="text-xs font-medium text-gray-500 mb-2">
+                    Sucursales asignadas
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {tenants.map((t) => {
+                      const checked = selectedTenantIds.includes(t.id);
+                      return (
+                        <label
+                          key={t.id}
+                          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs cursor-pointer transition-colors ${
+                            checked
+                              ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300'
+                              : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              setSelectedTenantIds((prev) =>
+                                checked ? prev.filter((id) => id !== t.id) : [...prev, t.id]
+                              );
+                            }}
+                            className="sr-only"
+                          />
+                          {checked ? '✓' : '○'} {t.name}
+                        </label>
+                      );
+                    })}
+                    {tenants.length === 0 && (
+                      <p className="text-xs text-gray-400">No hay sucursales disponibles.</p>
                     )}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                  {c.role === 'owner' ? (
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-1 rounded-full">
-                      <ShieldCheck className="h-3 w-3" />
-                      Propietario
-                    </span>
+                <Button type="submit" disabled={inviting || selectedTenantIds.length === 0}>
+                  {inviting ? (
+                    <><Loader2 className="h-4 w-4 animate-spin mr-1" />Enviando...</>
                   ) : (
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-full whitespace-nowrap">
-                      <Shield className="h-3 w-3" />
-                      {c.role === 'manager' ? 'Manager' : 'Miembro'}
-                    </span>
+                    <><Mail className="h-4 w-4 mr-1" />Enviar invitación</>
                   )}
-
-                  {isOwner && c.role !== 'owner' && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleRemove(c.tenant_users_ids?.[0], c.user_id)}
-                      disabled={removingId === c.tenant_users_ids?.[0]}
-                      className="border-transparent text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                    >
-                      {removingId === c.tenant_users_ids?.[0] ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <X className="h-4 w-4" />
-                      )}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))}
-
-            {collaborators.length === 0 && (
-              <p className="text-sm text-gray-500 text-center py-4">
-                No hay colaboradores
-              </p>
+                </Button>
+              </form>
             )}
-          </div>
-        )}
+          </Card>
+        </div>
+      </TabPanel>
 
-        {pendingInvitations.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <p className="text-xs font-semibold text-amber-600 uppercase tracking-wider mb-2 flex items-center gap-1">
-              <Mail className="h-3 w-3" />
-              Invitaciones pendientes
-            </p>
-            <div className="space-y-2">
-              {pendingInvitations.map((inv, idx) => (
-                <div key={inv.id || idx} className="flex items-center justify-between p-2 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="h-8 w-8 rounded-full bg-amber-200 dark:bg-amber-800 flex items-center justify-center text-sm font-medium text-amber-700 dark:text-amber-300 flex-shrink-0">
-                      {(inv.email || '?').charAt(0).toUpperCase()}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm text-amber-800 dark:text-amber-200 truncate">{inv.email}</p>
-                      <p className="text-xs text-amber-600 dark:text-amber-400">
-                        Pendiente — {inv.role === 'manager' ? 'Manager' : 'Miembro'}
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-xs text-amber-500 italic">Esperando registro</span>
+      <TabPanel id="preferencias" activeTab={activeTab}>
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            <Card className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Palette className="h-5 w-5 text-purple-500" />
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Tema</span>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {isOwner && !canInvite && (
-          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-500">
-            Tu plan actual (Starter) incluye 1 usuario.{' '}
-            <Link href="/billing" className="text-indigo-500 hover:underline">Mejorá tu plan para invitar colaboradores</Link>.
-          </div>
-        )}
-
-        {isOwner && canInvite && (
-          <form onSubmit={handleInvite} className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 space-y-3">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-              Invitar colaborador
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <div className="flex-1 min-w-[140px]">
-                <Input
-                  type="text"
-                  placeholder="Nombre"
-                  value={inviteName}
-                  onChange={(e) => setInviteName(e.target.value)}
-                />
+                <ThemeToggle />
               </div>
-              <div className="flex-1 min-w-[180px]">
-                <Input
-                  type="email"
-                  required
-                  placeholder="Email del usuario"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                />
+            </Card>
+
+            <Card className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ListChecks className="h-5 w-5 text-cyan-500" />
+                  <div>
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Guía de primeros pasos</span>
+                    <p className="text-[11px] text-gray-400">Mostrar la guía de configuración en el panel de control.</p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!user?.id}
+                  onClick={() => {
+                    try {
+                      localStorage.setItem(`vynko_onboarding_force_show_${user!.id}`, 'true');
+                    } catch { /* noop */ }
+                    toast.success('Guía reactivada. Volvé al dashboard.');
+                  }}
+                >
+                  Mostrar
+                </Button>
               </div>
-              <select
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value)}
-                className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
-              >
-                <option value="member">Miembro</option>
-                <option value="manager">Manager</option>
-              </select>
-              <Button type="submit" disabled={inviting}>
-                {inviting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Mail className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-gray-500 mb-1.5">Sucursales asignadas</p>
-              <div className="flex flex-wrap gap-2">
-                {tenants.map((t) => {
-                  const checked = selectedTenantIds.includes(t.id);
-                  return (
-                    <label
-                      key={t.id}
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs cursor-pointer transition-colors ${
-                        checked
-                          ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300'
-                          : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => {
-                          setSelectedTenantIds((prev) =>
-                            checked ? prev.filter((id) => id !== t.id) : [...prev, t.id]
-                          );
-                        }}
-                        className="sr-only"
-                      />
-                      {checked ? '✓' : '○'} {t.name}
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+              <Card className="p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <Percent className="h-5 w-5 text-indigo-500" />
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Ajustes por medio de pago</h2>
+                  {!canEditCheckout && (
+                    <span className="ml-auto text-xs text-gray-400">Solo el propietario o manager puede editar</span>
+                  )}
+                </div>
+
+                <form onSubmit={handleSaveCheckout} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {PAYMENT_METHODS.filter((m) => m.id !== 'mercadopago').map((method) => {
+                      const value = checkoutForm[method.id];
+                      return (
+                        <div
+                          key={method.id}
+                          className="rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2"
+                        >
+<div className="flex items-center justify-between gap-2">
+                          <span className="text-sm text-gray-700 dark:text-gray-300 min-w-0 truncate">{method.label}</span>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <Input
+                              type="number"
+                              min={-100}
+                              max={100}
+                              step={0.5}
+                              value={value}
+                              disabled={!canEditCheckout || savingCheckout}
+                              onChange={(e) => {
+                                const next = e.target.value === '' ? 0 : Number(e.target.value);
+                                setCheckoutForm((prev) => ({
+                                  ...prev,
+                                  [method.id]: Number.isFinite(next) ? next : 0,
+                                }));
+                              }}
+                              className="w-16 text-right"
+                            />
+                            <span className="text-xs text-gray-500">%</span>
+                          </div>
+                        </div>
+                          {value > 0 && (
+                            <p className="text-[11px] font-medium text-red-500 mt-1">+{value}% Recargo</p>
+                          )}
+                          {value < 0 && (
+                            <p className="text-[11px] font-medium text-green-600 dark:text-green-400 mt-1">{Math.abs(value)}% Descuento</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    Negativo = descuento, positivo = recargo. Se aplican automáticamente al cobrar según el medio utilizado.
+                  </p>
+
+                  <Button type="submit" disabled={!canEditCheckout || savingCheckout}>
+                    {savingCheckout ? (
+                      <><Loader2 className="h-4 w-4 animate-spin mr-1" />Guardando...</>
+                    ) : (
+                      <><Save className="h-4 w-4 mr-1" />Guardar cambios</>
+                    )}
+                  </Button>
+                </form>
+              </Card>
+
+              <Card className="p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <Ticket className="h-5 w-5 text-indigo-500" />
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Configuración de ticket</h2>
+                </div>
+
+                <form onSubmit={handleSaveTicket} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                      Tamaño de ticket
                     </label>
-                  );
-                })}
-              </div>
+                    <Select
+                      disabled={!canEditCheckout || savingTicket}
+                      value={checkoutPaperSize}
+                      onChange={(e) => setCheckoutPaperSize(e.target.value as '58mm' | '80mm')}
+                      className="w-full"
+                    >
+                      <option value="58mm">58mm (térmico)</option>
+                      <option value="80mm">80mm</option>
+                    </Select>
+                  </div>
+
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      disabled={!canEditCheckout || savingTicket}
+                      checked={checkoutShowReceipt}
+                      onChange={(e) => setCheckoutShowReceipt(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">Mostrar ticket al finalizar la venta</span>
+                  </label>
+
+                  <Button type="submit" disabled={!canEditCheckout || savingTicket}>
+                    {savingTicket ? (
+                      <><Loader2 className="h-4 w-4 animate-spin mr-1" />Guardando...</>
+                    ) : (
+                      <><Save className="h-4 w-4 mr-1" />Guardar cambios</>
+                    )}
+                  </Button>
+                </form>
+              </Card>
             </div>
-          </form>
-        )}
-      </Card>
+        </div>
+      </TabPanel>
+
+      <EditCollaboratorModal
+        key={editingCollab?.user_id || 'closed'}
+        open={editModalOpen}
+        fullName={editingCollab?.full_name}
+        email={editingCollab?.email || ''}
+        role={editingCollab?.role || 'member'}
+        tenants={tenants.map((t) => ({ id: t.id, name: t.name }))}
+        defaultTenantIds={(editingCollab?.tenants || []).map((t) => t.id)}
+        onCancel={() => {
+          setEditModalOpen(false);
+          setEditingCollab(null);
+        }}
+        onSave={(payload) => {
+          if (!editingCollab) return Promise.resolve();
+          return handleUpdateCollab(editingCollab, payload);
+        }}
+      />
     </div>
   );
 }

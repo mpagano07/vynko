@@ -76,6 +76,21 @@ function groupThousands(raw: string): string {
   return hasDecimal ? `${grouped},${decRaw.replace(/\D/g, '')}` : grouped;
 }
 
+/** Aplica el ajuste porcentual del medio de pago sobre un monto en centavos. */
+function adjustCents(cents: number, pct: number): number {
+  return Math.round((cents * (100 + pct)) / 100);
+}
+
+/** Nombra el ajuste según el signo del porcentaje. */
+function adjustmentLabel(pct: number): string {
+  return pct < 0 ? 'Descuento' : 'Recargo';
+}
+
+/** Convierte centavos a un string editable ya formateado (ej: 9000 -> "90,00"). */
+function centsToInput(cents: number): string {
+  return groupThousands((Math.max(0, cents) / 100).toFixed(2).replace('.', ','));
+}
+
 interface PaymentLine {
   id: string;
   method: PaymentMethodId;
@@ -84,12 +99,12 @@ interface PaymentLine {
 }
 
 let lineCounter = 0;
-function createLine(method: PaymentMethodId, allocation: string): PaymentLine {
+function createLine(method: PaymentMethodId, allocation: string, received?: string): PaymentLine {
   return {
     id: `line-${lineCounter++}`,
     method,
     allocation,
-    received: groupThousands(String(allocation)),
+    received: received ?? groupThousands(String(allocation)),
   };
 }
 
@@ -110,9 +125,11 @@ export function CheckoutModal({
   onClose,
   onConfirm,
 }: CheckoutModalProps) {
-  const [lines, setLines] = useState<PaymentLine[]>(() => [
-    createLine('cash', total.toFixed(2).replace('.', ',')),
-  ]);
+  const [lines, setLines] = useState<PaymentLine[]>(() => {
+    const baseCents = Math.round(total * 100);
+    const netCents = adjustCents(baseCents, adjustments.cash ?? 0);
+    return [createLine('cash', centsToInput(baseCents), centsToInput(netCents))];
+  });
   const [activeLineId, setActiveLineId] = useState<string>(lines[0]?.id ?? '');
   const [printReceipt, setPrintReceipt] = useState<boolean>(Boolean(defaultPrint));
   const [whatsappEnabled, setWhatsappEnabled] = useState(false);
@@ -133,24 +150,78 @@ export function CheckoutModal({
     setLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   };
 
+  /**
+   * Cambia el medio de pago de una línea recalculando automáticamente el monto
+   * a cobrar según el ajuste (descuento/recargo) del nuevo medio. Para la línea
+   * flexible (la última) el monto se ajusta sobre el total; para el resto se
+   * conserva la porción repartida.
+   */
+  const changeMethod = useCallback(
+    (id: string, method: PaymentMethodId) => {
+      setLines((prev) => {
+        const idx = prev.findIndex((l) => l.id === id);
+        if (idx < 0) return prev;
+        const isFlexLine = idx === prev.length - 1;
+        const pct = adjustments[method] ?? 0;
+        return prev.map((l, i) => {
+          if (i !== idx || method === l.method) return l;
+          if (isFlexLine) {
+            const fixedSum = prev.reduce((sum, line, j) => {
+              if (j === idx || j === prev.length - 1) return sum;
+              const raw = Math.round(parseAmount(line.allocation) * 100);
+              return sum + Math.max(0, Math.min(raw, totalCents));
+            }, 0);
+            const flexBase = Math.max(0, totalCents - fixedSum);
+            if (method === 'cash') {
+              return {
+                ...l,
+                method,
+                allocation: centsToInput(flexBase),
+                received: centsToInput(adjustCents(flexBase, pct)),
+              };
+            }
+            return { ...l, method, allocation: centsToInput(flexBase) };
+          }
+          return { ...l, method };
+        });
+      });
+    },
+    [adjustments, totalCents]
+  );
+
   const addLine = () => {
-    const cashLine = lines.find((l) => l.method === 'cash');
-    const receivedCents = cashLine ? Math.round(parseAmount(cashLine.received) * 100) : 0;
-    const next = createLine('transfer', '');
-    setLines((prev) => [...prev, next]);
-    if (lines.length === 1 && cashLine && receivedCents >= totalCents) {
-      setLines((prev) =>
-        prev.map((l) => (l.id === cashLine.id ? { ...l, received: '' } : l))
-      );
+    const previousFlexIdx = lines.length - 1;
+    let previousFlexAllocationCents = totalCents;
+    if (previousFlexIdx > 0) {
+      let fixedSum = 0;
+      lines.forEach((l, i) => {
+        if (i === previousFlexIdx) return;
+        const raw = Math.round(parseAmount(l.allocation) * 100);
+        fixedSum += Math.max(0, Math.min(raw, totalCents));
+      });
+      previousFlexAllocationCents = Math.max(0, totalCents - fixedSum);
     }
+    const next = createLine('transfer', '');
+    setLines((prev) => {
+      const frozen = prev.map((l, i) => {
+        if (i !== previousFlexIdx) return l;
+        const net = adjustCents(previousFlexAllocationCents, adjustments[l.method] ?? 0);
+        return {
+          ...l,
+          allocation: centsToInput(previousFlexAllocationCents),
+          received: l.method === 'cash' ? centsToInput(net) : l.received,
+        };
+      });
+      return [...frozen, next];
+    });
     setActiveLineId(next.id);
     window.setTimeout(() => {
-      const cashEl = document.getElementById(`received-${cashLine?.id}`);
-      if (cashEl) {
-        cashEl.focus();
-        return;
-      }
-      const allocEl = document.getElementById(`allocation-${next.id}`);
+      const previousCashId = lines[previousFlexIdx]?.id;
+      const cashEl = document.getElementById(`received-${previousCashId ?? ''}`);
+      const allocEl =
+        cashEl ??
+        document.getElementById(`allocation-${previousCashId ?? ''}`) ??
+        document.getElementById(`allocation-${next.id}`);
       allocEl?.focus();
     }, 0);
   };
@@ -172,10 +243,7 @@ export function CheckoutModal({
 
     const fixedAllocations = lines.map((line, idx) => {
       if (idx === flexIndex) return 0;
-      const raw =
-        line.method === 'cash'
-          ? Math.round(parseAmount(line.received) * 100)
-          : Math.round(parseAmount(line.allocation) * 100);
+      const raw = Math.round(parseAmount(line.allocation) * 100);
       if (line.method === 'cash') return Math.max(0, Math.min(raw, totalCents));
       return Math.max(0, raw);
     });
@@ -187,10 +255,10 @@ export function CheckoutModal({
       const allocationCents = idx === flexIndex ? flexAllocationCents : fixedAllocations[idx];
       const adjustmentPct = adjustments[line.method] ?? 0;
       const netCents = Math.round((allocationCents * (100 + adjustmentPct)) / 100);
-      const receivedCents =
-        line.method === 'cash' ? Math.round(parseAmount(line.received) * 100) : netCents;
-      const changeCents = line.method === 'cash' ? Math.max(0, receivedCents - netCents) : 0;
-      const shortReceived = line.method === 'cash' && receivedCents < netCents;
+      const isCashFlex = line.method === 'cash' && idx === flexIndex;
+      const receivedCents = isCashFlex ? Math.round(parseAmount(line.received) * 100) : netCents;
+      const changeCents = isCashFlex ? Math.max(0, receivedCents - netCents) : 0;
+      const shortReceived = isCashFlex && receivedCents < netCents;
       return {
         line,
         idx,
@@ -215,7 +283,7 @@ export function CheckoutModal({
     [adjustments]
   );
 
-  const canConfirm = resolved.covered && resolved.rows.every((r) => (r.isFlex || r.allocationCents > 0) && !r.shortReceived) && (!whatsappEnabled || whatsappPhone.trim().length > 0) && !submitting;
+  const canConfirm = resolved.covered && resolved.rows.every((r) => !r.shortReceived) && (!whatsappEnabled || whatsappPhone.trim().length > 0) && !submitting;
 
   const confirmPayment = useCallback(() => {
     const payments = resolved.rows
@@ -266,13 +334,13 @@ export function CheckoutModal({
       if (method) {
         e.preventDefault();
         const id = selectedLine.id;
-        updateLine(id, { method: method.id });
+        changeMethod(id, method.id);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [lines, selectedLine, canConfirm, onClose, confirmPayment]);
+  }, [lines, selectedLine, canConfirm, onClose, confirmPayment, changeMethod]);
 
   const showBreakdown = subtotal !== undefined && (discount > 0 || surcharge > 0);
 
@@ -375,11 +443,12 @@ export function CheckoutModal({
                     {CHECKOUT_METHODS.map((method) => {
                       const Icon = METHOD_ICONS[method.id];
                       const active = line.method === method.id;
+                      const methodPct = adjustments[method.id] ?? 0;
                       return (
                         <button
                           key={method.id}
                           type="button"
-                          onClick={() => updateLine(line.id, { method: method.id })}
+                          onClick={() => changeMethod(line.id, method.id)}
                           aria-pressed={active}
                           title={`${method.label} (${method.hotkey})`}
                           className={cn(
@@ -391,17 +460,17 @@ export function CheckoutModal({
                         >
                           <Icon className="h-3.5 w-3.5" />
                           {method.label}
-                          {pct !== 0 && (
+                          {methodPct !== 0 && (
                             <span
                               className={cn(
                                 'px-1 rounded font-mono text-[10px]',
-                                pct < 0
+                                methodPct < 0
                                   ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
                                   : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
                               )}
                             >
-                              {pct > 0 ? '+' : ''}
-                              {pct}%
+                              {methodPct > 0 ? '+' : ''}
+                              {methodPct}%
                             </span>
                           )}
                         </button>
@@ -421,7 +490,7 @@ export function CheckoutModal({
 
                   <div className="mt-2.5 grid grid-cols-2 gap-2">
                     <div>
-                      {isCash ? (
+                      {isCash && isFlex ? (
                         <>
                           <label
                             htmlFor={`received-${line.id}`}
@@ -458,13 +527,15 @@ export function CheckoutModal({
                       ) : isFlex ? (
                         <>
                           <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
-                            Monto a repartir
+                            Monto a cobrar
                           </label>
                           <div className="mt-1 flex h-10 items-center rounded-md border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/60 px-3 text-base font-semibold tabular-nums text-gray-900 dark:text-gray-100">
-                            {formatARS(allocationCents / 100)}
+                            {formatARS(netCents / 100)}
                           </div>
                           <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
-                            Se carga automáticamente el resto
+                            {split
+                              ? `Cubre ${formatARS(allocationCents / 100)} del total`
+                              : 'Se calcula automáticamente'}
                           </p>
                         </>
                       ) : (
@@ -486,9 +557,9 @@ export function CheckoutModal({
                             aria-label={`Monto del medio ${PAYMENT_METHODS.find((m) => m.id === line.method)?.label}`}
                             className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-base font-semibold tabular-nums text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                           />
-                          {pct !== 0 && (
+                          {pct !== 0 && !isCash && allocationCents > 0 && (
                             <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
-                              Ajuste {pct > 0 ? '+' : ''}
+                              {adjustmentLabel(pct)} {pct > 0 ? '+' : ''}
                               {pct}% ={' '}
                               <span className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                                 {formatARS(netCents / 100)}
@@ -514,9 +585,9 @@ export function CheckoutModal({
                               'Pago total en efectivo'
                             )}
                           </p>
-                          {pct !== 0 && (
+                          {pct !== 0 && allocationCents > 0 && !split && (
                             <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
-                              Ajuste {pct > 0 ? '+' : ''}
+                              {adjustmentLabel(pct)} {pct > 0 ? '+' : ''}
                               {pct}% ={' '}
                               <span className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                                 {formatARS(netCents / 100)}
@@ -524,6 +595,18 @@ export function CheckoutModal({
                             </p>
                           )}
                         </>
+                      ) : isFlex ? (
+                        pct !== 0 && allocationCents > 0 ? (
+                          <div className="flex items-end gap-1 pb-1">
+                            <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                              {adjustmentLabel(pct)} {pct > 0 ? '+' : ''}
+                              {pct}% ={' '}
+                              <span className="font-bold text-gray-900 dark:text-gray-100 tabular-nums">
+                                {formatARS(netCents / 100)}
+                              </span>
+                            </p>
+                          </div>
+                        ) : null
                       ) : (
                         <div className="flex items-end gap-1 pb-1">
                           <p className="text-[11px] text-gray-500 dark:text-gray-400">

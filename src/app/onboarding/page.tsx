@@ -54,18 +54,40 @@ export default function OnboardingPage() {
         );
         if (cancelled) return;
 
-        const data = await response.json();
-        const hasCompany = (data.tenants?.length ?? 0) > 0 || !!data.tenant;
+        // Solo una respuesta OK y con JSON válido nos permite afirmar si el
+        // usuario tiene empresa. Cualquier otra cosa (404/500/timeout/network)
+        // es un resultado indeterminado: no debemos exponer el formulario a
+        // alguien que quizá ya tiene cuenta. Se va al dashboard, cuyos guardas
+        // redirigen acá solo si la membresía está definitivamente vacía.
+        if (!response.ok) {
+          if (!cancelled) {
+            // Navegación dura única: evita el loop de router.push + reload
+            // sobre la misma ruta /onboarding. El proxy re-verifica el estado.
+            window.location.replace('/dashboard');
+          }
+          return;
+        }
 
-        if (hasCompany) {
-          router.push('/dashboard');
-          window.location.reload();
+        const data: { tenants?: unknown[]; tenant?: unknown; onboarding_pending?: boolean } | null =
+          await response.json().catch(() => null);
+        if (cancelled) return;
+
+        const hasCompany = (data?.tenants?.length ?? 0) > 0 || !!data?.tenant;
+        // Flag directo de la DB (onboarding_pending): FALSE = el usuario ya
+        // completó el onboarding y NUNCA debe ver este formulario, aunque el
+        // listado de sucursales llegue vacío.
+        const onboardingPending = data?.onboarding_pending ?? true;
+
+        if (data === null || hasCompany || onboardingPending === false) {
+          if (!cancelled) window.location.replace('/dashboard');
         } else {
           setChecking(false);
         }
       } catch (error) {
         console.error('Onboarding check error:', error);
-        if (!cancelled) setChecking(false);
+        if (!cancelled) {
+          window.location.replace('/dashboard');
+        }
       }
     }
 

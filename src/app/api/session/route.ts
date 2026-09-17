@@ -6,7 +6,7 @@ export async function GET(request: Request) {
     const authHeader = request.headers.get('authorization');
 
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ user: null, profile: null, tenant: null, tenants: [] });
+      return NextResponse.json({ user: null, profile: null, tenant: null, tenants: [], onboarding_pending: true });
     }
 
     const token = authHeader.replace('Bearer ', '');
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     );
 
     if (userError || !userData?.user) {
-      return NextResponse.json({ user: null, profile: null, tenant: null, tenants: [] });
+      return NextResponse.json({ user: null, profile: null, tenant: null, tenants: [], onboarding_pending: true });
     }
 
     const user = userData.user;
@@ -55,16 +55,28 @@ export async function GET(request: Request) {
         targetId = activeTenantId;
       }
 
-      const activeTU = tenantUsers.find(tu => tu.tenant_id === targetId);
+const activeTU = tenantUsers.find(tu => tu.tenant_id === targetId);
       role = activeTU?.role || null;
       tenant = tenants.find(t => t.id === targetId) || tenants[0] || null;
     }
 
-    return NextResponse.json({ user, profile, tenant, role, tenants });
+    // Flag directo de onboarding: FALSE = completado (nunca mostrar
+    // onboarding), TRUE o perfil inexistente = pendiente.
+    let onboardingPending = profile?.onboarding_pending !== false;
+
+    // Self-healing (espejo del proxy): si el usuario ya tiene empresa pero el
+    // flag quedó en TRUE, lo alineamos para que el guard de onboarding sea
+    // directo la próxima vez.
+    if ((tenantUsers?.length ?? 0) > 0 && profile?.onboarding_pending === true) {
+      await supabaseAdmin.from('profiles').update({ onboarding_pending: false }).eq('id', user.id);
+      onboardingPending = false;
+    }
+
+    return NextResponse.json({ user, profile, tenant, role, tenants, onboarding_pending: onboardingPending });
   } catch (error) {
     console.error('Error in GET /api/session:', error);
     return NextResponse.json(
-      { user: null, profile: null, tenant: null, tenants: [], error: 'Internal server error' },
+      { user: null, profile: null, tenant: null, tenants: [], onboarding_pending: true, error: 'Internal server error' },
       { status: 500 }
     );
   }
