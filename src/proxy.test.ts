@@ -32,7 +32,9 @@ function makeAdminClient() {
         select: vi.fn(() => builder),
         eq: vi.fn(() => builder),
         in: vi.fn(() => builder),
+        update: vi.fn(() => builder),
         single: () => Promise.resolve(adminQueue.shift() ?? { data: null, error: null }),
+        maybeSingle: () => Promise.resolve(adminQueue.shift() ?? { data: null, error: null }),
         then: (resolve: (v: unknown) => unknown) =>
           Promise.resolve(adminQueue.shift() ?? { data: null, error: null }).then(resolve),
       };
@@ -56,6 +58,7 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
 
   it('no redirige a onboarding si el usuario tiene una empresa', async () => {
     adminQueue.push({ data: [{ tenant_id: 't1' }], error: null });
+    adminQueue.push({ data: { onboarding_pending: false }, error: null });
     adminQueue.push({ data: [{ subscription_status: 'active' }], error: null });
 
     const res = await proxy(request('/dashboard'));
@@ -67,6 +70,7 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
   it('NO redirige a onboarding cuando la query de membresías falla (fail open)', async () => {
     // Ej: token en pleno refresh / error transitorio de RLS en el arranque.
     adminQueue.push({ data: null, error: { message: 'auth/invalid JWT' } });
+    adminQueue.push({ data: { onboarding_pending: false }, error: null });
 
     const res = await proxy(request('/dashboard'));
 
@@ -74,13 +78,38 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
     expect(res.headers.get('location')).toBeNull();
   });
 
-  it('redirige a onboarding SOLO ante una membresía definitivamente vacía', async () => {
+  it('redirige a onboarding SOLO ante una membresía definitivamente vacía y flag pendiente', async () => {
     adminQueue.push({ data: [], error: null });
+    adminQueue.push({ data: { onboarding_pending: true }, error: null });
 
     const res = await proxy(request('/dashboard'));
 
     expect(res.status).toBe(307);
     expect(res.headers.get('location')).toContain('/onboarding');
+  });
+
+  it('NO redirige a onboarding si el usuario completó su onboarding aunque la membresía llegue vacía', async () => {
+    // Regresión: cuenta admin con empresa cuyo chequeo de membresías sale
+    // vacío por cualquier motivo debe quedar protegida por el flag.
+    adminQueue.push({ data: [], error: null });
+    adminQueue.push({ data: { onboarding_pending: false }, error: null });
+
+    const res = await proxy(request('/dashboard'));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('location')).toBeNull();
+  });
+
+  it('aligns el flag a completado si el usuario ya tiene empresa pero quedó pendiente (self-healing)', async () => {
+    adminQueue.push({ data: [{ tenant_id: 't1' }], error: null });
+    adminQueue.push({ data: { onboarding_pending: true }, error: null });
+    adminQueue.push({ data: [{ subscription_status: 'free', subscription_plan: 'starter' }], error: null });
+    adminQueue.push({ data: null, error: null }); // response del update del flag
+
+    const res = await proxy(request('/dashboard'));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('x-tenant-id')).toBe('t1');
   });
 
   it('redirige a login si no hay sesión', async () => {
@@ -103,10 +132,61 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
   it('permite el acceso a rutas públicas sin autenticación', async () => {
     makeServerClient(null);
 
-    for (const p of ['/login', '/auth', '/auth/callback', '/onboarding', '/accept-invite']) {
+    for (const p of ['/login', '/auth', '/auth/callback', '/accept-invite']) {
       const res = await proxy(request(p));
       expect(res.status).toBe(200);
     }
+  });
+
+  it('envía a /login a un visitante anónimo de /onboarding', async () => {
+    makeServerClient(null);
+
+    const res = await proxy(request('/onboarding'));
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toContain('/login');
+  });
+
+  it('BLOQUEA /onboarding y redirige a /dashboard si el flag dice onboarding completado', async () => {
+    // Regresión: cuenta admin con empresa que escriba /onboarding a mano no
+    // debe ver el formulario ni quedarse en "Verificando tu cuenta".
+    adminQueue.push({ data: [], error: null });
+    adminQueue.push({ data: { onboarding_pending: false }, error: null });
+
+    const res = await proxy(request('/onboarding'));
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toContain('/dashboard');
+  });
+
+  it('BLOQUEA /onboarding si el usuario ya tiene membresías aunque el flag quede pendiente', async () => {
+    adminQueue.push({ data: [{ tenant_id: 't1' }], error: null });
+    adminQueue.push({ data: { onboarding_pending: true }, error: null });
+
+    const res = await proxy(request('/onboarding'));
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toContain('/dashboard');
+  });
+
+  it('deja pasar a /onboarding SOLO a un usuario nuevo (flag pendiente y sin membresías)', async () => {
+    adminQueue.push({ data: [], error: null });
+    adminQueue.push({ data: { onboarding_pending: true }, error: null });
+
+    const res = await proxy(request('/onboarding'));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('location')).toBeNull();
+  });
+
+  it('deja pasar a /onboarding si falla el chequeo (fail open para que decida el guard cliente)', async () => {
+    adminQueue.push({ data: null, error: { message: 'auth/invalid JWT' } });
+    adminQueue.push({ data: null, error: null });
+
+    const res = await proxy(request('/onboarding'));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('location')).toBeNull();
   });
 
   it('redirige a /billing cuando la suscripción del tenant está bloqueada', async () => {
@@ -116,6 +196,7 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
       message: 'Tu período de prueba finalizó.',
     });
     adminQueue.push({ data: [{ tenant_id: 't1' }], error: null });
+    adminQueue.push({ data: { onboarding_pending: false }, error: null });
     adminQueue.push({ data: [{ subscription_status: 'free', subscription_plan: 'starter' }], error: null });
 
     const res = await proxy(request('/dashboard'));
@@ -128,6 +209,7 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
   it('consolida la suscripción de todas las sucursales del dueño (no bloquea si hay una activa)', async () => {
     subscriptionMock.mockImplementation(() => ({ blocked: false }));
     adminQueue.push({ data: [{ tenant_id: 't1' }, { tenant_id: 't2' }], error: null });
+    adminQueue.push({ data: { onboarding_pending: false }, error: null });
     adminQueue.push({
       data: [
         { subscription_status: 'free', subscription_plan: 'starter', created_at: '2026-06-10T00:00:00Z' },
@@ -144,6 +226,7 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
 
   it('no evalúa el bloqueo de suscripción en la página de billing', async () => {
     adminQueue.push({ data: [{ tenant_id: 't1' }], error: null });
+    adminQueue.push({ data: { onboarding_pending: false }, error: null });
 
     const res = await proxy(request('/billing'));
 
@@ -154,6 +237,7 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
 
   it('sigue de largo si el tenant no existe (sin datos ni error)', async () => {
     adminQueue.push({ data: [{ tenant_id: 't1' }], error: null });
+    adminQueue.push({ data: { onboarding_pending: false }, error: null });
     adminQueue.push({ data: null, error: null });
 
     const res = await proxy(request('/dashboard'));

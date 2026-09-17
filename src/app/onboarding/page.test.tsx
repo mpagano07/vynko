@@ -65,7 +65,11 @@ describe('OnboardingPage guard', () => {
     sessionMock.mockReset();
     authMock.mockReturnValue({ switchTenant: vi.fn() } as unknown as ReturnType<typeof useAuth>);
     vi.stubGlobal('fetch', fetchMock);
-    Object.defineProperty(window, 'location', { value: { href: '', reload: vi.fn() }, writable: true, configurable: true });
+    Object.defineProperty(window, 'location', {
+      value: { href: '', reload: vi.fn(), replace: vi.fn() },
+      writable: true,
+      configurable: true,
+    });
   });
 
   it('redirige al dashboard si el usuario ya tiene una empresa', async () => {
@@ -75,7 +79,7 @@ describe('OnboardingPage guard', () => {
     render(<OnboardingPage />);
 
     await screen.findByText(/Verificando tu cuenta/i);
-    await vi.waitFor(() => expect(router.push).toHaveBeenCalledWith('/dashboard'));
+    await vi.waitFor(() => expect(window.location.replace).toHaveBeenCalledWith('/dashboard'));
     expect(screen.queryByText('Configura tu empresa')).not.toBeInTheDocument();
   });
 
@@ -85,7 +89,7 @@ describe('OnboardingPage guard', () => {
 
     render(<OnboardingPage />);
 
-    await vi.waitFor(() => expect(router.push).toHaveBeenCalledWith('/dashboard'));
+    await vi.waitFor(() => expect(window.location.replace).toHaveBeenCalledWith('/dashboard'));
     expect(screen.queryByText('Configura tu empresa')).not.toBeInTheDocument();
   });
 
@@ -99,6 +103,18 @@ describe('OnboardingPage guard', () => {
     expect(router.replace).not.toHaveBeenCalledWith('/dashboard');
   });
 
+  it('NO muestra el formulario si la DB marca onboarding completado aunque no haya sucursales', async () => {
+    // Regresión: cuenta admin con empresa cuyo listado de sucursales llegue
+    // vacío queda protegida por el flag onboarding_pending=false.
+    mockSession({ access_token: 'token', refresh_token: 'refresh' });
+    mockApiSession({ tenants: [], tenant: null, onboarding_pending: false });
+
+    render(<OnboardingPage />);
+
+    await vi.waitFor(() => expect(window.location.replace).toHaveBeenCalledWith('/dashboard'));
+    expect(screen.queryByText('Configura tu empresa')).not.toBeInTheDocument();
+  });
+
   it('redirige a login si no hay sesión', async () => {
     mockSession(null);
 
@@ -107,14 +123,30 @@ describe('OnboardingPage guard', () => {
     await vi.waitFor(() => expect(router.replace).toHaveBeenCalledWith('/login'));
   });
 
-  it('muestra el formulario si la verificación de sesión falla', async () => {
+  it('NO muestra el formulario si la verificación falla: redirige al dashboard (fail closed)', async () => {
     mockSession({ access_token: 'token', refresh_token: 'refresh' });
     fetchMock.mockRejectedValueOnce(new Error('network'));
 
     render(<OnboardingPage />);
 
-    expect(await screen.findByText('Configura tu empresa')).toBeInTheDocument();
-    expect(router.replace).not.toHaveBeenCalledWith('/dashboard');
+    await vi.waitFor(() => expect(window.location.replace).toHaveBeenCalledWith('/dashboard'));
+    expect(screen.queryByText('Configura tu empresa')).not.toBeInTheDocument();
+  });
+
+  it('NO muestra el formulario si /api/session responde 404 con HTML (fail closed)', async () => {
+    mockSession({ access_token: 'token', refresh_token: 'refresh' });
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      json: async () => {
+        throw new Error("Unexpected token '<', \"<!DOCTYPE html>...");
+      },
+    });
+
+    render(<OnboardingPage />);
+
+    await vi.waitFor(() => expect(window.location.replace).toHaveBeenCalledWith('/dashboard'));
+    expect(screen.queryByText('Configura tu empresa')).not.toBeInTheDocument();
   });
 });
 

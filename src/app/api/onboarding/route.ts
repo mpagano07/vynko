@@ -117,6 +117,7 @@ export async function POST(request: Request) {
       email: user.email,
       full_name: ownerName,
       tenant_id: tenantId,
+      onboarding_pending: false,
     },
     {
       onConflict: 'id',

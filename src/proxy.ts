@@ -4,13 +4,16 @@ import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { checkSubscriptionBlocked, consolidateOwnerSubscription, type TenantSubscription } from '@/lib/checkSubscription';
 
-const publicPaths = ['/login', '/auth', '/onboarding', '/accept-invite'];
+const publicPaths = ['/login', '/auth', '/accept-invite'];
+const onboardingPath = '/onboarding';
 const billingPath = '/billing';
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname === '/') return NextResponse.next();
+
+  const isOnboarding = pathname === onboardingPath || pathname.startsWith(`${onboardingPath}/`);
 
   if (publicPaths.some(p => pathname === p || pathname.startsWith(p + '/'))) {
     return NextResponse.next();
@@ -67,10 +70,53 @@ export async function proxy(request: NextRequest) {
 
   const tenantIds = tenantUsers?.map((tu) => tu.tenant_id) ?? [];
 
+  // Flag directo en el perfil: FALSE = onboarding completado (nunca
+  // mostrar). TRUE o perfil inexistente (usuario recién registrado) =
+  // pendiente. El redirect exige además membresías definitivamente vacías,
+  // así un invitee o un fallo transitorio jamás termina frente al onboarding.
+  const { data: profileRow } = await supabaseAdmin
+    .from('profiles')
+    .select('onboarding_pending')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  const onboardingPending = profileRow?.onboarding_pending !== false;
+
+  // Bloqueo server-side de /onboarding: la ruta queda reservada exclusivamente
+  // a usuarios nuevos (flag pendiente Y sin membresías). Si el usuario ya
+  // completó el onboarding o tiene empresa, no llega al formulario ni ve el
+  // estado "Verificando tu cuenta": se lo redirige al dashboard de una.
+  if (isOnboarding) {
+    if (membershipError) {
+      // Chequeo ambiguo: fail open y que el guard cliente (/api/session)
+      // decida. Nunca mostrar el formulario ante un resultado indeterminado.
+      console.warn('proxy: onboarding gate membership check failed, failing open:', membershipError.message);
+      return response;
+    }
+    if (!onboardingPending || tenantIds.length > 0) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+    return response;
+  }
+
   if (membershipError) {
     console.warn('proxy: tenant_users check failed, failing open:', membershipError.message);
-  } else if (!tenantIds || tenantIds.length === 0) {
+  } else if (onboardingPending && (!tenantIds || tenantIds.length === 0)) {
     return NextResponse.redirect(new URL('/onboarding', request.url));
+  }
+
+  // Self-healing: el flag quedó en TRUE pero el usuario ya tiene empresa
+  // (invitación aceptada, carrera de creación, datos previos a la
+  // migración). Lo alineamos para que próximos chequeos sean directos.
+  if (onboardingPending && tenantIds.length > 0) {
+    supabaseAdmin
+      .from('profiles')
+      .update({ onboarding_pending: false })
+      .eq('id', user.id)
+      .then(
+        () => undefined,
+        () => undefined
+      );
   }
 
   // Check subscription block (skip for billing page). Every branch of the same

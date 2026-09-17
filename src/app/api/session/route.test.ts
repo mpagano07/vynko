@@ -25,7 +25,7 @@ describe('GET /api/session', () => {
     const res = await GET(makeRequest());
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json).toEqual({ user: null, profile: null, tenant: null, tenants: [] });
+    expect(json).toEqual({ user: null, profile: null, tenant: null, tenants: [], onboarding_pending: true });
   });
 
   it('devuelve sesión vacía con token inválido', async () => {
@@ -37,11 +37,12 @@ describe('GET /api/session', () => {
     const json = await res.json();
     expect(json.user).toBeNull();
     expect(json.tenants).toEqual([]);
+    expect(json.onboarding_pending).toBe(true);
   });
 
   it('selecciona la sucursal activa del usuario', async () => {
     supabaseMock.__queue('profiles', {
-      data: { id: 'user-1', full_name: 'Ana', email: 'user@tienda.com' },
+      data: { id: 'user-1', full_name: 'Ana', email: 'user@tienda.com', onboarding_pending: false },
     });
     supabaseMock.__queue('tenant_users', {
       data: [
@@ -63,6 +64,26 @@ describe('GET /api/session', () => {
     expect(json.tenant).toMatchObject({ id: 't2', name: 'Sucursal Norte' });
     expect(json.role).toBe('member');
     expect(json.profile).toMatchObject({ full_name: 'Ana' });
+    expect(json.onboarding_pending).toBe(false);
+  });
+
+  it('baja onboarding_pending a FALSE vía self-healing si el usuario ya tiene empresa pero quedó pendiente', async () => {
+    supabaseMock.__queue('profiles', {
+      data: { id: 'user-1', full_name: 'Ana', email: 'user@tienda.com', onboarding_pending: true },
+    });
+    supabaseMock.__queue('tenant_users', {
+      data: [{ tenant_id: 't1', role: 'owner' }],
+    });
+    supabaseMock.__queue('tenants', {
+      data: [{ id: 't1', name: 'Central' }],
+    });
+    supabaseMock.__queue('profiles', { data: null, error: null }); // resultado del update
+
+    const res = await GET(makeRequest('token'));
+    const json = await res.json();
+
+    expect(json.onboarding_pending).toBe(false);
+    expect(json.tenant).toMatchObject({ id: 't1' });
   });
 
   it('cae a la primera sucursal si la activa no es válida', async () => {
