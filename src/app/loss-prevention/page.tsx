@@ -12,18 +12,20 @@ import { Select } from '@/components/ui/select';
 import toast from 'react-hot-toast';
 import {
   ShieldAlert, Package, TrendingDown, AlertTriangle,
-  Loader2, Search, X, CalendarDays, ClipboardList, BarChart3
+  Loader2, Search, X, Scale, BarChart3, ClipboardList, FilterX,
+  PieChart as PieChartIcon
 } from 'lucide-react';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatARS } from '@/lib/utils/currency';
 import { matchesQuery } from '@/lib/utils/text';
 
 const reasonOptions = [
-  { value: 'damaged', label: 'Dañado', color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30' },
-  { value: 'lost', label: 'Perdido', color: 'text-red-600 bg-red-50 dark:bg-red-950/30' },
-  { value: 'stolen', label: 'Robado', color: 'text-rose-600 bg-rose-50 dark:bg-rose-950/30' },
-  { value: 'expired', label: 'Vencido', color: 'text-orange-600 bg-orange-50 dark:bg-orange-950/30' },
-  { value: 'found', label: 'Encontrado', color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30' },
-  { value: 'correction', label: 'Corrección', color: 'text-blue-600 bg-blue-50 dark:bg-blue-950/30' },
+  { value: 'damaged', label: 'Dañado', color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30', hex: '#f59e0b' },
+  { value: 'lost', label: 'Perdido', color: 'text-red-600 bg-red-50 dark:bg-red-950/30', hex: '#ef4444' },
+  { value: 'stolen', label: 'Robado', color: 'text-rose-600 bg-rose-50 dark:bg-rose-950/30', hex: '#e11d48' },
+  { value: 'expired', label: 'Vencido', color: 'text-orange-600 bg-orange-50 dark:bg-orange-950/30', hex: '#f97316' },
+  { value: 'found', label: 'Encontrado', color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30', hex: '#10b981' },
+  { value: 'correction', label: 'Corrección', color: 'text-blue-600 bg-blue-50 dark:bg-blue-950/30', hex: '#3b82f6' },
 ];
 
 const reasonMap = Object.fromEntries(reasonOptions.map(r => [r.value, r]));
@@ -53,22 +55,20 @@ export default function LossPreventionPage() {
   useEffect(() => {
     searchInputRef.current?.focus();
   }, []);
-  const [typeFilter, setTypeFilter] = useState('adjustment');
+  const [reasonFilter, setReasonFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [showForm, setShowForm] = useState(false);
 
   const [form, setForm] = useState({ productId: '', quantity: 0, reason: 'damaged', notes: '' });
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchHistory = async (type?: string) => {
+  const fetchHistory = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const headers: Record<string, string> = {};
       if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-      const typeParam = type || typeFilter;
-      const url = typeParam === 'all'
-        ? `/api/stock-history?days=90&limit=200`
-        : `/api/stock-history?type=${typeParam}&days=90&limit=200`;
-      const res = await fetch(url, { headers });
+      const res = await fetch('/api/stock-history?type=adjustment&days=365&limit=500', { headers });
       if (res.ok) {
         const data = await res.json();
         setHistory(data.items || []);
@@ -85,7 +85,6 @@ export default function LossPreventionPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!productsLoading) fetchHistory().finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productsLoading]);
 
   // Antipérdidas es un feature del plan business (mismo guard que /forecast).
@@ -130,15 +129,14 @@ export default function LossPreventionPage() {
   };
 
   const losses = history.filter((h) => h.quantity < 0);
+  const gains = history.filter((h) => h.quantity > 0);
   const totalLosses = losses.reduce((sum, h) => sum + Math.abs(h.quantity), 0);
-  const totalValue = (() => {
-    let v = 0;
-    for (const h of losses) {
-      const p = products?.find(p => p.id === h.productId);
-      v += Math.abs(h.quantity) * (p?.cost || 0);
-    }
-    return v;
-  })();
+  const totalGains = gains.reduce((sum, h) => sum + h.quantity, 0);
+  const netBalance = totalGains - totalLosses;
+
+  const costOfProduct = (productId: string) => products?.find(p => p.id === productId)?.cost || 0;
+
+  const totalValue = losses.reduce((v, h) => v + Math.abs(h.quantity) * costOfProduct(h.productId), 0);
 
   const topLost: [string, number][] = Object.entries(
     losses.reduce((acc: Record<string, number>, h) => {
@@ -147,9 +145,34 @@ export default function LossPreventionPage() {
     }, {} as Record<string, number>)
   ).sort(([, a], [, b]) => b - a).slice(0, 5);
 
-  const filtered = history.filter(h =>
-    !search || matchesQuery(h.productName, search)
-  );
+  const lossByReason = losses.reduce((acc: Record<string, number>, h) => {
+    const reason = h.reason?.split(':')[0] || 'correction';
+    acc[reason] = (acc[reason] || 0) + Math.abs(h.quantity);
+    return acc;
+  }, {} as Record<string, number>);
+  const donutData = Object.entries(lossByReason)
+    .map(([reason, value]) => {
+      const info = reasonMap[reason] || reasonMap.correction;
+      return { name: info.label, value, color: info.hex };
+    })
+    .sort((a, b) => b.value - a.value);
+
+  const filtered = history.filter(h => {
+    if (search && !matchesQuery(h.productName, search)) return false;
+    if (reasonFilter && (h.reason?.split(':')[0] || '') !== reasonFilter) return false;
+    const day = h.createdAt.slice(0, 10);
+    if (dateFrom && day < dateFrom) return false;
+    if (dateTo && day > dateTo) return false;
+    return true;
+  });
+
+  const hasFilters = Boolean(search || reasonFilter || dateFrom || dateTo);
+  const clearFilters = () => {
+    setSearch('');
+    setReasonFilter('');
+    setDateFrom('');
+    setDateTo('');
+  };
 
   return (
     <div className="space-y-6">
@@ -171,11 +194,13 @@ export default function LossPreventionPage() {
         <Card className="p-5">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Ajustes totales</p>
-              <p className="text-2xl font-bold mt-1 text-gray-900 dark:text-white">{history.length}</p>
-              <p className="text-xs text-gray-500 mt-1">Últimos 90 días</p>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Balance neto</p>
+              <p className={`text-2xl font-bold mt-1 ${netBalance > 0 ? 'text-emerald-600' : netBalance < 0 ? 'text-rose-600' : 'text-gray-900 dark:text-white'}`}>
+                {netBalance > 0 ? '+' : ''}{netBalance} u.
+              </p>
+              <p className="text-xs text-gray-500 mt-1">{totalGains} recuperadas · {totalLosses} perdidas</p>
             </div>
-            <div className="p-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500"><ClipboardList className="h-5 w-5" /></div>
+            <div className="p-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500"><Scale className="h-5 w-5" /></div>
           </div>
         </Card>
         <Card className="p-5">
@@ -210,48 +235,111 @@ export default function LossPreventionPage() {
         </Card>
       </div>
 
-      {/* Top Lost Table */}
-      {topLost.length > 0 && (
-        <Card className="p-5">
-          <h2 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-            <BarChart3 className="h-4 w-4 text-rose-500" />
-            Productos con más pérdidas
-          </h2>
-          <div className="space-y-2">
-            {topLost.map(([name, qty], i) => (
-              <div key={name} className="flex items-center gap-3">
-                <span className="text-xs font-bold text-gray-400 w-5">{i + 1}</span>
-                <div className="flex-1 h-8 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-rose-400 dark:bg-rose-600 rounded-full flex items-center px-3"
-                    style={{ width: `${Math.min((qty / topLost[0][1]) * 100, 100)}%` }}
-                  >
-                    <span className="text-xs font-semibold text-white truncate">{name}</span>
+      {/* Pérdidas por motivo (donut) + Top productos */}
+      {(topLost.length > 0 || donutData.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {topLost.length > 0 && (
+            <Card className="p-5">
+              <h2 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-rose-500" />
+                Productos con más pérdidas
+              </h2>
+              <div className="space-y-2">
+                {topLost.map(([name, qty], i) => (
+                  <div key={name} className="flex items-center gap-3">
+                    <span className="text-xs font-bold text-gray-400 w-5">{i + 1}</span>
+                    <div className="flex-1 h-8 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-rose-400 dark:bg-rose-600 rounded-full flex items-center px-3"
+                        style={{ width: `${Math.min((qty / topLost[0][1]) * 100, 100)}%` }}
+                      >
+                        <span className="text-xs font-semibold text-white truncate">{name}</span>
+                      </div>
+                    </div>
+                    <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 w-16 text-right">{qty} u.</span>
                   </div>
-                </div>
-                <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 w-16 text-right">{qty} u.</span>
+                ))}
               </div>
-            ))}
-          </div>
-        </Card>
+            </Card>
+          )}
+
+          {donutData.length > 0 && (
+            <Card className="p-5">
+              <h2 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                <PieChartIcon className="h-4 w-4 text-rose-500" />
+                Pérdidas por motivo
+              </h2>
+              <div className="flex items-center gap-6">
+                <div className="h-44 w-44 flex-shrink-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={donutData}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={52}
+                        outerRadius={70}
+                        paddingAngle={3}
+                        strokeWidth={0}
+                      >
+                        {donutData.map((d) => (
+                          <Cell key={d.name} fill={d.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value: unknown) => [`${value} u.`, 'Unidades']}
+                        contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '12px' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="flex-1 space-y-2">
+                  {donutData.map((d) => {
+                    const pct = totalLosses > 0 ? Math.round((d.value / totalLosses) * 100) : 0;
+                    return (
+                      <div key={d.name} className="flex items-center gap-2 text-xs">
+                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: d.color }} />
+                        <span className="flex-1 text-gray-600 dark:text-gray-400">{d.name}</span>
+                        <span className="font-semibold text-gray-900 dark:text-gray-100 w-10 text-right">{pct}%</span>
+                        <span className="text-gray-400 w-14 text-right">{d.value} u.</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </Card>
+          )}
+        </div>
       )}
 
-      {/* History */}
+      {/* Historial */}
       <Card className="overflow-hidden border border-gray-100 dark:border-gray-800 p-0">
-        <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row gap-3">
+        <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex flex-col lg:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
             <Input ref={searchInputRef} placeholder="Buscar por producto..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
           </div>
-          <div className="w-full sm:w-44">
-            <Select value={typeFilter} onChange={(e) => {
-              setTypeFilter(e.target.value);
-              fetchHistory(e.target.value);
-            }}>
-              <option value="adjustment">Ajustes</option>
-              <option value="all">Todo el historial</option>
+          <div className="w-full sm:w-48">
+            <Select value={reasonFilter} onChange={(e) => setReasonFilter(e.target.value)}>
+              <option value="">Motivo: Todos</option>
+              {reasonOptions.map((r) => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
             </Select>
           </div>
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <Input type="date" aria-label="Desde" value={dateFrom} max={dateTo || undefined} onChange={(e) => setDateFrom(e.target.value)} />
+            </div>
+            <div className="flex-1">
+              <Input type="date" aria-label="Hasta" value={dateTo} min={dateFrom || undefined} onChange={(e) => setDateTo(e.target.value)} />
+            </div>
+          </div>
+          {hasFilters && (
+            <Button variant="outline" size="sm" onClick={clearFilters} className="shrink-0 self-start">
+              <FilterX className="h-4 w-4" /> Limpiar
+            </Button>
+          )}
         </div>
 
         {loading ? (
@@ -263,35 +351,55 @@ export default function LossPreventionPage() {
             <p className="text-sm text-gray-500 mt-1">Los ajustes de stock aparecerán aquí.</p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-100 dark:divide-gray-800">
-            {filtered.map((h) => {
-              const reasonInfo = reasonMap[h.reason?.split(':')[0] || ''] || reasonMap.correction;
-              return (
-                <div key={h.id} className="flex items-center gap-4 px-6 py-3.5 text-sm hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
-                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${h.quantity < 0 ? 'bg-rose-400' : 'bg-emerald-400'}`} />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-gray-900 dark:text-gray-100">{h.productName}</div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${reasonInfo?.color || 'text-gray-500 bg-gray-100'}`}>
-                        {reasonInfo?.label || h.reason}
-                      </span>
-                      {h.productSku && <span className="text-[10px] text-gray-400">SKU: {h.productSku}</span>}
-                    </div>
-                    {h.reason?.includes(':') && (
-                      <p className="text-xs text-gray-500 mt-0.5">{h.reason.split(':').slice(1).join(':').trim()}</p>
-                    )}
-                    <div className="flex items-center gap-2 mt-1 text-[10px] text-gray-400">
-                      <CalendarDays className="h-3 w-3" />
-                      {new Date(h.createdAt).toLocaleDateString('es-AR', { dateStyle: 'medium' })}
-                      <span>por {h.createdBy}</span>
-                    </div>
-                  </div>
-                  <div className={`text-right font-bold text-sm ${h.quantity < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                    {h.quantity > 0 ? '+' : ''}{h.quantity}
-                  </div>
-                </div>
-              );
-            })}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  <th className="py-3 px-4">Fecha</th>
+                  <th className="py-3 px-4">Producto / SKU</th>
+                  <th className="py-3 px-4">Motivo</th>
+                  <th className="py-3 px-4 text-right">Cantidad</th>
+                  <th className="py-3 px-4 text-right">Costo ($)</th>
+                  <th className="py-3 px-4">Nota</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
+                {filtered.map((h) => {
+                  const reasonInfo = reasonMap[h.reason?.split(':')[0] || ''] || reasonMap.correction;
+                  const note = h.reason?.includes(':') ? h.reason.split(':').slice(1).join(':').trim() : '';
+                  const cost = costOfProduct(h.productId);
+                  const costText = cost > 0
+                    ? `${h.quantity < 0 ? '-' : '+'}${formatARS(Math.abs(h.quantity) * cost)}`
+                    : '—';
+                  const isNegative = h.quantity < 0;
+                  return (
+                    <tr key={h.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
+                      <td className="py-2.5 px-4 whitespace-nowrap text-xs text-gray-500">
+                        {new Date(h.createdAt).toLocaleDateString('es-AR', { dateStyle: 'medium' })}
+                      </td>
+                      <td className="py-2.5 px-4">
+                        <div className="font-medium text-gray-900 dark:text-gray-100">{h.productName}</div>
+                        {h.productSku && <div className="text-[11px] text-gray-400">SKU: {h.productSku}</div>}
+                      </td>
+                      <td className="py-2.5 px-4">
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${reasonInfo?.color || 'text-gray-500 bg-gray-100'}`}>
+                          {reasonInfo?.label || h.reason}
+                        </span>
+                      </td>
+                      <td className={`py-2.5 px-4 text-right whitespace-nowrap font-semibold ${isNegative ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        {isNegative ? '' : '+'}{h.quantity} u.
+                      </td>
+                      <td className={`py-2.5 px-4 text-right whitespace-nowrap font-semibold ${isNegative ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        {costText}
+                      </td>
+                      <td className="py-2.5 px-4 text-xs text-gray-500 max-w-[220px] truncate" title={note || ''}>
+                        {note || '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </Card>

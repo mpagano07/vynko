@@ -38,10 +38,13 @@ import { getTenantHeaders } from '@/lib/fetchWithTenant';
 import { filterProducts } from '@/lib/product-search';
 import { matchesQuery } from '@/lib/utils/text';
 import { TransferInbox } from '@/components/transfers/TransferInbox';
+import { SortableTh, SortDir } from '@/components/ui/sortable-th';
 
 function marginPercent(price: number, cost: number): number {
   return ((price - cost) / cost) * 100;
 }
+
+type SortKey = 'name' | 'category' | 'location' | 'sku' | 'cost' | 'price' | 'stock';
 
 interface PriceAdjustSample {
   id: string;
@@ -344,6 +347,10 @@ function ProductsPageContent() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
 
+  // Sort State
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+
   // Filter Logic
   const filteredProducts = filterProducts(products || [], {
     searchTerm,
@@ -351,9 +358,42 @@ function ProductsPageContent() {
     stockFilter,
   });
 
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+    setCurrentPage(1);
+  };
+
+  const categoryNameOf = (p: Product) => categories.find((c) => c.id === p.category_id)?.name || 'Sin categoría';
+
+  const sortedProducts = sortKey
+    ? [...filteredProducts].sort((a, b) => {
+        let va: string | number;
+        let vb: string | number;
+        switch (sortKey) {
+          case 'name': va = a.name; vb = b.name; break;
+          case 'category': va = categoryNameOf(a).toLocaleLowerCase(); vb = categoryNameOf(b).toLocaleLowerCase(); break;
+          case 'location': va = `${a.deposito || ''} ${a.pasillo || ''} ${a.estanteria || ''}`.trim().toLocaleLowerCase(); vb = `${b.deposito || ''} ${b.pasillo || ''} ${b.estanteria || ''}`.trim().toLocaleLowerCase(); break;
+          case 'sku': va = a.sku || ''; vb = b.sku || ''; break;
+          case 'cost': va = a.cost ?? 0; vb = b.cost ?? 0; break;
+          case 'price': va = a.price ?? 0; vb = b.price ?? 0; break;
+          case 'stock': va = a.stock ?? 0; vb = b.stock ?? 0; break;
+          default: return 0;
+        }
+        const cmp = typeof va === 'string' && typeof vb === 'string'
+          ? va.localeCompare(vb, 'es', { sensitivity: 'base' })
+          : (va as number) - (vb as number);
+        return sortDir === 'asc' ? cmp : -cmp;
+      })
+    : filteredProducts;
+
   // Pagination Logic
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
-  const paginatedProducts = filteredProducts.slice(
+  const paginatedProducts = sortedProducts.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
@@ -686,14 +726,14 @@ function ProductsPageContent() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  <th className="py-4 px-6">Producto</th>
-                  <th className="py-4 px-3">Categoría</th>
-                  <th className="py-4 px-3">Ubicación</th>
-                  <th className="py-4 px-6">SKU / Código</th>
-                  <th className="py-4 px-6">Precios (Costo / Venta)</th>
-                  <th className="py-4 px-6 text-center">Stock</th>
-                  <th className="py-4 px-6 text-right">Acciones</th>
+                <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold uppercase tracking-wider">
+                  <SortableTh label="Producto" sortFor="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                  <SortableTh label="Categoría" sortFor="category" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-3" />
+                  <SortableTh label="Ubicación" sortFor="location" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-3" />
+                  <SortableTh label="SKU / Código" sortFor="sku" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                  <SortableTh label="Precios (Costo / Venta)" sortFor="price" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                  <SortableTh label="Stock" sortFor="stock" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" align="center" />
+                  <th className="py-4 px-6 text-right text-gray-500">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
