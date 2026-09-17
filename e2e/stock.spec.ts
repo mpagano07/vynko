@@ -88,8 +88,8 @@ test.describe('Stock E2E', () => {
     await searchInput.fill(PRODUCT_NAME);
     await page.waitForTimeout(500);
 
-    await expect(page.getByText('+5', { exact: true }).first()).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('-3', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('+5 u.', { exact: true }).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('-3 u.', { exact: true }).first()).toBeVisible();
   });
 
   // Test 5: Intentar retirar más stock del disponible

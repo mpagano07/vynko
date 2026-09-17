@@ -9,7 +9,10 @@ import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { Search, Plus, Edit, Trash2, Users, X, Loader2, ShoppingBag, DollarSign, CalendarDays } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import { matchesQuery } from '@/lib/utils/text';
+import { SortableTh, SortDir } from '@/components/ui/sortable-th';
 import toast from 'react-hot-toast';
+
+type SortKey = 'name' | 'email' | 'phone' | 'address';
 
 interface Customer {
   id: string;
@@ -155,6 +158,34 @@ export default function CustomersPage() {
     matchesQuery(c.phone, search)
   );
 
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const sortedCustomers = sortKey
+    ? [...filtered].sort((a, b) => {
+        let va: string;
+        let vb: string;
+        switch (sortKey) {
+          case 'name': va = a.name; vb = b.name; break;
+          case 'email': va = a.email || ''; vb = b.email || ''; break;
+          case 'phone': va = a.phone || ''; vb = b.phone || ''; break;
+          case 'address': va = a.address || ''; vb = b.address || ''; break;
+          default: return 0;
+        }
+        const cmp = va.localeCompare(vb, 'es', { sensitivity: 'base' });
+        return sortDir === 'asc' ? cmp : -cmp;
+      })
+    : filtered;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -193,16 +224,16 @@ export default function CustomersPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  <th className="py-4 px-6">Nombre</th>
-                  <th className="py-4 px-6">Email</th>
-                  <th className="py-4 px-6">Teléfono</th>
-                  <th className="py-4 px-6">Dirección</th>
-                  <th className="py-4 px-6 text-right">Acciones</th>
+                <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold uppercase tracking-wider">
+                  <SortableTh label="Nombre" sortFor="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                  <SortableTh label="Email" sortFor="email" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                  <SortableTh label="Teléfono" sortFor="phone" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                  <SortableTh label="Dirección" sortFor="address" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                  <th className="py-4 px-6 text-right text-gray-500">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
-                {filtered.map((c) => (
+                {sortedCustomers.map((c) => (
                   <tr key={c.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
                     <td className="py-4 px-6 font-semibold text-gray-900 dark:text-gray-100">{c.name}</td>
                     <td className="py-4 px-6 text-gray-600 dark:text-gray-400">{c.email || '—'}</td>

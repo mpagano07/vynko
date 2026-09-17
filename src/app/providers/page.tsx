@@ -26,8 +26,11 @@ import type { CommercialDocument } from '@/lib/types/document';
 import type { Product } from '@/lib/types/product';
 import { formatARS } from '@/lib/utils/currency';
 import { matchesQuery } from '@/lib/utils/text';
+import { SortableTh, SortDir } from '@/components/ui/sortable-th';
 
 const PO_INTENT_KEY = 'create_po_intent';
+
+type SortKey = 'name' | 'contact' | 'email' | 'address';
 
 export default function ProvidersPage() {
   const router = useRouter();
@@ -286,6 +289,34 @@ export default function ProvidersPage() {
     matchesQuery(s.email, searchTerm)
   );
 
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const sortedSuppliers = sortKey
+    ? [...filteredSuppliers].sort((a, b) => {
+        let va: string;
+        let vb: string;
+        switch (sortKey) {
+          case 'name': va = a.name; vb = b.name; break;
+          case 'contact': va = a.contact_name || ''; vb = b.contact_name || ''; break;
+          case 'email': va = a.email || ''; vb = b.email || ''; break;
+          case 'address': va = a.address || ''; vb = b.address || ''; break;
+          default: return 0;
+        }
+        const cmp = va.localeCompare(vb, 'es', { sensitivity: 'base' });
+        return sortDir === 'asc' ? cmp : -cmp;
+      })
+    : filteredSuppliers;
+
   const openSupplierModal = (supplier: Supplier | null = null) => {
     if (supplier) {
       setEditingSupplier(supplier);
@@ -421,16 +452,16 @@ export default function ProvidersPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  <th className="py-4 px-6">Nombre</th>
-                  <th className="py-4 px-6">Contacto</th>
-                  <th className="py-4 px-6">Email / Teléfono</th>
-                  <th className="py-4 px-6">Dirección</th>
-                  <th className="py-4 px-6 text-right">Acciones</th>
+                <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold uppercase tracking-wider">
+                  <SortableTh label="Nombre" sortFor="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                  <SortableTh label="Contacto" sortFor="contact" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                  <SortableTh label="Email / Teléfono" sortFor="email" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                  <SortableTh label="Dirección" sortFor="address" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                  <th className="py-4 px-6 text-right text-gray-500">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
-                {filteredSuppliers.map((supplier) => (
+                {sortedSuppliers.map((supplier) => (
                   <React.Fragment key={supplier.id}>
                     <tr
                       onClick={() => handleSelectSupplier(supplier.id)}

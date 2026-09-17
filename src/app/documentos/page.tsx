@@ -544,25 +544,43 @@ export default function DocumentosPage() {
     if (!order) return;
     setReceiveOrderId(id);
     setReceiveDate(new Date().toISOString().split('T')[0]);
-    setReceiveDeposito('');
-    setReceivePasillo('');
-    setReceiveEstanteria('');
     setReceiveNotes('');
-    setReceiveItems(
-      order.items.map(item => {
-        const alreadyReceived = item.quantity_received || 0;
-        const pending = Math.max(0, item.quantity_ordered - alreadyReceived);
-        return {
-          product_id: item.product_id,
-          product_name: item.product_name || 'Producto',
-          quantity_ordered: item.quantity_ordered,
-          already_received: alreadyReceived,
-          quantity_received: pending,
-        };
-      })
+
+    const items = order.items.map(item => {
+      const alreadyReceived = item.quantity_received || 0;
+      const pending = Math.max(0, item.quantity_ordered - alreadyReceived);
+      return {
+        product_id: item.product_id,
+        product_name: item.product_name || 'Producto',
+        quantity_ordered: item.quantity_ordered,
+        already_received: alreadyReceived,
+        quantity_received: pending,
+      };
+    });
+    setReceiveItems(items);
+
+    // Precargar la ubicación desde los productos del pedido (si comparten la misma)
+    const pendingItems = items.filter(i => (i.quantity_ordered - i.already_received) > 0);
+    const locationCandidates = (pendingItems.length > 0 ? pendingItems : items)
+      .map(i => products.find(p => p.id === i.product_id))
+      .filter((p): p is Product => Boolean(p));
+    const sameLocation = locationCandidates.length > 0 && locationCandidates.every(p =>
+      p.deposito === locationCandidates[0].deposito &&
+      p.pasillo === locationCandidates[0].pasillo &&
+      p.estanteria === locationCandidates[0].estanteria
     );
+    if (sameLocation) {
+      setReceiveDeposito(locationCandidates[0].deposito || '');
+      setReceivePasillo(locationCandidates[0].pasillo || '');
+      setReceiveEstanteria(locationCandidates[0].estanteria || '');
+    } else {
+      setReceiveDeposito('');
+      setReceivePasillo('');
+      setReceiveEstanteria('');
+    }
+
     setIsReceiveModalOpen(true);
-  }, [purchaseOrders]);
+  }, [purchaseOrders, products]);
 
   useEffect(() => {
     if (!autoReceiveId) return;
@@ -656,6 +674,9 @@ export default function DocumentosPage() {
       };
       const poRes = await fetch('/api/purchase-orders', { headers: h2 });
       if (poRes.ok) setPurchaseOrders(await poRes.json());
+
+      const docsRes = await fetch('/api/documents', { headers: h2 });
+      if (docsRes.ok) setDocuments(await docsRes.json());
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al recibir pedido');
     } finally {
