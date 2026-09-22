@@ -431,6 +431,15 @@ export function Sidebar() {
 function TrialCounter({ tenant }: { tenant: TenantInfo | null }) {
   const trialPlan = getTrialPlan();
   if (!tenant || !tenant.created_at || !trialPlan) return null;
+
+  // Solo los tenants que siguen en período de prueba (free/incomplete) muestran
+  // el contador y el aviso de prueba vencida. Una suscripción activa o cancelada
+  // ya salió del trial: aunque el plan coincida con el plan en prueba y hayan
+  // pasado más de N días desde la creación, no se debe mostrar "Prueba
+  // finalizada" a una cuenta que está pagando.
+  const status = tenant.subscription_status || 'free';
+  if (status !== 'free' && status !== 'incomplete') return null;
+
   const plan = tenant.subscription_plan || trialPlan;
   if (plan !== trialPlan) return null;
 
