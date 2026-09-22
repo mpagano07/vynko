@@ -59,8 +59,6 @@ export default function LandingPage() {
   const { user, profile, tenant, tenants, logout, loading: authLoading, loadProfileAndTenant } = useAuth();
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState('');
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const [termsError, setTermsError] = useState('');
   const [waitlistLoading, setWaitlistLoading] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
@@ -112,17 +110,12 @@ export default function LandingPage() {
   const handleWaitlist = async (e: React.FormEvent) => {
     e.preventDefault();
     setEmailError('');
-    setTermsError('');
     let valid = true;
     if (!email.trim()) {
       setEmailError('Ingresá tu email para continuar');
       valid = false;
     } else if (!/\S+@\S+\.\S+/.test(email)) {
       setEmailError('Email inválido');
-      valid = false;
-    }
-    if (!acceptedTerms) {
-      setTermsError('Debés aceptar los Términos, la Política de Privacidad y la Política de Cookies');
       valid = false;
     }
     if (!valid) return;
@@ -146,6 +139,8 @@ export default function LandingPage() {
                 <Link href="#features" className="text-sm text-gray-400 hover:text-white transition-colors">Características</Link>
                 <Link href="#how-it-works" className="text-sm text-gray-400 hover:text-white transition-colors">Cómo funciona</Link>
                 <Link href="#pricing" className="text-sm text-gray-400 hover:text-white transition-colors">Precios</Link>
+                <Link href="#demo" className="text-sm text-gray-400 hover:text-white transition-colors">Ver demo</Link>
+                <Link href="#roi" className="text-sm text-gray-400 hover:text-white transition-colors">Calculá cuánto podés ahorrar</Link>
               </div>
             </div>
             {isMounted && (<div className="flex items-center gap-3">
@@ -226,33 +221,6 @@ export default function LandingPage() {
                     {waitlistLoading ? 'Enviando...' : 'Comenzar gratis'}
                   </button>
                 </div>
-                <div className="mt-4 flex items-start gap-2.5">
-                  <input
-                    type="checkbox"
-                    id="landingAcceptedTerms"
-                    checked={acceptedTerms}
-                    onChange={(e) => {
-                      setAcceptedTerms(e.target.checked);
-                      if (e.target.checked) setTermsError('');
-                    }}
-                    className="mt-0.5 h-4 w-4 rounded border-gray-700 bg-gray-900 text-cyan-500 focus:ring-cyan-500 cursor-pointer"
-                  />
-                  <label htmlFor="landingAcceptedTerms" className="text-xs text-gray-400 leading-relaxed cursor-pointer select-none">
-                    Acepto los{' '}
-                    <Link href="/terminos" target="_blank" className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2">
-                      Términos y Condiciones
-                    </Link>
-                    , la{' '}
-                    <Link href="/privacidad" target="_blank" className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2">
-                      Política de Privacidad
-                    </Link>{' '}
-                    y la{' '}
-                    <Link href="/cookies" target="_blank" className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2">
-                      Política de Cookies
-                    </Link>.
-                  </label>
-                </div>
-                {termsError && <p className="text-xs text-red-400 mt-1.5">{termsError}</p>}
               </form>
               <p className="mt-3 text-xs text-gray-400">
                 Sin compromiso. 45 días de prueba gratuita.
