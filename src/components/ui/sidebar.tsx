@@ -59,6 +59,8 @@ const navGroups: NavGroup[] = [
     items: [
       { name: 'Pronóstico', href: '/forecast', requiredPlan: ['business', 'enterprise'], requiredRole: ['owner', 'manager'] },
       { name: 'Antipérdidas', href: '/loss-prevention', requiredPlan: ['business', 'enterprise'] },
+      { name: 'Asistente IA', href: '/ai', requiredPlan: ['business', 'enterprise'] },
+      { name: 'Visión de Góndolas', href: '/shelf-vision', requiredPlan: ['business', 'enterprise'] },
       { name: 'Historial', href: '/activity-logs', requiredPlan: ['business', 'enterprise'], requiredRole: ['owner', 'manager'] },
     ],
   },
@@ -69,11 +71,13 @@ const operacionesItems: NavItem[] = [
   { name: 'Escáner', href: '/scanning', requiredPlan: ALL_PLANS },
 ];
 
-const ADMIN_EMAIL = 'matias.pagano07@gmail.com';
+const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL ?? '';
 
 const LOCKED_ITEM_DESCRIPTIONS: Record<string, string> = {
   '/forecast': 'Pronóstico de demanda, picos de venta y proyecciones para anticiparte a tu negocio.',
   '/loss-prevention': 'Control de mermas y ajustes de inventario para proteger tu stock.',
+  '/ai': 'Asistente con IA para consultar tu stock, ventas y productos con bajo rendimiento.',
+  '/shelf-vision': 'Visión de góndolas: capturá una foto y la IA detecta faltantes y reposiciones.',
   '/activity-logs': 'Historial de actividad completo para auditar la operación de tu equipo.',
 };
 
@@ -135,7 +139,7 @@ function LockedNavItem({ item, compact = false, onNavClick }: { item: NavItem; c
           router.push('/billing');
         }}
         className={cn(
-          'flex items-center justify-between w-full rounded-md text-sm font-medium text-gray-500 opacity-60 cursor-not-allowed',
+          'flex items-center justify-between w-full rounded-md text-sm font-medium text-gray-500 dark:text-gray-400 cursor-not-allowed',
           compact ? 'px-3 py-1.5' : 'px-3 py-2'
         )}
       >

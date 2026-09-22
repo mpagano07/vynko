@@ -4,7 +4,7 @@ import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { checkSubscriptionBlocked, consolidateOwnerSubscription, type TenantSubscription } from '@/lib/checkSubscription';
 
-const publicPaths = ['/login', '/auth', '/accept-invite'];
+const publicPaths = ['/login', '/auth', '/accept-invite', '/privacidad', '/terminos', '/cookies'];
 const onboardingPath = '/onboarding';
 const billingPath = '/billing';
 

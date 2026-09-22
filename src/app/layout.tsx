@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     default: 'Vynko | Gestión de Stock y Ventas',
     template: '%s | Vynko',
   },
-  description: 'Plataforma SaaS B2B de gestión inteligente de stock, ventas en punto de venta, transferencia multi-sucursal y control comercial para tu negocio.',
+  description: 'Plataforma SaaS B2B de gestión de stock en tiempo real, ventas en punto de venta, transferencia multi-sucursal y control comercial para tu negocio.',
   generator: 'Next.js',
   applicationName: 'Vynko',
   referrer: 'origin-when-cross-origin',
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'Vynko | Gestión de Stock y Ventas',
-    description: 'Plataforma SaaS B2B de gestión inteligente de stock, ventas en punto de venta y control comercial para tu negocio.',
+    description: 'Plataforma SaaS B2B de gestión de stock en tiempo real, ventas en punto de venta y control comercial para tu negocio.',
     url: 'https://vynko.dev',
     siteName: 'Vynko',
     locale: 'es_AR',
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary',
     title: 'Vynko | Gestión de Stock y Ventas',
-    description: 'Plataforma SaaS B2B de gestión inteligente de stock y ventas para negocios.',
+    description: 'Plataforma SaaS B2B de gestión de stock y ventas para negocios.',
     images: ['/icons/icon-512.png'],
   },
 };

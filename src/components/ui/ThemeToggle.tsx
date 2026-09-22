@@ -46,14 +46,16 @@ export function ThemeToggle({ className }: { className?: string }) {
         className
       )}
     >
-      <Sun className="absolute left-1 h-3.5 w-3.5 text-amber-400" />
-      <Moon className="absolute right-1 h-3.5 w-3.5 text-gray-600" />
       <span
         className={cn(
-          'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md ring-0 transition-transform duration-300 ease-in-out',
+          'pointer-events-none inline-flex h-4 w-4 items-center justify-center rounded-full bg-white shadow-md ring-0 transition-transform duration-300 ease-in-out',
           theme === 'dark' ? 'translate-x-[22px]' : 'translate-x-[2px]'
         )}
-      />
+      >
+        {theme === 'dark'
+          ? <Moon className="h-3 w-3 text-indigo-700" aria-hidden="true" />
+          : <Sun className="h-3 w-3 text-amber-600" aria-hidden="true" />}
+      </span>
     </button>
   );
 }

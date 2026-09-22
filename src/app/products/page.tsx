@@ -1425,7 +1425,7 @@ function ProductsPageContent() {
                       placeholder="Ej: 2.1"
                       value={priceAdjustPercentage}
                       onChange={(e) => setPriceAdjustPercentage(e.target.value)}
-                      className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500 pr-8"
+                      className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-400 pr-8"
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">%</span>
                   </div>
