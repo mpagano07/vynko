@@ -153,7 +153,7 @@ export default function StockAndActivity({
         </div>
       ) : recentActivity.length === 0 ? (
         <Card className="p-6 flex items-center gap-3">
-          <Clock className="h-4 w-4 text-gray-400" />
+          <Clock className="h-4 w-4 text-gray-500 dark:text-gray-400" />
           <p className="text-sm text-gray-500">Sin actividad</p>
         </Card>
       ) : (
@@ -169,7 +169,7 @@ export default function StockAndActivity({
                     <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{info.detail}</p>
                   )}
                 </div>
-                <span className="text-[10px] text-gray-400 whitespace-nowrap mt-0.5">{timeAgo(log.created_at)}</span>
+                <span className="text-[10px] text-gray-600 dark:text-gray-400 whitespace-nowrap mt-0.5">{timeAgo(log.created_at)}</span>
               </div>
             );
           })}
@@ -201,14 +201,14 @@ export default function StockAndActivity({
                         <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
                           {order.supplier_name}
                           {allTenants && order.tenant_name && (
-                            <span className="text-[11px] font-normal text-gray-400 ml-1">· {order.tenant_name}</span>
+                            <span className="text-[11px] font-normal text-gray-600 dark:text-gray-400 ml-1">· {order.tenant_name}</span>
                           )}
                         </p>
-                        <p className="text-[11px] text-gray-400">
+                        <p className="text-[11px] text-gray-600 dark:text-gray-400">
                           {order.items.length} producto{order.items.length !== 1 ? 's' : ''} · {totalPending} u. por recibir
                           {order.expected_date && <> · Llega {formatShortDate(order.expected_date)}</>}
                         </p>
-                        <p className="text-[11px] text-gray-400 truncate">{productList}</p>
+                        <p className="text-[11px] text-gray-600 dark:text-gray-400 truncate">{productList}</p>
                       </div>
                     </div>
                     <Button
@@ -254,7 +254,7 @@ export default function StockAndActivity({
                     <div className={`w-2 h-2 rounded-full flex-shrink-0 ${product.stock === 0 ? 'bg-rose-500' : 'bg-amber-400'}`} />
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{product.name}</p>
-                      <p className="text-[11px] text-gray-400">
+                      <p className="text-[11px] text-gray-600 dark:text-gray-400">
                         Stock: {product.stock}
                         {lastSaleText && <> · Última venta {lastSaleText}</>}
                       </p>

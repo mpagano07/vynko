@@ -62,25 +62,25 @@ export default function DashboardResumen({ tenantId, allTenants }: { tenantId: s
         ) : (
           <>
             <div>
-              <p className="text-[11px] text-gray-400">Producto más vendido (90 días)</p>
+              <p className="text-[11px] text-gray-600 dark:text-gray-400">Producto más vendido (90 días)</p>
               <p className="text-xs font-semibold text-gray-900 dark:text-white mt-0.5">
                 {data?.topProduct?.name ?? '—'}
               </p>
             </div>
             <div>
-              <p className="text-[11px] text-gray-400">Cliente que más compra</p>
+              <p className="text-[11px] text-gray-600 dark:text-gray-400">Cliente que más compra</p>
               <p className="text-xs font-semibold text-gray-900 dark:text-white mt-0.5">
                 {data?.topCustomer?.name ?? '—'}
               </p>
             </div>
             <div>
-              <p className="text-[11px] text-gray-400">Última venta registrada</p>
+              <p className="text-[11px] text-gray-600 dark:text-gray-400">Última venta registrada</p>
               <p className="text-xs font-semibold text-gray-900 dark:text-white mt-0.5">
                 {data?.lastPurchase?.date ? timeAgo(data.lastPurchase.date) : 'Sin compras'}
               </p>
             </div>
             <div>
-              <p className="text-[11px] text-gray-400">Proveedor más utilizado</p>
+              <p className="text-[11px] text-gray-600 dark:text-gray-400">Proveedor más utilizado</p>
               <p className="text-xs font-semibold text-gray-900 dark:text-white mt-0.5">
                 {data?.topSupplier?.name ?? '—'}
               </p>

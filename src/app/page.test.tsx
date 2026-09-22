@@ -241,6 +241,8 @@ describe('LandingPage waitlist', () => {
   beforeEach(() => {
     authMock.mockReset();
     hasSessionMock.mockReset();
+    pushMock.mockClear();
+    replaceMock.mockClear();
     mockUseAuth({ loading: false });
   });
 
@@ -271,13 +273,13 @@ describe('LandingPage waitlist', () => {
     expect(await screen.findByText('Email inválido')).toBeInTheDocument();
   });
 
-  it('con un email válido muestra el estado de éxito', async () => {
+  it('con email válido, redirige al registro con el email cargado', async () => {
     render(<LandingPage />);
 
     const { input, form } = getForm();
     fireEvent.change(input, { target: { value: 'ana@tienda.com' } });
     fireEvent.submit(form);
 
-    expect(await screen.findByRole('button', { name: '¡Registrado!' }, { timeout: 2000 })).toBeInTheDocument();
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/auth/signup?email=ana%40tienda.com'));
   });
 });

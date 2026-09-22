@@ -49,7 +49,7 @@ export function Header() {
               aria-label="Menú de usuario"
               className={cn('flex items-center space-x-2 rounded-lg p-2 hover:bg-gray-100 dark:hover:bg-gray-800', isUserMenuOpen && 'relative z-50')}
             >
-              <div className="w-8 h-8 bg-blue-500 dark:bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
+              <div className="w-8 h-8 bg-blue-600 dark:bg-blue-700 rounded-full flex items-center justify-center text-white text-sm font-bold">
                 {(profile?.full_name || user?.email || 'U').charAt(0).toUpperCase()}
               </div>
               <span className="text-sm font-medium hidden sm:inline text-gray-700 dark:text-gray-300">

@@ -25,13 +25,13 @@ export default function ROICalculator() {
         </div>
         <div>
           <h3 className="text-lg font-bold text-white">Calculá tu ahorro</h3>
-          <p className="text-xs text-gray-500">Estimá cuánto podés ganar con Vynko</p>
+          <p className="text-xs text-gray-400">Estimá cuánto podés ganar con Vynko</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         <div>
-          <label className="block text-xs text-gray-500 mb-1.5">Productos en catálogo</label>
+          <label className="block text-xs text-gray-400 mb-1.5">Productos en catálogo</label>
           <input
             type="number"
             value={products}
@@ -40,7 +40,7 @@ export default function ROICalculator() {
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1.5">Ventas por día</label>
+          <label className="block text-xs text-gray-400 mb-1.5">Ventas por día</label>
           <input
             type="number"
             value={salesPerDay}
@@ -49,7 +49,7 @@ export default function ROICalculator() {
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1.5">Horas/día en control de stock</label>
+          <label className="block text-xs text-gray-400 mb-1.5">Horas/día en control de stock</label>
           <input
             type="number"
             step="0.5"
@@ -64,17 +64,17 @@ export default function ROICalculator() {
         <div className="bg-gray-950/60 border border-gray-800/50 rounded-xl p-4 text-center">
           <Clock className="h-5 w-5 text-cyan-400 mx-auto mb-2" />
           <p className="text-2xl font-extrabold text-cyan-400">{results.monthlyHours}h</p>
-          <p className="text-[11px] text-gray-500 mt-1">Ahorrás al mes</p>
+          <p className="text-[11px] text-gray-400 mt-1">Ahorrás al mes</p>
         </div>
         <div className="bg-gray-950/60 border border-gray-800/50 rounded-xl p-4 text-center">
           <AlertTriangle className="h-5 w-5 text-amber-400 mx-auto mb-2" />
           <p className="text-2xl font-extrabold text-amber-400">${results.monthlyLostFromStockouts.toLocaleString('es-AR')}</p>
-          <p className="text-[11px] text-gray-500 mt-1">Pérdidas por quiebres/mes</p>
+          <p className="text-[11px] text-gray-400 mt-1">Pérdidas por quiebres/mes</p>
         </div>
         <div className="bg-gray-950/60 border border-gray-800/50 rounded-xl p-4 text-center">
           <TrendingUp className="h-5 w-5 text-green-400 mx-auto mb-2" />
           <p className="text-2xl font-extrabold text-green-400">${results.monthlySaved.toLocaleString('es-AR')}</p>
-          <p className="text-[11px] text-gray-500 mt-1">Ahorro mensual total</p>
+          <p className="text-[11px] text-gray-400 mt-1">Ahorro mensual total</p>
         </div>
         <div className="bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 rounded-xl p-4 text-center">
           <TrendingUp className="h-5 w-5 text-cyan-300 mx-auto mb-2" />
@@ -82,6 +82,10 @@ export default function ROICalculator() {
           <p className="text-[11px] text-gray-400 mt-1">Proyección anual</p>
         </div>
       </div>
+
+      <p className="mt-4 text-center text-xs text-gray-400 leading-normal">
+        * Estimaciones simuladas de carácter orientativo basadas en promedios del sector comercial. Los ahorros reales pueden variar según el volumen y la dinámica de cada negocio.
+      </p>
     </div>
   );
 }

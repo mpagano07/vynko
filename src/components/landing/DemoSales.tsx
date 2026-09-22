@@ -33,9 +33,9 @@ interface CartItem {
 
 const DUMMY_PRODUCTS: DemoProduct[] = [
   { id: '1', name: 'Café Espresso 250g', price: 2800, cost: 1650, stock: 45, minStock: 10, maxStock: 60, sku: 'CAF-250', barcode: '7790001001', category: 'Bebidas', categoryColor: '#f59e0b', deposito: '1', pasillo: 'A', estanteria: '2' },
-  { id: '2', name: 'Leche Entera 1L', price: 1200, cost: 750, stock: 120, minStock: 30, maxStock: 150, sku: 'LEC-1L', barcode: '7790002002', category: 'Lácteos', categoryColor: '#3b82f6', deposito: '1', pasillo: 'B', estanteria: '1' },
+  { id: '2', name: 'Leche Entera 1L', price: 1200, cost: 750, stock: 120, minStock: 30, maxStock: 150, sku: 'LEC-1L', barcode: '7790002002', category: 'Lácteos', categoryColor: '#60a5fa', deposito: '1', pasillo: 'B', estanteria: '1' },
   { id: '3', name: 'Pan Lactal x6', price: 1500, cost: 980, stock: 30, minStock: 15, maxStock: 80, sku: 'PAN-6', barcode: '7790003003', category: 'Panadería', categoryColor: '#f97316', deposito: '2', pasillo: 'C', estanteria: '1' },
-  { id: '4', name: 'Manteca 200g', price: 900, cost: 540, stock: 3, minStock: 12, maxStock: 50, sku: 'MAN-200', barcode: '7790004004', category: 'Lácteos', categoryColor: '#3b82f6', deposito: '1', pasillo: 'B', estanteria: '3' },
+  { id: '4', name: 'Manteca 200g', price: 900, cost: 540, stock: 3, minStock: 12, maxStock: 50, sku: 'MAN-200', barcode: '7790004004', category: 'Lácteos', categoryColor: '#60a5fa', deposito: '1', pasillo: 'B', estanteria: '3' },
   { id: '5', name: 'Azúcar 1kg', price: 1100, cost: 680, stock: 80, minStock: 20, maxStock: 100, sku: 'AZU-1K', barcode: '7790005005', category: 'Almacén', categoryColor: '#10b981', deposito: '2', pasillo: 'D', estanteria: '2' },
   { id: '6', name: 'Aceite de Oliva 500ml', price: 3500, cost: 2400, stock: 22, minStock: 8, maxStock: 40, sku: 'ACE-500', barcode: '7790006006', category: 'Almacén', categoryColor: '#10b981', deposito: '2', pasillo: 'D', estanteria: '4' },
   { id: '7', name: 'Gaseosa Cola 1.5L', price: 1900, cost: 1150, stock: 36, minStock: 15, maxStock: 60, sku: 'GAS-CO', barcode: '7790007007', category: 'Bebidas', categoryColor: '#f59e0b', deposito: '1', pasillo: 'A', estanteria: '3' },
@@ -107,13 +107,13 @@ export default function DemoSales() {
         <div className="w-3 h-3 rounded-full bg-red-500" />
         <div className="w-3 h-3 rounded-full bg-yellow-500" />
         <div className="w-3 h-3 rounded-full bg-green-500" />
-        <span className="ml-2 text-xs text-gray-500 font-mono">Demo Interactiva — Sin login requerido</span>
+        <span className="ml-2 text-xs text-gray-400 font-mono">Demo Interactiva — Sin login requerido</span>
         <button
           onClick={() => { setTab('ventas'); setSearch(''); }}
           className={`ml-auto flex items-center gap-1.5 px-4 py-2.5 -mb-px text-xs font-semibold border-b-2 transition-colors ${
             tab === 'ventas'
               ? 'border-cyan-400 text-cyan-400'
-              : 'border-transparent text-gray-500 hover:text-gray-300'
+              : 'border-transparent text-gray-400 hover:text-gray-200'
           }`}
         >
           <Receipt className="h-3.5 w-3.5" />
@@ -124,7 +124,7 @@ export default function DemoSales() {
           className={`flex items-center gap-1.5 px-4 py-2.5 -mb-px text-xs font-semibold border-b-2 transition-colors ${
             tab === 'productos'
               ? 'border-cyan-400 text-cyan-400'
-              : 'border-transparent text-gray-500 hover:text-gray-300'
+              : 'border-transparent text-gray-400 hover:text-gray-200'
           }`}
         >
           <LayoutGrid className="h-3.5 w-3.5" />
@@ -147,13 +147,13 @@ export default function DemoSales() {
               <div className="md:col-span-2 border-b md:border-b-0 md:border-r border-gray-800">
                 <div className="p-3 border-b border-gray-800">
                   <div className="relative">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                     <input
                       type="text"
                       placeholder="Buscar productos..."
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
-                      className="w-full pl-9 pr-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-cyan-500/50"
+                      className="w-full pl-9 pr-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-400 focus:outline-none focus:border-cyan-500/50"
                     />
                   </div>
                 </div>
@@ -175,7 +175,7 @@ export default function DemoSales() {
                         }`}
                       >
                         <div className="flex items-center justify-between mb-1">
-                          <span className={`text-[10px] font-mono ${isCritical ? 'text-amber-400' : 'text-gray-600'}`}>
+                          <span className={`text-[10px] font-mono ${isCritical ? 'text-amber-400' : 'text-gray-400'}`}>
                             {isCritical ? '⚠ Bajo' : `Stock: ${p.stock}`}
                           </span>
                         </div>
@@ -199,8 +199,8 @@ export default function DemoSales() {
                 </div>
                 <div className="flex-1 p-3 space-y-2 overflow-y-auto max-h-[200px]">
                   {cart.length === 0 ? (
-                    <div className="text-center py-8 text-gray-600 text-xs">
-                      <Package className="h-8 w-8 mx-auto mb-2 text-gray-700" />
+                    <div className="text-center py-8 text-gray-400 text-xs">
+                      <Package className="h-8 w-8 mx-auto mb-2 text-gray-500" />
                       Click en un producto para agregarlo
                     </div>
                   ) : (
@@ -208,17 +208,17 @@ export default function DemoSales() {
                       <div key={item.product_id} className="flex items-center justify-between bg-gray-950/60 rounded-lg px-3 py-2 border border-gray-800/50">
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium text-gray-300 truncate">{item.name}</p>
-                          <p className="text-[10px] text-gray-600">{formatARS(item.price)} x {item.quantity}</p>
+                          <p className="text-[10px] text-gray-400">{formatARS(item.price)} x {item.quantity}</p>
                         </div>
                         <div className="flex items-center gap-1 ml-2">
-                          <button onClick={() => updateQty(item.product_id, -1)} className="w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:text-white hover:bg-gray-700 transition-colors">
+                          <button onClick={() => updateQty(item.product_id, -1)} className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-white hover:bg-gray-700 transition-colors">
                             <Minus className="h-3 w-3" />
                           </button>
                           <span className="w-5 text-center text-xs font-bold text-gray-300">{item.quantity}</span>
-                          <button onClick={() => updateQty(item.product_id, 1)} className="w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:text-white hover:bg-gray-700 transition-colors">
+                          <button onClick={() => updateQty(item.product_id, 1)} className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-white hover:bg-gray-700 transition-colors">
                             <Plus className="h-3 w-3" />
                           </button>
-                          <button onClick={() => removeItem(item.product_id)} className="w-6 h-6 flex items-center justify-center rounded text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors ml-1">
+                          <button onClick={() => removeItem(item.product_id)} className="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors ml-1">
                             <Trash2 className="h-3 w-3" />
                           </button>
                         </div>
@@ -229,7 +229,7 @@ export default function DemoSales() {
                 {cart.length > 0 && (
                   <div className="p-3 border-t border-gray-800 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-500">Total</span>
+                      <span className="text-xs text-gray-400">Total</span>
                       <span className="text-lg font-bold text-cyan-400">{formatARS(total)}</span>
                     </div>
                     <button
@@ -249,23 +249,23 @@ export default function DemoSales() {
         <div className="min-h-[360px]">
           <div className="p-3 border-b border-gray-800 flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
               <input
                 type="text"
                 placeholder="Buscar por nombre, SKU o código de barras..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-cyan-500/50"
+                className="w-full pl-9 pr-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-400 focus:outline-none focus:border-cyan-500/50"
               />
             </div>
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-gray-400">
               {filtered.length} de {DUMMY_PRODUCTS.length} productos
             </span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-gray-950/40 border-b border-gray-800 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <tr className="bg-gray-950/40 border-b border-gray-800 text-xs font-semibold text-gray-400 uppercase tracking-wider">
                   <th className="py-3 px-4 sm:px-5">Producto</th>
                   <th className="py-3 px-3">Categoría</th>
                   <th className="py-3 px-4 sm:px-5">Ubicación</th>
@@ -283,7 +283,7 @@ export default function DemoSales() {
                     <tr key={p.id} className="hover:bg-gray-800/20">
                       <td className="py-3.5 px-4 sm:px-5">
                         <p className="font-semibold text-gray-100 text-sm">{p.name}</p>
-                        <p className="text-[10px] text-gray-600 font-mono">{p.sku}</p>
+                        <p className="text-[10px] text-gray-400 font-mono">{p.sku}</p>
                       </td>
                       <td className="py-3.5 px-3">
                         <span
@@ -295,21 +295,21 @@ export default function DemoSales() {
                         </span>
                       </td>
                       <td className="py-3.5 px-4 sm:px-5">
-                        <div className="text-[11px] text-gray-500 leading-tight whitespace-nowrap">
+                        <div className="text-[11px] text-gray-400 leading-tight whitespace-nowrap">
                           <p>Depósito: {p.deposito}</p>
                           <p className="mt-0.5">Pasillo: {p.pasillo} · Est.: {p.estanteria}</p>
                         </div>
                       </td>
                       <td className="py-3.5 px-4 sm:px-5">
                         <p className="text-gray-300 font-mono text-[11px]">{p.sku}</p>
-                        <p className="text-[10px] text-gray-600 font-mono mt-0.5">GTIN: {p.barcode}</p>
+                        <p className="text-[10px] text-gray-400 font-mono mt-0.5">GTIN: {p.barcode}</p>
                       </td>
                       <td className="py-3.5 px-4 sm:px-5">
-                        <p className="text-[11px] text-gray-500">
+                        <p className="text-[11px] text-gray-400">
                           Costo: <span className="font-medium text-gray-300">{formatARS(p.cost)}</span>
                         </p>
                         <p className="text-sm font-semibold text-green-400 mt-0.5">{formatARS(p.price)}</p>
-                        <p className="text-[11px] text-gray-500 mt-0.5">
+                        <p className="text-[11px] text-gray-400 mt-0.5">
                           Margen: <span className={`font-medium ${margin >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                             {margin >= 0 ? '+' : ''}{margin.toFixed(0)}%
                           </span>
@@ -326,7 +326,7 @@ export default function DemoSales() {
                           }`}>
                             {p.stock}
                           </span>
-                          <div className="text-left text-[10px] text-gray-500">
+                          <div className="text-left text-[10px] text-gray-400">
                             <div>Ideal: {p.minStock} - {p.maxStock}</div>
                             {isCritical && <div className="text-red-400 font-semibold">Crítico</div>}
                             {isLow && <div className="text-amber-400 font-semibold">Bajo</div>}
@@ -343,7 +343,7 @@ export default function DemoSales() {
       )}
 
       <div className="px-4 py-3 border-t border-gray-800 bg-gray-900/30 flex items-center justify-between">
-        <p className="text-[11px] text-gray-600">Productos de ejemplo — Los datos no se guardan</p>
+        <p className="text-[11px] text-gray-400">Productos de ejemplo — Los datos no se guardan</p>
         <Link href="/auth/signup" className="text-[11px] text-cyan-400 hover:text-cyan-300 font-medium transition-colors">
           Crear cuenta real →
         </Link>

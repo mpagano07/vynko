@@ -47,6 +47,8 @@ function BillingContent() {
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [showRevocationModal, setShowRevocationModal] = useState(false);
+  const [revocationDone, setRevocationDone] = useState(false);
   const [pendingDowngrade, setPendingDowngrade] = useState<string | null>(null);
   const [downgrading, setDowngrading] = useState(false);
   const [showSupportModal, setShowSupportModal] = useState(false);
@@ -155,6 +157,28 @@ function BillingContent() {
     } finally {
       setCancelling(false);
       setShowCancelModal(false);
+      setShowRevocationModal(false);
+    }
+  };
+
+  const handleRevocationConfirm = async () => {
+    setCancelling(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+
+      const res = await fetch('/api/billing/portal', { method: 'POST', headers });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || 'Error'); return; }
+      toast.success('Suscripción cancelada');
+      setSubscription(null);
+      setRevocationDone(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
+    } finally {
+      setCancelling(false);
+      setShowRevocationModal(false);
     }
   };
 
@@ -325,6 +349,40 @@ function BillingContent() {
               </Button>
             )}
           </div>
+          {subscription.status === 'active' && (
+            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={() => setShowRevocationModal(true)}
+                className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 underline underline-offset-4"
+              >
+                Botón de arrepentimiento — derecho de revocación (Ley N° 24.240, art. 34)
+              </button>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Podés revocar la contratación desde el mismo medio electrónico por el que lo realizaste, sin trámites adicionales y dentro de los diez (10) días corridos.
+              </p>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {revocationDone && (
+        <Card className="p-6 border-l-4 border-l-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 flex-shrink-0">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div className="flex-1 text-sm text-gray-700 dark:text-gray-300">
+              <p className="font-bold text-gray-900 dark:text-white">Baja registrada por derecho de arrepentimiento</p>
+              <p className="mt-1">
+                Tu suscripción fue cancelada. Si tu pago se procesó dentro de los últimos 10 días, tenés derecho a que se reintegre el importe abonado (art. 34, Ley N° 24.240). Para solicitar el reembolso enviá un correo a{' '}
+                <a href={`mailto:soporte@vynko.dev?subject=${encodeURIComponent('Reembolso - Derecho de arrepentimiento (Ley N° 24.240, art. 34)')}`} className="text-emerald-700 dark:text-emerald-300 font-medium underline underline-offset-4">
+                  soporte@vynko.dev
+                </a>{' '}
+                indicando tu número de cuenta; procesaremos la restitución dentro de los plazos legales.
+              </p>
+            </div>
+          </div>
         </Card>
       )}
 
@@ -442,6 +500,18 @@ function BillingContent() {
         loading={cancelling}
         onConfirm={handleCancelConfirm}
         onCancel={() => setShowCancelModal(false)}
+      />
+
+      <ConfirmModal
+        open={showRevocationModal}
+        title="Derecho de arrepentimiento"
+        message="Como consumidor tenés derecho a revocar la contratación dentro de los diez (10) días corridos desde la contratación, por el mismo medio electrónico (art. 34, Ley N° 24.240). Vynko no cobra penalidad ni exige trámite adicional. Al confirmar, se cancelará tu suscripción y podrás solicitar el reembolso del importe abonado. ¿Querés continuar?"
+        confirmLabel="Sí, revocar"
+        cancelLabel="Volver"
+        variant="danger"
+        loading={cancelling}
+        onConfirm={handleRevocationConfirm}
+        onCancel={() => setShowRevocationModal(false)}
       />
 
       <ConfirmModal

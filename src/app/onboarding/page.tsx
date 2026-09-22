@@ -208,7 +208,7 @@ export default function OnboardingPage() {
               }
               autoFocus
               required
-              className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-500"
+              className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-400"
             />
           </div>
 
@@ -225,7 +225,7 @@ export default function OnboardingPage() {
                 setFormData({ ...formData, ownerName: e.target.value })
               }
               required
-              className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-500"
+              className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-400"
             />
           </div>
 
@@ -238,7 +238,7 @@ export default function OnboardingPage() {
           </Button>
         </form>
 
-        <p className="text-xs text-gray-500 text-center mt-4">
+        <p className="text-xs text-gray-400 text-center mt-4">
           Podrás invitar más usuarios después
         </p>
       </Card>

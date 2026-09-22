@@ -60,10 +60,7 @@ export default function LandingPage() {
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState('');
   const [waitlistLoading, setWaitlistLoading] = useState(false);
-  const [waitlistDone, setWaitlistDone] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-
-  const [modal, setModal] = useState<'privacidad' | 'terminos' | null>(null);
 
   const tenantRef = useRef<TenantInfo | null>(null);
   const tenantsRef = useRef<TenantInfo[]>([]);
@@ -113,18 +110,19 @@ export default function LandingPage() {
   const handleWaitlist = async (e: React.FormEvent) => {
     e.preventDefault();
     setEmailError('');
+    let valid = true;
     if (!email.trim()) {
       setEmailError('Ingresá tu email para continuar');
-      return;
-    }
-    if (!/\S+@\S+\.\S+/.test(email)) {
+      valid = false;
+    } else if (!/\S+@\S+\.\S+/.test(email)) {
       setEmailError('Email inválido');
-      return;
+      valid = false;
     }
+    if (!valid) return;
     setWaitlistLoading(true);
-    await new Promise(r => setTimeout(r, 1000));
-    setWaitlistDone(true);
+    await new Promise(r => setTimeout(r, 600));
     setWaitlistLoading(false);
+    router.push(`/auth/signup?email=${encodeURIComponent(email.trim())}`);
   };
 
   return (
@@ -141,6 +139,8 @@ export default function LandingPage() {
                 <Link href="#features" className="text-sm text-gray-400 hover:text-white transition-colors">Características</Link>
                 <Link href="#how-it-works" className="text-sm text-gray-400 hover:text-white transition-colors">Cómo funciona</Link>
                 <Link href="#pricing" className="text-sm text-gray-400 hover:text-white transition-colors">Precios</Link>
+                <Link href="#demo" className="text-sm text-gray-400 hover:text-white transition-colors">Ver demo</Link>
+                <Link href="#roi" className="text-sm text-gray-400 hover:text-white transition-colors">Calculá cuánto podés ahorrar</Link>
               </div>
             </div>
             {isMounted && (<div className="flex items-center gap-3">
@@ -199,28 +199,32 @@ export default function LandingPage() {
                 {' '}en tiempo real
               </h1>
               <p className="mt-6 text-lg text-gray-400 leading-relaxed max-w-lg">
-                Olvidate de las planillas. Escaneá productos con tu teléfono, sincronizá al instante con tu negocio y recibí alertas inteligentes de reposición.
+                Olvidate de las planillas. Escaneá productos con tu teléfono, sincronizá al instante con tu negocio y recibí alertas automáticas de reposición.
               </p>
-              <form onSubmit={handleWaitlist} noValidate className="mt-8 flex gap-3 max-w-md">
-                <div className="flex-1">
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={e => { setEmail(e.target.value); setEmailError(''); }}
-                    placeholder="tu@email.com"
-                    className="w-full px-4 py-3 bg-gray-900 border border-gray-800 rounded-lg text-white placeholder:text-gray-600 focus:outline-none focus:border-cyan-500/50 text-sm"
-                  />
-                  {emailError && <p className="text-xs text-red-400 mt-1.5">{emailError}</p>}
+              <form onSubmit={handleWaitlist} noValidate className="mt-8 max-w-md">
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={e => { setEmail(e.target.value); setEmailError(''); }}
+                      placeholder="tu@email.com"
+                      className="w-full px-4 py-3 bg-gray-900 border border-gray-800 rounded-lg text-white placeholder:text-gray-400 focus:outline-none focus:border-cyan-500/50 text-sm"
+                    />
+                    {emailError && <p className="text-xs text-red-400 mt-1.5">{emailError}</p>}
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={waitlistLoading}
+                    className="px-6 py-3 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-colors text-sm disabled:opacity-50 h-fit"
+                  >
+                    {waitlistLoading ? 'Enviando...' : 'Comenzar gratis'}
+                  </button>
                 </div>
-                <button
-                  type="submit"
-                  disabled={waitlistLoading || waitlistDone}
-                  className="px-6 py-3 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-colors text-sm disabled:opacity-50 h-fit"
-                >
-                  {waitlistLoading ? 'Enviando...' : waitlistDone ? '¡Registrado!' : 'Comenzar gratis'}
-                </button>
               </form>
-              <p className="mt-3 text-xs text-gray-600">Sin compromiso. 45 días de prueba gratuita.</p>
+              <p className="mt-3 text-xs text-gray-400">
+                Sin compromiso. 45 días de prueba gratuita.
+              </p>
             </div>
 
             {/* Dashboard Preview */}
@@ -231,7 +235,7 @@ export default function LandingPage() {
                   <div className="w-3 h-3 rounded-full bg-red-500" />
                   <div className="w-3 h-3 rounded-full bg-yellow-500" />
                   <div className="w-3 h-3 rounded-full bg-green-500" />
-                  <span className="ml-2 text-xs text-gray-500">Dashboard Preview</span>
+                  <span className="ml-2 text-xs text-gray-400">Dashboard Preview</span>
                 </div>
                 <div className="grid grid-cols-3 gap-3 mb-6">
                   {[
@@ -240,7 +244,7 @@ export default function LandingPage() {
                     { label: 'Alertas', value: '3', color: 'text-amber-400' },
                   ].map(k => (
                     <div key={k.label} className="bg-gray-950/60 rounded-lg p-3 border border-gray-800/50">
-                      <p className="text-[10px] text-gray-500 uppercase tracking-wider">{k.label}</p>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wider">{k.label}</p>
                       <p className={`text-lg font-bold mt-1 ${k.color}`}>{k.value}</p>
                     </div>
                   ))}
@@ -314,7 +318,7 @@ export default function LandingPage() {
                   'Datos desactualizados',
                   'Difícil de compartir con el equipo',
                 ].map(item => (
-                  <li key={item} className="flex items-start gap-3 text-sm text-gray-500">
+                  <li key={item} className="flex items-start gap-3 text-sm text-gray-400">
                     <span className="text-red-400 mt-0.5">✕</span>
                     {item}
                   </li>
@@ -329,7 +333,7 @@ export default function LandingPage() {
                 {[
                   'Escaneo móvil en tiempo real',
                   'Sincronización automática 2-way',
-                  'Alertas inteligentes de bajo stock',
+                  'Alertas de bajo stock',
                   'Pronósticos',
                   'Acceso multi-dispositivo',
                 ].map(item => (
@@ -445,13 +449,13 @@ export default function LandingPage() {
                   <h3 className="text-lg font-bold mb-2">{plan.name}</h3>
                   <div className="mb-6">
                     {plan.comingSoon ? (
-                      <span className="text-2xl font-semibold text-gray-500">Próximamente</span>
+                      <span className="text-2xl font-semibold text-gray-400">Próximamente</span>
                     ) : id === 'enterprise' ? (
                       <span className="text-4xl font-extrabold">A medida</span>
                     ) : (
                       <>
                         <span className="text-4xl font-extrabold">{formatARS(plan.price)}</span>
-                        <span className="text-sm text-gray-500 ml-1">/mes</span>
+                        <span className="text-sm text-gray-400 ml-1">/mes</span>
                       </>
                     )}
                   </div>
@@ -459,9 +463,9 @@ export default function LandingPage() {
                     {plan.features.map((f, i) => (
                       <li
                         key={i}
-                        className={`flex items-start gap-3 text-sm ${f.included ? 'text-gray-400' : 'text-gray-600'}`}
+                        className={`flex items-start gap-3 text-sm ${f.included ? 'text-gray-400' : 'text-gray-500'}`}
                       >
-                        <span className={`mt-0.5 ${f.included ? 'text-cyan-400' : 'text-gray-700'}`}>
+                        <span className={`mt-0.5 ${f.included ? 'text-cyan-400' : 'text-gray-500'}`}>
                           {f.included ? '✓' : '✗'}
                         </span>
                         <span>
@@ -472,7 +476,7 @@ export default function LandingPage() {
                     ))}
                   </ul>
                   {plan.comingSoon ? (
-                    <span className="block text-center w-full py-3 rounded-lg font-semibold text-sm bg-gray-800 text-gray-500 border border-gray-700 cursor-not-allowed">
+                    <span className="block text-center w-full py-3 rounded-lg font-semibold text-sm bg-gray-800 text-gray-400 border border-gray-700 cursor-not-allowed">
                       Próximamente
                     </span>
                   ) : id === 'enterprise' ? (
@@ -508,7 +512,7 @@ export default function LandingPage() {
             ¿Listo para dejar atrás las planillas?
           </h2>
           <p className="text-gray-400 mb-8 max-w-lg mx-auto">
-            Unite a los cientos de negocios que ya gestionan su stock con Vynko.
+            Comenzá a gestionar tu inventario y ventas con Vynko hoy mismo.
           </p>
           <Link
             href="/auth/signup"
@@ -527,49 +531,20 @@ export default function LandingPage() {
             <div className="flex items-center gap-2">
               <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="128px" className="h-12 w-auto object-contain" />
             </div>
-            <div className="flex items-center gap-6 text-sm text-gray-500">
-              <Link href="/privacidad" className="hover:text-gray-300 transition-colors">Privacidad</Link>
-              <Link href="/terminos" className="hover:text-gray-300 transition-colors">Términos</Link>
-              <span>© 2026 Vynko</span>
+            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-sm text-gray-400">
+              <div className="flex items-center gap-6">
+                <Link href="/privacidad" className="hover:text-gray-200 transition-colors">Privacidad</Link>
+                <Link href="/terminos" className="hover:text-gray-200 transition-colors">Términos</Link>
+                <Link href="/cookies" className="hover:text-gray-200 transition-colors">Cookies</Link>
+              </div>
+              <span className="text-xs text-gray-400">
+                © {new Date().getFullYear()} Vynko. Todos los derechos reservados.
+                <span className="hidden sm:inline"> Logotipo e imágenes: propiedad de Vynko.</span>
+              </span>
             </div>
           </div>
         </div>
       </footer>
-
-      {/* Modal */}
-      {modal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setModal(null)} />
-          <div className="relative bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto shadow-2xl">
-            <div className="sticky top-0 bg-gray-900/95 backdrop-blur-sm border-b border-gray-800 px-6 py-4 flex items-center justify-between rounded-t-2xl">
-              <h2 className="text-lg font-bold text-white">
-                {modal === 'privacidad' ? 'Política de Privacidad' : 'Términos y Condiciones'}
-              </h2>
-              <button onClick={() => setModal(null)} className="text-gray-500 hover:text-white transition-colors p-1">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-            <div className="px-6 py-5 text-sm text-gray-400 space-y-4">
-              {modal === 'privacidad' ? (
-                <>
-                  <p>En Vynko nos tomamos tu privacidad en serio. Recopilamos la información necesaria para operar la plataforma: datos de cuenta, perfil de negocio, productos, ventas y uso del servicio.</p>
-                  <p>No vendemos tu información a terceros. Compartimos datos solo con proveedores esenciales (hosting, pagos) y cuando la ley lo requiere.</p>
-                  <p>Usamos cifrado SSL/TLS y autenticación segura. Podés acceder, corregir o eliminar tus datos desde la configuración de tu cuenta en cualquier momento.</p>
-                  <p className="text-gray-500">Consultas: <span className="text-cyan-400">privacidad@vynko.dev</span></p>
-                </>
-              ) : (
-                <>
-                  <p>Al usar Vynko aceptás estos términos. El servicio incluye gestión de stock, escaneo de productos, alertas y reportes.</p>
-                  <p>Sos responsable de mantener la confidencialidad de tu cuenta. Ofrecemos planes gratuitos y pagos procesados por Mercado Pago. Podés cancelar cuando quieras.</p>
-                  <p>No está permitido usar la plataforma para actividades ilegales. Nos reservamos el derecho de suspender cuentas que violen estas reglas.</p>
-                  <p>Podemos modificar estos términos; te notificaremos por correo. El uso continuado implica aceptación de los cambios.</p>
-                  <p className="text-gray-500">Consultas: <span className="text-cyan-400">legal@vynko.dev</span></p>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Sticky Mobile CTA */}
       {isMounted && !user && !hasSession && (

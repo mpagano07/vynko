@@ -359,7 +359,7 @@ export default function DashboardPage() {
               <p className="text-xl font-bold text-gray-900 dark:text-white">
                 {salesData ? formatARS(salesData.todayTotal / 100) : '0.00'}
               </p>
-              <p className="text-[11px] text-gray-400 mt-0.5">
+              <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5">
                 {hasSalesToday ? `${todaySalesCount} venta${todaySalesCount !== 1 ? 's' : ''}` : 'Sin ventas'}
               </p>
             </>
@@ -389,7 +389,7 @@ export default function DashboardPage() {
               <p className="text-xl font-bold text-gray-900 dark:text-white">
                 {monthlyData ? formatARS(monthlyData.total) : '0.00'}
               </p>
-              <p className="text-[11px] text-gray-400 mt-0.5">
+              <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5">
                 Ticket promedio: {monthlyData?.avgTicket != null ? formatARS(monthlyData.avgTicket) : '0.00'}
               </p>
             </>
@@ -405,7 +405,7 @@ export default function DashboardPage() {
               <p className={`text-xl font-bold ${criticalCount > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-gray-900 dark:text-white'}`}>
                 {criticalCount}
               </p>
-              <p className="text-[11px] text-gray-400 mt-0.5">
+              <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5">
                 {criticalCount > 0 ? 'productos por reponer' : 'todo en orden'}
               </p>
             </>
@@ -421,7 +421,7 @@ export default function DashboardPage() {
               <p className="text-sm font-medium text-gray-900 dark:text-white leading-snug">
                 {!hasSalesToday ? 'Sin ventas hoy' : criticalCount > 0 ? 'Stock bajo' : 'Todo OK'}
               </p>
-              <p className="text-[11px] text-gray-400 mt-0.5">
+              <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5">
                 {!hasSalesToday ? 'Registra tu primera venta' : criticalCount > 0 ? 'Reponé stock pronto' : 'Negocio funcionando'}
               </p>
             </div>
@@ -432,7 +432,7 @@ export default function DashboardPage() {
       {allTenants && Object.keys(perTenant).length > 0 && (
         <Card className="p-4">
           <h2 className="text-sm font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-gray-400" />
+            <Building2 className="h-4 w-4 text-gray-500 dark:text-gray-400" />
             Desglose por sucursal
           </h2>
           <div className="overflow-x-auto">

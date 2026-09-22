@@ -96,7 +96,7 @@ export function TenantSwitcher() {
         onClick={() => setSwitcherOpen(!switcherOpen)}
       >
         <div className="w-6 h-6 rounded-md bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-          <span className="text-xs font-bold text-blue-500 dark:text-blue-400">{tenants.length > 1 && !tenant ? 'T' : (tenant?.name || 'T')[0].toUpperCase()}</span>
+          <span className="text-xs font-bold text-blue-700 dark:text-blue-400">{tenants.length > 1 && !tenant ? 'T' : (tenant?.name || 'T')[0].toUpperCase()}</span>
         </div>
         <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate flex-1 text-left">{!tenant && tenants.length > 0 ? 'Todas las sucursales' : (tenant?.name || 'Seleccionar')}</p>
         {switcherOpen ? <ChevronUp className="h-4 w-4 text-gray-500 dark:text-gray-400 flex-shrink-0" /> : <ChevronDown className="h-4 w-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />}
@@ -115,11 +115,11 @@ export function TenantSwitcher() {
               className="flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-700 mb-1"
             >
               <div className="w-5 h-5 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                <span className="text-[10px] font-bold text-blue-500 dark:text-blue-400">T</span>
+                <span className="text-[10px] font-bold text-blue-700 dark:text-blue-400">T</span>
               </div>
               <span className="truncate flex-1 text-gray-800 dark:text-gray-200 font-medium">Todas las sucursales</span>
               {!tenant && (
-                <Check className="h-4 w-4 text-blue-500 dark:text-blue-400 flex-shrink-0" />
+                <Check className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
               )}
             </button>
             {tenants.map((t) => (
@@ -134,9 +134,9 @@ export function TenantSwitcher() {
                       type="text"
                       value={renameValue}
                       onChange={(e) => setRenameValue(e.target.value)}
-                      className="flex-1 px-2 py-1 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="flex-1 px-2 py-1 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-gray-200 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
-                    <button type="submit" className="p-1 text-blue-500 dark:text-blue-400 hover:text-blue-600">
+                    <button type="submit" className="p-1 text-blue-600 dark:text-blue-400 hover:text-blue-700">
                       <Check className="h-3.5 w-3.5" />
                     </button>
                   </form>
@@ -157,7 +157,7 @@ export function TenantSwitcher() {
                       <span className="truncate flex-1 text-gray-800 dark:text-gray-200 text-left">{t.name}</span>
                     </button>
                     {t.id === tenant?.id && (
-                      <Check className="h-4 w-4 text-blue-500 dark:text-blue-400 flex-shrink-0" />
+                      <Check className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
                     )}
                     <button
                       onClick={(e) => { e.stopPropagation(); setRenamingTenantId(t.id); setRenameValue(t.name); }}
@@ -179,7 +179,7 @@ export function TenantSwitcher() {
                     value={newTenantName}
                     onChange={(e) => setNewTenantName(e.target.value)}
                     placeholder="Nombre de la sucursal"
-                    className="w-full px-2 py-1.5 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full px-2 py-1.5 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-gray-200 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     disabled={creating}
                   />
                   <div className="flex gap-1.5 mt-1.5">
@@ -211,7 +211,7 @@ export function TenantSwitcher() {
               ) : (
                 <div className="px-3 py-2 text-xs text-gray-500">
                   Límite de {maxBranches} sucursal{maxBranches !== 1 ? 'es' : ''} alcanzado para tu plan ({currentPlan}).
-                  <Link href="/billing" className="text-blue-500 dark:text-blue-400 hover:underline ml-1">Mejorar plan</Link>
+                  <Link href="/billing" className="text-blue-600 dark:text-blue-400 hover:underline ml-1">Mejorar plan</Link>
                 </div>
               )}
             </div>
