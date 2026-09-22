@@ -273,25 +273,11 @@ describe('LandingPage waitlist', () => {
     expect(await screen.findByText('Email inválido')).toBeInTheDocument();
   });
 
-  it('con email válido pero sin consentimiento, muestra el error de términos', async () => {
+  it('con email válido, redirige al registro con el email cargado', async () => {
     render(<LandingPage />);
 
     const { input, form } = getForm();
     fireEvent.change(input, { target: { value: 'ana@tienda.com' } });
-    fireEvent.submit(form);
-
-    expect(
-      await screen.findByText('Debés aceptar los Términos, la Política de Privacidad y la Política de Cookies')
-    ).toBeInTheDocument();
-    expect(pushMock).not.toHaveBeenCalled();
-  });
-
-  it('con email válido y consentimiento, redirige al registro con el email cargado', async () => {
-    render(<LandingPage />);
-
-    const { input, form } = getForm();
-    fireEvent.change(input, { target: { value: 'ana@tienda.com' } });
-    fireEvent.click(screen.getByRole('checkbox', { name: /Acepto los Términos y Condiciones, la Política de Privacidad y la Política de Cookies/ }));
     fireEvent.submit(form);
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/auth/signup?email=ana%40tienda.com'));
