@@ -82,6 +82,8 @@ const ENTITY_LABELS: Record<string, string> = {
   customer: 'Cliente',
   import: 'Importación',
   stock_transfer: 'Transferencia',
+  cash_register_session: 'Sesión de caja',
+  cash_movement: 'Movimiento de caja',
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -94,6 +96,10 @@ const ACTION_LABELS: Record<string, string> = {
   cancelled: 'canceló',
   sold: 'vendió',
   sent: 'envió',
+  'Caja abierta': 'abrió la caja',
+  'Caja cerrada': 'cerró la caja',
+  'Ingreso manual de caja': 'registró un ingreso en caja',
+  'Egreso manual de caja': 'registró un egreso en caja',
 };
 
 const DETAIL_LABELS: Record<string, string> = {
@@ -108,11 +114,17 @@ const DETAIL_LABELS: Record<string, string> = {
   status: 'Estado',
   quantity: 'Cantidad',
   reason: 'Motivo',
+  initial_fund_cents: 'Fondo inicial',
+  total_expected_cents: 'Esperado',
+  total_counted_cents: 'Contado',
+  total_difference_cents: 'Diferencia',
+  amount_cents: 'Monto',
 };
 
 function formatDetailValue(key: string, value: unknown): string {
   if (value === null || value === undefined || value === '') return '';
   if (key === 'total_cents' && typeof value === 'number') return formatARS(value / 100);
+  if (['initial_fund_cents', 'total_expected_cents', 'total_counted_cents', 'total_difference_cents', 'amount_cents'].includes(key) && typeof value === 'number') return formatARS(value / 100);
   if (key === 'from_tenant_id' || key === 'to_tenant_id') return `#${String(value).slice(0, 8)}`;
   if (key === 'status' && typeof value === 'string') {
     const statusLabels: Record<string, string> = {
