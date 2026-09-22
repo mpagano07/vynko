@@ -11,7 +11,8 @@ export async function GET(request: Request) {
     .from('customers')
     .select('*')
     .order('name', { ascending: true });
-  if (!auth.allTenants) query = query.eq('tenant_id', auth.tenantId);
+  if (auth.allTenants) query = query.in('tenant_id', auth.tenantIds);
+  else query = query.eq('tenant_id', auth.tenantId);
 
   const { data, error } = await query;
 

@@ -220,7 +220,6 @@ function clearStoredAuthStorage() {
   clearSupabaseAuthCookies();
   try {
     window.localStorage.removeItem('supabase.auth.token');
-    window.localStorage.removeItem('vynko_remember');
   } catch {
     // ignore
   }

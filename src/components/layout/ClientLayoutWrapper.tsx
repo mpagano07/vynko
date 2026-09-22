@@ -26,7 +26,13 @@ const HeaderSkeleton = () => (
 export function ClientLayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { tenant, loading } = useAuth();
+  const { tenant, allTenants, loading } = useAuth();
+
+  // Clave de remount de la página: al cambiar de sucursal activa (o pasar a
+  // "todas las sucursales") React desmonta y remonta el subtree de la página,
+  // forzando que todos los fetches/useEffects se vuelvan a ejecutar con los
+  // headers de la nueva sucursal.
+  const pageKey = allTenants ? '__all__' : (tenant?.id ?? 'none');
 
   // These components use `dynamic(..., { ssr: false })`, so the server
   // renders nothing for them while a cached chunk resolves instantly on the
@@ -161,7 +167,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
             <Header />
           </React.Suspense>
           <main className="flex-1 w-full overflow-auto bg-gray-50 dark:bg-gray-950">
-            <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+            <div key={pageKey} className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full">
               {children}
             </div>
           </main>

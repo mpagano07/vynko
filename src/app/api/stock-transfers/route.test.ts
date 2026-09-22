@@ -63,6 +63,7 @@ describe('Stock Transfers API', () => {
     });
 
     it('rejects without items (400)', async () => {
+      vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 't1', 't2'] });
       const res = await POST(makeRequest('POST', { from_tenant_id: 't1', to_tenant_id: 't2', items: [] }));
       expect(res.status).toBe(400);
 
@@ -71,6 +72,7 @@ describe('Stock Transfers API', () => {
     });
 
     it('creates transfer with valid data (201) and records activity log', async () => {
+      vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 't1', 't2'] });
       supabaseMock.__queue('stock_transfers', {
         data: { id: 'tr1', from_tenant_id: 't1', to_tenant_id: 't2', status: 'pending' },
       });
@@ -110,6 +112,7 @@ describe('Stock Transfers API', () => {
     });
 
     it('cleans up transfer if items insert fails', async () => {
+      vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 't1', 't2'] });
       supabaseMock.__queue('stock_transfers', {
         data: { id: 'tr1', from_tenant_id: 't1', to_tenant_id: 't2', status: 'pending' },
       });
@@ -138,6 +141,7 @@ describe('Stock Transfers API', () => {
     });
 
     it('returns 400 when the transfer could not be created without an error message', async () => {
+      vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 't1', 't2'] });
       supabaseMock.__queue('stock_transfers', { data: null, error: null });
 
       const res = await POST(makeRequest('POST', {
@@ -203,18 +207,18 @@ describe('Stock Transfers API', () => {
       expect(json[0].items[1].product_name).toBeNull();
 
       const orCall = supabaseMock.__calls.find((c) => c.method === 'or');
-      expect(orCall?.args[0]).toBe('from_tenant_id.eq.tenant-1,to_tenant_id.eq.tenant-1');
+      expect(orCall?.args[0]).toBe('from_tenant_id.in.("tenant-1"),to_tenant_id.in.("tenant-1")');
     });
 
-    it('aplica el filtro de estado y no usa or() para allTenants', async () => {
-      vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true });
+    it('aplica el filtro de estado y usa or() con in() para todos los tenants', async () => {
+      vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 'tenant-2'] });
       supabaseMock.__queue('stock_transfers', { data: [] });
 
       const res = await GET(makeGetRequest('?status=completed'));
       expect(res.status).toBe(200);
 
       const orCall = supabaseMock.__calls.find((c) => c.method === 'or');
-      expect(orCall).toBeUndefined();
+      expect(orCall?.args[0]).toBe('from_tenant_id.in.("tenant-1","tenant-2"),to_tenant_id.in.("tenant-1","tenant-2")');
       const statusEq = supabaseMock.__calls.find(
         (c) => c.table === 'stock_transfers' && c.method === 'eq' && c.args[0] === 'status'
       );

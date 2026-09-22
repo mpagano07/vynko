@@ -60,17 +60,19 @@ describe('Categories API', () => {
       expect(categoryEqs[0].args[1]).toBe('tenant-1');
     });
 
-    it('does not filter by tenant when allTenants is true', async () => {
-      vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true });
+    it('filtra con in() cuando allTenants es true', async () => {
+      vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 'tenant-2'] });
       supabaseMock.__queue('categories', { data: [] });
 
       const res = await GET(makeRequest('GET'));
       expect(res.status).toBe(200);
 
-      const categoryEqs = supabaseMock.__calls.filter(
-        (c) => c.table === 'categories' && c.method === 'eq'
+      const categoryIns = supabaseMock.__calls.filter(
+        (c) => c.table === 'categories' && c.method === 'in'
       );
-      expect(categoryEqs).toHaveLength(0);
+      expect(categoryIns).toHaveLength(1);
+      expect(categoryIns[0].args[0]).toBe('tenant_id');
+      expect(categoryIns[0].args[1]).toEqual(['tenant-1', 'tenant-2']);
     });
   });
 

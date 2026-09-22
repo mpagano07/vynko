@@ -25,7 +25,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Transferencia no encontrada' }, { status: 404 });
   }
 
-  const userCanAccess = auth.allTenants || auth.tenantIds.includes(transfer.from_tenant_id) || auth.tenantIds.includes(transfer.to_tenant_id);
+  const userCanAccess = auth.tenantIds.includes(transfer.from_tenant_id) || auth.tenantIds.includes(transfer.to_tenant_id);
   if (!userCanAccess) {
     return NextResponse.json({ error: 'No tienes permisos sobre esta transferencia' }, { status: 403 });
   }
@@ -184,7 +184,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     return NextResponse.json({ error: 'Solo se pueden cancelar transferencias pendientes de envío' }, { status: 400 });
   }
 
-  if (!auth.allTenants && transfer.from_tenant_id !== auth.tenantId && transfer.to_tenant_id !== auth.tenantId) {
+  if (auth.tenantIds.includes(transfer.from_tenant_id) === false && auth.tenantIds.includes(transfer.to_tenant_id) === false) {
     return NextResponse.json({ error: 'No tienes permisos sobre esta transferencia' }, { status: 403 });
   }
 
