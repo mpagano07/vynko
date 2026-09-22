@@ -104,16 +104,17 @@ describe('GET /api/sales/summary', () => {
     }
   });
 
-  it('no filtra por tenant cuando el usuario ve todas las sucursales', async () => {
-    vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true });
+  it('filtra con in() cuando el usuario ve todas las sucursales', async () => {
+    vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 'tenant-2'] });
     supabaseMock.__queue('sales_daily_totals', { data: [] });
     const res = await GET(makeRequest());
     expect(res.status).toBe(200);
 
-    const tenantEqs = supabaseMock.__calls.filter(
-      (c) => c.table === 'sales_daily_totals' && c.method === 'eq' && c.args[0] === 'tenant_id'
+    const tenantIns = supabaseMock.__calls.filter(
+      (c) => c.table === 'sales_daily_totals' && c.method === 'in' && c.args[0] === 'tenant_id'
     );
-    expect(tenantEqs).toHaveLength(0);
+    expect(tenantIns).toHaveLength(1);
+    expect(tenantIns[0].args[1]).toEqual(['tenant-1', 'tenant-2']);
   });
 
   it('filtra por tenant para un usuario de una sola sucursal', async () => {
@@ -121,11 +122,11 @@ describe('GET /api/sales/summary', () => {
     const res = await GET(makeRequest());
     expect(res.status).toBe(200);
 
-    const tenantEqs = supabaseMock.__calls.filter(
-      (c) => c.table === 'sales_daily_totals' && c.method === 'eq' && c.args[0] === 'tenant_id'
+    const tenantIns = supabaseMock.__calls.filter(
+      (c) => c.table === 'sales_daily_totals' && c.method === 'in' && c.args[0] === 'tenant_id'
     );
-    expect(tenantEqs.length).toBeGreaterThan(0);
-    for (const call of tenantEqs) expect(call.args[1]).toBe('tenant-1');
+    expect(tenantIns.length).toBeGreaterThan(0);
+    for (const call of tenantIns) expect(call.args[1]).toEqual(['tenant-1']);
   });
 
   it('devuelve 500 cuando la consulta falla', async () => {

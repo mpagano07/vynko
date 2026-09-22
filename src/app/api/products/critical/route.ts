@@ -17,7 +17,8 @@ export async function GET(request: Request) {
         id, name,
         stock_data:product_stock!inner(stock, min_stock)
       `);
-    if (!auth.allTenants) productsQuery = productsQuery.eq('product_stock.tenant_id', tenantId);
+    if (auth.allTenants) productsQuery = productsQuery.in('product_stock.tenant_id', auth.tenantIds);
+    else productsQuery = productsQuery.eq('product_stock.tenant_id', tenantId);
     productsQuery = productsQuery.eq('product_stock.active', true);
     const { data: products, error } = await productsQuery;
 

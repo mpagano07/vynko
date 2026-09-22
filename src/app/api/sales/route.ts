@@ -27,7 +27,8 @@ export async function GET(request: Request) {
       .select('id, total_cents, created_at')
       .gte('created_at', todayStart.toISOString())
       .order('created_at', { ascending: false });
-    if (!auth.allTenants) query = query.eq('tenant_id', auth.tenantId);
+    if (auth.allTenants) query = query.in('tenant_id', auth.tenantIds);
+    else query = query.eq('tenant_id', auth.tenantId);
     const { data: sales, error } = await query;
 
     if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }

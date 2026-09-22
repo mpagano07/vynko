@@ -4,14 +4,14 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 // Lee la vista agregada sales_monthly_totals (sum(total_cents) + count(*)
 // por mes, calculado en la base) en lugar de traer filas y sumar en JS.
-async function getMonthTotals(tenantId: string | null, monthStart: Date) {
+async function getMonthTotals(tenantIds: string[], monthStart: Date) {
   const month = monthStart.toISOString().slice(0, 10);
 
   let query = supabaseAdmin
     .from('sales_monthly_totals')
     .select('total, sale_count')
-    .eq('month', month);
-  if (tenantId) query = query.eq('tenant_id', tenantId);
+    .eq('month', month)
+    .in('tenant_id', tenantIds);
 
   const res = (await query) as unknown as {
     data: Array<{ total: number; sale_count: number }> | null;
@@ -30,15 +30,15 @@ export async function GET(request: Request) {
   try {
     const auth = await getAuth(request);
     if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-    const tenantId = auth.allTenants ? null : auth.tenantId;
+    const scopeTenantIds = auth.allTenants ? auth.tenantIds : [auth.tenantId];
 
     const now = new Date();
     const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
     const [thisMonth, prevMonth] = await Promise.all([
-      getMonthTotals(tenantId, thisMonthStart),
-      getMonthTotals(tenantId, prevMonthStart),
+      getMonthTotals(scopeTenantIds, thisMonthStart),
+      getMonthTotals(scopeTenantIds, prevMonthStart),
     ]);
 
     if (thisMonth.error) { console.error('DB error:', thisMonth.error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 }); }

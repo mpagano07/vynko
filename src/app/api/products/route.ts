@@ -24,7 +24,9 @@ export async function GET(request: Request) {
         estanteria
       )
     `);
-  if (!auth.allTenants) {
+  if (auth.allTenants) {
+    q = q.in('product_stock.tenant_id', auth.tenantIds);
+  } else {
     q = q.eq('product_stock.tenant_id', auth.tenantId);
   }
   q = q.eq('product_stock.active', true);

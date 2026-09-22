@@ -67,17 +67,21 @@ describe('GET /api/dashboard/summary', () => {
     }
   });
 
-  it('no filtra por tenant cuando el usuario ve todas las sucursales', async () => {
-    vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true });
+  it('filtra con in() cuando el usuario ve todas las sucursales', async () => {
+    vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 'tenant-2'] });
     queueSummary();
 
     const res = await GET(makeRequest());
     expect(res.status).toBe(200);
 
-    const salesEqs = supabaseMock.__calls.filter(
-      (c) => c.table === 'sales' && c.method === 'eq'
+    const salesIns = supabaseMock.__calls.filter(
+      (c) => c.table === 'sales' && c.method === 'in'
     );
-    expect(salesEqs).toHaveLength(0);
+    expect(salesIns.length).toBeGreaterThan(0);
+    for (const call of salesIns) {
+      expect(call.args[0]).toBe('tenant_id');
+      expect(call.args[1]).toEqual(['tenant-1', 'tenant-2']);
+    }
   });
 
   it('devuelve valores nulos cuando no hay datos', async () => {

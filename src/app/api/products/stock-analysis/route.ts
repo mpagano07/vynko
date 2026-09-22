@@ -17,7 +17,8 @@ export async function GET(request: Request) {
         id, name, sku,
         stock_data:product_stock!inner(stock, min_stock)
       `);
-    if (!auth.allTenants) productsQ = productsQ.eq('product_stock.tenant_id', tenantId);
+    if (auth.allTenants) productsQ = productsQ.in('product_stock.tenant_id', auth.tenantIds);
+    else productsQ = productsQ.eq('product_stock.tenant_id', tenantId);
     productsQ = productsQ.eq('product_stock.active', true);
     const { data: allProducts } = await productsQ;
 
@@ -52,7 +53,8 @@ export async function GET(request: Request) {
       .gte('created_at', thirtyDaysAgo.toISOString())
       .order('created_at', { ascending: false })
       .limit(100);
-    if (!auth.allTenants) recentSalesQ = recentSalesQ.eq('tenant_id', tenantId);
+    if (auth.allTenants) recentSalesQ = recentSalesQ.in('tenant_id', auth.tenantIds);
+    else recentSalesQ = recentSalesQ.eq('tenant_id', tenantId);
     const { data: recentSales } = await recentSalesQ;
 
     const recentSaleIds = (recentSales ?? []).map(s => s.id);

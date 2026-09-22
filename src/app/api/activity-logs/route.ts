@@ -31,7 +31,8 @@ export async function GET(request: Request) {
       .select('*', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
-    if (!auth.allTenants) query = query.eq('tenant_id', tenantId);
+    if (auth.allTenants) query = query.in('tenant_id', auth.tenantIds);
+    else query = query.eq('tenant_id', tenantId);
 
     if (entityType) query = query.eq('entity_type', entityType);
 

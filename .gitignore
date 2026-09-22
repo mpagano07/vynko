@@ -49,6 +49,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# opencode skills
+/.opencode/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

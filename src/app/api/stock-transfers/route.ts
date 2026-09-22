@@ -21,16 +21,11 @@ export async function GET(request: Request) {
       )
     `);
 
-  if (auth.allTenants) {
-    if (statusFilter) {
-      q = q.eq('status', statusFilter);
-    }
-  } else {
-    const filter = `from_tenant_id.eq.${auth.tenantId},to_tenant_id.eq.${auth.tenantId}`;
-    q = q.or(filter);
-    if (statusFilter) {
-      q = q.eq('status', statusFilter);
-    }
+  const ids = auth.tenantIds.map((t) => `"${t}"`).join(',');
+  const filter = `from_tenant_id.in.(${ids}),to_tenant_id.in.(${ids})`;
+  q = q.or(filter);
+  if (statusFilter) {
+    q = q.eq('status', statusFilter);
   }
 
   q = q.order('created_at', { ascending: false });
@@ -88,6 +83,10 @@ export async function POST(request: Request) {
 
   if (from_tenant_id === to_tenant_id) {
     return NextResponse.json({ error: 'Origen y destino deben ser diferentes' }, { status: 400 });
+  }
+
+  if (!auth.tenantIds.includes(from_tenant_id) || !auth.tenantIds.includes(to_tenant_id)) {
+    return NextResponse.json({ error: 'No tienes permisos sobre esos tenants' }, { status: 403 });
   }
 
   if (!items || !Array.isArray(items) || items.length === 0) {

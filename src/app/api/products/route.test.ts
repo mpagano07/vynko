@@ -252,17 +252,17 @@ describe('GET /api/products', () => {
     expect(tenantEq?.args[1]).toBe('tenant-1');
   });
 
-  it('no filtra por tenant cuando allTenants es true', async () => {
-    vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true });
+  it('filtra con in() cuando allTenants es true', async () => {
+    vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 'tenant-2'] });
     queueProduct();
 
     const res = await GET(makeGetRequest());
     expect(res.status).toBe(200);
 
-    const tenantEq = supabaseMock.__calls.find(
-      (c) => c.table === 'products' && c.method === 'eq' && c.args[0] === 'product_stock.tenant_id'
+    const tenantIn = supabaseMock.__calls.find(
+      (c) => c.table === 'products' && c.method === 'in' && c.args[0] === 'product_stock.tenant_id'
     );
-    expect(tenantEq).toBeUndefined();
+    expect(tenantIn?.args[1]).toEqual(['tenant-1', 'tenant-2']);
   });
 
   it('devuelve 500 ante un error de base de datos', async () => {

@@ -6,7 +6,8 @@ export async function GET(request: Request) {
   try {
     const auth = await getAuth(request);
     if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-    const tenantId = auth.allTenants ? null : auth.tenantId;
+    const tenantId = auth.tenantId;
+    const scopeTenantIds = auth.allTenants ? auth.tenantIds : [tenantId];
 
     const { searchParams } = new URL(request.url);
     const daysParam = Number(searchParams.get('days')) || 7;
@@ -22,8 +23,8 @@ export async function GET(request: Request) {
     let sQuery = supabaseAdmin
       .from('sales_daily_totals')
       .select('day, total')
-      .gte('day', sinceDay);
-    if (!auth.allTenants) sQuery = sQuery.eq('tenant_id', tenantId);
+      .gte('day', sinceDay)
+      .in('tenant_id', scopeTenantIds);
     const res = (await sQuery) as unknown as {
       data: Array<{ day: string; total: number }> | null;
       error: { message: string } | null;
