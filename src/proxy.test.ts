@@ -103,7 +103,7 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
   it('aligns el flag a completado si el usuario ya tiene empresa pero quedó pendiente (self-healing)', async () => {
     adminQueue.push({ data: [{ tenant_id: 't1' }], error: null });
     adminQueue.push({ data: { onboarding_pending: true }, error: null });
-    adminQueue.push({ data: [{ subscription_status: 'free', subscription_plan: 'starter' }], error: null });
+    adminQueue.push({ data: [{ subscription_status: 'free', subscription_plan: 'business' }], error: null });
     adminQueue.push({ data: null, error: null }); // response del update del flag
 
     const res = await proxy(request('/dashboard'));
@@ -197,7 +197,7 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
     });
     adminQueue.push({ data: [{ tenant_id: 't1' }], error: null });
     adminQueue.push({ data: { onboarding_pending: false }, error: null });
-    adminQueue.push({ data: [{ subscription_status: 'free', subscription_plan: 'starter' }], error: null });
+    adminQueue.push({ data: [{ subscription_status: 'free', subscription_plan: 'business' }], error: null });
 
     const res = await proxy(request('/dashboard'));
 
@@ -212,7 +212,7 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
     adminQueue.push({ data: { onboarding_pending: false }, error: null });
     adminQueue.push({
       data: [
-        { subscription_status: 'free', subscription_plan: 'starter', created_at: '2026-06-10T00:00:00Z' },
+        { subscription_status: 'free', subscription_plan: 'business', created_at: '2026-06-10T00:00:00Z' },
         { subscription_status: 'active', subscription_plan: 'business', created_at: '2026-07-26T00:00:00Z' },
       ],
       error: null,

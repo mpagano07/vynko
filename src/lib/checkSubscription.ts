@@ -1,4 +1,7 @@
-const TRIAL_DAYS = 45;
+import { getTrialDays, getTrialPlan } from './plans';
+
+const TRIAL_DAYS = getTrialDays();
+const TRIAL_PLAN = getTrialPlan();
 
 export function isTrialExpired(tenant: TenantSubscription | null): boolean {
   if (!tenant) return false;
@@ -6,8 +9,8 @@ export function isTrialExpired(tenant: TenantSubscription | null): boolean {
   if (status === 'active') return false;
 
   if (status === 'free' || status === 'incomplete') {
-    const plan = tenant.subscription_plan || 'starter';
-    if (plan !== 'starter') return true;
+    const plan = tenant.subscription_plan || TRIAL_PLAN;
+    if (TRIAL_PLAN === null || plan !== TRIAL_PLAN) return true;
 
     if (tenant.created_at) {
       const now = new Date();
@@ -98,9 +101,9 @@ export function checkSubscriptionBlocked(tenant: TenantSubscription | null): Che
   }
 
   if (status === 'free' || status === 'incomplete') {
-    const plan = tenant.subscription_plan || 'starter';
+    const plan = tenant.subscription_plan || TRIAL_PLAN;
 
-    if (plan !== 'starter') {
+    if (TRIAL_PLAN === null || plan !== TRIAL_PLAN) {
       return {
         blocked: true,
         reason: 'trial_expired',
@@ -119,7 +122,7 @@ export function checkSubscriptionBlocked(tenant: TenantSubscription | null): Che
         return {
           blocked: true,
           reason: 'trial_expired',
-          message: 'Tu período de prueba de 45 días finalizó. Seleccioná un plan para seguir usando Vynko.',
+          message: `Tu período de prueba de ${TRIAL_DAYS} días finalizó. Seleccioná un plan para seguir usando Vynko.`,
         };
       }
     }

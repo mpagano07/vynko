@@ -1,6 +1,7 @@
 import './globals.css';
 import React from 'react';
 import { Inter } from 'next/font/google';
+import { ThemeInit } from '@/components/ThemeInit';
 import { ClientLayoutWrapper } from '@/components/layout/ClientLayoutWrapper';
 import { AuthProvider } from '@/lib/contexts/auth-context';
 import { TenantHeaderProvider } from '@/components/TenantHeaderProvider';
@@ -62,25 +63,9 @@ export default function RootLayout({
     <html lang="es" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                try {
-                  var t = localStorage.getItem('vynko-theme');
-                  var isDark = t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches);
-                  if (isDark) {
-                    document.documentElement.classList.add('dark');
-                  } else {
-                    document.documentElement.classList.remove('dark');
-                  }
-                } catch (e) {}
-              })();
-            `,
-          }}
-        />
       </head>
       <body className={`${inter.variable} min-h-screen bg-gray-50 antialiased dark:bg-gray-950 font-sans`}>
+        <ThemeInit />
         <AppProviders>
           <AuthProvider>
             <TenantHeaderProvider>

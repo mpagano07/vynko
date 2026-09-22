@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { PLAN_LIMITS } from '@/lib/plans';
+import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 
 interface UserLike {
@@ -42,9 +42,9 @@ export async function createCompanyForUser(
       .in('id', existingTenantIds);
 
     const planRank: Record<string, number> = { enterprise: 4, business: 3, starter: 2, free: 1 };
-    let bestPlan = 'starter';
+    let bestPlan = NEW_ACCOUNT_PLAN;
     for (const t of existingTenants ?? []) {
-      const p = t.subscription_plan || 'starter';
+      const p = t.subscription_plan || NEW_ACCOUNT_PLAN;
       if ((planRank[p] || 0) > (planRank[bestPlan] || 0)) bestPlan = p;
     }
 
@@ -61,7 +61,7 @@ export async function createCompanyForUser(
     id: tenantId,
     name: companyName,
     slug: tenantSlug,
-    subscription_plan: 'starter',
+    subscription_plan: NEW_ACCOUNT_PLAN,
     subscription_status: 'free',
   });
 
@@ -105,7 +105,7 @@ export async function createCompanyForUser(
     user_email: user.email,
     user_name: ownerName,
     tenant_id: tenantId,
-    metadata: { plan: 'starter' },
+    metadata: { plan: NEW_ACCOUNT_PLAN },
   });
 
   return tenantId;

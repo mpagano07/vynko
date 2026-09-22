@@ -18,6 +18,7 @@ import {
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatARS } from '@/lib/utils/currency';
 import { matchesQuery } from '@/lib/utils/text';
+import { NEW_ACCOUNT_PLAN } from '@/lib/plans';
 
 const reasonOptions = [
   { value: 'damaged', label: 'Dañado', color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30', hex: '#f59e0b' },
@@ -44,7 +45,7 @@ interface StockAdjustment {
 export default function LossPreventionPage() {
   const { tenant, loading: authLoading } = useAuth();
   const router = useRouter();
-  const plan = tenant?.subscription_plan || 'starter';
+  const plan = tenant?.subscription_plan || NEW_ACCOUNT_PLAN;
   const isStarterPlan = plan === 'free' || plan === 'starter';
   const { products, isLoading: productsLoading } = useProducts(tenant?.id);
   const [loading, setLoading] = useState(true);

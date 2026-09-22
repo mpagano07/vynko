@@ -88,13 +88,13 @@ describe('POST /api/tenants', () => {
     expect(tuInsert?.args[0]).toMatchObject({ role: 'owner', user_id: 'user-1' });
   });
 
-  it('crea la primera sucursal con plan starter por defecto', async () => {
+  it('crea la primera sucursal con plan business por defecto (trial)', async () => {
     vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, tenantIds: [] });
 
     supabaseMock.__queue('tenants', { data: null, error: null });
     supabaseMock.__queue('tenant_users', { data: null, error: null });
     supabaseMock.__queue('tenants', {
-      data: { id: 't-2', name: 'Principal', subscription_plan: 'starter' } as unknown as Record<string, unknown>,
+      data: { id: 't-2', name: 'Principal', subscription_plan: 'business' } as unknown as Record<string, unknown>,
     });
 
     const res = await POST(makeRequest({ name: 'Principal' }));
@@ -103,7 +103,7 @@ describe('POST /api/tenants', () => {
     const tenantInsert = supabaseMock.__calls.find(
       (c) => c.table === 'tenants' && c.method === 'insert'
     );
-    expect(tenantInsert?.args[0]).toMatchObject({ subscription_plan: 'starter' });
+    expect(tenantInsert?.args[0]).toMatchObject({ subscription_plan: 'business' });
   });
 
   it('devuelve 500 cuando falla el insert del tenant', async () => {

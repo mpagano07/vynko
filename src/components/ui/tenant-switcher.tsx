@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { ChevronDown, ChevronUp, Check, Plus, Loader2, Pencil } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
-import { PLAN_LIMITS } from '@/lib/plans';
+import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import toast from 'react-hot-toast';
 
@@ -20,7 +20,7 @@ export function TenantSwitcher() {
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
 
-  const currentPlan = tenant?.subscription_plan || 'starter';
+  const currentPlan = tenant?.subscription_plan || NEW_ACCOUNT_PLAN;
   const maxBranches = PLAN_LIMITS[currentPlan as PlanId]?.branches ?? 1;
   const canAddBranch = tenants.length < maxBranches;
 

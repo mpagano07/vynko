@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createServerSupabaseClient } from '@/lib/supabase';
-import { PLANS } from '@/lib/plans';
+import { PLANS, getEffectivePrice, getTrialDays, getTrialPlan } from '@/lib/plans';
 import { createPreApproval } from '@/lib/mercadopago';
 
 export async function POST(request: Request) {
@@ -68,9 +68,9 @@ export async function POST(request: Request) {
       auto_recurring: {
         frequency: 1,
         frequency_type: 'months',
-        transaction_amount: planConfig.price,
+        transaction_amount: getEffectivePrice(planConfig.id),
         currency_id: 'ARS',
-        trial_period_days: planConfig.id === 'starter' ? 45 : 0,
+        trial_period_days: planConfig.id === getTrialPlan() ? getTrialDays() : 0,
       },
     });
 

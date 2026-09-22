@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
-import { PLAN_LIMITS } from '@/lib/plans';
+import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import { validateProduct } from '@/lib/product-validation';
 import { fixResponse } from '@/lib/utils/encoding';
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     .eq('id', auth.tenantId)
     .single();
 
-  const plan = (tenantRow?.subscription_plan as PlanId) || 'starter';
+  const plan = (tenantRow?.subscription_plan as PlanId) || NEW_ACCOUNT_PLAN;
   const maxProducts = PLAN_LIMITS[plan]?.products ?? 50;
   if (maxProducts !== Infinity) {
     const { count } = await supabaseAdmin
