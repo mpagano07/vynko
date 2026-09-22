@@ -9,6 +9,10 @@ export default function Error({
 }) {
   console.error('Error boundary caught:', error);
 
+  const link = (href: string, label: string) => (
+    <a href={href} style={{ color: '#22d3ee' }}>{label}</a>
+  );
+
   return (
     <div style={{ padding: '20px', textAlign: 'center' }}>
       <h1>Algo salió mal</h1>
@@ -27,6 +31,9 @@ export default function Error({
       >
         Reintentar
       </button>
+      <div style={{ marginTop: '24px', fontSize: '12px' }}>
+        {link('/privacidad', 'Privacidad')} · {link('/terminos', 'Términos')} · {link('/cookies', 'Cookies')}
+      </div>
     </div>
   );
 }

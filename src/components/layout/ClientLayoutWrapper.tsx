@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
 
 import { NetworkStatusNotifier } from '@/components/ui/NetworkStatusNotifier';
+import { CookieBanner } from '@/components/ui/CookieBanner';
 
 const LazyToaster = dynamic(() => import('@/components/ui/lazy-toaster'), { ssr: false });
 const LazyInstallAppBanner = dynamic(() => import('@/components/ui/lazy-install-app-banner'), { ssr: false });
@@ -41,6 +42,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
     pathname === '/' ||
     pathname?.startsWith('/privacidad') ||
     pathname?.startsWith('/terminos') ||
+    pathname?.startsWith('/cookies') ||
     pathname?.startsWith('/login') ||
     pathname?.startsWith('/auth') ||
     pathname?.startsWith('/onboarding') ||
@@ -125,6 +127,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
         <NetworkStatusNotifier />
         {mounted && <LazyToaster />}
         {mounted && <LazyInstallAppBanner />}
+        {mounted && <CookieBanner />}
         {children}
       </>
     );
@@ -135,6 +138,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
       <NetworkStatusNotifier />
       {mounted && <LazyToaster />}
       {mounted && <LazyInstallAppBanner />}
+      {mounted && <CookieBanner />}
       {/* Outer container: flex-row on desktop, flex-col on mobile */}
       <div className="flex flex-row flex-1 min-h-screen w-full">
         {/* Sidebar: on mobile it's an absolutely positioned drawer, on desktop it's in-flow */}

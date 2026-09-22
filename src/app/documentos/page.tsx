@@ -716,24 +716,24 @@ export default function DocumentosPage() {
           .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px; }
           .business-info { flex: 1; }
           .business-name { font-size: 20px; font-weight: bold; margin-bottom: 4px; }
-          .business-detail { font-size: 11px; color: #666; margin: 2px 0; }
+          .business-detail { font-size: 11px; color: #444; margin: 2px 0; }
           .doc-info { text-align: right; }
           .title { font-size: 22px; font-weight: bold; }
-          .doc-number { font-size: 14px; color: #666; margin-top: 5px; }
+          .doc-number { font-size: 14px; color: #444; margin-top: 5px; }
           .status { background: #f0f0f0; padding: 4px 12px; border-radius: 4px; font-size: 12px; display: inline-block; margin-top: 8px; }
           .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
-          .info-section h3 { font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 8px; }
+          .info-section h3 { font-size: 12px; color: #444; text-transform: uppercase; margin-bottom: 8px; }
           .info-section p { margin: 4px 0; font-size: 14px; }
           table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-          th { background: #f5f5f5; padding: 8px; text-align: left; font-size: 12px; text-transform: uppercase; color: #666; }
+          th { background: #f5f5f5; padding: 8px; text-align: left; font-size: 12px; text-transform: uppercase; color: #444; }
           .total-section { display: flex; justify-content: flex-end; margin-top: 20px; }
           .total-box { border-top: 2px solid #333; padding-top: 10px; text-align: right; }
-          .total-label { font-size: 14px; color: #666; }
+          .total-label { font-size: 14px; color: #444; }
           .total-amount { font-size: 24px; font-weight: bold; color: #16a34a; }
           .notes { margin-top: 30px; padding: 15px; background: #f9f9f9; border-radius: 4px; }
-          .notes h3 { font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 8px; }
+          .notes h3 { font-size: 12px; color: #444; text-transform: uppercase; margin-bottom: 8px; }
           .notes p { font-size: 14px; }
-          .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; font-size: 11px; color: #999; text-align: center; }
+          .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; font-size: 11px; color: #555; text-align: center; }
           @media print { body { padding: 20px; } }
         </style>
       </head>

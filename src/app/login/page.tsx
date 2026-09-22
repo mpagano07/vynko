@@ -96,7 +96,7 @@ function LoginContent() {
             <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="128px" className="h-10 w-auto object-contain" />
           </div>
           <p className="text-gray-400 text-lg leading-relaxed">
-            Gestión de stock inteligente. Controlá tu inventario, ventas y
+            Gestión de stock en tiempo real. Controlá tu inventario, ventas y
             proveedores en un solo lugar.
           </p>
           <div className="mt-12 space-y-6">
@@ -108,7 +108,7 @@ function LoginContent() {
               </div>
               <div>
                 <h3 className="text-white font-medium">Control de inventario</h3>
-                <p className="text-gray-500 text-sm">Seguimiento en tiempo real de tu stock</p>
+                <p className="text-gray-400 text-sm">Seguimiento en tiempo real de tu stock</p>
               </div>
             </div>
             <div className="flex items-start gap-4">
@@ -119,7 +119,7 @@ function LoginContent() {
               </div>
               <div>
                 <h3 className="text-white font-medium">Pronóstico</h3>
-                <p className="text-gray-500 text-sm">Predicciones de demanda y alertas de reposición</p>
+                <p className="text-gray-400 text-sm">Predicciones de demanda y alertas de reposición</p>
               </div>
             </div>
             <div className="flex items-start gap-4">
@@ -130,7 +130,7 @@ function LoginContent() {
               </div>
               <div>
                 <h3 className="text-white font-medium">Gestión de ventas</h3>
-                <p className="text-gray-500 text-sm">Facturación y seguimiento de clientes</p>
+                <p className="text-gray-400 text-sm">Facturación y seguimiento de clientes</p>
               </div>
             </div>
           </div>
@@ -159,7 +159,7 @@ function LoginContent() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+                className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-400"
               />
             </div>
 
@@ -176,7 +176,7 @@ function LoginContent() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500 pr-10"
+                  className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-400 pr-10"
                 />
                 <button
                   type="button"
@@ -214,6 +214,22 @@ function LoginContent() {
             >
               {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
             </Button>
+
+            <p className="text-xs text-gray-400 leading-relaxed text-center">
+              Al iniciar sesión continuás sujeto a nuestros{' '}
+              <Link href="/terminos" target="_blank" className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2">
+                Términos
+              </Link>
+              ,{' '}
+              <Link href="/privacidad" target="_blank" className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2">
+                Política de Privacidad
+              </Link>{' '}
+              y{' '}
+              <Link href="/cookies" target="_blank" className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2">
+                Política de Cookies
+              </Link>
+              .
+            </p>
           </form>
 
           <div className="relative my-6">
@@ -221,7 +237,7 @@ function LoginContent() {
               <div className="w-full border-t border-gray-700" />
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="bg-gray-900 px-2 text-gray-500">O continuar con</span>
+              <span className="bg-gray-900 px-2 text-gray-400">O continuar con</span>
             </div>
           </div>
 
@@ -253,7 +269,7 @@ function LoginContent() {
             Google
           </Button>
 
-          <p className="text-sm text-gray-500 text-center mt-8">
+          <p className="text-sm text-gray-400 text-center mt-8">
             ¿No tienes cuenta?{' '}
             <Link
               href="/auth/signup"
@@ -262,6 +278,12 @@ function LoginContent() {
               Registrate
             </Link>
           </p>
+
+          <div className="mt-8 flex justify-center gap-4 text-xs text-gray-500">
+            <Link href="/privacidad" className="hover:text-gray-300 underline underline-offset-2">Privacidad</Link>
+            <Link href="/terminos" className="hover:text-gray-300 underline underline-offset-2">Términos</Link>
+            <Link href="/cookies" className="hover:text-gray-300 underline underline-offset-2">Cookies</Link>
+          </div>
         </div>
       </div>
     </div>
@@ -273,7 +295,7 @@ export default function LoginPage() {
     <Suspense
       fallback={
         <div className="min-h-screen flex items-center justify-center bg-gray-900">
-          <div className="animate-pulse text-gray-500">Cargando...</div>
+          <div className="animate-pulse text-gray-400">Cargando...</div>
         </div>
       }
     >

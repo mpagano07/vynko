@@ -109,7 +109,7 @@ function ResetPasswordContent() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={6}
-              className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-500"
+              className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-400"
             />
           </div>
 
@@ -125,7 +125,7 @@ function ResetPasswordContent() {
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
               minLength={6}
-              className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-500"
+              className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-400"
             />
           </div>
 
