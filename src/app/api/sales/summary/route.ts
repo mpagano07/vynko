@@ -20,7 +20,7 @@ export async function GET(request: Request) {
 
     // Lee la vista agregada sales_daily_totals (sum(total_cents) por día,
     // calculado en la base). El filtro por tenant/date lo aplica el endpoint.
-    let sQuery = supabaseAdmin
+    const sQuery = supabaseAdmin
       .from('sales_daily_totals')
       .select('day, total')
       .gte('day', sinceDay)

@@ -7,7 +7,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 async function getMonthTotals(tenantIds: string[], monthStart: Date) {
   const month = monthStart.toISOString().slice(0, 10);
 
-  let query = supabaseAdmin
+  const query = supabaseAdmin
     .from('sales_monthly_totals')
     .select('total, sale_count')
     .eq('month', month)
