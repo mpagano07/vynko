@@ -139,6 +139,8 @@ export default function LandingPage() {
                 <Link href="#features" className="text-sm text-gray-400 hover:text-white transition-colors">Características</Link>
                 <Link href="#how-it-works" className="text-sm text-gray-400 hover:text-white transition-colors">Cómo funciona</Link>
                 <Link href="#pricing" className="text-sm text-gray-400 hover:text-white transition-colors">Precios</Link>
+                <Link href="#demo" className="text-sm text-gray-400 hover:text-white transition-colors">Ver demo</Link>
+                <Link href="#roi" className="text-sm text-gray-400 hover:text-white transition-colors">Calculá cuánto podés ahorrar</Link>
               </div>
             </div>
             {isMounted && (<div className="flex items-center gap-3">
@@ -218,22 +220,6 @@ export default function LandingPage() {
                   >
                     {waitlistLoading ? 'Enviando...' : 'Comenzar gratis'}
                   </button>
-                </div>
-                <div className="mt-4 flex items-center gap-2.5">
-                  <p className="text-xs text-gray-400 leading-relaxed">
-                    Al continuar, completás tu registro y aceptás los{' '}
-                    <Link href="/terminos" target="_blank" className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2">
-                      Términos y Condiciones
-                    </Link>
-                    , la{' '}
-                    <Link href="/privacidad" target="_blank" className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2">
-                      Política de Privacidad
-                    </Link>{' '}
-                    y la{' '}
-                    <Link href="/cookies" target="_blank" className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2">
-                      Política de Cookies
-                    </Link>.
-                  </p>
                 </div>
               </form>
               <p className="mt-3 text-xs text-gray-400">
