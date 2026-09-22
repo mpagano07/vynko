@@ -148,6 +148,45 @@ describe('OnboardingPage guard', () => {
     await vi.waitFor(() => expect(window.location.replace).toHaveBeenCalledWith('/dashboard'));
     expect(screen.queryByText('Configura tu empresa')).not.toBeInTheDocument();
   });
+it('crea la empresa automáticamente si user_metadata trae nombre/empresa del registro', async () => {
+    const switchTenant = vi.fn().mockResolvedValue(undefined);
+    authMock.mockReturnValue({ switchTenant } as unknown as ReturnType<typeof useAuth>);
+    mockSession({
+      access_token: 'token',
+      refresh_token: 'refresh',
+      user: { id: 'u1', user_metadata: { company_name: 'Mi Ropa', full_name: 'Ana' } },
+    });
+
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ tenants: [], tenant: null }) }) // guard /api/session
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ tenantId: 't1' }) }); // POST /api/onboarding
+
+    render(<OnboardingPage />);
+
+    expect(await screen.findByText(/¡Bienvenido!/)).toBeInTheDocument();
+    await waitFor(() => expect(switchTenant).toHaveBeenCalledWith('t1'));
+    expect(router.push).toHaveBeenCalledWith('/dashboard');
+    expect(screen.queryByText('Configura tu empresa')).not.toBeInTheDocument();
+  });
+
+  it('si la auto-creación falla, muestra el formulario con nombre/empresa precargados', async () => {
+    mockSession({
+      access_token: 'token',
+      refresh_token: 'refresh',
+      user: { id: 'u1', user_metadata: { company_name: 'Mi Ropa', full_name: 'Ana' } },
+    });
+
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ tenants: [], tenant: null }) }) // guard /api/session
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'No se pudo crear' }) }); // POST /api/onboarding
+
+    render(<OnboardingPage />);
+
+    expect(await screen.findByText('Configura tu empresa')).toBeInTheDocument();
+    expect((screen.getByPlaceholderText('Mi Tienda') as HTMLInputElement).value).toBe('Mi Ropa');
+    expect((screen.getByPlaceholderText('Juan Pérez') as HTMLInputElement).value).toBe('Ana');
+    expect(router.push).not.toHaveBeenCalledWith('/dashboard');
+  });
 });
 
 describe('OnboardingPage formulario de empresa', () => {

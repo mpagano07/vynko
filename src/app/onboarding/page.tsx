@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
@@ -27,6 +27,30 @@ export default function OnboardingPage() {
     companyName: '',
     ownerName: '',
   });
+
+  const createCompany = useCallback(async (companyName: string, ownerName: string) => {
+    const sessionResult = await supabase.auth.getSession();
+    const accessToken = sessionResult.data.session?.access_token;
+    const refreshToken = sessionResult.data.session?.refresh_token;
+
+    const response = await fetch('/api/onboarding', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...(refreshToken ? { 'x-refresh-token': refreshToken } : {}),
+      },
+      body: JSON.stringify({
+        companyName: companyName.trim(),
+        ownerName: ownerName.trim(),
+      }),
+    });
+
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Error al crear empresa');
+    return result as { tenantId: string };
+  }, []);
 
   // Guard definitivo: si el usuario ya pertenece a una empresa, no mostramos el
   // formulario. Se verifica contra /api/session (service role) en lugar de
@@ -81,7 +105,33 @@ export default function OnboardingPage() {
         if (data === null || hasCompany || onboardingPending === false) {
           if (!cancelled) window.location.replace('/dashboard');
         } else {
-          setChecking(false);
+          // El usuario se registró cargando nombre/empresa, pero la empresa no
+          // llegó a crearse (confirmación de email que no pasó por
+          // /auth/callback, code verifier perdido, registro sin confirmación).
+          // Esos datos viajan en user_metadata: creá la empresa automáticamente
+          // para no pedir dos veces lo mismo.
+          const meta = (session.user?.user_metadata ?? {}) as Record<string, unknown>;
+          const metaCompany = typeof meta.company_name === 'string' ? meta.company_name.trim() : '';
+          const metaOwner = typeof meta.full_name === 'string' ? meta.full_name.trim() : '';
+
+          if (metaCompany && metaOwner) {
+            try {
+              const { tenantId } = await createCompany(metaCompany, metaOwner);
+              if (cancelled) return;
+              setStep('success');
+              await switchTenant(tenantId);
+              router.push('/dashboard');
+            } catch (error) {
+              console.error('Onboarding auto-create error:', error);
+              if (!cancelled) {
+                // Si no se pudo, mostramos el formulario con los datos ya cargados.
+                setFormData({ companyName: metaCompany, ownerName: metaOwner });
+                setChecking(false);
+              }
+            }
+          } else {
+            setChecking(false);
+          }
         }
       } catch (error) {
         console.error('Onboarding check error:', error);
@@ -95,41 +145,19 @@ export default function OnboardingPage() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCreateCompany = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const sessionResult = await supabase.auth.getSession();
-      const accessToken = sessionResult.data.session?.access_token;
-      const refreshToken = sessionResult.data.session?.refresh_token;
-
-      const response = await fetch('/api/onboarding', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-          ...(refreshToken ? { 'x-refresh-token': refreshToken } : {}),
-        },
-        body: JSON.stringify({
-          companyName: formData.companyName,
-          ownerName: formData.ownerName,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Error al crear empresa');
-      }
+      const { tenantId } = await createCompany(formData.companyName, formData.ownerName);
 
       toast.success('Empresa creada exitosamente');
       setStep('success');
 
-      await switchTenant(result.tenantId);
+      await switchTenant(tenantId);
       router.push('/dashboard');
     } catch (error: unknown) {
       console.error('Onboarding error:', error, JSON.stringify(error, null, 2));
