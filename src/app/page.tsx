@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { PLANS, getActivePromoPlan, getEffectivePrice, getPlanBadge, getTrialDays, getTrialPlan } from '@/lib/plans';
 import { isTrialExpired } from '@/lib/checkSubscription';
@@ -424,28 +424,70 @@ export default function LandingPage() {
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold">Planes simples y transparentes</h2>
             <p className="mt-4 text-gray-400">Elegí el plan que mejor se adapte a tu negocio.</p>
-            <div className="mt-4">
-              <PromoCountdown />
-            </div>
+            <p className="mt-6 text-sm text-gray-400">
+              Empezá hoy. No pagues nada por los primeros <span className="text-white font-semibold">{getTrialDays()} días</span> de prueba.
+            </p>
           </div>
-          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto md:items-center">
             {Object.entries(PLANS).map(([id, plan]) => {
               const isPopular = id === getActivePromoPlan();
               const badge = getPlanBadge(id);
               const isTrialPlan = id === getTrialPlan();
               const price = getEffectivePrice(id);
+              const trialDays = getTrialDays();
+
+              let cta: ReactNode;
+              if (plan.comingSoon) {
+                cta = (
+                  <span className="block text-center w-full py-3 rounded-lg font-semibold text-sm bg-gray-800 text-gray-400 border border-gray-700 cursor-not-allowed">
+                    Próximamente
+                  </span>
+                );
+              } else if (id === 'enterprise') {
+                cta = (
+                  <a
+                    href={`mailto:${SALES_EMAIL}?subject=${encodeURIComponent('Cotización Plan Enterprise - Vynko')}`}
+                    className="block text-center w-full py-3 rounded-lg font-semibold text-sm transition-colors bg-amber-500 hover:bg-amber-400 text-black"
+                  >
+                    Hablar con Ventas
+                  </a>
+                );
+              } else {
+                cta = (
+                  <Link
+                    href={isTrialPlan && trialExpired ? '/billing' : '/auth/signup'}
+                    className={`block text-center w-full py-3 rounded-lg font-semibold text-sm transition-colors ${
+                      isPopular
+                        ? 'bg-cyan-500 hover:bg-cyan-400 text-black shadow-lg shadow-cyan-500/25'
+                        : 'bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                    }`}
+                  >
+                    {isTrialPlan && trialExpired
+                      ? 'Suscribirse'
+                      : isTrialPlan
+                        ? `Probar ${trialDays} Días Gratis`
+                        : 'Elegir Starter'}
+                  </Link>
+                );
+              }
+
               return (
                 <div
                   key={id}
-                  className={`relative rounded-2xl p-8 ${
+                  className={`relative rounded-2xl p-8 flex flex-col ${
                     plan.comingSoon
                       ? 'bg-gray-950 border border-dashed border-gray-700'
                       : isPopular
-                        ? 'bg-gray-900 border-2 border-cyan-500/40 shadow-xl shadow-cyan-500/5'
+                        ? 'bg-gradient-to-b from-cyan-500/10 via-gray-900 to-gray-900 border-2 border-cyan-400 shadow-[0_0_60px_-12px_rgba(34,211,238,0.55)] md:scale-[1.06] md:z-10'
                         : 'bg-gray-950 border border-gray-800'
                   }`}
                 >
-                  {badge && (
+                  {isPopular && (
+                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap px-5 py-1.5 rounded-full bg-gradient-to-r from-orange-500 to-amber-400 text-black text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-orange-500/30">
+                      🔥 Más popular — {trialDays} días gratis
+                    </div>
+                  )}
+                  {badge && !isPopular && (
                     <div
                       className={`absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 text-xs font-bold rounded-full whitespace-nowrap ${
                         plan.comingSoon ? 'bg-gray-700 text-gray-300' : 'bg-cyan-500 text-black'
@@ -460,6 +502,24 @@ export default function LandingPage() {
                       <span className="text-2xl font-semibold text-gray-400">Próximamente</span>
                     ) : id === 'enterprise' ? (
                       <span className="text-4xl font-extrabold">A medida</span>
+                    ) : isTrialPlan ? (
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-base text-gray-500 line-through">{formatARS(price)}</span>
+                          <span className="text-sm text-gray-400">/mes</span>
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
+                            Oferta
+                          </span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-baseline gap-x-2">
+                          <span className="text-5xl font-extrabold text-cyan-400">$0</span>
+                          <span className="text-xl font-bold text-white">GRATIS</span>
+                          <span className="text-sm text-gray-400">por {trialDays} días</span>
+                        </div>
+                        <p className="mt-2 text-xs text-gray-400">
+                          Ahorrás <span className="text-gray-100 font-semibold">{formatARS(price)}</span> durante tu prueba.
+                        </p>
+                      </div>
                     ) : (
                       <>
                         <span className="text-4xl font-extrabold">{formatARS(price)}</span>
@@ -467,7 +527,7 @@ export default function LandingPage() {
                       </>
                     )}
                   </div>
-                  <ul className="space-y-3 mb-8">
+                  <ul className="space-y-3 mb-8 flex-1">
                     {plan.features.map((f, i) => (
                       <li
                         key={i}
@@ -483,32 +543,21 @@ export default function LandingPage() {
                       </li>
                     ))}
                   </ul>
-                  {plan.comingSoon ? (
-                    <span className="block text-center w-full py-3 rounded-lg font-semibold text-sm bg-gray-800 text-gray-400 border border-gray-700 cursor-not-allowed">
-                      Próximamente
-                    </span>
-                  ) : id === 'enterprise' ? (
-                    <a
-                      href={`mailto:${SALES_EMAIL}?subject=${encodeURIComponent('Cotización Plan Enterprise - Vynko')}`}
-                      className="block text-center w-full py-3 rounded-lg font-semibold text-sm transition-colors bg-amber-500 hover:bg-amber-400 text-black"
-                    >
-                      Pensado a tu medida
-                    </a>
-                  ) : (
-                    <Link
-                      href={isTrialPlan && trialExpired ? '/billing' : '/auth/signup'}
-                      className={`block text-center w-full py-3 rounded-lg font-semibold text-sm transition-colors ${
-                        isPopular
-                          ? 'bg-cyan-500 hover:bg-cyan-400 text-black'
-                          : 'bg-gray-800 hover:bg-gray-700 text-white border border-gray-700'
-                      }`}
-                    >
-                      {isTrialPlan && trialExpired ? 'Suscribirse' : isTrialPlan ? 'Comenzar gratis' : 'Suscribirse'}
-                    </Link>
+                  {isPopular && (
+                    <div className="mb-4">
+                      <PromoCountdown variant="banner" />
+                    </div>
                   )}
+                  {cta}
                 </div>
               );
             })}
+          </div>
+
+          <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6 text-sm text-gray-400">
+            <span>💳 Sin tarjeta de crédito requerida.</span>
+            <span>⚡ Configuración lista en menos de 2 minutos.</span>
+            <span>🔒 Cancelá cuando quieras sin compromisos.</span>
           </div>
         </div>
       </section>

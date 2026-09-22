@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Clock3 } from 'lucide-react';
+import { Clock3, Flame } from 'lucide-react';
 import { getActivePromo, getPromoDeadline } from '@/lib/plans';
 
 interface TimeLeft {
@@ -43,7 +43,11 @@ function useCountdown(deadline: Date | null) {
   return left;
 }
 
-export default function PromoCountdown() {
+type PromoCountdownProps = {
+  variant?: 'pill' | 'banner';
+};
+
+export default function PromoCountdown({ variant = 'pill' }: PromoCountdownProps) {
   const active = getActivePromo();
   const deadline = getPromoDeadline(active);
   const left = useCountdown(deadline);
@@ -53,6 +57,29 @@ export default function PromoCountdown() {
   const expired =
     left.days === 0 && left.hours === 0 && left.minutes === 0 && left.seconds === 0;
 
+  const timer = (
+    <>
+      {left.days > 0 ? `${left.days}d ` : ''}
+      {pad(left.hours)}:{pad(left.minutes)}:{pad(left.seconds)}
+    </>
+  );
+
+  if (variant === 'banner') {
+    return (
+      <div className="flex flex-col items-center justify-center gap-1 rounded-xl bg-gradient-to-r from-orange-500/15 via-amber-500/20 to-orange-500/15 border border-orange-500/40 px-4 py-3 text-center">
+        <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-orange-400">
+          <Flame className="w-4 h-4 animate-pulse" />
+          {expired ? 'Oferta finalizada' : 'Oferta por tiempo limitado'}
+        </p>
+        {!expired && (
+          <p className="text-sm font-extrabold tabular-nums text-amber-400">
+            Termina en <span className="text-orange-400">{timer}</span>
+          </p>
+        )}
+      </div>
+    );
+  }
+
   return (
     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-semibold">
       <Clock3 className="w-3.5 h-3.5 animate-pulse" />
@@ -60,9 +87,7 @@ export default function PromoCountdown() {
         'Oferta finalizada'
       ) : (
         <>
-          Por tiempo limitado · termina en{' '}
-          {left.days > 0 ? `${left.days}d ` : ''}
-          {pad(left.hours)}:{pad(left.minutes)}:{pad(left.seconds)}
+          Por tiempo limitado · termina en {timer}
         </>
       )}
     </span>
