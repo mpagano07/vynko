@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState, useEffect } from 'react';
+import { Suspense, useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { SalesContactModal } from '@/components/ui/sales-contact-modal';
 import { PLANS, PLAN_ORDER } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import { formatARS } from '@/lib/utils/currency';
-import { CreditCard, CheckCircle2, XCircle, Loader2, ArrowRight, AlertTriangle } from 'lucide-react';
+import { CreditCard, CheckCircle2, XCircle, Loader2, ArrowRight, AlertTriangle, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { getTenantHeaders } from '@/lib/fetchWithTenant';
@@ -48,6 +48,8 @@ function BillingContent() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [showRevocationModal, setShowRevocationModal] = useState(false);
+  const [showRevocationTooltip, setShowRevocationTooltip] = useState(false);
+  const revocationTooltipRef = useRef<HTMLDivElement>(null);
   const [revocationDone, setRevocationDone] = useState(false);
   const [pendingDowngrade, setPendingDowngrade] = useState<string | null>(null);
   const [downgrading, setDowngrading] = useState(false);
@@ -70,6 +72,21 @@ function BillingContent() {
       setLoading(false);
     })();
   }, []);
+
+  useEffect(() => {
+    if (!showRevocationTooltip) return;
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (revocationTooltipRef.current && !revocationTooltipRef.current.contains(event.target as Node)) {
+        setShowRevocationTooltip(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [showRevocationTooltip]);
 
   if (authLoading || role === 'member') return null;
 
@@ -351,16 +368,37 @@ function BillingContent() {
           </div>
           {subscription.status === 'active' && (
             <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-              <button
-                type="button"
-                onClick={() => setShowRevocationModal(true)}
-                className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 underline underline-offset-4"
-              >
-                Botón de arrepentimiento — derecho de revocación (Ley N° 24.240, art. 34)
-              </button>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Podés revocar la contratación desde el mismo medio electrónico por el que lo realizaste, sin trámites adicionales y dentro de los diez (10) días corridos.
-              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={() => setShowRevocationModal(true)}
+                  className="text-indigo-600 border-indigo-200 hover:bg-indigo-50 dark:border-indigo-800 dark:hover:bg-indigo-950/30"
+                >
+                  Botón de arrepentimiento
+                </Button>
+                <div className="relative" ref={revocationTooltipRef}>
+                  <button
+                    type="button"
+                    aria-label="Detalle del derecho de arrepentimiento"
+                    onClick={() => setShowRevocationTooltip((v) => !v)}
+                    className="p-1 rounded-full text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                  >
+                    <Info className="h-4 w-4" />
+                  </button>
+                  {showRevocationTooltip && (
+                    <div className="absolute left-0 top-full mt-1.5 z-30 w-72 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3.5 shadow-2xl shadow-black/15 dark:shadow-black/60">
+                      <p className="text-xs font-bold text-gray-900 dark:text-white">
+                        Botón de arrepentimiento
+                      </p>
+                      <p className="mt-1.5 text-xs leading-relaxed text-gray-600 dark:text-gray-400">
+                        Podés revocar la contratación desde el mismo medio electrónico por el que lo realizaste, sin trámites adicionales y dentro de los diez (10) días corridos.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </Card>
