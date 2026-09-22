@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabaseClient';
 import type { Session, User } from '@supabase/supabase-js';
 import toast from 'react-hot-toast';
 import { clearAuthLinkErrorFromUrl, getAuthLinkErrorParams } from '@/lib/auth-link-error';
+import { NEW_ACCOUNT_PLAN } from '@/lib/plans';
 
 // An expired or already-used email link leaves a Supabase auth error in the
 // URL (e.g. `?error=access_denied&error_code=otp_expired...`). It doesn't
@@ -297,7 +298,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const tenantsList: TenantInfo[] = data.tenants || [];
 
         let bestStatus = 'free';
-        let bestPlan = 'starter';
+        let bestPlan: string = NEW_ACCOUNT_PLAN;
         let bestPeriodEnd: string | null = null;
         let bestCreatedAt: string | null = null;
         const planRank: Record<string, number> = { enterprise: 4, business: 3, starter: 2, free: 1 };

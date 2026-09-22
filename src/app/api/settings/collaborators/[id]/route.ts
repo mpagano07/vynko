@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { PLAN_LIMITS } from '@/lib/plans';
+import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 
 export async function PATCH(
@@ -62,7 +62,7 @@ export async function PATCH(
         .select('subscription_plan')
         .eq('id', tid)
         .single();
-      const plan = (tenantRow?.subscription_plan as PlanId) || 'starter';
+      const plan = (tenantRow?.subscription_plan as PlanId) || NEW_ACCOUNT_PLAN;
       const maxUsers = PLAN_LIMITS[plan]?.users ?? 1;
       if (maxUsers !== Infinity) {
         const { count } = await supabaseAdmin

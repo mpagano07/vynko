@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createServerSupabaseClient } from '@/lib/supabase';
-import { PLANS, PLAN_ORDER, PLAN_LIMITS } from '@/lib/plans';
+import { PLANS, PLAN_ORDER, PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import { cancelPreApproval, createPreApproval } from '@/lib/mercadopago';
 
 const planRank = (plan?: string | null): number => {
-  const idx = PLAN_ORDER.indexOf((plan as PlanId) || 'starter');
+  const idx = PLAN_ORDER.indexOf((plan as PlanId) || NEW_ACCOUNT_PLAN);
   return idx === -1 ? 0 : idx;
 };
 

@@ -5,13 +5,15 @@ import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { PLANS } from '@/lib/plans';
+import { PLANS, getActivePromoPlan, getEffectivePrice, getPlanBadge, getTrialDays, getTrialPlan } from '@/lib/plans';
 import { isTrialExpired } from '@/lib/checkSubscription';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { hasStoredSession, type TenantInfo } from '@/lib/contexts/auth-context';
 import { SALES_EMAIL } from '@/lib/tenant-config';
 
 import { formatARS } from '@/lib/utils/currency';
+
+import PromoCountdown from '@/components/landing/PromoCountdown';
 
 const DemoSales = dynamic(() => import('@/components/landing/DemoSales'), {
   ssr: false,
@@ -223,7 +225,7 @@ export default function LandingPage() {
                 </div>
               </form>
               <p className="mt-3 text-xs text-gray-400">
-                Sin compromiso. 45 días de prueba gratuita.
+                Sin compromiso. {getTrialDays() || 0} días de prueba gratuita.
               </p>
             </div>
 
@@ -422,10 +424,16 @@ export default function LandingPage() {
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold">Planes simples y transparentes</h2>
             <p className="mt-4 text-gray-400">Elegí el plan que mejor se adapte a tu negocio.</p>
+            <div className="mt-4">
+              <PromoCountdown />
+            </div>
           </div>
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
             {Object.entries(PLANS).map(([id, plan]) => {
-              const isPopular = id === 'starter';
+              const isPopular = id === getActivePromoPlan();
+              const badge = getPlanBadge(id);
+              const isTrialPlan = id === getTrialPlan();
+              const price = getEffectivePrice(id);
               return (
                 <div
                   key={id}
@@ -437,13 +445,13 @@ export default function LandingPage() {
                         : 'bg-gray-950 border border-gray-800'
                   }`}
                 >
-                  {plan.badge && (
+                  {badge && (
                     <div
                       className={`absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 text-xs font-bold rounded-full whitespace-nowrap ${
                         plan.comingSoon ? 'bg-gray-700 text-gray-300' : 'bg-cyan-500 text-black'
                       }`}
                     >
-                      {plan.badge}
+                      {badge}
                     </div>
                   )}
                   <h3 className="text-lg font-bold mb-2">{plan.name}</h3>
@@ -454,7 +462,7 @@ export default function LandingPage() {
                       <span className="text-4xl font-extrabold">A medida</span>
                     ) : (
                       <>
-                        <span className="text-4xl font-extrabold">{formatARS(plan.price)}</span>
+                        <span className="text-4xl font-extrabold">{formatARS(price)}</span>
                         <span className="text-sm text-gray-400 ml-1">/mes</span>
                       </>
                     )}
@@ -488,14 +496,14 @@ export default function LandingPage() {
                     </a>
                   ) : (
                     <Link
-                      href={id === 'starter' && trialExpired ? '/billing' : '/auth/signup'}
+                      href={isTrialPlan && trialExpired ? '/billing' : '/auth/signup'}
                       className={`block text-center w-full py-3 rounded-lg font-semibold text-sm transition-colors ${
                         isPopular
                           ? 'bg-cyan-500 hover:bg-cyan-400 text-black'
                           : 'bg-gray-800 hover:bg-gray-700 text-white border border-gray-700'
                       }`}
                     >
-                      {id === 'starter' && trialExpired ? 'Suscribirse' : id === 'starter' ? 'Comenzar gratis' : 'Suscribirse'}
+                      {isTrialPlan && trialExpired ? 'Suscribirse' : isTrialPlan ? 'Comenzar gratis' : 'Suscribirse'}
                     </Link>
                   )}
                 </div>
@@ -553,7 +561,7 @@ export default function LandingPage() {
             href="/auth/signup"
             className="flex items-center justify-center gap-2 w-full py-3.5 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl text-sm transition-colors shadow-lg shadow-cyan-500/20"
           >
-            Comenzar gratis — 45 días de prueba
+            Comenzar gratis — {getTrialDays() || 0} días de prueba
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
           </Link>
         </div>

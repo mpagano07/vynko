@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { PLAN_LIMITS } from '@/lib/plans';
+import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 
 interface UserLike {
@@ -35,7 +35,7 @@ export async function acceptInvitationsForUser(user: UserLike) {
         .select('subscription_plan')
         .eq('id', inv.tenant_id)
         .single();
-      const plan = (tenantRow?.subscription_plan as PlanId) || 'starter';
+      const plan = (tenantRow?.subscription_plan as PlanId) || NEW_ACCOUNT_PLAN;
       const maxUsers = PLAN_LIMITS[plan]?.users ?? 1;
       if (maxUsers !== Infinity) {
         const { count } = await supabaseAdmin

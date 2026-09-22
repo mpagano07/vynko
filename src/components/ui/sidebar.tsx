@@ -11,6 +11,7 @@ import { useSidebar } from '@/lib/contexts/sidebar-context';
 import { cn } from '@/lib/utils/cn';
 import { X, Clock, AlertTriangle, ChevronDown, Settings, Lock, Sparkles, ArrowRight } from 'lucide-react';
 import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
+import { getTrialDays, getTrialPlan } from '@/lib/plans';
 import { toast } from 'react-hot-toast';
 
 interface NavItem {
@@ -428,11 +429,12 @@ export function Sidebar() {
 }
 
 function TrialCounter({ tenant }: { tenant: TenantInfo | null }) {
-  if (!tenant || !tenant.created_at) return null;
-  const plan = tenant.subscription_plan || 'starter';
-  if (plan !== 'starter') return null;
+  const trialPlan = getTrialPlan();
+  if (!tenant || !tenant.created_at || !trialPlan) return null;
+  const plan = tenant.subscription_plan || trialPlan;
+  if (plan !== trialPlan) return null;
 
-  const TRIAL_DAYS = 45;
+  const TRIAL_DAYS = getTrialDays();
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const created = new Date(tenant.created_at);

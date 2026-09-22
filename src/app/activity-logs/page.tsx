@@ -23,7 +23,7 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
-import { PLAN_LIMITS } from '@/lib/plans';
+import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 
 interface ActivityDetails {
@@ -444,7 +444,7 @@ type Tab = 'activity' | 'transfers';
 export default function ActivityLogsPage() {
   const { role, tenant, tenants, loading: authLoading } = useAuth();
   const router = useRouter();
-  const plan = tenant?.subscription_plan || 'starter';
+  const plan = tenant?.subscription_plan || NEW_ACCOUNT_PLAN;
   const isStarterPlan = plan === 'free' || plan === 'starter';
   const maxBranches = PLAN_LIMITS[plan as PlanId]?.branches ?? 1;
   const multiBranch = maxBranches > 1 && (tenants?.length || 0) > 1;

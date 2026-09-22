@@ -7,7 +7,16 @@ import { Button } from '@/components/ui/button';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { SupportModal } from '@/components/ui/support-modal';
 import { SalesContactModal } from '@/components/ui/sales-contact-modal';
-import { PLANS, PLAN_ORDER } from '@/lib/plans';
+import {
+  PLANS,
+  PLAN_ORDER,
+  NEW_ACCOUNT_PLAN,
+  getTrialDays,
+  getTrialPlan,
+  getPlanBadge,
+  getActivePromoPlan,
+  getEffectivePrice,
+} from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import { formatARS } from '@/lib/utils/currency';
 import { CreditCard, CheckCircle2, XCircle, Loader2, ArrowRight, AlertTriangle, Info } from 'lucide-react';
@@ -92,7 +101,7 @@ function BillingContent() {
 
   const handleSubscribe = async (planId: string) => {
     const targetRank = PLAN_ORDER.indexOf(planId as PlanId);
-    const currentRank = PLAN_ORDER.indexOf((currentPlanId as PlanId) || 'starter');
+    const currentRank = PLAN_ORDER.indexOf((currentPlanId as PlanId) || NEW_ACCOUNT_PLAN);
 
     if (planId === 'enterprise') {
       setShowSalesModal(true);
@@ -208,10 +217,11 @@ function BillingContent() {
     );
   }
 
-  const currentPlanId = subscription?.plan || 'starter';
+  const currentPlanId = subscription?.plan || NEW_ACCOUNT_PLAN;
   const isPlanActive = subscription?.status === 'active';
 
-  const TRIAL_DAYS = 45;
+  const TRIAL_DAYS = getTrialDays();
+  const TRIAL_PLAN = getTrialPlan();
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const daysUntilRenewal = subscription?.currentPeriodEnd
@@ -226,7 +236,7 @@ function BillingContent() {
       })()
     : null;
 
-  const isTrial = subscription?.plan === 'starter' && (subscription?.status === 'free' || subscription?.status === 'inactive');
+  const isTrial = !!TRIAL_PLAN && subscription?.plan === TRIAL_PLAN && (subscription?.status === 'free' || subscription?.status === 'inactive');
 
   const autoBlockedReason = blockedReason
     ? blockedReason
@@ -251,7 +261,7 @@ function BillingContent() {
             </p>
             <p className="text-sm text-red-600 dark:text-red-400 mt-1">
               {autoBlockedReason === 'trial_expired'
-                ? 'Los 45 días de prueba gratuita terminaron. Seleccioná uno de los planes para seguir usando todas las funcionalidades de Vynko.'
+                ? `Los ${TRIAL_DAYS} días de prueba gratuita terminaron. Seleccioná uno de los planes para seguir usando todas las funcionalidades de Vynko.`
                 : 'No se pudo procesar el pago de tu suscripción. Seleccioná un plan o actualizá tu método de pago para recuperar el acceso.'}
             </p>
           </div>
@@ -428,14 +438,15 @@ function BillingContent() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {Object.entries(PLANS).map(([id, plan]) => {
           const isCurrent = id === currentPlanId;
-          const isPopular = id === 'starter';
-          const isDowngrade = PLAN_ORDER.indexOf(id as PlanId) < PLAN_ORDER.indexOf((currentPlanId as PlanId) || 'starter');
+          const isPopular = id === getActivePromoPlan();
+          const badge = getPlanBadge(id);
+          const isDowngrade = PLAN_ORDER.indexOf(id as PlanId) < PLAN_ORDER.indexOf((currentPlanId as PlanId) || NEW_ACCOUNT_PLAN);
 
           return (
             <Card key={id} className={`p-6 relative flex flex-col ${isCurrent ? 'ring-2 ring-indigo-500' : ''} ${isPopular && !isCurrent ? 'border-indigo-200 dark:border-indigo-800' : ''}`}>
-              {plan.badge && !isCurrent && (
+              {badge && !isCurrent && (
                 <span className={`absolute -top-2.5 left-1/2 -translate-x-1/2 text-[10px] font-semibold px-3 py-0.5 rounded-full ${plan.comingSoon ? 'bg-gray-500 text-white' : 'bg-indigo-600 text-white'}`}>
-                  {plan.badge}
+                  {badge}
                 </span>
               )}
               {isCurrent && (
@@ -448,9 +459,9 @@ function BillingContent() {
               <div className="mt-2 mb-4">
                 {plan.comingSoon ? (
                   <span className="text-xl font-semibold text-gray-500">Próximamente</span>
-                ) : plan.price > 0 ? (
+                ) : getEffectivePrice(id) > 0 ? (
                   <>
-                    <span className="text-3xl font-extrabold text-gray-900 dark:text-white">{formatARS(plan.price)}</span>
+                    <span className="text-3xl font-extrabold text-gray-900 dark:text-white">{formatARS(getEffectivePrice(id))}</span>
                     <span className="text-sm text-gray-500">/mes</span>
                   </>
                 ) : (

@@ -10,9 +10,9 @@ test.describe.configure({ mode: 'serial' });
 test.describe('Facturación E2E', () => {
   // Billing requiere ver el plan no-activo para sus assertions (botón
   // "Suscribirse"). Auto-preparamos el estado: todas las sucursales en
-  // starter/free con trial fresco (consolidación = starter).
+  // business/free con trial fresco (consolidación = business).
   test.beforeAll(async () => {
-    await setTenantBilling('starter', 'free', true);
+    await setTenantBilling('business', 'free', true);
   });
 
   // Al terminar, devolvemos el entorno a su estado base (Business activo),
@@ -251,16 +251,16 @@ test.describe('Facturación E2E', () => {
   });
 
   test('cleanup - restaurar estado del tenant', async ({ authenticatedPage: page }) => {
-    // Resetear el estado de billing a starter/free (la consolidación por owner
-    // debe devolver starter tras limpiar todas las sucursales).
-    await setTenantBilling('starter', 'free', true);
+    // Resetear el estado de billing a business/free (la consolidación por owner
+    // debe devolver business tras limpiar todas las sucursales).
+    await setTenantBilling('business', 'free', true);
 
-    // Verify the tenant is back to free/starter state
+    // Verify the tenant is back to free/business state
     const response = await page.evaluate(async () => {
       const res = await fetch('/api/billing/status');
       return res.json();
     });
 
-    expect(response.plan).toBe('starter');
+    expect(response.plan).toBe('business');
   });
 });

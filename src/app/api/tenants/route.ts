@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { PLAN_LIMITS } from '@/lib/plans';
+import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 
 const slugify = (value: string) =>
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     const tenantId = crypto.randomUUID();
     const tenantSlug = `${slugify(name) || 'sucursal'}-${crypto.randomUUID().slice(0, 8)}`;
 
-    let inheritPlan = 'starter';
+    let inheritPlan = NEW_ACCOUNT_PLAN;
     let inheritStatus = 'free';
     let inheritPeriodEnd: string | null = null;
     if (auth.tenantIds.length > 0) {

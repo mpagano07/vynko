@@ -23,30 +23,40 @@ describe('checkSubscription', () => {
       expect(isTrialExpired({ subscription_status: 'past_due' })).toBe(true);
     });
 
-    it('returns false for free starter plan within trial period', () => {
+    it('returns false for free business plan within trial period', () => {
       vi.setSystemTime(new Date('2026-08-11T12:00:00Z'));
       const tenant: TenantSubscription = {
         subscription_status: 'free',
-        subscription_plan: 'starter',
+        subscription_plan: 'business',
         created_at: '2026-08-01T12:00:00Z', // 10 days ago
       };
       expect(isTrialExpired(tenant)).toBe(false);
     });
 
-    it('returns true for free starter plan after trial period', () => {
+    it('returns true for free business plan after trial period', () => {
       vi.setSystemTime(new Date('2026-08-11T12:00:00Z'));
       const tenant: TenantSubscription = {
         subscription_status: 'free',
-        subscription_plan: 'starter',
+        subscription_plan: 'business',
         created_at: '2026-06-01T12:00:00Z', // More than 45 days ago
       };
       expect(isTrialExpired(tenant)).toBe(true);
     });
 
-    it('returns false for free starter plan without created_at', () => {
+    it('returns true for free non-business plan (no trial)', () => {
+      vi.setSystemTime(new Date('2026-08-11T12:00:00Z'));
       const tenant: TenantSubscription = {
         subscription_status: 'free',
         subscription_plan: 'starter',
+        created_at: '2026-08-01T12:00:00Z', // Fresh, but without a trial plan the trial does not apply
+      };
+      expect(isTrialExpired(tenant)).toBe(true);
+    });
+
+    it('returns false for free business plan without created_at', () => {
+      const tenant: TenantSubscription = {
+        subscription_status: 'free',
+        subscription_plan: 'business',
       };
       expect(isTrialExpired(tenant)).toBe(false);
     });
@@ -74,21 +84,21 @@ describe('checkSubscription', () => {
       });
     });
 
-    it('returns not blocked for free starter plan within trial period', () => {
+    it('returns not blocked for free business plan within trial period', () => {
       vi.setSystemTime(new Date('2026-08-11T12:00:00Z'));
       const tenant: TenantSubscription = {
         subscription_status: 'free',
-        subscription_plan: 'starter',
+        subscription_plan: 'business',
         created_at: '2026-08-01T12:00:00Z', // 10 days ago
       };
       expect(checkSubscriptionBlocked(tenant)).toEqual({ blocked: false });
     });
 
-    it('returns blocked with trial_expired for free starter plan after trial period', () => {
+    it('returns blocked with trial_expired for free business plan after trial period', () => {
       vi.setSystemTime(new Date('2026-08-11T12:00:00Z'));
       const tenant: TenantSubscription = {
         subscription_status: 'free',
-        subscription_plan: 'starter',
+        subscription_plan: 'business',
         created_at: '2026-06-01T12:00:00Z', // More than 45 days ago
       };
       expect(checkSubscriptionBlocked(tenant)).toEqual({
@@ -98,10 +108,10 @@ describe('checkSubscription', () => {
       });
     });
 
-    it('returns blocked with trial_expired for free non-starter plan', () => {
+    it('returns blocked with trial_expired for free non-business plan (starter sin trial)', () => {
       const tenant: TenantSubscription = {
         subscription_status: 'free',
-        subscription_plan: 'business',
+        subscription_plan: 'starter',
       };
       expect(checkSubscriptionBlocked(tenant)).toEqual({
         blocked: true,
@@ -110,10 +120,10 @@ describe('checkSubscription', () => {
       });
     });
 
-    it('returns blocked with trial_expired for incomplete non-starter plan', () => {
+    it('returns blocked with trial_expired for incomplete non-business plan', () => {
       const tenant: TenantSubscription = {
         subscription_status: 'incomplete',
-        subscription_plan: 'business',
+        subscription_plan: 'starter',
       };
       expect(checkSubscriptionBlocked(tenant)).toEqual({
         blocked: true,
@@ -144,10 +154,10 @@ describe('checkSubscription', () => {
       expect(checkSubscriptionBlocked(tenant)).toEqual({ blocked: false });
     });
 
-    it('returns not blocked for free starter plan without created_at', () => {
+    it('returns not blocked for free business plan without created_at', () => {
       const tenant: TenantSubscription = {
         subscription_status: 'free',
-        subscription_plan: 'starter',
+        subscription_plan: 'business',
       };
       expect(checkSubscriptionBlocked(tenant)).toEqual({ blocked: false });
     });

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createServerSupabaseClient } from '@/lib/supabase';
-import { PLANS } from '@/lib/plans';
+import { PLANS, NEW_ACCOUNT_PLAN, getTrialDays, getTrialPlan } from '@/lib/plans';
 import { consolidateOwnerSubscription, type TenantSubscription } from '@/lib/checkSubscription';
 
 export async function GET() {
@@ -24,11 +24,12 @@ export async function GET() {
   // Every branch of the owner shares a single subscription.
   const tenant = consolidateOwnerSubscription(tenants as TenantSubscription[] | null);
 
-  const plan = (tenant?.subscription_plan as keyof typeof PLANS) || 'starter';
-  const planConfig = PLANS[plan] || PLANS.starter;
+  const trialPlan = getTrialPlan() ?? NEW_ACCOUNT_PLAN;
+  const plan = (tenant?.subscription_plan as keyof typeof PLANS) || NEW_ACCOUNT_PLAN;
+  const planConfig = PLANS[plan] || PLANS[NEW_ACCOUNT_PLAN];
 
-  const TRIAL_DAYS = 45;
-  const trialEndsAt = plan === 'starter' && tenant?.created_at
+  const TRIAL_DAYS = getTrialDays();
+  const trialEndsAt = trialPlan && plan === trialPlan && tenant?.created_at
     ? new Date(new Date(tenant.created_at).getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString()
     : null;
 
