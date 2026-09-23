@@ -11,6 +11,12 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
+import { Modal } from '@/components/ui/modal';
+import { Pagination } from '@/components/ui/pagination';
+import { LoadingState } from '@/components/ui/loading-state';
+import { EmptyState } from '@/components/ui/empty-state';
+import { SearchInput } from '@/components/ui/search-input';
+import { Thead, Th } from '@/components/ui/table-header';
 import type { Product } from '@/lib/types/product';
 import toast from 'react-hot-toast';
 import {
@@ -668,15 +674,12 @@ function ProductsPageContent() {
       {/* Filters Card */}
       <Card className="p-4 border border-gray-100 dark:border-gray-800">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-            <Input
+          <div>
+            <SearchInput
               ref={searchInputRef}
-              type="text"
               placeholder="Buscar por nombre, SKU o barras..."
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-              className="pl-9"
             />
           </div>
 
@@ -712,30 +715,21 @@ function ProductsPageContent() {
       {/* Products Table */}
       <Card className="overflow-hidden border border-gray-100 dark:border-gray-800 p-0">
         {productsLoading ? (
-          <div className="flex flex-col items-center justify-center py-20 space-y-4">
-            <Loader2 className="h-10 w-10 animate-spin text-indigo-500" />
-            <p className="text-sm text-gray-500">Cargando inventario...</p>
-          </div>
+          <LoadingState label="Cargando inventario..." />
         ) : filteredProducts.length === 0 ? (
-          <div className="text-center py-20">
-            <Package className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
-            <p className="text-lg font-medium text-gray-900 dark:text-gray-100">No se encontraron productos</p>
-            <p className="text-sm text-gray-500 mt-1">Intenta ajustando los filtros de búsqueda.</p>
-          </div>
+          <EmptyState icon={Package} title="No se encontraron productos" description="Intenta ajustando los filtros de búsqueda." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold uppercase tracking-wider">
-                  <SortableTh label="Producto" sortFor="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                  <SortableTh label="Categoría" sortFor="category" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-3" />
-                  <SortableTh label="Ubicación" sortFor="location" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-3" />
-                  <SortableTh label="SKU / Código" sortFor="sku" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                  <SortableTh label="Precios (Costo / Venta)" sortFor="price" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                  <SortableTh label="Stock" sortFor="stock" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" align="center" />
-                  <th className="py-4 px-6 text-right text-gray-500">Acciones</th>
-                </tr>
-              </thead>
+              <Thead>
+                <SortableTh label="Producto" sortFor="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                <SortableTh label="Categoría" sortFor="category" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-3" />
+                <SortableTh label="Ubicación" sortFor="location" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-3" />
+                <SortableTh label="SKU / Código" sortFor="sku" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                <SortableTh label="Precios (Costo / Venta)" sortFor="price" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                <SortableTh label="Stock" sortFor="stock" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" align="center" />
+                <Th align="right">Acciones</Th>
+              </Thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
                 {paginatedProducts.map((product) => {
                   const category = categories.find((c) => c.id === product.category_id);
@@ -861,76 +855,22 @@ function ProductsPageContent() {
         )}
 
         {/* Pagination Panel */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-gray-100 dark:border-gray-800 px-6 py-4">
-            <span className="text-xs text-gray-500">
-              Página <strong>{currentPage}</strong> de <strong>{totalPages}</strong>
-            </span>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              >
-                Anterior
-              </Button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1)
-                .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
-                .reduce<(number | '...')[]>((acc, p, i, arr) => {
-                  if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push('...');
-                  acc.push(p);
-                  return acc;
-                }, [])
-                .map((p, i) =>
-                  p === '...' ? (
-                    <span key={`dots-${i}`} className="px-1 text-gray-400 text-xs">…</span>
-                  ) : (
-                    <Button
-                      key={p}
-                      variant={currentPage === p ? 'primary' : 'outline'}
-                      size="sm"
-                      onClick={() => setCurrentPage(p)}
-                      className="min-w-[28px] px-1"
-                    >
-                      {p}
-                    </Button>
-                  )
-                )}
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-              >
-                Siguiente
-              </Button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+        />
       </Card>
 
       {/* PRODUCT DIALOG MODAL */}
       {isProductModalOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
+        <Modal
           aria-label="Producto"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs"
+          onClose={() => setIsProductModalOpen(false)}
+          className="max-w-2xl flex flex-col max-h-[90vh]"
+          title={editingProduct ? 'Editar Producto' : 'Agregar Nuevo Producto'}
         >
-          <Card className="w-full max-w-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
-            <button
-              onClick={() => setIsProductModalOpen(false)}
-              className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-              {editingProduct ? 'Editar Producto' : 'Agregar Nuevo Producto'}
-            </h2>
-
-            <form onSubmit={handleSaveProduct} className="space-y-4 overflow-y-auto pr-1 flex-1">
+          <form onSubmit={handleSaveProduct} className="space-y-4 overflow-y-auto pr-1 flex-1">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
                   <label htmlFor="product-name" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
@@ -1163,23 +1103,17 @@ function ProductsPageContent() {
                 </Button>
               </div>
             </form>
-          </Card>
-        </div>
+        </Modal>
       )}
 
       {/* IMPORT EXCEL MODAL */}
       {isImportModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
-          <Card className="w-full max-w-3xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
-            <button
-              onClick={() => { setIsImportModalOpen(false); setImportRows([]); setImportColumns([]); setImportResults(null); setShowColumnInfo(false); }}
-              className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <div className="flex items-center gap-3 mb-4">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Importar productos desde Excel</h2>
+        <Modal
+          onClose={() => { setIsImportModalOpen(false); setImportRows([]); setImportColumns([]); setImportResults(null); setShowColumnInfo(false); }}
+          className="max-w-3xl flex flex-col max-h-[90vh]"
+        >
+          <div className="flex items-center gap-3 mb-4">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Importar productos desde Excel</h2>
               <button
                 onClick={() => setShowColumnInfo(!showColumnInfo)}
                 className="p-1.5 rounded-full text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
@@ -1320,23 +1254,18 @@ function ProductsPageContent() {
                 </div>
               </div>
             )}
-          </Card>
-        </div>
+        </Modal>
       )}
 
       {/* PRICE ADJUST MODAL */}
       {isPriceAdjustModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
-          <Card className="w-full max-w-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative">
-            <button
-              onClick={() => { setIsPriceAdjustModalOpen(false); setPriceAdjustResult(null); }}
-              className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Ajustar precios</h2>
-            <p className="text-sm text-gray-500 mb-6">Aumentá el precio y costo de los productos por porcentaje.</p>
+        <Modal
+          onClose={() => { setIsPriceAdjustModalOpen(false); setPriceAdjustResult(null); }}
+          className="max-w-md"
+          title="Ajustar precios"
+          titleClassName="mb-1"
+        >
+          <p className="text-sm text-gray-500 mb-6">Aumentá el precio y costo de los productos por porcentaje.</p>
 
             {priceAdjustResult ? (
               <div className="space-y-4">
@@ -1406,7 +1335,7 @@ function ProductsPageContent() {
                 {priceAdjustScope === 'category' && (
                   <div>
                     <label className="block text-sm font-medium mb-1.5 text-gray-300">Categoría</label>
-                    <Select value={priceAdjustCategoryId} onChange={(e) => setPriceAdjustCategoryId(e.target.value)} className="bg-gray-800 border-gray-700 text-white">
+                    <Select value={priceAdjustCategoryId} onChange={(e) => setPriceAdjustCategoryId(e.target.value)} className="bg-gray-800 border-gray-700 text-white hover:bg-gray-700" darkPanel>
                       <option value="">Seleccionar categoría...</option>
                       {categories.map((c) => (
                         <option key={c.id} value={c.id}>{c.name}</option>
@@ -1449,24 +1378,16 @@ function ProductsPageContent() {
                 </div>
               </div>
             )}
-          </Card>
-        </div>
+        </Modal>
       )}
 
       {/* CATEGORIES MANAGER MODAL */}
       {isCategoryModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
-          <Card className="w-full max-w-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative flex flex-col max-h-[85vh]">
-            <button
-              onClick={() => setIsCategoryModalOpen(false)}
-              className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-              Gestionar Categorías
-            </h2>
+        <Modal
+          onClose={() => setIsCategoryModalOpen(false)}
+          className="max-w-md flex flex-col max-h-[85vh]"
+          title="Gestionar Categorías"
+        >
 
             {/* List of categories */}
             <div className="mb-6 overflow-y-auto max-h-[40vh] border border-gray-100 dark:border-gray-800 rounded-md divide-y divide-gray-100 dark:divide-gray-800 p-2">
@@ -1551,8 +1472,7 @@ function ProductsPageContent() {
                 </Button>
               </div>
             </form>
-          </Card>
-        </div>
+        </Modal>
       )}
 
       <ConfirmModal
@@ -1707,21 +1627,14 @@ function NewTransferModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
-      <Card className="w-full max-w-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
-        <button
-          onClick={onClose}
-          className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700"
-        >
-          <X className="h-5 w-5" />
-        </button>
-
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-          <ArrowRightLeft className="h-5 w-5 text-indigo-500" />
-          Nueva transferencia
-        </h2>
-
-        <form onSubmit={handleSubmit} className="space-y-5 overflow-y-auto pr-1 flex-1">
+    <Modal
+      onClose={onClose}
+      className="max-w-2xl flex flex-col max-h-[90vh]"
+      title="Nueva transferencia"
+      titleClassName="mb-4 flex items-center gap-2"
+      icon={<ArrowRightLeft className="h-5 w-5 text-indigo-500" />}
+    >
+      <form onSubmit={handleSubmit} className="space-y-5 overflow-y-auto pr-1 flex-1">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
@@ -1844,7 +1757,6 @@ function NewTransferModal({
             </Button>
           </div>
         </form>
-      </Card>
-    </div>
+      </Modal>
   );
 }

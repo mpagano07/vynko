@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Loader2, TrendingUp, AlertTriangle, ShoppingCart, Banknote, Activity, BarChart3, Sparkles, Flame, Filter, ExternalLink } from 'lucide-react';
+import { Pagination } from '@/components/ui/pagination';
+import { LoadingState } from '@/components/ui/loading-state';
+import { EmptyState } from '@/components/ui/empty-state';
+import { TrendingUp, AlertTriangle, ShoppingCart, Banknote, Activity, BarChart3, Sparkles, Flame, Filter, ExternalLink } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
@@ -107,12 +109,7 @@ export default function ForecastPage() {
   if (!authLoading && isStarter) return null;
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 space-y-4">
-        <Loader2 className="h-10 w-10 animate-spin text-indigo-500" />
-        <p className="text-sm text-gray-500">Calculando proyecciones de demanda...</p>
-      </div>
-    );
+    return <LoadingState label="Calculando proyecciones de demanda..." />;
   }
 
   if (error) {
@@ -126,13 +123,7 @@ export default function ForecastPage() {
   }
 
   if (!data || data.predictions.length === 0 || data.predictions.every((p) => p.totalSoldLast30 === 0)) {
-    return (
-      <div className="text-center py-20">
-        <BarChart3 className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
-        <p className="text-lg font-medium text-gray-900 dark:text-gray-100">Sin datos suficientes</p>
-        <p className="text-sm text-gray-500 mt-1">Se necesitan ventas en los últimos 30 días para generar proyecciones.</p>
-      </div>
-    );
+    return <EmptyState icon={BarChart3} title="Sin datos suficientes" description="Se necesitan ventas en los últimos 30 días para generar proyecciones." />;
   }
 
   const totalDailySales = data.predictions.reduce((s, p) => s + p.avgDailySales, 0);
@@ -447,53 +438,12 @@ export default function ForecastPage() {
             </table>
           </div>
         )}
-        {isPaginated && totalPages > 1 && (
-          <div className="px-6 py-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between">
-            <p className="text-xs text-gray-500">
-              Mostrando {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filteredPredictions.length)} de {filteredPredictions.length}
-            </p>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page === 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                Anterior
-              </Button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1)
-                .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
-                .reduce<(number | '...')[]>((acc, p, i, arr) => {
-                  if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push('...');
-                  acc.push(p);
-                  return acc;
-                }, [])
-                .map((p, i) =>
-                  p === '...' ? (
-                    <span key={`dots-${i}`} className="px-1 text-gray-400 text-xs">…</span>
-                  ) : (
-                    <Button
-                      key={p}
-                      variant={page === p ? 'primary' : 'outline'}
-                      size="sm"
-                      onClick={() => setPage(p)}
-                      className="min-w-[28px] px-1"
-                    >
-                      {p}
-                    </Button>
-                  )
-                )}
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page === totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              >
-                Siguiente
-              </Button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          resultInfo={`Mostrando ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, filteredPredictions.length)} de ${filteredPredictions.length}`}
+        />
       </Card>
     </div>
   );

@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils/cn';
 import { X, Clock, AlertTriangle, ChevronDown, Settings, Lock, Sparkles, ArrowRight } from 'lucide-react';
 import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
 import { getTrialDays, getTrialPlan } from '@/lib/plans';
+import { isAdminEmail } from '@/lib/admin';
 import { toast } from 'react-hot-toast';
 
 interface NavItem {
@@ -69,8 +70,6 @@ const operacionesItems: NavItem[] = [
   { name: 'QR', href: '/codigos', requiredPlan: ALL_PLANS },
   { name: 'Escáner', href: '/scanning', requiredPlan: ALL_PLANS },
 ];
-
-const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL ?? '';
 
 const LOCKED_ITEM_DESCRIPTIONS: Record<string, string> = {
   '/forecast': 'Pronóstico de demanda, picos de venta y proyecciones para anticiparte a tu negocio.',
@@ -250,7 +249,7 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
         );
       })}
 
-      {userEmail === ADMIN_EMAIL && (
+      {isAdminEmail(userEmail) && (
         <div className="mb-1">
           <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
             Admin

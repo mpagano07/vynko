@@ -9,6 +9,11 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
+import { Modal } from '@/components/ui/modal';
+import { LoadingState } from '@/components/ui/loading-state';
+import { EmptyState } from '@/components/ui/empty-state';
+import { SearchInput } from '@/components/ui/search-input';
+import { Thead, Th } from '@/components/ui/table-header';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import {
@@ -16,9 +21,7 @@ import {
   Plus,
   Edit,
   Trash2,
-  Search,
   Loader2,
-  X,
   Check,
 } from 'lucide-react';
 import type { Supplier, PurchaseOrder } from '@/lib/types/supplier';
@@ -425,41 +428,29 @@ export default function ProvidersPage() {
       </div>
 
       <Card className="p-4 border border-gray-100 dark:border-gray-800">
-        <div className="relative">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-          <Input
-            ref={searchInputRef}
-            type="text"
-            placeholder="Buscar proveedor por nombre, contacto o email..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+        <SearchInput
+          ref={searchInputRef}
+          placeholder="Buscar proveedor por nombre, contacto o email..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
       </Card>
 
       <Card className="overflow-hidden border border-gray-100 dark:border-gray-800 p-0">
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-          </div>
+          <LoadingState compact />
         ) : filteredSuppliers.length === 0 ? (
-          <div className="text-center py-16">
-            <Truck className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
-            <p className="text-gray-500">No hay proveedores registrados</p>
-          </div>
+          <EmptyState icon={Truck} title="No hay proveedores registrados" />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold uppercase tracking-wider">
-                  <SortableTh label="Nombre" sortFor="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                  <SortableTh label="Contacto" sortFor="contact" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                  <SortableTh label="Email / Teléfono" sortFor="email" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                  <SortableTh label="Dirección" sortFor="address" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                  <th className="py-4 px-6 text-right text-gray-500">Acciones</th>
-                </tr>
-              </thead>
+              <Thead>
+                <SortableTh label="Nombre" sortFor="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                <SortableTh label="Contacto" sortFor="contact" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                <SortableTh label="Email / Teléfono" sortFor="email" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                <SortableTh label="Dirección" sortFor="address" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                <Th align="right">Acciones</Th>
+              </Thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
                 {sortedSuppliers.map((supplier) => (
                   <React.Fragment key={supplier.id}>
@@ -566,20 +557,12 @@ export default function ProvidersPage() {
 
       {/* Supplier Modal */}
       {isSupplierModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
-          <Card className="w-full max-w-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative">
-            <button
-              onClick={() => setIsSupplierModalOpen(false)}
-              className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-              {editingSupplier ? 'Editar Proveedor' : 'Nuevo Proveedor'}
-            </h2>
-
-            <form onSubmit={handleSaveSupplier} className="space-y-4">
+        <Modal
+          onClose={() => setIsSupplierModalOpen(false)}
+          className="max-w-lg"
+          title={editingSupplier ? 'Editar Proveedor' : 'Nuevo Proveedor'}
+        >
+          <form onSubmit={handleSaveSupplier} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                   Nombre *
@@ -664,26 +647,17 @@ export default function ProvidersPage() {
                 </Button>
               </div>
             </form>
-          </Card>
-        </div>
+        </Modal>
       )}
 
       {/* Purchase Order Create Modal */}
       {isPoModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
-          <Card className="w-full max-w-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
-            <button
-              onClick={closePoModal}
-              className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-              Nueva Compra
-            </h2>
-
-            <form onSubmit={handleCreatePo} className="space-y-4 overflow-y-auto pr-1 flex-1">
+        <Modal
+          onClose={closePoModal}
+          className="max-w-2xl flex flex-col max-h-[90vh]"
+          title="Nueva Compra"
+        >
+          <form onSubmit={handleCreatePo} className="space-y-4 overflow-y-auto pr-1 flex-1">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
@@ -722,6 +696,7 @@ export default function ProvidersPage() {
                 <div className="mb-3">
                   <Select
                     value=""
+                    searchable
                     onChange={e => {
                       if (e.target.value) {
                         addPoItemFromProduct(e.target.value);
@@ -845,8 +820,7 @@ export default function ProvidersPage() {
                 </Button>
               </div>
             </form>
-          </Card>
-        </div>
+        </Modal>
       )}
 
       <ConfirmModal

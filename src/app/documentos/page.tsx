@@ -8,19 +8,23 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
+import { Modal } from '@/components/ui/modal';
+import { Pagination } from '@/components/ui/pagination';
+import { LoadingState } from '@/components/ui/loading-state';
+import { EmptyState } from '@/components/ui/empty-state';
+import { SearchInput } from '@/components/ui/search-input';
+import { Thead, Th } from '@/components/ui/table-header';
 import toast from 'react-hot-toast';
 import {
   FileText,
   Plus,
   Loader2,
-  Search,
   Check,
   Trash2,
   ChevronDown,
   ChevronUp,
   Printer,
   Package,
-  X,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import { matchesQuery } from '@/lib/utils/text';
@@ -876,15 +880,13 @@ export default function DocumentosPage() {
 
       <Card className="p-4 border border-gray-100 dark:border-gray-800">
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-            <Input
+          <div>
+            <SearchInput
               ref={searchInputRef}
-              type="text"
               placeholder="Buscar..."
               value={search}
               onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
-              className="pl-9 w-48"
+              className="w-48"
             />
           </div>
           <Select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="w-36">
@@ -920,35 +922,31 @@ export default function DocumentosPage() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-          </div>
+          <LoadingState compact />
         ) : currentItems.length === 0 ? (
-          <div className="text-center py-16">
-            <FileText className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
-            <p className="text-gray-500">
-              {isPoTab ? 'No hay pedidos de compra' : `No se encontraron ${getDocumentTypeLabel(typeFilter).toLowerCase()}s`}
-            </p>
-            <Button onClick={handleNewDocument} className="mt-4" variant="outline" size="sm">
-              <Plus className="h-4 w-4 mr-1" />
-              {isPoTab ? 'Crear primer pedido' : `Crear primer ${getDocumentTypeLabel(typeFilter).toLowerCase()}`}
-            </Button>
-          </div>
+          <EmptyState
+            icon={FileText}
+            title={isPoTab ? 'No hay pedidos de compra' : `No se encontraron ${getDocumentTypeLabel(typeFilter).toLowerCase()}s`}
+            action={
+              <Button onClick={handleNewDocument} variant="outline" size="sm">
+                <Plus className="h-4 w-4 mr-1" />
+                {isPoTab ? 'Crear primer pedido' : `Crear primer ${getDocumentTypeLabel(typeFilter).toLowerCase()}`}
+              </Button>
+            }
+          />
         ) : isPoTab ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  <th className="py-3 px-4 w-8"></th>
-                  <th className="py-3 px-4">Folio</th>
-                  <th className="py-3 px-4">Proveedor</th>
-                  <th className="py-3 px-4">Estado</th>
-                  <th className="py-3 px-4 text-right">Total</th>
-                  <th className="py-3 px-4">Recibido</th>
-                  <th className="py-3 px-4 text-right">Fecha</th>
-                  <th className="py-3 px-4 text-center">Acciones</th>
-                </tr>
-              </thead>
+              <Thead>
+                <th className="py-3 px-4 w-8"></th>
+                <Th dense>Folio</Th>
+                <Th dense>Proveedor</Th>
+                <Th dense>Estado</Th>
+                <Th dense align="right">Total</Th>
+                <Th dense>Recibido</Th>
+                <Th dense align="right">Fecha</Th>
+                <Th dense align="center">Acciones</Th>
+              </Thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
                 {(paginatedDocuments as PurchaseOrder[]).map(order => (
                   <React.Fragment key={order.id}>
@@ -1134,18 +1132,16 @@ export default function DocumentosPage() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  <th className="py-3 px-4 w-8"></th>
-                  <th className="py-3 px-4">Nro.</th>
-                  <th className="py-3 px-4">{(typeFilter === 'remito_ingreso') ? 'Proveedor' : 'Cliente'}</th>
-                  <th className="py-3 px-4 text-right">Total</th>
-                  <th className="py-3 px-4">Estado</th>
-                  <th className="py-3 px-4 text-right">Fecha</th>
-                  <th className="py-3 px-4 text-right">Vencimiento</th>
-                  <th className="py-3 px-4 text-center">Acciones</th>
-                </tr>
-              </thead>
+              <Thead>
+                <th className="py-3 px-4 w-8"></th>
+                <Th dense>Nro.</Th>
+                <Th dense>{(typeFilter === 'remito_ingreso') ? 'Proveedor' : 'Cliente'}</Th>
+                <Th dense align="right">Total</Th>
+                <Th dense>Estado</Th>
+                <Th dense align="right">Fecha</Th>
+                <Th dense align="right">Vencimiento</Th>
+                <Th dense align="center">Acciones</Th>
+              </Thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
                 {(paginatedDocuments as CommercialDocument[]).map(doc => (
                   <React.Fragment key={doc.id}>
@@ -1342,72 +1338,22 @@ export default function DocumentosPage() {
           </div>
         )}
 
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-gray-100 dark:border-gray-800 px-6 py-4">
-            <span className="text-xs text-gray-500">
-              Página <strong>{currentPage}</strong> de <strong>{totalPages}</strong>
-            </span>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              >
-                Anterior
-              </Button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1)
-                .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
-                .reduce<(number | '...')[]>((acc, p, i, arr) => {
-                  if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push('...');
-                  acc.push(p);
-                  return acc;
-                }, [])
-                .map((p, i) =>
-                  p === '...' ? (
-                    <span key={`dots-${i}`} className="px-1 text-gray-400 text-xs">…</span>
-                  ) : (
-                    <Button
-                      key={p}
-                      variant={currentPage === p ? 'primary' : 'outline'}
-                      size="sm"
-                      onClick={() => setCurrentPage(p)}
-                      className="min-w-[28px] px-1"
-                    >
-                      {p}
-                    </Button>
-                  )
-                )}
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-              >
-Siguiente
-              </Button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+        />
       </Card>
 
 {/* Document Create Modal */}
       {showCreateForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
-          <Card className="w-full max-w-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
-            <button
-              onClick={() => { setShowCreateForm(false); resetForm(); }}
-              className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-              <FileText className="h-5 w-5 text-indigo-600" />
-              Nuevo {getDocumentTypeLabel(typeFilter)}
-            </h2>
-
-            <form onSubmit={(e) => { e.preventDefault(); createDocument(); }} className="space-y-4 overflow-y-auto pr-1 flex-1">
+        <Modal
+          onClose={() => { setShowCreateForm(false); resetForm(); }}
+          className="max-w-2xl flex flex-col max-h-[90vh]"
+          title={`Nuevo ${getDocumentTypeLabel(typeFilter)}`}
+          icon={<FileText className="h-5 w-5 text-indigo-600" />}
+        >
+          <form onSubmit={(e) => { e.preventDefault(); createDocument(); }} className="space-y-4 overflow-y-auto pr-1 flex-1">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               </div>
 
@@ -1487,32 +1433,31 @@ Siguiente
               )}
 
               <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Items</h3>
-                  <div className="flex items-center gap-2">
-                    {products.length > 0 && (
-                      <Select
-                        value=""
-                        onChange={e => {
-                          if (e.target.value) {
-                            addItemFromProduct(e.target.value);
-                            e.target.value = '';
-                          }
-                        }}
-                        className="text-xs"
-                      >
-                        <option value="">+ Agregar producto...</option>
-                        {products.map(p => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} - {formatARS(p.price || 0)}
-                          </option>
-                        ))}
-                      </Select>
-                    )}
-                    <Button type="button" variant="outline" size="sm" onClick={addItem}>
-                      <Plus className="h-3.5 w-3.5 mr-1" /> Agregar item
-                    </Button>
-                  </div>
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Items</h3>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-3">
+                  {products.length > 0 && (
+                    <Select
+                      value=""
+                      searchable
+                      onChange={e => {
+                        if (e.target.value) {
+                          addItemFromProduct(e.target.value);
+                          e.target.value = '';
+                        }
+                      }}
+                      className="text-xs sm:w-1/2"
+                    >
+                      <option value="">+ Agregar producto...</option>
+                      {products.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} - {formatARS(p.price || 0)}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                  <Button type="button" variant="outline" size="sm" onClick={addItem} className="sm:w-auto">
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Agregar item
+                  </Button>
                 </div>
 
                 {formData.items.length === 0 ? (
@@ -1521,51 +1466,58 @@ Siguiente
                   </p>
                 ) : (
                   <div className="space-y-2">
+                    <div className="hidden sm:grid grid-cols-[minmax(0,1.6fr)_96px_130px_110px_32px] gap-2 px-2 mb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                      <span>Descripción</span>
+                      <span>Cant.</span>
+                      <span>Precio unitario</span>
+                      <span className="text-right">Importe</span>
+                      <span />
+                    </div>
                     {formData.items.map((item, i) => (
-                      <div key={item.uid} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                        <div className="flex-1 grid grid-cols-1 sm:grid-cols-4 gap-2">
-                          <div className="sm:col-span-2">
-                            <Input
-                              placeholder="Descripción del producto"
-                              value={item.description}
-                              onChange={e => updateItem(i, 'description', e.target.value)}
-                              className="text-sm"
-                            />
-                          </div>
-                          <div>
-                            <Input
-                              type="number"
-                              min="1"
-                              placeholder="Cant."
-                              value={item.quantity}
-                              onChange={e => updateItem(i, 'quantity', e.target.value)}
-                              className="text-sm"
-                            />
-                          </div>
-                          <div>
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              placeholder="Precio unitario"
-                              value={(item.unit_price_cents / 100).toFixed(2)}
-                              onChange={e => updateItem(i, 'unit_price_cents', e.target.value)}
-                              className="text-sm"
-                            />
-                          </div>
+                      <div key={item.uid} className="grid grid-cols-2 sm:grid-cols-[minmax(0,1.6fr)_96px_130px_110px_32px] gap-2 items-center p-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                        <div className="col-span-2 sm:col-span-1">
+                          <Input
+                            placeholder="Descripción del producto"
+                            value={item.description}
+                            onChange={e => updateItem(i, 'description', e.target.value)}
+                            className="text-sm"
+                          />
                         </div>
-                        <div className="text-right text-sm font-medium text-gray-900 dark:text-gray-100 w-24">
+                        <div>
+                          <Input
+                            type="number"
+                            min="1"
+                            placeholder="Cant."
+                            value={item.quantity}
+                            onChange={e => updateItem(i, 'quantity', e.target.value)}
+                            className="text-sm"
+                          />
+                        </div>
+                        <div>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="Precio unitario"
+                            value={(item.unit_price_cents / 100).toFixed(2)}
+                            onChange={e => updateItem(i, 'unit_price_cents', e.target.value)}
+                            className="text-sm"
+                          />
+                        </div>
+                        <div className="text-right text-sm font-medium text-gray-900 dark:text-gray-100">
                           {formatARS((item.unit_price_cents * item.quantity) / 100)}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => removeItem(i)}
-                          className="text-red-500 hover:text-red-700 p-1"
-                          title="Eliminar item"
-                          aria-label={`Eliminar item ${item.description || i + 1}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        <div className="flex justify-center">
+                          <button
+                            type="button"
+                            onClick={() => removeItem(i)}
+                            className="text-red-500 hover:text-red-700 p-1"
+                            title="Eliminar item"
+                            aria-label={`Eliminar item ${item.description || i + 1}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                     ))}
                     <div className="flex justify-end pt-2">
@@ -1602,26 +1554,17 @@ Siguiente
                 </Button>
               </div>
             </form>
-          </Card>
-        </div>
+          </Modal>
       )}
 
       {/* Purchase Order Create Modal */}
       {isPoModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
-          <Card className="w-full max-w-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
-            <button
-              onClick={() => { setIsPoModalOpen(false); resetPoForm(); }}
-              className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-              Nuevo Pedido de Compra
-            </h2>
-
-            <form onSubmit={handleCreatePo} className="space-y-4 overflow-y-auto pr-1 flex-1">
+        <Modal
+          onClose={() => { setIsPoModalOpen(false); resetPoForm(); }}
+          className="max-w-2xl flex flex-col max-h-[90vh]"
+          title="Nuevo Pedido de Compra"
+        >
+          <form onSubmit={handleCreatePo} className="space-y-4 overflow-y-auto pr-1 flex-1">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
@@ -1656,16 +1599,17 @@ Siguiente
               </div>
 
               <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Productos</h3>
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Productos</h3>
                 <div className="mb-3">
                   <Select
                     value=""
+                    searchable
                     onChange={e => {
                       if (e.target.value) {
                         addPoItemFromProduct(e.target.value);
                       }
                     }}
-                    className="text-xs"
+                    className="text-xs sm:w-1/2"
                   >
                     <option value="">+ Agregar producto...</option>
                     {products.map(p => (
@@ -1682,16 +1626,23 @@ Siguiente
                   </p>
                 ) : (
                   <div className="space-y-2 max-h-48 overflow-y-auto">
+                    <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_150px_110px_110px_32px] gap-2 px-2 mb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                      <span>Producto</span>
+                      <span className="text-center">Cantidad</span>
+                      <span className="text-right">Costo unit.</span>
+                      <span className="text-right">Importe</span>
+                      <span />
+                    </div>
                     {poItems.map((item, index) => {
                       const product = products.find((p) => p.id === item.product_id);
                       return (
-                        <div key={item.product_id} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                          <div className="flex-1 min-w-0">
+                        <div key={item.product_id} className="grid grid-cols-2 sm:grid-cols-[minmax(0,1fr)_150px_110px_110px_32px] gap-2 items-center p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                          <div className="col-span-2 sm:col-span-1 min-w-0">
                             <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                               {product?.name || item.product_id}
                             </p>
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center justify-center gap-1">
                             <button
                               type="button"
                               onClick={() => updatePoItem(index, 'quantity', Math.max(1, item.quantity - 1))}
@@ -1714,7 +1665,7 @@ Siguiente
                               +
                             </button>
                           </div>
-                          <div className="w-24">
+                          <div>
                             <input
                               type="number"
                               min="0"
@@ -1724,17 +1675,19 @@ Siguiente
                               className="w-full text-right text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 py-1 px-2"
                             />
                           </div>
-                          <div className="text-right text-sm font-medium text-gray-900 dark:text-gray-100 w-24">
+                          <div className="text-right text-sm font-medium text-gray-900 dark:text-gray-100">
                             {formatARS(item.quantity * item.unit_cost)}
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => removePoItem(index)}
-                            className="text-red-500 hover:text-red-700 p-1"
-                            title="Eliminar"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          <div className="flex justify-center">
+                            <button
+                              type="button"
+                              onClick={() => removePoItem(index)}
+                              className="text-red-500 hover:text-red-700 p-1"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
@@ -1783,25 +1736,17 @@ Siguiente
                 </Button>
               </div>
             </form>
-          </Card>
-        </div>
+        </Modal>
       )}
 
       {/* Receive Modal */}
       {isReceiveModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
-          <Card className="w-full max-w-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
-            <button
-              onClick={() => setIsReceiveModalOpen(false)}
-              className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-              <Package className="h-5 w-5 text-teal-600" />
-              Recibir Pedido
-            </h2>
+        <Modal
+          onClose={() => setIsReceiveModalOpen(false)}
+          className="max-w-2xl flex flex-col max-h-[90vh]"
+          title="Recibir Pedido"
+          icon={<Package className="h-5 w-5 text-teal-600" />}
+        >
 
             <div className="space-y-4 overflow-y-auto pr-1 flex-1">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1935,8 +1880,7 @@ Siguiente
                 </Button>
               </div>
             </div>
-          </Card>
-        </div>
+        </Modal>
       )}
 
       <ConfirmModal

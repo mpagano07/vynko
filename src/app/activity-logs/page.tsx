@@ -7,6 +7,10 @@ import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { Pagination } from '@/components/ui/pagination';
+import { LoadingState } from '@/components/ui/loading-state';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Thead, Th } from '@/components/ui/table-header';
 import toast from 'react-hot-toast';
 import {
   Loader2,
@@ -18,8 +22,6 @@ import {
   Package,
   ChevronUp,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   FileSpreadsheet,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
@@ -212,37 +214,26 @@ function TransfersHistoryTab() {
   const paginated = transfers.slice(page * limit, (page + 1) * limit);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-      </div>
-    );
+    return <LoadingState compact />;
   }
 
   if (transfers.length === 0) {
-    return (
-      <div className="text-center py-16">
-        <ArrowRightLeft className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
-        <p className="text-gray-500">No hay transferencias registradas</p>
-      </div>
-    );
+    return <EmptyState icon={ArrowRightLeft} title="No hay transferencias registradas" />;
   }
 
   return (
     <div className="space-y-4">
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+          <Thead>
               <th className="py-4 px-6 w-8"></th>
-              <th className="py-4 px-6">Ruta</th>
-              <th className="py-4 px-6">Productos</th>
-              <th className="py-4 px-6">Estado</th>
-              <th className="py-4 px-6">Creada por</th>
-              <th className="py-4 px-6">Fecha envío</th>
-              <th className="py-4 px-6">Fecha recepción</th>
-            </tr>
-          </thead>
+              <Th>Ruta</Th>
+              <Th>Productos</Th>
+              <Th>Estado</Th>
+              <Th>Creada por</Th>
+              <Th>Fecha envío</Th>
+              <Th>Fecha recepción</Th>
+            </Thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
             {paginated.map(t => (
               <React.Fragment key={t.id}>
@@ -407,34 +398,12 @@ function TransfersHistoryTab() {
         </table>
       </div>
 
-      {transfers.length > 0 && (
-        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800">
-          <span className="text-xs text-gray-400">
-            Mostrando {page * limit + 1}–{Math.min((page + 1) * limit, transfers.length)} de {transfers.length} transferencias
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              disabled={page === 0}
-              onClick={() => setPage(p => Math.max(0, p - 1))}
-              className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Anterior
-            </button>
-            <span className="text-xs text-gray-400">
-              Página {page + 1} de {Math.max(totalPages, 1)}
-            </span>
-            <button
-              disabled={page >= totalPages - 1}
-              onClick={() => setPage(p => p + 1)}
-              className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              Siguiente
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      )}
+      <Pagination
+        currentPage={page + 1}
+        totalPages={Math.max(totalPages, 1)}
+        onPageChange={(p) => setPage(p - 1)}
+        resultInfo={`Mostrando ${page * limit + 1}–${Math.min((page + 1) * limit, transfers.length)} de ${transfers.length} transferencias`}
+      />
     </div>
   );
 }
@@ -695,7 +664,7 @@ export default function ActivityLogsPage() {
                   setEntityFilter(e.target.value);
                   setPage(0);
                 }}
-                className="max-w-xs"
+                className="w-36"
               >
                 <option value="">Todos</option>
                 {Object.entries(ENTITY_LABELS).map(([key, label]) => (
@@ -712,26 +681,19 @@ export default function ActivityLogsPage() {
 
           <Card className="overflow-hidden border border-gray-100 dark:border-gray-800 p-0">
             {loading ? (
-              <div className="flex items-center justify-center py-16">
-                <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-              </div>
+              <LoadingState compact />
             ) : logs.length === 0 ? (
-              <div className="text-center py-16">
-                <ScrollText className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
-                <p className="text-gray-500">No hay actividad registrada</p>
-              </div>
+              <EmptyState icon={ScrollText} title="No hay actividad registrada" />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  <Thead>
                       <th className="py-4 px-6 w-8"></th>
-                      <th className="py-4 px-6">Usuario</th>
-                      <th className="py-4 px-6">Acción</th>
-                      <th className="py-4 px-6">Detalle</th>
-                      <th className="py-4 px-6 text-right">Fecha</th>
-                    </tr>
-                  </thead>
+                      <Th>Usuario</Th>
+                      <Th>Acción</Th>
+                      <Th>Detalle</Th>
+                      <Th align="right">Fecha</Th>
+                    </Thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
                     {logs.map(log => (
                       <React.Fragment key={log.id}>
@@ -864,34 +826,12 @@ export default function ActivityLogsPage() {
             )}
           </Card>
 
-          {total > 0 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800">
-              <span className="text-xs text-gray-400">
-                Mostrando {page * limit + 1}–{Math.min((page + 1) * limit, total)} de {total} registros
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  disabled={page === 0}
-                  onClick={() => setPage(p => Math.max(0, p - 1))}
-                  className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  Anterior
-                </button>
-                <span className="text-xs text-gray-400">
-                  Página {page + 1} de {Math.max(totalPages, 1)}
-                </span>
-                <button
-                  disabled={page >= totalPages - 1}
-                  onClick={() => setPage(p => p + 1)}
-                  className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  Siguiente
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          )}
+          <Pagination
+            currentPage={page + 1}
+            totalPages={Math.max(totalPages, 1)}
+            onPageChange={(p) => setPage(p - 1)}
+            resultInfo={`Mostrando ${page * limit + 1}–${Math.min((page + 1) * limit, total)} de ${total} registros`}
+          />
         </>
       ) : (
         <Card className="overflow-hidden border border-gray-100 dark:border-gray-800 p-0">

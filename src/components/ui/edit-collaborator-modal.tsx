@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Pencil, X, Loader2, Shield, ShieldCheck, HelpCircle } from 'lucide-react';
+import { Select } from '@/components/ui/select';
+import { Modal } from '@/components/ui/modal';
+import { Pencil, Loader2, Shield, ShieldCheck, HelpCircle } from 'lucide-react';
 
 export interface TenantOption {
   id: string;
@@ -56,17 +57,8 @@ export function EditCollaboratorModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
-      <Card className="w-full max-w-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative">
-        <button
-          onClick={onCancel}
-          className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700"
-          aria-label="Cerrar"
-        >
-          <X className="h-5 w-5" />
-        </button>
-
-        <div className="flex items-center gap-3 mb-5">
+    <Modal onClose={onCancel} className="max-w-md">
+      <div className="flex items-center gap-3 mb-5">
           <div className="p-2.5 rounded-full bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400">
             <Pencil className="h-5 w-5" />
           </div>
@@ -91,15 +83,14 @@ export function EditCollaboratorModal({
                 <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
               </span>
             </label>
-            <select
+            <Select
               value={editRole}
               disabled={!canEditRole || role === 'owner'}
               onChange={(e) => setEditRole(e.target.value as 'member' | 'manager')}
-              className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
             >
               <option value="member">Miembro</option>
               <option value="manager">Manager</option>
-            </select>
+            </Select>
           </div>
 
           <div>
@@ -160,7 +151,6 @@ export function EditCollaboratorModal({
             </Button>
           </div>
         </div>
-      </Card>
-    </div>
+      </Modal>
   );
 }

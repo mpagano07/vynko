@@ -5,8 +5,13 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { Modal } from '@/components/ui/modal';
+import { Pagination } from '@/components/ui/pagination';
+import { LoadingState } from '@/components/ui/loading-state';
+import { EmptyState } from '@/components/ui/empty-state';
+import { SearchInput } from '@/components/ui/search-input';
+import { Thead, Th } from '@/components/ui/table-header';
 import dynamicImport from 'next/dynamic';
 const BarcodeScanner = dynamicImport(
   () => import('@/components/scanner/BarcodeScanner').then((m) => ({ default: m.BarcodeScanner })),
@@ -18,7 +23,6 @@ import {
   Plus,
   Minus,
   Trash2,
-  Search,
   User,
   Loader2,
   Receipt,
@@ -26,10 +30,7 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
-  ChevronLeft,
-  ChevronRight,
   Scan,
-  X,
   LayoutGrid,
   List,
   Percent,
@@ -699,15 +700,12 @@ export default function SalesPage() {
         <div className="lg:col-span-2 space-y-4">
           <Card className="p-4 border border-gray-100 dark:border-gray-800">
             <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                <Input
+              <div className="flex-1">
+                <SearchInput
                   ref={searchInputRef}
-                  type="text"
                   placeholder="Buscar producto por nombre, SKU o código de barras..."
                   value={productSearch}
                   onChange={(e) => { setProductSearch(e.target.value); setProductPage(1); }}
-                  className="pl-9"
                 />
               </div>
               <Button
@@ -722,13 +720,10 @@ export default function SalesPage() {
           </Card>
 
           {loadingData ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-            </div>
+            <LoadingState compact />
           ) : filteredProducts.length === 0 ? (
-            <Card className="p-8 text-center border border-gray-100 dark:border-gray-800">
-              <Package className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
-              <p className="text-gray-500">No se encontraron productos</p>
+            <Card className="p-8 border border-gray-100 dark:border-gray-800">
+              <EmptyState icon={Package} title="No se encontraron productos" className="py-8" />
             </Card>
           ) : (
             <>
@@ -856,29 +851,11 @@ export default function SalesPage() {
                 </div>
               )}
 
-              {totalProductPages > 1 && (
-                <div className="flex items-center justify-between pt-2">
-                  <button
-                    onClick={() => setProductPage((p) => Math.max(1, p - 1))}
-                    disabled={productPage === 1}
-                    className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Anterior
-                  </button>
-                  <span className="text-xs text-gray-400">
-                    Página {productPage} de {totalProductPages}
-                  </span>
-                  <button
-                    onClick={() => setProductPage((p) => Math.min(totalProductPages, p + 1))}
-                    disabled={productPage === totalProductPages}
-                    className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Siguiente
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
+              <Pagination
+                currentPage={productPage}
+                totalPages={totalProductPages}
+                onPageChange={setProductPage}
+              />
             </>
           )}
         </div>
@@ -1112,28 +1089,22 @@ export default function SalesPage() {
         {showSalesList && (
           <div className="border-t border-gray-100 dark:border-gray-800">
             {loadingData ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
-              </div>
+              <LoadingState compact className="py-8" />
             ) : sales.length === 0 ? (
-              <div className="text-center py-8 text-gray-400 text-sm">
-                No hay ventas registradas
-              </div>
+              <EmptyState icon={Receipt} title="No hay ventas registradas" className="py-8" />
             ) : (
               <>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                      <th className="py-3 px-4 w-8"></th>
-                      <th className="py-3 px-4">Folio</th>
-                      <th className="py-3 px-4">Cliente</th>
-                      <th className="py-3 px-4">Productos</th>
-                      <th className="py-3 px-4">Pago</th>
-                      <th className="py-3 px-4 text-right">Total</th>
-                      <th className="py-3 px-4 text-right">Fecha</th>
-                    </tr>
-                  </thead>
+                  <Thead>
+                    <th className="py-3 px-4 w-8"></th>
+                    <Th dense>Folio</Th>
+                    <Th dense>Cliente</Th>
+                    <Th dense>Productos</Th>
+                    <Th dense>Pago</Th>
+                    <Th dense align="right">Total</Th>
+                    <Th dense align="right">Fecha</Th>
+                  </Thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
                     {sales.map((sale) => (
                       <React.Fragment key={sale.id}>
@@ -1360,34 +1331,12 @@ export default function SalesPage() {
                   </tbody>
                 </table>
               </div>
-              {Math.ceil(salesTotal / SALES_PER_PAGE) > 1 && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800">
-                  <span className="text-xs text-gray-400">
-                    Mostrando {((salesPage - 1) * SALES_PER_PAGE) + 1}–{Math.min(salesPage * SALES_PER_PAGE, salesTotal)} de {salesTotal} ventas
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setSalesPage((p) => Math.max(1, p - 1))}
-                      disabled={salesPage === 1}
-                      className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      Anterior
-                    </button>
-                    <span className="text-xs text-gray-400">
-                      Página {salesPage} de {Math.ceil(salesTotal / SALES_PER_PAGE)}
-                    </span>
-                    <button
-                      onClick={() => setSalesPage((p) => Math.min(Math.ceil(salesTotal / SALES_PER_PAGE), p + 1))}
-                      disabled={salesPage >= Math.ceil(salesTotal / SALES_PER_PAGE)}
-                      className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Siguiente
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              )}
+              <Pagination
+                currentPage={salesPage}
+                totalPages={Math.ceil(salesTotal / SALES_PER_PAGE)}
+                onPageChange={setSalesPage}
+                resultInfo={`Mostrando ${((salesPage - 1) * SALES_PER_PAGE) + 1}–${Math.min(salesPage * SALES_PER_PAGE, salesTotal)} de ${salesTotal} ventas`}
+              />
               </>
             )}
           </div>
@@ -1418,32 +1367,23 @@ export default function SalesPage() {
       )}
 
       {showScanner && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-800">
-              <h3 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                <Scan className="h-5 w-5 text-indigo-600" />
-                Escanear producto
-              </h3>
-              <button
-                onClick={() => setShowScanner(false)}
-                className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="p-4">
-              <BarcodeScanner
-                onResult={handleScanBarcode}
-                onError={(err) => toast.error(err)}
-                className="aspect-[4/3] w-full"
-              />
-              <p className="text-xs text-gray-400 text-center mt-3">
-                Apunta la cámara al código de barras del producto
-              </p>
-            </div>
+        <Modal
+          panel
+          onClose={() => setShowScanner(false)}
+          className="max-w-md"
+          header={<span className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2"><Scan className="h-5 w-5 text-indigo-600" /> Escanear producto</span>}
+        >
+          <div className="p-4">
+            <BarcodeScanner
+              onResult={handleScanBarcode}
+              onError={(err) => toast.error(err)}
+              className="aspect-[4/3] w-full"
+            />
+            <p className="text-xs text-gray-400 text-center mt-3">
+              Apunta la cámara al código de barras del producto
+            </p>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
+import { Modal } from '@/components/ui/modal';
 import toast from 'react-hot-toast';
 import {
   Banknote,
@@ -623,23 +624,25 @@ function MovementModal({
   onClose: () => void;
   onSubmit: () => void;
 }) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+return (
+    <Modal
+      panel
+      backdropClose
+      onClose={onClose}
+      aria-label={type === 'in' ? 'Ingreso manual' : 'Egreso manual'}
+      className="max-w-sm"
+      header={
+        <span className={cn('inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold',
+          type === 'in'
+            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+            : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300')}>
+          {type === 'in' ? <Plus className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
+          {type === 'in' ? 'Ingreso manual' : 'Egreso manual'}
+        </span>
+      }
     >
-      <div role="dialog" aria-modal="true" aria-label={type === 'in' ? 'Ingreso manual' : 'Egreso manual'} className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-sm overflow-hidden">
-        <div className="p-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <span className={cn('inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold',
-              type === 'in'
-                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-                : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300')}>
-              {type === 'in' ? <Plus className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
-              {type === 'in' ? 'Ingreso manual' : 'Egreso manual'}
-            </span>
-          </div>
-          <label className="block">
+      <div className="p-5 space-y-4">
+        <label className="block">
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Monto</span>
             <input
               type="text"
@@ -679,9 +682,8 @@ function MovementModal({
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Registrar'}
             </button>
           </div>
-        </div>
-      </div>
-    </div>
+</div>
+      </Modal>
   );
 }
 
@@ -703,19 +705,23 @@ function ArqueoModal({
   onSubmit: () => void;
 }) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    <Modal
+      panel
+      backdropClose
+      onClose={onClose}
+      aria-label="Arqueo de caja"
+      className="max-w-md"
+      header={
+        <h3 className="font-bold text-gray-900 dark:text-gray-100 text-lg flex items-center gap-2">
+          <Lock className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+          Arqueo de caja
+        </h3>
+      }
     >
-      <div role="dialog" aria-modal="true" aria-label="Arqueo de caja" className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
-        <div className="p-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <Lock className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
-            <h3 className="font-bold text-gray-900 dark:text-gray-100 text-lg">Arqueo de caja</h3>
-          </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Contá el dinero real en caja por medio y confirmá el cierre. La comparación con lo esperado se muestra al final.
-          </p>
+      <div className="p-5 space-y-4">
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Contá el dinero real en caja por medio y confirmá el cierre. La comparación con lo esperado se muestra al final.
+        </p>
           <div className="space-y-2.5">
             {CASH_METHODS.map((method) => (
               <div key={method.id} className="flex items-center gap-3">
@@ -765,7 +771,6 @@ function ArqueoModal({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+      </Modal>
   );
 }
