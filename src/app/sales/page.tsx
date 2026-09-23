@@ -14,6 +14,7 @@ import { SearchInput } from '@/components/ui/search-input';
 import { Thead, Th } from '@/components/ui/table-header';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { PageHeader } from '@/components/ui/page-header';
+import { IconAction } from '@/components/ui/icon-action';
 import dynamicImport from 'next/dynamic';
 const BarcodeScanner = dynamicImport(
   () => import('@/components/scanner/BarcodeScanner').then((m) => ({ default: m.BarcodeScanner })),
@@ -729,32 +730,28 @@ export default function SalesPage() {
                   Mostrando {((productPage - 1) * productsPerPage) + 1}–{Math.min(productPage * productsPerPage, sortedProducts.length)} de {sortedProducts.length} productos
                 </span>
                 <div className="flex items-center gap-1 shrink-0" role="group" aria-label="Modo de vista">
-                  <button
-                    type="button"
-                    onClick={() => changeView('grid')}
+                  <IconAction
+                    icon={LayoutGrid}
+                    label="Vista de tarjetas"
                     aria-pressed={productView === 'grid'}
-                    title="Vista de tarjetas"
-                    className={`p-1.5 rounded-md border transition-colors ${
+                    className={`rounded-md border ${
                       productView === 'grid'
                         ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30'
                         : 'border-gray-200 dark:border-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
                     }`}
-                  >
-                    <LayoutGrid className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => changeView('list')}
+                    onClick={() => changeView('grid')}
+                  />
+                  <IconAction
+                    icon={List}
+                    label="Vista de lista compacta"
                     aria-pressed={productView === 'list'}
-                    title="Vista de lista compacta"
-                    className={`p-1.5 rounded-md border transition-colors ${
+                    className={`rounded-md border ${
                       productView === 'list'
                         ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30'
                         : 'border-gray-200 dark:border-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
                     }`}
-                  >
-                    <List className="h-4 w-4" />
-                  </button>
+                    onClick={() => changeView('list')}
+                  />
                 </div>
               </div>
 
@@ -916,30 +913,28 @@ export default function SalesPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-1 ml-2">
-                      <button
+                      <IconAction
+                        icon={Minus}
+                        label={`Quitar una unidad de ${item.name}`}
+                        className="h-9 w-9 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-all"
                         onClick={() => updateQuantity(item.product_id, -1)}
-                        className="h-9 w-9 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-200 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-all"
-                        aria-label={`Quitar una unidad de ${item.name}`}
-                      >
-                        <Minus className="h-4 w-4" />
-                      </button>
+                      />
                       <span className="w-7 text-center text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                         {item.quantity}
                       </span>
-                      <button
+                      <IconAction
+                        icon={Plus}
+                        label={`Agregar una unidad de ${item.name}`}
+                        className="h-9 w-9 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-all"
                         onClick={() => updateQuantity(item.product_id, 1)}
-                        className="h-9 w-9 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-200 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-all"
-                        aria-label={`Agregar una unidad de ${item.name}`}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </button>
-                      <button
+                      />
+                      <IconAction
+                        icon={Trash2}
+                        label={`Eliminar ${item.name} del carrito`}
+                        tone="red"
+                        className="h-9 w-9 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 ml-1 active:scale-95 transition-all"
                         onClick={() => removeFromCart(item.product_id)}
-                        className="h-9 w-9 flex items-center justify-center rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 ml-1 active:scale-95 transition-all"
-                        aria-label={`Eliminar ${item.name} del carrito`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      />
                     </div>
                   </div>
                 ))}

@@ -7,6 +7,7 @@ import { Pagination } from '@/components/ui/pagination';
 import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { StatCard } from '@/components/ui/stat-card';
 import { TrendingUp, AlertTriangle, ShoppingCart, Banknote, Activity, BarChart3, Sparkles, Flame, Filter, ExternalLink } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -183,69 +184,42 @@ export default function ForecastPage() {
 
       {/* KPIs orientados a la acción */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="p-5">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium uppercase tracking-wider text-gray-400">Sugerencia de compra</p>
-            <div className="flex-shrink-0 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400">
-              <ShoppingCart className="h-5 w-5" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold mt-1 text-gray-900 dark:text-white">
-            {s.purchaseSuggestion15 > 0 ? formatARS(s.purchaseSuggestion15) : '—'}
-          </p>
-          <p className="text-xs text-gray-500 mt-1">Para cubrir los próximos 15 días</p>
-        </Card>
+        <StatCard
+          title="Sugerencia de compra"
+          value={s.purchaseSuggestion15 > 0 ? formatARS(s.purchaseSuggestion15) : '—'}
+          subtitle="Para cubrir los próximos 15 días"
+          icon={ShoppingCart}
+          tone="emerald"
+        />
 
-        <Card className="p-5">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-xs font-medium uppercase tracking-wider text-gray-400">Riesgo de quiebre</p>
-              <p className={`text-2xl font-bold mt-1 ${s.stockoutRiskCount > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-gray-900 dark:text-white'}`}>
-                {s.stockoutRiskCount}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                {s.stockoutRiskCount === 1 ? 'Se agota' : 'Se agotan'} en menos de 7 días
-              </p>
-            </div>
-            <div className="flex-shrink-0 p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400">
-              <AlertTriangle className="h-5 w-5" />
-            </div>
-          </div>
-        </Card>
+        <StatCard
+          title="Riesgo de quiebre"
+          value={s.stockoutRiskCount}
+          valueClassName={s.stockoutRiskCount > 0 ? 'text-rose-600 dark:text-rose-400' : undefined}
+          subtitle={`${s.stockoutRiskCount === 1 ? 'Se agota' : 'Se agotan'} en menos de 7 días`}
+          icon={AlertTriangle}
+          tone="rose"
+        />
 
-        <Card className="p-5">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-xs font-medium uppercase tracking-wider text-gray-400">Capital inmovilizado</p>
-              <p className="text-2xl font-bold mt-1 text-gray-900 dark:text-white">
-                {s.immobilizedCapital > 0 ? formatARS(s.immobilizedCapital) : '—'}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                {s.deadStockCount} producto{s.deadStockCount === 1 ? '' : 's'} sin rotación (+30 días)
-              </p>
-            </div>
-            <div className="flex-shrink-0 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400">
-              <Banknote className="h-5 w-5" />
-            </div>
-          </div>
-        </Card>
+        <StatCard
+          title="Capital inmovilizado"
+          value={s.immobilizedCapital > 0 ? formatARS(s.immobilizedCapital) : '—'}
+          subtitle={`${s.deadStockCount} producto${s.deadStockCount === 1 ? '' : 's'} sin rotación (+30 días)`}
+          icon={Banknote}
+          tone="amber"
+        />
 
-        <Card className="p-5">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-xs font-medium uppercase tracking-wider text-gray-400">Efectividad del stock</p>
-              <p className="text-2xl font-bold mt-1 text-gray-900 dark:text-white">
-                {s.productsWithSales} <span className="text-base font-semibold text-gray-400">de {s.totalProducts}</span>
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                {noRotationPct !== null ? `${noRotationPct}% del stock no rota` : 'Sin datos'}
-              </p>
-            </div>
-            <div className="flex-shrink-0 p-2.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400">
-              <Activity className="h-5 w-5" />
-            </div>
-          </div>
-        </Card>
+        <StatCard
+          title="Efectividad del stock"
+          value={
+            <>
+              {s.productsWithSales} <span className="text-base font-semibold text-gray-400">de {s.totalProducts}</span>
+            </>
+          }
+          subtitle={noRotationPct !== null ? `${noRotationPct}% del stock no rota` : 'Sin datos'}
+          icon={Activity}
+          tone="indigo"
+        />
       </div>
 
       {/* AI Analysis */}

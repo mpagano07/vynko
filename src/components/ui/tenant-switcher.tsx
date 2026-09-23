@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { ChevronDown, ChevronUp, Check, Plus, Loader2, Pencil } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
+import { IconAction } from '@/components/ui/icon-action';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import toast from 'react-hot-toast';
@@ -136,9 +137,12 @@ export function TenantSwitcher() {
                       onChange={(e) => setRenameValue(e.target.value)}
                       className="flex-1 px-2 py-1 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-gray-200 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
-                    <button type="submit" className="p-1 text-blue-600 dark:text-blue-400 hover:text-blue-700">
-                      <Check className="h-3.5 w-3.5" />
-                    </button>
+                    <IconAction
+                      icon={Check}
+                      label="Confirmar renombre"
+                      type="submit"
+                      className="text-blue-600 dark:text-blue-400 hover:text-blue-700"
+                    />
                   </form>
                 ) : (
                   <>
@@ -159,13 +163,14 @@ export function TenantSwitcher() {
                     {t.id === tenant?.id && (
                       <Check className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
                     )}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setRenamingTenantId(t.id); setRenameValue(t.name); }}
-                      className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                    <IconAction
+                      icon={Pencil}
+                      label="Renombrar"
                       title="Renombrar"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
+                      size="xs"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-transparent dark:hover:bg-transparent"
+                      onClick={(e) => { e.stopPropagation(); setRenamingTenantId(t.id); setRenameValue(t.name); }}
+                    />
                   </>
                 )}
               </div>

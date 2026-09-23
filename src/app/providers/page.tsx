@@ -16,6 +16,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { SearchInput } from '@/components/ui/search-input';
 import { Thead, Th } from '@/components/ui/table-header';
 import { PageHeader } from '@/components/ui/page-header';
+import { IconAction } from '@/components/ui/icon-action';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import {
@@ -476,18 +477,18 @@ export default function ProvidersPage() {
                       </td>
                       <td className="py-4 px-6 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <button
+                          <IconAction
+                            icon={Edit}
+                            label={`Editar ${supplier.name}`}
+                            tone="indigo"
                             onClick={(e) => { e.stopPropagation(); openSupplierModal(supplier); }}
-                            className="p-1.5 text-gray-500 hover:text-indigo-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                          <button
+                          />
+                          <IconAction
+                            icon={Trash2}
+                            label={`Eliminar ${supplier.name}`}
+                            tone="red"
                             onClick={(e) => { e.stopPropagation(); handleDeleteSupplier(supplier.id); }}
-                            className="p-1.5 text-gray-500 hover:text-red-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          />
                         </div>
                       </td>
                     </tr>

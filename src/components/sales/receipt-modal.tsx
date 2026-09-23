@@ -7,6 +7,7 @@ import {
   X,
   Ruler,
 } from 'lucide-react';
+import { IconAction } from '@/components/ui/icon-action';
 import {
   getPaymentMethodLabel,
 } from '@/lib/payment-methods';
@@ -294,13 +295,13 @@ export function ReceiptModal({
                 80mm
               </button>
             </div>
-            <button
+            <IconAction
+              icon={X}
+              label="Cerrar comprobante"
+              tone="muted"
+              size="md"
               onClick={onClose}
-              className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              aria-label="Cerrar comprobante"
-            >
-              <X className="h-5 w-5" />
-            </button>
+            />
           </div>
         </div>
 

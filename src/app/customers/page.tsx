@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { SearchInput } from '@/components/ui/search-input';
 import { Thead, Th } from '@/components/ui/table-header';
 import { PageHeader } from '@/components/ui/page-header';
+import { IconAction } from '@/components/ui/icon-action';
 import { Plus, Edit, Trash2, Users, Loader2, ShoppingBag, DollarSign, CalendarDays } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import { matchesQuery } from '@/lib/utils/text';
@@ -235,16 +236,28 @@ export default function CustomersPage() {
                     <td className="py-4 px-6 text-gray-600 dark:text-gray-400 max-w-[200px] truncate">{c.address || '—'}</td>
                     <td className="py-4 px-6 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <button onClick={() => openHistory(c)} className="p-1.5 text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800" title="Historial">
-                          <ShoppingBag className="h-4 w-4" />
-                        </button>
-                        <button onClick={() => openEdit(c)} className="p-1.5 text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800" title="Editar">
-                          <Edit className="h-4 w-4" />
-                        </button>
-                        <button onClick={() => setDeleteTarget(c)} className="p-1.5 text-gray-500 hover:text-red-600 dark:hover:text-red-400 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800" title="Eliminar">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
+                          <IconAction
+                            icon={ShoppingBag}
+                            label="Ver historial"
+                            title="Historial"
+                            tone="indigo"
+                            onClick={() => openHistory(c)}
+                          />
+                          <IconAction
+                            icon={Edit}
+                            label={`Editar ${c.name}`}
+                            title="Editar"
+                            tone="indigo"
+                            onClick={() => openEdit(c)}
+                          />
+                          <IconAction
+                            icon={Trash2}
+                            label={`Eliminar ${c.name}`}
+                            title="Eliminar"
+                            tone="red"
+                            onClick={() => setDeleteTarget(c)}
+                          />
+                        </div>
                     </td>
                   </tr>
                 ))}

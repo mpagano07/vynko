@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { Users } from 'lucide-react';
 import { LoadingState } from './loading-state';
@@ -8,6 +8,9 @@ import { Thead, Th } from './table-header';
 import { FormLabel } from './form-label';
 import { StatusBadge } from './status-badge';
 import { PageHeader } from './page-header';
+import { IconAction } from './icon-action';
+import { StatCard } from './stat-card';
+import { ExportButton } from './export-button';
 
 describe('LoadingState', () => {
   it('renders an optional label', () => {
@@ -197,5 +200,90 @@ describe('PageHeader', () => {
     );
 
     expect(screen.getByText('Atajo F2')).toBeInTheDocument();
+  });
+});
+
+describe('IconAction', () => {
+  it('renders an icon button with the given accessible label', () => {
+    render(<IconAction icon={Users} label="Editar cliente" onClick={vi.fn()} />);
+
+    const button = screen.getByRole('button', { name: 'Editar cliente' });
+    expect(button.querySelector('svg')).toBeInTheDocument();
+  });
+
+  it('applies tone and size classes', () => {
+    render(<IconAction icon={Users} label="Eliminar" tone="danger" />);
+
+    const button = screen.getByRole('button', { name: 'Eliminar' });
+    expect(button).toHaveClass('p-1.5', 'text-red-500');
+  });
+
+  it('merges className overrides onto the base', () => {
+    render(<IconAction icon={Users} label="Actualizar" className="rounded-full" />);
+
+    const button = screen.getByRole('button', { name: 'Actualizar' });
+    expect(button).toHaveClass('rounded-full');
+    expect(button).toHaveAttribute('type', 'button');
+  });
+});
+
+describe('StatCard', () => {
+  it('renders title, value and subtitle', () => {
+    render(<StatCard title="Balance neto" value="+5 u." subtitle="2 recuperadas · 1 perdidas" />);
+
+    expect(screen.getByText('Balance neto')).toBeInTheDocument();
+    expect(screen.getByText('+5 u.')).toBeInTheDocument();
+    expect(screen.getByText('2 recuperadas · 1 perdidas')).toBeInTheDocument();
+  });
+
+  it('renders an icon chip with the tone classes', () => {
+    const { container } = render(<StatCard title="Riesgo" value="3" icon={Users} tone="rose" />);
+
+    const chip = container.querySelector('svg')?.parentElement;
+    expect(chip).toBeInTheDocument();
+    expect(chip).toHaveClass('bg-rose-50');
+  });
+
+  it('renders the trend pill with sign and arrow for positive values', () => {
+    render(<StatCard title="Ingresos" value="$100" trend={12.5} />);
+
+    expect(screen.getByText('+12.5%')).toBeInTheDocument();
+  });
+
+  it('renders the horizontal layout with icon on the left', () => {
+    render(<StatCard horizontal title="Total pagos" value={7} icon={Users} tone="green" />);
+
+    const card = screen.getByText('Total pagos').closest('.flex');
+    expect(card).toHaveClass('items-center');
+    expect(screen.getByText('7')).toBeInTheDocument();
+  });
+
+  it('shows a skeleton while loading and hides the value', () => {
+    const { container } = render(<StatCard title="Ventas" value="$10" loading />);
+
+    expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
+    expect(screen.queryByText('$10')).not.toBeInTheDocument();
+  });
+});
+
+describe('ExportButton', () => {
+  it('blocks clicks and shows a loader while exporting', () => {
+    render(<ExportButton label="Exportar a Excel" onExport={() => new Promise(() => {})} />);
+
+    const button = screen.getByRole('button', { name: 'Exportar a Excel' });
+    fireEvent.click(button);
+
+    expect(button).toBeDisabled();
+    expect(screen.getByText('Exportando...')).toBeInTheDocument();
+  });
+
+  it('temporarily locks clicks after a completed export', async () => {
+    render(<ExportButton label="Exportar" lockMs={100} onExport={() => Promise.resolve()} />);
+
+    const button = screen.getByRole('button', { name: 'Exportar' });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(button).toBeDisabled());
+    await waitFor(() => expect(button).toBeEnabled(), { timeout: 1000 });
   });
 });

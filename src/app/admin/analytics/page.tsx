@@ -7,6 +7,7 @@ import { useTheme } from '@/lib/hooks/useTheme';
 import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { StatCard } from '@/components/ui/stat-card';
 import { Users, CreditCard, TrendingUp, ArrowLeft, Rocket } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -123,65 +124,11 @@ export default function AdminAnalyticsPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-        <Card className="p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center">
-              <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Total registros</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{data.totalSignups}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center">
-              <Rocket className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Total activados</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{data.totalActivated}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-500/20 flex items-center justify-center">
-              <CreditCard className="h-5 w-5 text-green-600 dark:text-green-400" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Total pagos</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{data.totalPayments}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center">
-              <TrendingUp className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Activación</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{data.activationRate}%</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-500/20 flex items-center justify-center">
-              <TrendingUp className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Conversión</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{data.conversionRate}%</p>
-            </div>
-          </div>
-        </Card>
+        <StatCard horizontal title="Total registros" value={data.totalSignups} icon={Users} tone="blue" />
+        <StatCard horizontal title="Total activados" value={data.totalActivated} icon={Rocket} tone="orange" />
+        <StatCard horizontal title="Total pagos" value={data.totalPayments} icon={CreditCard} tone="green" />
+        <StatCard horizontal title="Activación" value={`${data.activationRate}%`} icon={TrendingUp} tone="amber" />
+        <StatCard horizontal title="Conversión" value={`${data.conversionRate}%`} icon={TrendingUp} tone="purple" />
       </div>
 
       <Card className="p-5">

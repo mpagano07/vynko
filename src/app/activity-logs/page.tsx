@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
-import { Button } from '@/components/ui/button';
+import { ExportButton } from '@/components/ui/export-button';
 import { Pagination } from '@/components/ui/pagination';
 import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -24,7 +24,6 @@ import {
   Package,
   ChevronUp,
   ChevronDown,
-  FileSpreadsheet,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
@@ -603,15 +602,14 @@ export default function ActivityLogsPage() {
         actions={
           activeTab === 'activity' && !loading && logs.length > 0 ? (
             <div className="relative group">
-              <Button
+              <ExportButton
                 variant="outline"
                 size="sm"
-                onClick={handleExportExcel}
-                className="flex items-center gap-2 text-xs border-gray-300 dark:border-gray-700 w-full sm:w-auto justify-center"
-              >
-                <FileSpreadsheet className="h-4 w-4 text-green-600" />
-                Exportar a Excel
-              </Button>
+                label="Exportar a Excel"
+                iconClassName="text-green-600"
+                className="text-xs border-gray-300 dark:border-gray-700 w-full sm:w-auto justify-center"
+                onExport={handleExportExcel}
+              />
               <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
                 Se descargará todo lo filtrado
                 <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700" />

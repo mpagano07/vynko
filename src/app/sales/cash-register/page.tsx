@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Modal } from '@/components/ui/modal';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { PageHeader } from '@/components/ui/page-header';
+import { IconAction } from '@/components/ui/icon-action';
 import toast from 'react-hot-toast';
 import {
   Banknote,
@@ -20,6 +21,7 @@ import {
   CheckCircle2,
   TriangleAlert,
   History,
+  X,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import { getTenantHeaders } from '@/lib/fetchWithTenant';
@@ -342,14 +344,7 @@ export default function CashRegisterPage() {
                 <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
                   Movimientos
                 </h2>
-                <button
-                  type="button"
-                  onClick={fetchState}
-                  className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                  aria-label="Actualizar"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </button>
+                <IconAction icon={RefreshCw} label="Actualizar" tone="muted" onClick={fetchState} />
               </div>
               {(openSession.movements ?? []).length === 0 ? (
                 <p className="text-sm text-gray-400 py-4 text-center">Sin movimientos manuales</p>
@@ -525,14 +520,7 @@ function ReportPanel({ report, onClose }: { report: CloseReport; onClose: () => 
               : 'La caja cerró cuadrada. Perfecto.'}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-          aria-label="Cerrar reporte"
-        >
-          ×
-        </button>
+        <IconAction icon={X} label="Cerrar reporte" tone="muted" size="md" onClick={onClose} />
       </div>
 
       <div className="overflow-x-auto">

@@ -17,6 +17,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { StatusBadge as StatusPill } from '@/components/ui/status-badge';
+import { IconAction } from '@/components/ui/icon-action';
 import toast from 'react-hot-toast';
 
 interface TransferItem {
@@ -212,14 +213,13 @@ function TransferCard({
               {transfer.items.length} producto{transfer.items.length !== 1 ? 's' : ''} · {totalUnits} u.
             </div>
           </div>
-          <button
-            onClick={() => setExpanded(e => !e)}
-            className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 text-gray-500 transition-colors"
-            aria-label={expanded ? 'Contraer detalles' : 'Expandir detalles'}
+          <IconAction
+            icon={expanded ? ChevronUp : ChevronDown}
+            label={expanded ? 'Contraer detalles' : 'Expandir detalles'}
+            className="rounded-lg hover:bg-black/5 dark:hover:bg-white/5"
             aria-expanded={expanded}
-          >
-            {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </button>
+            onClick={() => setExpanded(e => !e)}
+          />
         </div>
       </div>
 

@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Check, ChevronRight, X, Package, ShoppingCart, Bell, Users, EyeOff, ArrowRight } from 'lucide-react';
+import { IconAction } from '@/components/ui/icon-action';
 import Link from 'next/link';
 
 interface OnboardingChecklistProps {
@@ -133,17 +134,18 @@ export default function OnboardingChecklist({ hasProducts, hasSales, hasAlerts, 
             {completedCount}/{steps.length}
           </span>
         </div>
-        <button
-          onClick={() => setConfirmOpen((v) => !v)}
-          className={`p-1 rounded-md transition-colors ${
+        <IconAction
+          icon={X}
+          label="Ocultar checklist"
+          tone="muted"
+          size="xs"
+          className={
             confirmOpen
               ? 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'
               : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-          }`}
-          aria-label="Ocultar checklist"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
+          }
+          onClick={() => setConfirmOpen((v) => !v)}
+        />
       </div>
 
       <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1 mb-2.5">

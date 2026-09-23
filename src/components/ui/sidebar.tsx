@@ -8,6 +8,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import type { TenantInfo } from '@/lib/hooks/useAuth';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
+import { IconAction } from '@/components/ui/icon-action';
 import { cn } from '@/lib/utils/cn';
 import { X, Clock, AlertTriangle, ChevronDown, Settings, Lock, Sparkles, ArrowRight } from 'lucide-react';
 import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
@@ -399,9 +400,7 @@ export function Sidebar() {
           <div className="flex-1 flex justify-center">
             <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="96px" className="h-9 w-auto object-contain [filter:drop-shadow(0_0_1px_#000)_drop-shadow(0_0_1px_#000)_drop-shadow(0_0_0.5px_#000)] dark:[filter:none]" />
           </div>
-          <button onClick={close} aria-label="Cerrar menú" className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400">
-            <X className="h-5 w-5" />
-          </button>
+          <IconAction icon={X} label="Cerrar menú" size="md" onClick={close} />
         </div>
         <nav className="flex-1 space-y-2 overflow-y-auto">
           <SidebarNav onNavClick={close} tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} userEmail={user?.email || profile?.email || null} />

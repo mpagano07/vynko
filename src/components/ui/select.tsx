@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronUp, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { IconAction } from '@/components/ui/icon-action';
 
 export type SelectProps = {
   children: React.ReactNode;
@@ -233,14 +234,13 @@ export const Select = React.forwardRef<HTMLDivElement, SelectProps>(
                     className="h-8 w-full bg-transparent text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none dark:text-gray-100"
                   />
                   {query && (
-                    <button
-                      type="button"
+                    <IconAction
+                      icon={X}
+                      label="Limpiar búsqueda"
+                      size="xs"
+                      className="p-0.5 rounded hover:text-gray-600 dark:hover:text-gray-300"
                       onClick={() => setQuery('')}
-                      aria-label="Limpiar búsqueda"
-                      className="p-0.5 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
+                    />
                   )}
                 </div>
               )}

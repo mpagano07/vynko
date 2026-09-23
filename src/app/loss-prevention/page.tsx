@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
+import { StatCard } from '@/components/ui/stat-card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
@@ -198,48 +199,41 @@ export default function LossPreventionPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="p-5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Balance neto</p>
-              <p className={`text-2xl font-bold mt-1 ${netBalance > 0 ? 'text-emerald-600' : netBalance < 0 ? 'text-rose-600' : 'text-gray-900 dark:text-white'}`}>
-                {netBalance > 0 ? '+' : ''}{netBalance} u.
-              </p>
-              <p className="text-xs text-gray-500 mt-1">{totalGains} recuperadas · {totalLosses} perdidas</p>
-            </div>
-            <div className="p-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500"><Scale className="h-5 w-5" /></div>
-          </div>
-        </Card>
-        <Card className="p-5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Unidades perdidas</p>
-              <p className="text-2xl font-bold mt-1 text-rose-600">{totalLosses}</p>
-              <p className="text-xs text-gray-500 mt-1">{losses.length} eventos</p>
-            </div>
-            <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/30 text-rose-500"><TrendingDown className="h-5 w-5" /></div>
-          </div>
-        </Card>
-        <Card className="p-5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Valor estimado perdido</p>
-              <p className="text-2xl font-bold mt-1 text-gray-900 dark:text-white">{formatARS(totalValue)}</p>
-              <p className="text-xs text-gray-500 mt-1">Basado en costo</p>
-            </div>
-            <div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-500"><AlertTriangle className="h-5 w-5" /></div>
-          </div>
-        </Card>
-        <Card className="p-5">
-          <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Producto más afectado</p>
-                <p className="text-lg font-bold mt-1 text-gray-900 dark:text-white truncate">{topLost.length > 0 ? topLost[0][0] : '—'}</p>
-                <p className="text-xs text-gray-500 mt-1">{topLost.length > 0 ? topLost[0][1] : 0} unidades perdidas</p>
-              </div>
-            <div className="p-2.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-500"><Package className="h-5 w-5" /></div>
-          </div>
-        </Card>
+        <StatCard
+          title="Balance neto"
+          titleClassName="text-gray-500 dark:text-gray-400"
+          value={<>{netBalance > 0 ? '+' : ''}{netBalance} u.</>}
+          valueClassName={netBalance > 0 ? 'text-emerald-600 dark:text-emerald-400' : netBalance < 0 ? 'text-rose-600 dark:text-rose-400' : undefined}
+          subtitle={`${totalGains} recuperadas · ${totalLosses} perdidas`}
+          icon={Scale}
+          tone="gray"
+        />
+        <StatCard
+          title="Unidades perdidas"
+          titleClassName="text-gray-500 dark:text-gray-400"
+          value={totalLosses}
+          valueClassName="text-rose-600 dark:text-rose-400"
+          subtitle={`${losses.length} eventos`}
+          icon={TrendingDown}
+          tone="rose"
+        />
+        <StatCard
+          title="Valor estimado perdido"
+          titleClassName="text-gray-500 dark:text-gray-400"
+          value={formatARS(totalValue)}
+          subtitle="Basado en costo"
+          icon={AlertTriangle}
+          tone="amber"
+        />
+        <StatCard
+          title="Producto más afectado"
+          titleClassName="text-gray-500 dark:text-gray-400"
+          value={topLost.length > 0 ? topLost[0][0] : '—'}
+          valueClassName="text-lg truncate"
+          subtitle={`${topLost.length > 0 ? topLost[0][1] : 0} unidades perdidas`}
+          icon={Package}
+          tone="indigo"
+        />
       </div>
 
       {/* Pérdidas por motivo (donut) + Top productos */}

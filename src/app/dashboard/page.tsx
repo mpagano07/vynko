@@ -6,9 +6,9 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { StatCard } from '@/components/ui/stat-card';
 import {
-  TrendingUp, Plus, ShoppingCart, Package,
-  ArrowUpRight, ArrowDownRight, Minus, Building2, AlertTriangle,
+  TrendingUp, Plus, ShoppingCart, Package, Building2, AlertTriangle,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import Link from 'next/link';
@@ -345,88 +345,57 @@ export default function DashboardPage() {
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="p-4 h-[104px] flex flex-col justify-between">
-          <div className="flex items-center gap-2">
-            <div className="p-1 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">
-              <TrendingUp className="h-3.5 w-3.5" />
-            </div>
-            <span className="text-xs text-gray-500 dark:text-gray-400">Ventas hoy</span>
-          </div>
-          {isLoading ? (
-            <div className="h-6 w-20 bg-gray-200 dark:bg-gray-800 animate-pulse rounded" />
-          ) : (
-            <>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">
-                {salesData ? formatARS(salesData.todayTotal / 100) : '0.00'}
-              </p>
-              <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5">
-                {hasSalesToday ? `${todaySalesCount} venta${todaySalesCount !== 1 ? 's' : ''}` : 'Sin ventas'}
-              </p>
-            </>
-          )}
-        </Card>
+        <StatCard
+          stretch
+          className="p-4 h-[104px]"
+          title="Ventas hoy"
+          titleClassName="normal-case tracking-normal font-normal text-gray-500 dark:text-gray-400"
+          value={salesData ? formatARS(salesData.todayTotal / 100) : '0.00'}
+          valueClassName="text-xl"
+          subtitle={hasSalesToday ? `${todaySalesCount} venta${todaySalesCount !== 1 ? 's' : ''}` : 'Sin ventas'}
+          subtitleClassName="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5"
+          icon={TrendingUp}
+          tone="emerald"
+          iconVariant="small"
+          loading={isLoading}
+        />
 
-        <Card className="p-4 h-[104px] flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-500 dark:text-gray-400">Ingresos del mes</span>
-            {!isLoading && monthlyData?.variationPercent !== null && monthlyData?.variationPercent !== undefined && (
-              <span className={`flex items-center gap-0.5 text-[11px] font-semibold ${
-                monthlyData.variationPercent > 0 ? 'text-emerald-600 dark:text-emerald-400'
-                : monthlyData.variationPercent < 0 ? 'text-rose-600 dark:text-rose-400'
-                : 'text-gray-400'
-              }`}>
-                {monthlyData.variationPercent > 0 ? <ArrowUpRight className="h-3 w-3" />
-                  : monthlyData.variationPercent < 0 ? <ArrowDownRight className="h-3 w-3" />
-                  : <Minus className="h-3 w-3" />}
-                {monthlyData.variationPercent > 0 ? '+' : ''}{monthlyData.variationPercent}%
-              </span>
-            )}
-          </div>
-          {isLoading ? (
-            <div className="h-6 w-24 bg-gray-200 dark:bg-gray-800 animate-pulse rounded" />
-          ) : (
-            <>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">
-                {monthlyData ? formatARS(monthlyData.total) : '0.00'}
-              </p>
-              <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5">
-                Ticket promedio: {monthlyData?.avgTicket != null ? formatARS(monthlyData.avgTicket) : '0.00'}
-              </p>
-            </>
-          )}
-        </Card>
+        <StatCard
+          stretch
+          className="p-4 h-[104px]"
+          title="Ingresos del mes"
+          titleClassName="normal-case tracking-normal font-normal text-gray-500 dark:text-gray-400"
+          value={monthlyData ? formatARS(monthlyData.total) : '0.00'}
+          valueClassName="text-xl"
+          subtitle={`Ticket promedio: ${monthlyData?.avgTicket != null ? formatARS(monthlyData.avgTicket) : '0.00'}`}
+          subtitleClassName="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5"
+          trend={!isLoading && monthlyData?.variationPercent != null ? monthlyData.variationPercent : null}
+          loading={isLoading}
+        />
 
-        <Card className="p-4 h-[104px] flex flex-col justify-between">
-          <span className="text-xs text-gray-500 dark:text-gray-400">Stock crítico</span>
-          {isLoading ? (
-            <div className="h-6 w-12 bg-gray-200 dark:bg-gray-800 animate-pulse rounded" />
-          ) : (
-            <>
-              <p className={`text-xl font-bold ${criticalCount > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-gray-900 dark:text-white'}`}>
-                {criticalCount}
-              </p>
-              <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5">
-                {criticalCount > 0 ? 'productos por reponer' : 'todo en orden'}
-              </p>
-            </>
-          )}
-        </Card>
+        <StatCard
+          stretch
+          className="p-4 h-[104px]"
+          title="Stock crítico"
+          titleClassName="normal-case tracking-normal font-normal text-gray-500 dark:text-gray-400"
+          value={criticalCount}
+          valueClassName={`text-xl ${criticalCount > 0 ? 'text-rose-600 dark:text-rose-400' : ''}`}
+          subtitle={criticalCount > 0 ? 'productos por reponer' : 'todo en orden'}
+          subtitleClassName="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5"
+          loading={isLoading}
+        />
 
-        <Card className="p-4 h-[104px] flex flex-col justify-between">
-          <span className="text-xs text-gray-500 dark:text-gray-400">Estado</span>
-          {isLoading ? (
-            <div className="h-6 w-16 bg-gray-200 dark:bg-gray-800 animate-pulse rounded" />
-          ) : (
-            <div>
-              <p className="text-sm font-medium text-gray-900 dark:text-white leading-snug">
-                {!hasSalesToday ? 'Sin ventas hoy' : criticalCount > 0 ? 'Stock bajo' : 'Todo OK'}
-              </p>
-              <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5">
-                {!hasSalesToday ? 'Registra tu primera venta' : criticalCount > 0 ? 'Reponé stock pronto' : 'Negocio funcionando'}
-              </p>
-            </div>
-          )}
-        </Card>
+        <StatCard
+          stretch
+          className="p-4 h-[104px]"
+          title="Estado"
+          titleClassName="normal-case tracking-normal font-normal text-gray-500 dark:text-gray-400"
+          value={!hasSalesToday ? 'Sin ventas hoy' : criticalCount > 0 ? 'Stock bajo' : 'Todo OK'}
+          valueClassName="text-sm font-medium text-gray-900 dark:text-white leading-snug"
+          subtitle={!hasSalesToday ? 'Registra tu primera venta' : criticalCount > 0 ? 'Reponé stock pronto' : 'Negocio funcionando'}
+          subtitleClassName="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5"
+          loading={isLoading}
+        />
       </div>
 
       {allTenants && Object.keys(perTenant).length > 0 && (
