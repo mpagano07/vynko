@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils/cn';
 import { Menu } from 'lucide-react';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
 import { TenantSwitcher } from '@/components/ui/tenant-switcher';
+import { IconAction } from '@/components/ui/icon-action';
 
 export function Header() {
   const pathname = usePathname();
@@ -27,13 +28,14 @@ export function Header() {
   return (
     <header className={cn('flex h-14 items-center justify-between bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4')}>
       <div className="flex items-center space-x-2">
-        <button
+        <IconAction
+          icon={Menu}
+          label="Abrir menú de navegación"
+          tone="neutral"
+          size="lg"
+          className="md:hidden rounded-lg"
           onClick={toggleSidebar}
-          aria-label="Abrir menú de navegación"
-          className="md:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-        >
-          <Menu className="h-5 w-5 text-gray-500 dark:text-gray-400" />
-        </button>
+        />
         {tenants && tenants.length > 0 && (
           <div className="ml-1 min-w-0">
             <TenantSwitcher />

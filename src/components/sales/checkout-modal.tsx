@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal } from '@/components/ui/modal';
+import { IconAction } from '@/components/ui/icon-action';
 import {
   Banknote,
   Landmark,
@@ -464,14 +465,12 @@ return (
                       );
                     })}
                     {split && (
-                      <button
-                        type="button"
+                      <IconAction
+                        icon={Trash2}
+                        label="Quitar medio de pago"
+                        className="ml-auto hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                         onClick={() => removeLine(line.id)}
-                        className="ml-auto p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                        aria-label="Quitar medio de pago"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      />
                     )}
                   </div>
 

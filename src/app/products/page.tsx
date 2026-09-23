@@ -19,6 +19,7 @@ import { SearchInput } from '@/components/ui/search-input';
 import { Thead, Th } from '@/components/ui/table-header';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { PageHeader } from '@/components/ui/page-header';
+import { IconAction } from '@/components/ui/icon-action';
 import type { Product } from '@/lib/types/product';
 import toast from 'react-hot-toast';
 import {
@@ -829,20 +830,20 @@ function ProductsPageContent() {
                       </td>
                       <td className="py-4 px-6 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => handleOpenProductModal(product)}
-                            className="p-1.5 text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+                          <IconAction
+                            icon={Edit}
+                            label={`Editar ${product.name}`}
                             title="Editar"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteProduct(product.id)}
-                            className="p-1.5 text-gray-500 hover:text-red-600 dark:hover:text-red-400 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+                            tone="indigo"
+                            onClick={() => handleOpenProductModal(product)}
+                          />
+                          <IconAction
+                            icon={Trash2}
+                            label={`Eliminar ${product.name}`}
                             title="Eliminar"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                            tone="red"
+                            onClick={() => handleDeleteProduct(product.id)}
+                          />
                         </div>
                       </td>
                     </tr>
@@ -1113,13 +1114,15 @@ function ProductsPageContent() {
         >
           <div className="flex items-center gap-3 mb-4">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white">Importar productos desde Excel</h2>
-              <button
-                onClick={() => setShowColumnInfo(!showColumnInfo)}
-                className="p-1.5 rounded-full text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              <IconAction
+                icon={HelpCircle}
+                label="Ver columnas aceptadas"
                 title="Ver columnas aceptadas"
-              >
-                <HelpCircle className="h-5 w-5" />
-              </button>
+                tone="indigo"
+                size="md"
+                className="rounded-full text-gray-400 dark:text-gray-500"
+                onClick={() => setShowColumnInfo(!showColumnInfo)}
+              />
             </div>
             <p className="text-sm text-gray-500 mb-4">Subí un archivo .xlsx o .xls con los productos a importar.</p>
 
@@ -1404,13 +1407,14 @@ function ProductsPageContent() {
                       />
                       <span className="font-medium text-gray-800 dark:text-gray-200">{cat.name}</span>
                     </div>
-                    <button
-                      onClick={() => handleDeleteCategory(cat.id)}
-                      className="p-1 hover:bg-red-50 hover:text-red-500 rounded text-gray-400"
+                    <IconAction
+                      icon={Trash2}
+                      label={`Eliminar categoría ${cat.name}`}
                       title="Eliminar Categoría"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                      size="xs"
+                      className="rounded text-gray-400 hover:bg-red-50 hover:text-red-500"
+                      onClick={() => handleDeleteCategory(cat.id)}
+                    />
                   </div>
                 ))
               )}
@@ -1712,13 +1716,13 @@ function NewTransferModal({
                         onChange={(e) => updateQuantity(item.product_id, parseInt(e.target.value) || 1)}
                         className="w-20 text-center text-sm"
                       />
-                      <button
-                        type="button"
+                      <IconAction
+                        icon={X}
+                        label="Quitar item"
+                        size="xs"
+                        className="text-gray-400 hover:text-red-500"
                         onClick={() => removeItem(item.product_id)}
-                        className="p-1 text-gray-400 hover:text-red-500"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
+                      />
                     </div>
                   </div>
                 ))}

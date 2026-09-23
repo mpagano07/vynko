@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Download, X, Share } from 'lucide-react';
+import { IconAction } from '@/components/ui/icon-action';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -115,13 +116,13 @@ export function InstallAppBanner() {
             </div>
           </>
         )}
-        <button
+        <IconAction
+          icon={X}
+          label="Cerrar"
+          size="xs"
+          className="shrink-0 hover:text-white hover:bg-transparent dark:hover:bg-transparent"
           onClick={handleDismiss}
-          aria-label="Cerrar"
-          className="shrink-0 text-gray-500 hover:text-white transition-colors p-1"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        />
       </div>
     </div>
   );

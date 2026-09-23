@@ -8,6 +8,7 @@ import { Thead, Th } from './table-header';
 import { FormLabel } from './form-label';
 import { StatusBadge } from './status-badge';
 import { PageHeader } from './page-header';
+import { IconAction } from './icon-action';
 
 describe('LoadingState', () => {
   it('renders an optional label', () => {
@@ -197,5 +198,29 @@ describe('PageHeader', () => {
     );
 
     expect(screen.getByText('Atajo F2')).toBeInTheDocument();
+  });
+});
+
+describe('IconAction', () => {
+  it('renders an icon button with the given accessible label', () => {
+    render(<IconAction icon={Users} label="Editar cliente" onClick={vi.fn()} />);
+
+    const button = screen.getByRole('button', { name: 'Editar cliente' });
+    expect(button.querySelector('svg')).toBeInTheDocument();
+  });
+
+  it('applies tone and size classes', () => {
+    render(<IconAction icon={Users} label="Eliminar" tone="danger" />);
+
+    const button = screen.getByRole('button', { name: 'Eliminar' });
+    expect(button).toHaveClass('p-1.5', 'text-red-500');
+  });
+
+  it('merges className overrides onto the base', () => {
+    render(<IconAction icon={Users} label="Actualizar" className="rounded-full" />);
+
+    const button = screen.getByRole('button', { name: 'Actualizar' });
+    expect(button).toHaveClass('rounded-full');
+    expect(button).toHaveAttribute('type', 'button');
   });
 });

@@ -17,6 +17,7 @@ import { Thead, Th } from '@/components/ui/table-header';
 import { FormLabel } from '@/components/ui/form-label';
 import { StatusBadge, type StatusTone } from '@/components/ui/status-badge';
 import { PageHeader } from '@/components/ui/page-header';
+import { IconAction } from '@/components/ui/icon-action';
 import toast from 'react-hot-toast';
 import {
   FileText,
@@ -1223,20 +1224,21 @@ export default function DocumentosPage() {
                                 ))}
                             </>
                           )}
-                          <button
-                            onClick={() => deleteDocument(doc.id)}
-                            className="text-red-500 hover:text-red-700 p-1"
+                          <IconAction
+                            icon={Trash2}
+                            label="Eliminar"
                             title="Eliminar"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            onClick={() => printDocument(doc)}
-                            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 p-1"
+                            tone="danger"
+                            size="xs"
+                            onClick={() => deleteDocument(doc.id)}
+                          />
+                          <IconAction
+                            icon={Printer}
+                            label="Imprimir"
                             title="Imprimir"
-                          >
-                            <Printer className="h-3.5 w-3.5" />
-                          </button>
+                            size="xs"
+                            onClick={() => printDocument(doc)}
+                          />
                         </div>
                       </td>
                     </tr>
@@ -1520,15 +1522,14 @@ export default function DocumentosPage() {
                           {formatARS((item.unit_price_cents * item.quantity) / 100)}
                         </div>
                         <div className="flex justify-center">
-                          <button
-                            type="button"
-                            onClick={() => removeItem(i)}
-                            className="text-red-500 hover:text-red-700 p-1"
+                          <IconAction
+                            icon={Trash2}
+                            label={`Eliminar item ${item.description || i + 1}`}
                             title="Eliminar item"
-                            aria-label={`Eliminar item ${item.description || i + 1}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                            tone="danger"
+                            size="xs"
+                            onClick={() => removeItem(i)}
+                          />
                         </div>
                       </div>
                     ))}
@@ -1691,14 +1692,14 @@ export default function DocumentosPage() {
                             {formatARS(item.quantity * item.unit_cost)}
                           </div>
                           <div className="flex justify-center">
-                            <button
-                              type="button"
-                              onClick={() => removePoItem(index)}
-                              className="text-red-500 hover:text-red-700 p-1"
+                            <IconAction
+                              icon={Trash2}
+                              label="Eliminar"
                               title="Eliminar"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
+                              tone="danger"
+                              size="xs"
+                              onClick={() => removePoItem(index)}
+                            />
                           </div>
                         </div>
                       );

@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { IconAction } from '@/components/ui/icon-action';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { SupportModal } from '@/components/ui/support-modal';
 import { SalesContactModal } from '@/components/ui/sales-contact-modal';
@@ -389,14 +390,13 @@ function BillingContent() {
                   Botón de arrepentimiento
                 </Button>
                 <div className="relative" ref={revocationTooltipRef}>
-                  <button
-                    type="button"
-                    aria-label="Detalle del derecho de arrepentimiento"
+                  <IconAction
+                    icon={Info}
+                    label="Detalle del derecho de arrepentimiento"
+                    tone="muted"
+                    className="rounded-full hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-transparent dark:hover:bg-transparent"
                     onClick={() => setShowRevocationTooltip((v) => !v)}
-                    className="p-1 rounded-full text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-                  >
-                    <Info className="h-4 w-4" />
-                  </button>
+                  />
                   {showRevocationTooltip && (
                     <div className="absolute left-0 top-full mt-1.5 z-30 w-72 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3.5 shadow-2xl shadow-black/15 dark:shadow-black/60">
                       <p className="text-xs font-bold text-gray-900 dark:text-white">
