@@ -672,7 +672,7 @@ export default function ActivityLogsPage() {
                   setEntityFilter(e.target.value);
                   setPage(0);
                 }}
-                className="max-w-xs"
+                className="w-36"
               >
                 <option value="">Todos</option>
                 {Object.entries(ENTITY_LABELS).map(([key, label]) => (

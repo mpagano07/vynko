@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Select } from '@/components/ui/select';
 import { Pencil, X, Loader2, Shield, ShieldCheck, HelpCircle } from 'lucide-react';
 
 export interface TenantOption {
@@ -91,15 +92,14 @@ export function EditCollaboratorModal({
                 <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
               </span>
             </label>
-            <select
+            <Select
               value={editRole}
               disabled={!canEditRole || role === 'owner'}
               onChange={(e) => setEditRole(e.target.value as 'member' | 'manager')}
-              className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
             >
               <option value="member">Miembro</option>
               <option value="manager">Manager</option>
-            </select>
+            </Select>
           </div>
 
           <div>

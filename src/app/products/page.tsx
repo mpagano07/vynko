@@ -1365,7 +1365,7 @@ function ProductsPageContent() {
                 {priceAdjustScope === 'category' && (
                   <div>
                     <label className="block text-sm font-medium mb-1.5 text-gray-300">Categoría</label>
-                    <Select value={priceAdjustCategoryId} onChange={(e) => setPriceAdjustCategoryId(e.target.value)} className="bg-gray-800 border-gray-700 text-white">
+                    <Select value={priceAdjustCategoryId} onChange={(e) => setPriceAdjustCategoryId(e.target.value)} className="bg-gray-800 border-gray-700 text-white hover:bg-gray-700" darkPanel>
                       <option value="">Seleccionar categoría...</option>
                       {categories.map((c) => (
                         <option key={c.id} value={c.id}>{c.name}</option>

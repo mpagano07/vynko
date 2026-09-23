@@ -13,6 +13,7 @@ const BarcodeScanner = dynamicImport(
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { Package, Scan, Loader2, CheckCircle2, PackagePlus } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import toast from 'react-hot-toast';
@@ -217,15 +218,14 @@ function ScanningPageContent() {
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                     Motivo
                   </label>
-                  <select
+                  <Select
                     value={addReason}
                     onChange={(e) => setAddReason(e.target.value)}
-                    className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100"
                   >
                     {reasons.map((r) => (
                       <option key={r.value} value={r.value}>{r.label}</option>
                     ))}
-                  </select>
+                  </Select>
                   {!stockinMode && (addReason === 'damaged' || addReason === 'lost') && (
                     <p className="text-xs text-amber-600 mt-1">Esta opción restará stock</p>
                   )}
