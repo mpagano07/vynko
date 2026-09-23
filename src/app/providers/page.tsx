@@ -10,10 +10,12 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { Modal } from '@/components/ui/modal';
+import { StatusBadge as StatusBadgePanel, type StatusTone } from '@/components/ui/status-badge';
 import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SearchInput } from '@/components/ui/search-input';
 import { Thead, Th } from '@/components/ui/table-header';
+import { PageHeader } from '@/components/ui/page-header';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import {
@@ -30,6 +32,7 @@ import type { Product } from '@/lib/types/product';
 import { formatARS } from '@/lib/utils/currency';
 import { matchesQuery } from '@/lib/utils/text';
 import { SortableTh, SortDir } from '@/components/ui/sortable-th';
+import { FormLabel } from '@/components/ui/form-label';
 
 const PO_INTENT_KEY = 'create_po_intent';
 
@@ -405,27 +408,23 @@ export default function ProvidersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <Truck className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
-            Proveedores
-          </h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Administra tus proveedores.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button onClick={openPoModal} className="flex items-center gap-2">
-            <Plus className="h-4 w-4" />
-            Nueva compra
-          </Button>
-          <Button variant="outline" onClick={() => openSupplierModal(null)} className="flex items-center gap-2">
-            <Plus className="h-4 w-4" />
-            Nuevo Proveedor
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        icon={<Truck className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />}
+        title="Proveedores"
+        subtitle="Administra tus proveedores."
+        actions={
+          <>
+            <Button onClick={openPoModal} className="flex items-center gap-2">
+              <Plus className="h-4 w-4" />
+              Nueva compra
+            </Button>
+            <Button variant="outline" onClick={() => openSupplierModal(null)} className="flex items-center gap-2">
+              <Plus className="h-4 w-4" />
+              Nuevo Proveedor
+            </Button>
+          </>
+        }
+      />
 
       <Card className="p-4 border border-gray-100 dark:border-gray-800">
         <SearchInput
@@ -564,9 +563,9 @@ export default function ProvidersPage() {
         >
           <form onSubmit={handleSaveSupplier} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                <FormLabel>
                   Nombre *
-                </label>
+                </FormLabel>
                 <Input
                   type="text"
                   required
@@ -578,9 +577,9 @@ export default function ProvidersPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <FormLabel>
                     Persona de Contacto
-                  </label>
+                  </FormLabel>
                   <Input
                     type="text"
                     placeholder="Nombre del contacto"
@@ -589,9 +588,9 @@ export default function ProvidersPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <FormLabel>
                     Teléfono
-                  </label>
+                  </FormLabel>
                   <Input
                     type="text"
                     placeholder="Teléfono"
@@ -602,9 +601,9 @@ export default function ProvidersPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                <FormLabel>
                   Email
-                </label>
+                </FormLabel>
                 <Input
                   type="email"
                   placeholder="proveedor@ejemplo.com"
@@ -614,9 +613,9 @@ export default function ProvidersPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                <FormLabel>
                   Dirección
-                </label>
+                </FormLabel>
                 <Input
                   type="text"
                   placeholder="Dirección"
@@ -626,9 +625,9 @@ export default function ProvidersPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                <FormLabel>
                   Notas
-                </label>
+                </FormLabel>
                 <textarea
                   className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                   rows={3}
@@ -660,9 +659,9 @@ export default function ProvidersPage() {
           <form onSubmit={handleCreatePo} className="space-y-4 overflow-y-auto pr-1 flex-1">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <FormLabel>
                     Proveedor *
-                  </label>
+                  </FormLabel>
                   <Select value={poSupplierId} onChange={(e) => setPoSupplierId(e.target.value)} required>
                     <option value="">Seleccionar proveedor...</option>
                     {suppliers.map((s) => (
@@ -671,9 +670,9 @@ export default function ProvidersPage() {
                   </Select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <FormLabel>
                     Fecha Esperada
-                  </label>
+                  </FormLabel>
                   <Input
                     type="date"
                     value={poExpectedDate}
@@ -681,9 +680,9 @@ export default function ProvidersPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <FormLabel>
                     Estado
-                  </label>
+                  </FormLabel>
                   <Select value={poStatus} onChange={(e) => setPoStatus(e.target.value as 'draft' | 'sent')}>
                     <option value="draft">Borrador</option>
                     <option value="sent">Enviado</option>
@@ -788,9 +787,9 @@ export default function ProvidersPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                <FormLabel>
                   Notas del pedido
-                </label>
+                </FormLabel>
                 <textarea
                   className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                   rows={2}
@@ -836,23 +835,19 @@ export default function ProvidersPage() {
   );
 }
 
-const statusLabels: Record<string, { label: string; color: string }> = {
-  draft: { label: 'Borrador', color: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' },
-  sent: { label: 'Enviado', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
-  partial: { label: 'Recibido Parcial', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' },
-  received: { label: 'Recibido', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' },
-  cancelled: { label: 'Cancelado', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
-  pending: { label: 'Pendiente', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
-  completed: { label: 'Completado', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' },
+const statusLabels: Record<string, { label: string; tone: StatusTone }> = {
+  draft: { label: 'Borrador', tone: 'gray' },
+  sent: { label: 'Enviado', tone: 'amber' },
+  partial: { label: 'Recibido Parcial', tone: 'blue' },
+  received: { label: 'Recibido', tone: 'green' },
+  cancelled: { label: 'Cancelado', tone: 'red' },
+  pending: { label: 'Pendiente', tone: 'amber' },
+  completed: { label: 'Completado', tone: 'green' },
 };
 
 function StatusBadge({ status }: { status: string }) {
-  const s = statusLabels[status] ?? { label: status, color: 'bg-gray-100 text-gray-700' };
-  return (
-    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${s.color}`}>
-      {s.label}
-    </span>
-  );
+  const s = statusLabels[status] ?? { label: status, tone: 'gray' as StatusTone };
+  return <StatusBadgePanel tone={s.tone}>{s.label}</StatusBadgePanel>;
 }
 
 function formatCents(cents: number): string {

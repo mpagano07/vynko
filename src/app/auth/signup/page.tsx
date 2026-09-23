@@ -10,6 +10,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff } from 'lucide-react';
 import { EmailVerificationModal } from '@/components/ui/email-verification-modal';
+import { FormLabel } from '@/components/ui/form-label';
 import { authErrorMessage } from '@/lib/auth-errors';
 
 function SignupContent() {
@@ -212,7 +213,7 @@ function SignupContent() {
 
           <form onSubmit={handleSignup} noValidate className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1.5 text-gray-300">Tu nombre</label>
+              <FormLabel variant="default" className="text-gray-300 mb-1.5">Tu nombre</FormLabel>
               <Input
                 type="text"
                 name="ownerName"
@@ -224,7 +225,7 @@ function SignupContent() {
               {ownerError && <p className="text-xs text-red-400 mt-1">{ownerError}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1.5 text-gray-300">Nombre de tu empresa</label>
+              <FormLabel variant="default" className="text-gray-300 mb-1.5">Nombre de tu empresa</FormLabel>
               <Input
                 type="text"
                 name="companyName"
@@ -236,7 +237,7 @@ function SignupContent() {
               {companyError && <p className="text-xs text-red-400 mt-1">{companyError}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1.5 text-gray-300">Email</label>
+              <FormLabel variant="default" className="text-gray-300 mb-1.5">Email</FormLabel>
               <Input
                 type="email"
                 name="email"
@@ -248,7 +249,7 @@ function SignupContent() {
               {emailError && <p className="text-xs text-red-400 mt-1">{emailError}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1.5 text-gray-300">Contraseña</label>
+              <FormLabel variant="default" className="text-gray-300 mb-1.5">Contraseña</FormLabel>
               <div className="relative">
                 <Input
                   type={showPassword ? 'text' : 'password'}
@@ -270,7 +271,7 @@ function SignupContent() {
               {passwordError && <p className="text-xs text-red-400 mt-1">{passwordError}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1.5 text-gray-300">Confirmar contraseña</label>
+              <FormLabel variant="default" className="text-gray-300 mb-1.5">Confirmar contraseña</FormLabel>
               <div className="relative">
                 <Input
                   type={showConfirmPassword ? 'text' : 'password'}

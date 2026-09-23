@@ -5,6 +5,9 @@ import { LoadingState } from './loading-state';
 import { EmptyState } from './empty-state';
 import { SearchInput } from './search-input';
 import { Thead, Th } from './table-header';
+import { FormLabel } from './form-label';
+import { StatusBadge } from './status-badge';
+import { PageHeader } from './page-header';
 
 describe('LoadingState', () => {
   it('renders an optional label', () => {
@@ -85,5 +88,114 @@ describe('Th / Thead', () => {
     );
 
     expect(screen.getByText('Nombre').closest('th')).toHaveClass('py-3');
+  });
+});
+
+describe('FormLabel', () => {
+  it('renders the default uppercase variant', () => {
+    render(<FormLabel htmlFor="email">Email</FormLabel>);
+
+    const label = screen.getByText('Email');
+    expect(label).toHaveClass('text-xs', 'font-semibold', 'text-gray-500');
+  });
+
+  it('renders the default (non-uppercase) variant', () => {
+    render(<FormLabel variant="default">Nombre</FormLabel>);
+
+    const label = screen.getByText('Nombre');
+    expect(label).toHaveClass('text-sm', 'font-medium', 'text-gray-700');
+  });
+
+  it('forwards htmlFor and merges className overrides', () => {
+    render(
+      <FormLabel htmlFor="product-name" className="text-[10px]">
+        Nombre
+      </FormLabel>
+    );
+
+    const label = screen.getByText('Nombre');
+    expect(label).toHaveAttribute('for', 'product-name');
+    expect(label).toHaveClass('text-[10px]');
+  });
+});
+
+describe('StatusBadge', () => {
+  it('renders children with the default gray / sm styles', () => {
+    render(<StatusBadge>Pendiente</StatusBadge>);
+
+    const badge = screen.getByText('Pendiente');
+    expect(badge).toHaveClass('inline-flex', 'rounded-full', 'bg-gray-100', 'px-2', 'py-0.5');
+  });
+
+  it('applies the requested tone and size', () => {
+    render(
+      <StatusBadge tone="emerald" size="md">
+        Recibida
+      </StatusBadge>
+    );
+
+    const badge = screen.getByText('Recibida');
+    expect(badge).toHaveClass('bg-emerald-100', 'text-emerald-700', 'px-2.5', 'py-1', 'text-xs', 'font-semibold');
+  });
+
+  it('renders an icon and merges className overrides', () => {
+    render(
+      <StatusBadge tone="rose" icon={<Users className="h-3 w-3" />} className="font-bold capitalize">
+        Crítico
+      </StatusBadge>
+    );
+
+    const badge = screen.getByText('Crítico');
+    expect(badge.querySelector('svg')).toBeInTheDocument();
+    expect(badge).toHaveClass('bg-rose-50', 'text-rose-600', 'font-bold', 'capitalize');
+  });
+});
+
+describe('PageHeader', () => {
+  it('renders title, subtitle and icon', () => {
+    render(
+      <PageHeader
+        icon={<Users className="h-8 w-8" />}
+        title="Clientes"
+        subtitle="Gestiona tus clientes."
+      />
+    );
+
+    expect(screen.getByText('Clientes')).toBeInTheDocument();
+    expect(screen.getByText('Gestiona tus clientes.')).toBeInTheDocument();
+    expect(screen.getByText('Clientes').querySelector('svg')).toBeInTheDocument();
+  });
+
+  it('applies the responsive container by default and compact variant', () => {
+    const { container } = render(<PageHeader title="Header" />);
+    expect(container.querySelector('header')).toHaveClass('sm:justify-between', 'gap-4');
+
+    const { container: compactContainer } = render(<PageHeader title="Header" compact />);
+    expect(compactContainer.querySelector('header')).toHaveClass('justify-between');
+    expect(compactContainer.querySelector('header')).not.toHaveClass('gap-4');
+  });
+
+  it('renders actions on the right and merges subtitle className', () => {
+    render(
+      <PageHeader
+        title="Antipérdidas"
+        subtitle="Control de mermas."
+        subtitleClassName="text-gray-500"
+        actions={<button>Reportar</button>}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: 'Reportar' })).toBeInTheDocument();
+    expect(screen.getByText('Control de mermas.')).toHaveClass('text-gray-500');
+  });
+
+  it('renders extra children below the subtitle', () => {
+    render(
+      <PageHeader title="Registrar Venta">
+        <span>Atajo F2</span>
+      </PageHeader>
+    );
+
+    expect(screen.getByText('Atajo F2')).toBeInTheDocument();
   });
 });

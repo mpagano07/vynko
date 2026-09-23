@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { useTheme } from '@/lib/hooks/useTheme';
 import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { Users, CreditCard, TrendingUp, ArrowLeft, Rocket } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -231,13 +232,9 @@ export default function AdminAnalyticsPage() {
                       })}
                     </td>
                     <td className="py-2.5 px-3">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                        event.event_type === 'signup'
-                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400'
-                          : 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400'
-                      }`}>
+                      <StatusBadge tone={event.event_type === 'signup' ? 'blue' : 'green'}>
                         {event.event_type === 'signup' ? 'Registro' : 'Pago'}
-                      </span>
+                      </StatusBadge>
                     </td>
                     <td className="py-2.5 px-3 text-gray-600 dark:text-gray-300">{event.user_email || '-'}</td>
                     <td className="py-2.5 px-3 text-gray-600 dark:text-gray-300">{event.user_name || '-'}</td>

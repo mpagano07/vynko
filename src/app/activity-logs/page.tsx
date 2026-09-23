@@ -11,6 +11,8 @@ import { Pagination } from '@/components/ui/pagination';
 import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Thead, Th } from '@/components/ui/table-header';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { PageHeader } from '@/components/ui/page-header';
 import toast from 'react-hot-toast';
 import {
   Loader2,
@@ -153,20 +155,20 @@ function buildDescription(log: ActivityLog): string {
 function TransferStatusBadge({ status }: { status: Transfer['status'] }) {
   if (status === 'pending')
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-        <Clock className="h-3 w-3" /> Pendiente
-      </span>
+      <StatusBadge tone="amber" className="font-semibold" icon={<Clock className="h-3 w-3" />}>
+        Pendiente
+      </StatusBadge>
     );
   if (status === 'in_transit')
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-        <Truck className="h-3 w-3" /> En tránsito
-      </span>
+      <StatusBadge tone="blue" className="font-semibold" icon={<Truck className="h-3 w-3" />}>
+        En tránsito
+      </StatusBadge>
     );
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
-      <CheckCircle2 className="h-3 w-3" /> Recibida
-    </span>
+    <StatusBadge tone="emerald" className="font-semibold" icon={<CheckCircle2 className="h-3 w-3" />}>
+      Recibida
+    </StatusBadge>
   );
 }
 
@@ -594,34 +596,30 @@ export default function ActivityLogsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <ScrollText className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
-            Historial de Actividad
-          </h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Registro detallado de todas las acciones realizadas en el sistema.
-          </p>
-        </div>
-        {activeTab === 'activity' && !loading && logs.length > 0 && (
-          <div className="relative group">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportExcel}
-              className="flex items-center gap-2 text-xs border-gray-300 dark:border-gray-700 w-full sm:w-auto justify-center"
-            >
-              <FileSpreadsheet className="h-4 w-4 text-green-600" />
-              Exportar a Excel
-            </Button>
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
-              Se descargará todo lo filtrado
-              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700" />
+      <PageHeader
+        icon={<ScrollText className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />}
+        title="Historial de Actividad"
+        subtitle="Registro detallado de todas las acciones realizadas en el sistema."
+        actions={
+          activeTab === 'activity' && !loading && logs.length > 0 ? (
+            <div className="relative group">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportExcel}
+                className="flex items-center gap-2 text-xs border-gray-300 dark:border-gray-700 w-full sm:w-auto justify-center"
+              >
+                <FileSpreadsheet className="h-4 w-4 text-green-600" />
+                Exportar a Excel
+              </Button>
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+                Se descargará todo lo filtrado
+                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700" />
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          ) : undefined
+        }
+      />
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-gray-200 dark:border-gray-800">
@@ -711,9 +709,9 @@ export default function ActivityLogsPage() {
                           </span>
                         </td>
                         <td className="py-4 px-6">
-                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400">
+                          <StatusBadge tone="indigo">
                             {buildDescription(log)}
-                          </span>
+                          </StatusBadge>
                         </td>
                         <td className="py-4 px-6 text-xs text-gray-500 max-w-xs truncate">
                           {log.details?.name || log.details?.folio || log.details?.sku || '—'}
@@ -752,9 +750,9 @@ export default function ActivityLogsPage() {
                                     </p>
                                   </div>
                                   <div className="text-right">
-                                    <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 capitalize">
+                                    <StatusBadge tone="indigo" className="capitalize">
                                       {ACTION_LABELS[log.action] || log.action}
-                                    </span>
+                                    </StatusBadge>
                                     <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
                                       {log.user_name || 'Usuario'}
                                     </p>

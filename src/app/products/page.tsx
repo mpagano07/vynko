@@ -17,6 +17,8 @@ import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SearchInput } from '@/components/ui/search-input';
 import { Thead, Th } from '@/components/ui/table-header';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { PageHeader } from '@/components/ui/page-header';
 import type { Product } from '@/lib/types/product';
 import toast from 'react-hot-toast';
 import {
@@ -45,6 +47,7 @@ import { filterProducts } from '@/lib/product-search';
 import { matchesQuery } from '@/lib/utils/text';
 import { TransferInbox } from '@/components/transfers/TransferInbox';
 import { SortableTh, SortDir } from '@/components/ui/sortable-th';
+import { FormLabel } from '@/components/ui/form-label';
 
 function marginPercent(price: number, cost: number): number {
   return ((price - cost) / cost) * 100;
@@ -574,17 +577,12 @@ function ProductsPageContent() {
   return (
     <div className="space-y-6">
       {/* Upper Control Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <Package className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
-            Gestión de Inventario
-          </h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Administra tus productos, códigos de barras y niveles de stock crítico.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        icon={<Package className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />}
+        title="Gestión de Inventario"
+        subtitle="Administra tus productos, códigos de barras y niveles de stock crítico."
+        actions={
+          <>
           {/* Actions Dropdown */}
           <div className="relative" ref={actionsMenuRef}>
             <Button
@@ -663,8 +661,9 @@ function ProductsPageContent() {
             <Plus className="h-3.5 w-3.5 shrink-0" />
             Nuevo
           </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Transfer Inbox — active transfers for multi-branch */}
       {multiBranch && tenantId && (
@@ -873,9 +872,9 @@ function ProductsPageContent() {
           <form onSubmit={handleSaveProduct} className="space-y-4 overflow-y-auto pr-1 flex-1">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
-                  <label htmlFor="product-name" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <FormLabel htmlFor="product-name">
                     Nombre del Producto *
-                  </label>
+                  </FormLabel>
                   <Input
                     id="product-name"
                     name="name"
@@ -888,9 +887,9 @@ function ProductsPageContent() {
                 </div>
 
                 <div>
-                  <label htmlFor="product-category" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <FormLabel htmlFor="product-category">
                     Categoría
-                  </label>
+                  </FormLabel>
                   <Select
                     id="product-category"
                     name="categoria"
@@ -908,9 +907,9 @@ function ProductsPageContent() {
 
                 <div className="grid grid-cols-2 gap-4 sm:col-span-2">
                   <div>
-                    <label htmlFor="product-barcode" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel htmlFor="product-barcode">
                       Código de Barras / GTIN
-                    </label>
+                    </FormLabel>
                     <Input
                       id="product-barcode"
                       name="barcode"
@@ -921,9 +920,9 @@ function ProductsPageContent() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="product-sku" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel htmlFor="product-sku">
                       SKU
-                    </label>
+                    </FormLabel>
                     <Input
                       id="product-sku"
                       name="sku"
@@ -937,9 +936,9 @@ function ProductsPageContent() {
 
                 <div className="grid grid-cols-3 gap-2 sm:col-span-2">
                   <div>
-                    <label htmlFor="product-cost" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel htmlFor="product-cost">
                       Costo ($)
-                    </label>
+                    </FormLabel>
                     <Input
                       id="product-cost"
                       name="cost"
@@ -951,9 +950,9 @@ function ProductsPageContent() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="product-price" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel htmlFor="product-price">
                       Precio ($)
-                    </label>
+                    </FormLabel>
                     <Input
                       id="product-price"
                       name="price"
@@ -966,9 +965,9 @@ function ProductsPageContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel>
                       Margen
-                    </label>
+                    </FormLabel>
                     <Input
                       type="text"
                       readOnly
@@ -987,9 +986,9 @@ function ProductsPageContent() {
 
                 <div className="grid grid-cols-3 gap-2 sm:col-span-2">
                   <div>
-                    <label htmlFor="product-stock" className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel htmlFor="product-stock" className="text-[10px]">
                       Stock Inicial
-                    </label>
+                    </FormLabel>
                     <Input
                       id="product-stock"
                       name="stock"
@@ -999,9 +998,9 @@ function ProductsPageContent() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="product-min-stock" className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel htmlFor="product-min-stock" className="text-[10px]">
                       Mínimo Crítico
-                    </label>
+                    </FormLabel>
                     <Input
                       id="product-min-stock"
                       name="min_stock"
@@ -1011,9 +1010,9 @@ function ProductsPageContent() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="product-max-stock" className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel htmlFor="product-max-stock" className="text-[10px]">
                       Máximo Sugerido
-                    </label>
+                    </FormLabel>
                     <Input
                       id="product-max-stock"
                       name="max_stock"
@@ -1025,14 +1024,14 @@ function ProductsPageContent() {
                 </div>
 
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <FormLabel>
                     Ubicación en depósito
-                  </label>
+                  </FormLabel>
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label htmlFor="product-deposito" className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      <FormLabel htmlFor="product-deposito" className="text-[10px]">
                         Depósito
-                      </label>
+                      </FormLabel>
                       <Input
                         id="product-deposito"
                         name="deposito"
@@ -1043,9 +1042,9 @@ function ProductsPageContent() {
                       />
                     </div>
                     <div>
-                      <label htmlFor="product-pasillo" className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      <FormLabel htmlFor="product-pasillo" className="text-[10px]">
                         Pasillo
-                      </label>
+                      </FormLabel>
                       <Input
                         id="product-pasillo"
                         name="pasillo"
@@ -1056,9 +1055,9 @@ function ProductsPageContent() {
                       />
                     </div>
                     <div>
-                      <label htmlFor="product-estanteria" className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                      <FormLabel htmlFor="product-estanteria" className="text-[10px]">
                         Estantería
-                      </label>
+                      </FormLabel>
                       <Input
                         id="product-estanteria"
                         name="estanteria"
@@ -1072,9 +1071,9 @@ function ProductsPageContent() {
                 </div>
 
                 <div className="sm:col-span-2">
-                  <label htmlFor="product-description" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <FormLabel htmlFor="product-description">
                     Descripción del producto
-                  </label>
+                  </FormLabel>
                   <textarea
                     id="product-description"
                     name="description"
@@ -1156,15 +1155,15 @@ function ProductsPageContent() {
             ) : importResults ? (
               <div className="space-y-4">
                 <div className="flex items-center gap-3 text-sm">
-                  <span className="px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-medium">
+                  <StatusBadge size="md" tone="emerald" className="font-medium">
                     {importResults.filter(r => r.status === 'created').length} creados
-                  </span>
-                  <span className="px-2.5 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium">
+                  </StatusBadge>
+                  <StatusBadge size="md" tone="blue" className="font-medium">
                     {importResults.filter(r => r.status === 'updated').length} actualizados
-                  </span>
-                  <span className="px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 font-medium">
+                  </StatusBadge>
+                  <StatusBadge size="md" tone="grayMuted" className="font-medium">
                     {importResults.filter(r => r.status === 'skipped').length} omitidos
-                  </span>
+                  </StatusBadge>
                 </div>
                 <div className="max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
                   <table className="w-full text-sm">
@@ -1303,7 +1302,7 @@ function ProductsPageContent() {
             ) : (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1.5 text-gray-300">Alcance del ajuste</label>
+                  <FormLabel variant="default" className="text-gray-300 mb-1.5">Alcance del ajuste</FormLabel>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
@@ -1334,7 +1333,7 @@ function ProductsPageContent() {
 
                 {priceAdjustScope === 'category' && (
                   <div>
-                    <label className="block text-sm font-medium mb-1.5 text-gray-300">Categoría</label>
+                    <FormLabel variant="default" className="text-gray-300 mb-1.5">Categoría</FormLabel>
                     <Select value={priceAdjustCategoryId} onChange={(e) => setPriceAdjustCategoryId(e.target.value)} className="bg-gray-800 border-gray-700 text-white hover:bg-gray-700" darkPanel>
                       <option value="">Seleccionar categoría...</option>
                       {categories.map((c) => (
@@ -1345,7 +1344,7 @@ function ProductsPageContent() {
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium mb-1.5 text-gray-300">Porcentaje de aumento (%)</label>
+                  <FormLabel variant="default" className="text-gray-300 mb-1.5">Porcentaje de aumento (%)</FormLabel>
                   <div className="relative">
                     <Input
                       type="number"
@@ -1424,9 +1423,9 @@ function ProductsPageContent() {
               </h3>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                <FormLabel>
                   Nombre
-                </label>
+                </FormLabel>
                 <Input
                   type="text"
                   required
@@ -1437,9 +1436,9 @@ function ProductsPageContent() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                <FormLabel>
                   Color Identificador
-                </label>
+                </FormLabel>
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
@@ -1637,9 +1636,9 @@ function NewTransferModal({
       <form onSubmit={handleSubmit} className="space-y-5 overflow-y-auto pr-1 flex-1">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+              <FormLabel className="mb-1.5">
                 Origen
-              </label>
+              </FormLabel>
               <Select value={fromTenantId} onChange={(e) => {
                 setFromTenantId(e.target.value);
                 if (e.target.value === toTenantId) setToTenantId('');
@@ -1651,9 +1650,9 @@ function NewTransferModal({
               </Select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+              <FormLabel className="mb-1.5">
                 Destino
-              </label>
+              </FormLabel>
               <Select value={toTenantId} onChange={(e) => setToTenantId(e.target.value)}>
                 <option value="">Seleccionar destino...</option>
                 {otherTenants.map((t) => (
@@ -1664,9 +1663,9 @@ function NewTransferModal({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+            <FormLabel className="mb-1.5">
               Productos
-            </label>
+            </FormLabel>
             <div className="relative mb-3">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
               <Input
@@ -1732,9 +1731,9 @@ function NewTransferModal({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+            <FormLabel className="mb-1.5">
               Notas (opcional)
-            </label>
+            </FormLabel>
             <textarea
               className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
               rows={2}

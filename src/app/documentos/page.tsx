@@ -14,6 +14,9 @@ import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SearchInput } from '@/components/ui/search-input';
 import { Thead, Th } from '@/components/ui/table-header';
+import { FormLabel } from '@/components/ui/form-label';
+import { StatusBadge, type StatusTone } from '@/components/ui/status-badge';
+import { PageHeader } from '@/components/ui/page-header';
 import toast from 'react-hot-toast';
 import {
   FileText,
@@ -37,7 +40,6 @@ import type {
 import {
   DOCUMENT_TYPE_LABELS,
   DOCUMENT_STATUS_LABELS,
-  DOCUMENT_STATUS_COLORS,
   VALID_STATUSES_PER_TYPE,
 } from '@/lib/types/document';
 import type { PurchaseOrder } from '@/lib/types/supplier';
@@ -59,6 +61,14 @@ const PO_STATUS_LABELS: Record<string, string> = {
   partial: 'Recibido Parcial',
   received: 'Recibido',
   cancelled: 'Cancelado',
+};
+
+const DOCUMENT_STATUS_COLORS_TONE: Record<DocumentStatus, StatusTone> = {
+  pending: 'yellow',
+  approved: 'green',
+  rejected: 'red',
+  completed: 'blue',
+  cancelled: 'grayMuted',
 };
 
 interface DocumentItem {
@@ -822,27 +832,32 @@ export default function DocumentosPage() {
     });
   };
 
+  const documentTone = (status: DocumentStatus): StatusTone =>
+    DOCUMENT_STATUS_COLORS_TONE[status] ?? 'gray';
+
   const statusBadge = (status: DocumentStatus) => (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${DOCUMENT_STATUS_COLORS[status]}`}>
+    <StatusBadge tone={documentTone(status)} className="px-2.5">
       {DOCUMENT_STATUS_LABELS[status]}
-    </span>
+    </StatusBadge>
   );
 
-  const poStatusBadge = (status: string) => (
-    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+  const poStatusBadge = (status: string) => {
+    const tone: StatusTone =
       status === 'draft'
-        ? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+        ? 'gray'
         : status === 'sent'
-        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+        ? 'amber'
         : status === 'partial'
-        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+        ? 'blue'
         : status === 'received'
-        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-        : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-    }`}>
-      {PO_STATUS_LABELS[status]}
-    </span>
-  );
+        ? 'green'
+        : 'red';
+    return (
+      <StatusBadge size="sm" tone={tone}>
+        {PO_STATUS_LABELS[status]}
+      </StatusBadge>
+    );
+  };
 
   const getDocumentTypeLabel = (type: DocumentType) => DOCUMENT_TYPE_LABELS[type];
 
@@ -862,21 +877,18 @@ export default function DocumentosPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <FileText className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
-            Documentos Comerciales
-          </h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Gestión de remitos, presupuestos y órdenes
-          </p>
-        </div>
-        <Button onClick={handleNewDocument} className="flex items-center gap-2">
-          <Plus className="h-4 w-4" />
-          Nuevo Documento
-        </Button>
-      </div>
+      <PageHeader
+        compact
+        icon={<FileText className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />}
+        title="Documentos Comerciales"
+        subtitle="Gestión de remitos, presupuestos y órdenes"
+        actions={
+          <Button onClick={handleNewDocument} className="flex items-center gap-2">
+            <Plus className="h-4 w-4" />
+            Nuevo Documento
+          </Button>
+        }
+      />
 
       <Card className="p-4 border border-gray-100 dark:border-gray-800">
         <div className="flex items-center gap-2 flex-wrap">
@@ -1363,9 +1375,9 @@ export default function DocumentosPage() {
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <FormLabel variant="default">
                       {typeFilter === 'remito_ingreso' ? 'Proveedor existente' : 'Cliente existente'}
-                    </label>
+                    </FormLabel>
                     {typeFilter === 'remito_ingreso' ? (
                       <Select value={formData.supplier_name || ''} onChange={e => {
                         const supplier = suppliers.find(s => s.name === e.target.value);
@@ -1390,7 +1402,7 @@ export default function DocumentosPage() {
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre *</label>
+                    <FormLabel variant="default">Nombre *</FormLabel>
                     <Input
                       value={typeFilter === 'remito_ingreso' ? (formData.supplier_name || '') : formData.customer_name}
                       onChange={e => setFormData(prev => ({
@@ -1410,7 +1422,7 @@ export default function DocumentosPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {typeFilter === 'presupuesto' && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Válido hasta</label>
+                        <FormLabel variant="default">Válido hasta</FormLabel>
                         <Input
                           type="date"
                           value={formData.valid_until || ''}
@@ -1420,7 +1432,7 @@ export default function DocumentosPage() {
                     )}
                     {(typeFilter === 'remito_salida' || typeFilter === 'remito_ingreso') && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Fecha de entrega</label>
+                        <FormLabel variant="default">Fecha de entrega</FormLabel>
                         <Input
                           type="date"
                           value={formData.delivery_date || ''}
@@ -1533,7 +1545,7 @@ export default function DocumentosPage() {
               </div>
 
               <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notas (opcional)</label>
+                <FormLabel variant="default">Notas (opcional)</FormLabel>
                 <textarea
                   value={formData.notes || ''}
                   onChange={e => setFormData(prev => ({ ...prev, notes: e.target.value }))}
@@ -1567,9 +1579,9 @@ export default function DocumentosPage() {
           <form onSubmit={handleCreatePo} className="space-y-4 overflow-y-auto pr-1 flex-1">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <FormLabel>
                     Proveedor *
-                  </label>
+                  </FormLabel>
                   <Select value={poSupplierId} onChange={(e) => setPoSupplierId(e.target.value)} required>
                     <option value="">Seleccionar proveedor...</option>
                     {suppliers.map((s) => (
@@ -1578,9 +1590,9 @@ export default function DocumentosPage() {
                   </Select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <FormLabel>
                     Fecha Esperada
-                  </label>
+                  </FormLabel>
                   <Input
                     type="date"
                     value={poExpectedDate}
@@ -1588,9 +1600,9 @@ export default function DocumentosPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <FormLabel>
                     Estado
-                  </label>
+                  </FormLabel>
                   <Select value={poStatus} onChange={(e) => setPoStatus(e.target.value as 'draft' | 'sent')}>
                     <option value="draft">Borrador</option>
                     <option value="sent">Enviado</option>
@@ -1704,9 +1716,9 @@ export default function DocumentosPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                <FormLabel>
                   Notas del pedido
-                </label>
+                </FormLabel>
                 <textarea
                   className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                   rows={2}
@@ -1751,17 +1763,17 @@ export default function DocumentosPage() {
             <div className="space-y-4 overflow-y-auto pr-1 flex-1">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <FormLabel>
                     Proveedor
-                  </label>
+                  </FormLabel>
                   <p className="text-sm font-medium text-gray-900 dark:text-gray-100 py-2">
                     {receiveOrderId ? purchaseOrders.find(o => o.id === receiveOrderId)?.supplier_name || '—' : '—'}
                   </p>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <FormLabel>
                     Fecha de Recepción
-                  </label>
+                  </FormLabel>
                   <Input
                     type="date"
                     value={receiveDate}
@@ -1771,14 +1783,14 @@ export default function DocumentosPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                <FormLabel>
                   Ubicación en depósito
-                </label>
+                </FormLabel>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel className="text-[10px]">
                       Depósito
-                    </label>
+                    </FormLabel>
                     <Input
                       type="text"
                       placeholder="Ej. A"
@@ -1787,9 +1799,9 @@ export default function DocumentosPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel className="text-[10px]">
                       Pasillo
-                    </label>
+                    </FormLabel>
                     <Input
                       type="text"
                       placeholder="Ej. 3"
@@ -1798,9 +1810,9 @@ export default function DocumentosPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel className="text-[10px]">
                       Estantería
-                    </label>
+                    </FormLabel>
                     <Input
                       type="text"
                       placeholder="Ej. 2"
@@ -1855,9 +1867,9 @@ export default function DocumentosPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                <FormLabel>
                   Observaciones
-                </label>
+                </FormLabel>
                 <textarea
                   className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                   rows={2}
