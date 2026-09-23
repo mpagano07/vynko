@@ -9,6 +9,7 @@ import { FormLabel } from './form-label';
 import { StatusBadge } from './status-badge';
 import { PageHeader } from './page-header';
 import { IconAction } from './icon-action';
+import { StatCard } from './stat-card';
 
 describe('LoadingState', () => {
   it('renders an optional label', () => {
@@ -222,5 +223,44 @@ describe('IconAction', () => {
     const button = screen.getByRole('button', { name: 'Actualizar' });
     expect(button).toHaveClass('rounded-full');
     expect(button).toHaveAttribute('type', 'button');
+  });
+});
+
+describe('StatCard', () => {
+  it('renders title, value and subtitle', () => {
+    render(<StatCard title="Balance neto" value="+5 u." subtitle="2 recuperadas · 1 perdidas" />);
+
+    expect(screen.getByText('Balance neto')).toBeInTheDocument();
+    expect(screen.getByText('+5 u.')).toBeInTheDocument();
+    expect(screen.getByText('2 recuperadas · 1 perdidas')).toBeInTheDocument();
+  });
+
+  it('renders an icon chip with the tone classes', () => {
+    const { container } = render(<StatCard title="Riesgo" value="3" icon={Users} tone="rose" />);
+
+    const chip = container.querySelector('svg')?.parentElement;
+    expect(chip).toBeInTheDocument();
+    expect(chip).toHaveClass('bg-rose-50');
+  });
+
+  it('renders the trend pill with sign and arrow for positive values', () => {
+    render(<StatCard title="Ingresos" value="$100" trend={12.5} />);
+
+    expect(screen.getByText('+12.5%')).toBeInTheDocument();
+  });
+
+  it('renders the horizontal layout with icon on the left', () => {
+    render(<StatCard horizontal title="Total pagos" value={7} icon={Users} tone="green" />);
+
+    const card = screen.getByText('Total pagos').closest('.flex');
+    expect(card).toHaveClass('items-center');
+    expect(screen.getByText('7')).toBeInTheDocument();
+  });
+
+  it('shows a skeleton while loading and hides the value', () => {
+    const { container } = render(<StatCard title="Ventas" value="$10" loading />);
+
+    expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
+    expect(screen.queryByText('$10')).not.toBeInTheDocument();
   });
 });
