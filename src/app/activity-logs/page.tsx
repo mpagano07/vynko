@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { Pagination } from '@/components/ui/pagination';
 import toast from 'react-hot-toast';
 import {
   Loader2,
@@ -18,8 +19,6 @@ import {
   Package,
   ChevronUp,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   FileSpreadsheet,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
@@ -407,34 +406,12 @@ function TransfersHistoryTab() {
         </table>
       </div>
 
-      {transfers.length > 0 && (
-        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800">
-          <span className="text-xs text-gray-400">
-            Mostrando {page * limit + 1}–{Math.min((page + 1) * limit, transfers.length)} de {transfers.length} transferencias
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              disabled={page === 0}
-              onClick={() => setPage(p => Math.max(0, p - 1))}
-              className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Anterior
-            </button>
-            <span className="text-xs text-gray-400">
-              Página {page + 1} de {Math.max(totalPages, 1)}
-            </span>
-            <button
-              disabled={page >= totalPages - 1}
-              onClick={() => setPage(p => p + 1)}
-              className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              Siguiente
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      )}
+      <Pagination
+        currentPage={page + 1}
+        totalPages={Math.max(totalPages, 1)}
+        onPageChange={(p) => setPage(p - 1)}
+        resultInfo={`Mostrando ${page * limit + 1}–${Math.min((page + 1) * limit, transfers.length)} de ${transfers.length} transferencias`}
+      />
     </div>
   );
 }
@@ -864,34 +841,12 @@ export default function ActivityLogsPage() {
             )}
           </Card>
 
-          {total > 0 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800">
-              <span className="text-xs text-gray-400">
-                Mostrando {page * limit + 1}–{Math.min((page + 1) * limit, total)} de {total} registros
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  disabled={page === 0}
-                  onClick={() => setPage(p => Math.max(0, p - 1))}
-                  className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  Anterior
-                </button>
-                <span className="text-xs text-gray-400">
-                  Página {page + 1} de {Math.max(totalPages, 1)}
-                </span>
-                <button
-                  disabled={page >= totalPages - 1}
-                  onClick={() => setPage(p => p + 1)}
-                  className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  Siguiente
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          )}
+          <Pagination
+            currentPage={page + 1}
+            totalPages={Math.max(totalPages, 1)}
+            onPageChange={(p) => setPage(p - 1)}
+            resultInfo={`Mostrando ${page * limit + 1}–${Math.min((page + 1) * limit, total)} de ${total} registros`}
+          />
         </>
       ) : (
         <Card className="overflow-hidden border border-gray-100 dark:border-gray-800 p-0">

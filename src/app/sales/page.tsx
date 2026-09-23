@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { Pagination } from '@/components/ui/pagination';
 import dynamicImport from 'next/dynamic';
 const BarcodeScanner = dynamicImport(
   () => import('@/components/scanner/BarcodeScanner').then((m) => ({ default: m.BarcodeScanner })),
@@ -26,8 +27,6 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
-  ChevronLeft,
-  ChevronRight,
   Scan,
   X,
   LayoutGrid,
@@ -856,29 +855,11 @@ export default function SalesPage() {
                 </div>
               )}
 
-              {totalProductPages > 1 && (
-                <div className="flex items-center justify-between pt-2">
-                  <button
-                    onClick={() => setProductPage((p) => Math.max(1, p - 1))}
-                    disabled={productPage === 1}
-                    className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Anterior
-                  </button>
-                  <span className="text-xs text-gray-400">
-                    Página {productPage} de {totalProductPages}
-                  </span>
-                  <button
-                    onClick={() => setProductPage((p) => Math.min(totalProductPages, p + 1))}
-                    disabled={productPage === totalProductPages}
-                    className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Siguiente
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
+              <Pagination
+                currentPage={productPage}
+                totalPages={totalProductPages}
+                onPageChange={setProductPage}
+              />
             </>
           )}
         </div>
@@ -1360,34 +1341,12 @@ export default function SalesPage() {
                   </tbody>
                 </table>
               </div>
-              {Math.ceil(salesTotal / SALES_PER_PAGE) > 1 && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800">
-                  <span className="text-xs text-gray-400">
-                    Mostrando {((salesPage - 1) * SALES_PER_PAGE) + 1}–{Math.min(salesPage * SALES_PER_PAGE, salesTotal)} de {salesTotal} ventas
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setSalesPage((p) => Math.max(1, p - 1))}
-                      disabled={salesPage === 1}
-                      className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      Anterior
-                    </button>
-                    <span className="text-xs text-gray-400">
-                      Página {salesPage} de {Math.ceil(salesTotal / SALES_PER_PAGE)}
-                    </span>
-                    <button
-                      onClick={() => setSalesPage((p) => Math.min(Math.ceil(salesTotal / SALES_PER_PAGE), p + 1))}
-                      disabled={salesPage >= Math.ceil(salesTotal / SALES_PER_PAGE)}
-                      className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Siguiente
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              )}
+              <Pagination
+                currentPage={salesPage}
+                totalPages={Math.ceil(salesTotal / SALES_PER_PAGE)}
+                onPageChange={setSalesPage}
+                resultInfo={`Mostrando ${((salesPage - 1) * SALES_PER_PAGE) + 1}–${Math.min(salesPage * SALES_PER_PAGE, salesTotal)} de ${salesTotal} ventas`}
+              />
               </>
             )}
           </div>

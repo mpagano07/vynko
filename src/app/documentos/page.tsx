@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
+import { Pagination } from '@/components/ui/pagination';
 import toast from 'react-hot-toast';
 import {
   FileText,
@@ -1342,53 +1343,11 @@ export default function DocumentosPage() {
           </div>
         )}
 
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-gray-100 dark:border-gray-800 px-6 py-4">
-            <span className="text-xs text-gray-500">
-              Página <strong>{currentPage}</strong> de <strong>{totalPages}</strong>
-            </span>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              >
-                Anterior
-              </Button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1)
-                .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
-                .reduce<(number | '...')[]>((acc, p, i, arr) => {
-                  if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push('...');
-                  acc.push(p);
-                  return acc;
-                }, [])
-                .map((p, i) =>
-                  p === '...' ? (
-                    <span key={`dots-${i}`} className="px-1 text-gray-400 text-xs">…</span>
-                  ) : (
-                    <Button
-                      key={p}
-                      variant={currentPage === p ? 'primary' : 'outline'}
-                      size="sm"
-                      onClick={() => setCurrentPage(p)}
-                      className="min-w-[28px] px-1"
-                    >
-                      {p}
-                    </Button>
-                  )
-                )}
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-              >
-Siguiente
-              </Button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+        />
       </Card>
 
 {/* Document Create Modal */}
