@@ -89,6 +89,44 @@ describe('Select', () => {
     expect(trigger).toHaveTextContent('Opcion 2');
   });
 
+  it('extracts the full text of compound option children (name + price/stock)', () => {
+    render(
+      <Select data-testid="select" value="a">
+        <option value="a">Coca Cola {1.5}{'L'} (stock: {12})</option>
+        <option value="b">Sprite - {`$1.500,00`}</option>
+      </Select>
+    );
+    const trigger = screen.getByTestId('select');
+
+    expect(trigger).toHaveTextContent('Coca Cola 1.5L (stock: 12)');
+
+    fireEvent.click(trigger);
+    expect(screen.getByRole('option', { name: 'Sprite - $1.500,00' })).toBeInTheDocument();
+  });
+
+  it('filters options by typing when searchable', () => {
+    render(
+      <Select data-testid="select" searchable>
+        <option value="1">Coca Cola</option>
+        <option value="2">Sprite</option>
+        <option value="3">Fanta Naranja</option>
+      </Select>
+    );
+    const trigger = screen.getByTestId('select');
+
+    fireEvent.click(trigger);
+    const search = screen.getByTestId('select-search');
+    expect(search).toBeInTheDocument();
+
+    fireEvent.change(search, { target: { value: 'fa' } });
+    expect(screen.queryByRole('option', { name: 'Coca Cola' })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Fanta Naranja' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Sprite' })).not.toBeInTheDocument();
+
+    fireEvent.change(search, { target: { value: 'zzz' } });
+    expect(screen.getByText('Sin resultados')).toBeInTheDocument();
+  });
+
   it('forwards ref correctly', () => {
     const selectRef = { current: null as HTMLDivElement | null };
     render(

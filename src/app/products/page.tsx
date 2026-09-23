@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
+import { Modal } from '@/components/ui/modal';
 import { Pagination } from '@/components/ui/pagination';
 import type { Product } from '@/lib/types/product';
 import toast from 'react-hot-toast';
@@ -871,25 +872,13 @@ function ProductsPageContent() {
 
       {/* PRODUCT DIALOG MODAL */}
       {isProductModalOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
+        <Modal
           aria-label="Producto"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs"
+          onClose={() => setIsProductModalOpen(false)}
+          className="max-w-2xl flex flex-col max-h-[90vh]"
+          title={editingProduct ? 'Editar Producto' : 'Agregar Nuevo Producto'}
         >
-          <Card className="w-full max-w-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
-            <button
-              onClick={() => setIsProductModalOpen(false)}
-              className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-              {editingProduct ? 'Editar Producto' : 'Agregar Nuevo Producto'}
-            </h2>
-
-            <form onSubmit={handleSaveProduct} className="space-y-4 overflow-y-auto pr-1 flex-1">
+          <form onSubmit={handleSaveProduct} className="space-y-4 overflow-y-auto pr-1 flex-1">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
                   <label htmlFor="product-name" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
@@ -1122,23 +1111,17 @@ function ProductsPageContent() {
                 </Button>
               </div>
             </form>
-          </Card>
-        </div>
+        </Modal>
       )}
 
       {/* IMPORT EXCEL MODAL */}
       {isImportModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
-          <Card className="w-full max-w-3xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
-            <button
-              onClick={() => { setIsImportModalOpen(false); setImportRows([]); setImportColumns([]); setImportResults(null); setShowColumnInfo(false); }}
-              className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <div className="flex items-center gap-3 mb-4">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Importar productos desde Excel</h2>
+        <Modal
+          onClose={() => { setIsImportModalOpen(false); setImportRows([]); setImportColumns([]); setImportResults(null); setShowColumnInfo(false); }}
+          className="max-w-3xl flex flex-col max-h-[90vh]"
+        >
+          <div className="flex items-center gap-3 mb-4">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Importar productos desde Excel</h2>
               <button
                 onClick={() => setShowColumnInfo(!showColumnInfo)}
                 className="p-1.5 rounded-full text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
@@ -1279,23 +1262,18 @@ function ProductsPageContent() {
                 </div>
               </div>
             )}
-          </Card>
-        </div>
+        </Modal>
       )}
 
       {/* PRICE ADJUST MODAL */}
       {isPriceAdjustModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
-          <Card className="w-full max-w-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative">
-            <button
-              onClick={() => { setIsPriceAdjustModalOpen(false); setPriceAdjustResult(null); }}
-              className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Ajustar precios</h2>
-            <p className="text-sm text-gray-500 mb-6">Aumentá el precio y costo de los productos por porcentaje.</p>
+        <Modal
+          onClose={() => { setIsPriceAdjustModalOpen(false); setPriceAdjustResult(null); }}
+          className="max-w-md"
+          title="Ajustar precios"
+          titleClassName="mb-1"
+        >
+          <p className="text-sm text-gray-500 mb-6">Aumentá el precio y costo de los productos por porcentaje.</p>
 
             {priceAdjustResult ? (
               <div className="space-y-4">
@@ -1408,24 +1386,16 @@ function ProductsPageContent() {
                 </div>
               </div>
             )}
-          </Card>
-        </div>
+        </Modal>
       )}
 
       {/* CATEGORIES MANAGER MODAL */}
       {isCategoryModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
-          <Card className="w-full max-w-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative flex flex-col max-h-[85vh]">
-            <button
-              onClick={() => setIsCategoryModalOpen(false)}
-              className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-              Gestionar Categorías
-            </h2>
+        <Modal
+          onClose={() => setIsCategoryModalOpen(false)}
+          className="max-w-md flex flex-col max-h-[85vh]"
+          title="Gestionar Categorías"
+        >
 
             {/* List of categories */}
             <div className="mb-6 overflow-y-auto max-h-[40vh] border border-gray-100 dark:border-gray-800 rounded-md divide-y divide-gray-100 dark:divide-gray-800 p-2">
@@ -1510,8 +1480,7 @@ function ProductsPageContent() {
                 </Button>
               </div>
             </form>
-          </Card>
-        </div>
+        </Modal>
       )}
 
       <ConfirmModal
@@ -1666,21 +1635,14 @@ function NewTransferModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
-      <Card className="w-full max-w-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
-        <button
-          onClick={onClose}
-          className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700"
-        >
-          <X className="h-5 w-5" />
-        </button>
-
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-          <ArrowRightLeft className="h-5 w-5 text-indigo-500" />
-          Nueva transferencia
-        </h2>
-
-        <form onSubmit={handleSubmit} className="space-y-5 overflow-y-auto pr-1 flex-1">
+    <Modal
+      onClose={onClose}
+      className="max-w-2xl flex flex-col max-h-[90vh]"
+      title="Nueva transferencia"
+      titleClassName="mb-4 flex items-center gap-2"
+      icon={<ArrowRightLeft className="h-5 w-5 text-indigo-500" />}
+    >
+      <form onSubmit={handleSubmit} className="space-y-5 overflow-y-auto pr-1 flex-1">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
@@ -1803,7 +1765,6 @@ function NewTransferModal({
             </Button>
           </div>
         </form>
-      </Card>
-    </div>
+      </Modal>
   );
 }

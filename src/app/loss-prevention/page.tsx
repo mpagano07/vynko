@@ -9,10 +9,11 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { Modal } from '@/components/ui/modal';
 import toast from 'react-hot-toast';
 import {
   ShieldAlert, Package, TrendingDown, AlertTriangle,
-  Loader2, Search, X, Scale, BarChart3, ClipboardList, FilterX,
+  Loader2, Search, Scale, BarChart3, ClipboardList, FilterX,
   PieChart as PieChartIcon
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
@@ -407,14 +408,15 @@ export default function LossPreventionPage() {
 
       {/* Report Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
-          <Card className="w-full max-w-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative">
-            <button onClick={() => setShowForm(false)} className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"><X className="h-5 w-5" /></button>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Reportar ajuste de stock</h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
+        <Modal
+          onClose={() => setShowForm(false)}
+          className="max-w-md"
+          title="Reportar ajuste de stock"
+        >
+          <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Producto *</label>
-                <Select value={form.productId} onChange={(e) => setForm({ ...form, productId: e.target.value })}>
+                <Select searchable value={form.productId} onChange={(e) => setForm({ ...form, productId: e.target.value })}>
                   <option value="">Seleccionar producto...</option>
                   {(products || []).map((p) => (
                     <option key={p.id} value={p.id}>{p.name} (stock: {p.stock})</option>
@@ -460,8 +462,7 @@ export default function LossPreventionPage() {
                 <Button type="submit" disabled={submitting}>{submitting ? 'Guardando...' : 'Guardar ajuste'}</Button>
               </div>
             </form>
-          </Card>
-        </div>
+        </Modal>
       )}
     </div>
   );

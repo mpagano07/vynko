@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Modal } from '@/components/ui/modal';
 import {
   Banknote,
   Landmark,
   CreditCard,
   Wallet,
-  X,
   Loader2,
   TriangleAlert,
   CheckCircle2,
@@ -344,34 +344,21 @@ export function CheckoutModal({
 
   const showBreakdown = subtotal !== undefined && (discount > 0 || surcharge > 0);
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+return (
+    <Modal
+      panel
+      backdropClose
+      onClose={onClose}
+      aria-label="Cobrar venta"
+      className="max-w-lg"
+      header={
+        <h3 className="font-bold text-gray-900 dark:text-gray-100 text-lg flex items-center gap-2">
+          <CheckCircle2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+          Cobrar venta
+        </h3>
+      }
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Cobrar venta"
-        className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden"
-      >
-        <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-800">
-          <h3 className="font-bold text-gray-900 dark:text-gray-100 text-lg flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
-            Cobrar venta
-          </h3>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-            aria-label="Cerrar"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+      <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
           <div>
             <div className="flex items-end justify-between">
               <div>
@@ -737,7 +724,6 @@ export function CheckoutModal({
             ))}
           </p>
         </div>
-      </div>
-    </div>
-  );
+      </Modal>
+    );
 }

@@ -6,7 +6,8 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
-import { Search, Plus, Edit, Trash2, Users, X, Loader2, ShoppingBag, DollarSign, CalendarDays } from 'lucide-react';
+import { Modal } from '@/components/ui/modal';
+import { Search, Plus, Edit, Trash2, Users, Loader2, ShoppingBag, DollarSign, CalendarDays } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import { matchesQuery } from '@/lib/utils/text';
 import { SortableTh, SortDir } from '@/components/ui/sortable-th';
@@ -262,13 +263,8 @@ export default function CustomersPage() {
 
       {/* Create/Edit Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
-          <Card className="w-full max-w-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative">
-            <button onClick={() => setModalOpen(false)} className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
-              <X className="h-5 w-5" />
-            </button>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">{editing ? 'Editar Cliente' : 'Nuevo Cliente'}</h2>
-            <form onSubmit={handleSave} className="space-y-4">
+        <Modal onClose={() => setModalOpen(false)} className="max-w-md" title={editing ? 'Editar Cliente' : 'Nuevo Cliente'}>
+          <form onSubmit={handleSave} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Nombre *</label>
                 <Input required placeholder="Nombre del cliente" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -290,18 +286,12 @@ export default function CustomersPage() {
                 <Button type="submit" disabled={submitting}>{submitting ? 'Guardando...' : 'Guardar'}</Button>
               </div>
             </form>
-          </Card>
-        </div>
+          </Modal>
       )}
 
       {/* History Modal */}
       {historyTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
-          <Card className="w-full max-w-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative max-h-[85vh] flex flex-col">
-            <button onClick={() => setHistoryTarget(null)} className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
-              <X className="h-5 w-5" />
-            </button>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Historial de {historyTarget.name}</h2>
+        <Modal onClose={() => setHistoryTarget(null)} className="max-w-2xl max-h-[85vh] flex flex-col" title={`Historial de ${historyTarget.name}`} titleClassName="mb-1">
             {historyLoading ? (
               <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-indigo-500" /></div>
             ) : historyData ? (
@@ -338,8 +328,7 @@ export default function CustomersPage() {
             ) : (
               <p className="text-sm text-gray-500 text-center py-8">Error al cargar historial.</p>
             )}
-          </Card>
-        </div>
+          </Modal>
       )}
 
       <ConfirmModal

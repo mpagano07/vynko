@@ -1,8 +1,8 @@
 'use client';
 
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Mail, Copy, Check, X } from 'lucide-react';
+import { Mail, Copy, Check } from 'lucide-react';
+import { Modal } from '@/components/ui/modal';
 import { useState } from 'react';
 
 interface SupportModalProps {
@@ -28,17 +28,8 @@ export function SupportModal({ open, onClose }: SupportModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
-      <Card className="w-full max-w-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative">
-        <button
-          onClick={onClose}
-          className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700"
-          aria-label="Cerrar"
-        >
-          <X className="h-5 w-5" />
-        </button>
-
-        <div className="flex flex-col items-center text-center">
+    <Modal onClose={onClose} className="max-w-sm">
+      <div className="flex flex-col items-center text-center">
           <div className="p-3 rounded-full mb-4 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400">
             <Mail className="h-6 w-6" />
           </div>
@@ -70,7 +61,6 @@ export function SupportModal({ open, onClose }: SupportModalProps) {
             </a>
           </div>
         </div>
-      </Card>
-    </div>
+      </Modal>
   );
 }

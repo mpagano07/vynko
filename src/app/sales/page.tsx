@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { Modal } from '@/components/ui/modal';
 import { Pagination } from '@/components/ui/pagination';
 import dynamicImport from 'next/dynamic';
 const BarcodeScanner = dynamicImport(
@@ -28,7 +29,6 @@ import {
   ChevronDown,
   ChevronUp,
   Scan,
-  X,
   LayoutGrid,
   List,
   Percent,
@@ -1377,32 +1377,23 @@ export default function SalesPage() {
       )}
 
       {showScanner && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-800">
-              <h3 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                <Scan className="h-5 w-5 text-indigo-600" />
-                Escanear producto
-              </h3>
-              <button
-                onClick={() => setShowScanner(false)}
-                className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="p-4">
-              <BarcodeScanner
-                onResult={handleScanBarcode}
-                onError={(err) => toast.error(err)}
-                className="aspect-[4/3] w-full"
-              />
-              <p className="text-xs text-gray-400 text-center mt-3">
-                Apunta la cámara al código de barras del producto
-              </p>
-            </div>
+        <Modal
+          panel
+          onClose={() => setShowScanner(false)}
+          className="max-w-md"
+          header={<span className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2"><Scan className="h-5 w-5 text-indigo-600" /> Escanear producto</span>}
+        >
+          <div className="p-4">
+            <BarcodeScanner
+              onResult={handleScanBarcode}
+              onError={(err) => toast.error(err)}
+              className="aspect-[4/3] w-full"
+            />
+            <p className="text-xs text-gray-400 text-center mt-3">
+              Apunta la cámara al código de barras del producto
+            </p>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

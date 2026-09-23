@@ -1,8 +1,8 @@
 'use client';
 
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
+import { Modal } from '@/components/ui/modal';
 
 interface ConfirmModalProps {
   open: boolean;
@@ -30,16 +30,8 @@ export function ConfirmModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs">
-      <Card className="w-full max-w-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6 relative">
-        <button
-          onClick={onCancel}
-          className="absolute right-4 top-4 p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700"
-        >
-          <X className="h-5 w-5" />
-        </button>
-
-        <div className="flex flex-col items-center text-center">
+    <Modal onClose={onCancel} className="max-w-sm">
+      <div className="flex flex-col items-center text-center">
           <div className={`p-3 rounded-full mb-4 ${
             variant === 'danger'
               ? 'bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400'
@@ -76,7 +68,6 @@ export function ConfirmModal({
             </Button>
           </div>
         </div>
-      </Card>
-    </div>
+      </Modal>
   );
 }
