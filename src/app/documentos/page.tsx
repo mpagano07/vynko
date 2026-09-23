@@ -10,12 +10,15 @@ import { Select } from '@/components/ui/select';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { Modal } from '@/components/ui/modal';
 import { Pagination } from '@/components/ui/pagination';
+import { LoadingState } from '@/components/ui/loading-state';
+import { EmptyState } from '@/components/ui/empty-state';
+import { SearchInput } from '@/components/ui/search-input';
+import { Thead, Th } from '@/components/ui/table-header';
 import toast from 'react-hot-toast';
 import {
   FileText,
   Plus,
   Loader2,
-  Search,
   Check,
   Trash2,
   ChevronDown,
@@ -877,15 +880,13 @@ export default function DocumentosPage() {
 
       <Card className="p-4 border border-gray-100 dark:border-gray-800">
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-            <Input
+          <div>
+            <SearchInput
               ref={searchInputRef}
-              type="text"
               placeholder="Buscar..."
               value={search}
               onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
-              className="pl-9 w-48"
+              className="w-48"
             />
           </div>
           <Select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="w-36">
@@ -921,35 +922,31 @@ export default function DocumentosPage() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-          </div>
+          <LoadingState compact />
         ) : currentItems.length === 0 ? (
-          <div className="text-center py-16">
-            <FileText className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
-            <p className="text-gray-500">
-              {isPoTab ? 'No hay pedidos de compra' : `No se encontraron ${getDocumentTypeLabel(typeFilter).toLowerCase()}s`}
-            </p>
-            <Button onClick={handleNewDocument} className="mt-4" variant="outline" size="sm">
-              <Plus className="h-4 w-4 mr-1" />
-              {isPoTab ? 'Crear primer pedido' : `Crear primer ${getDocumentTypeLabel(typeFilter).toLowerCase()}`}
-            </Button>
-          </div>
+          <EmptyState
+            icon={FileText}
+            title={isPoTab ? 'No hay pedidos de compra' : `No se encontraron ${getDocumentTypeLabel(typeFilter).toLowerCase()}s`}
+            action={
+              <Button onClick={handleNewDocument} variant="outline" size="sm">
+                <Plus className="h-4 w-4 mr-1" />
+                {isPoTab ? 'Crear primer pedido' : `Crear primer ${getDocumentTypeLabel(typeFilter).toLowerCase()}`}
+              </Button>
+            }
+          />
         ) : isPoTab ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  <th className="py-3 px-4 w-8"></th>
-                  <th className="py-3 px-4">Folio</th>
-                  <th className="py-3 px-4">Proveedor</th>
-                  <th className="py-3 px-4">Estado</th>
-                  <th className="py-3 px-4 text-right">Total</th>
-                  <th className="py-3 px-4">Recibido</th>
-                  <th className="py-3 px-4 text-right">Fecha</th>
-                  <th className="py-3 px-4 text-center">Acciones</th>
-                </tr>
-              </thead>
+              <Thead>
+                <th className="py-3 px-4 w-8"></th>
+                <Th dense>Folio</Th>
+                <Th dense>Proveedor</Th>
+                <Th dense>Estado</Th>
+                <Th dense align="right">Total</Th>
+                <Th dense>Recibido</Th>
+                <Th dense align="right">Fecha</Th>
+                <Th dense align="center">Acciones</Th>
+              </Thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
                 {(paginatedDocuments as PurchaseOrder[]).map(order => (
                   <React.Fragment key={order.id}>
@@ -1135,18 +1132,16 @@ export default function DocumentosPage() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  <th className="py-3 px-4 w-8"></th>
-                  <th className="py-3 px-4">Nro.</th>
-                  <th className="py-3 px-4">{(typeFilter === 'remito_ingreso') ? 'Proveedor' : 'Cliente'}</th>
-                  <th className="py-3 px-4 text-right">Total</th>
-                  <th className="py-3 px-4">Estado</th>
-                  <th className="py-3 px-4 text-right">Fecha</th>
-                  <th className="py-3 px-4 text-right">Vencimiento</th>
-                  <th className="py-3 px-4 text-center">Acciones</th>
-                </tr>
-              </thead>
+              <Thead>
+                <th className="py-3 px-4 w-8"></th>
+                <Th dense>Nro.</Th>
+                <Th dense>{(typeFilter === 'remito_ingreso') ? 'Proveedor' : 'Cliente'}</Th>
+                <Th dense align="right">Total</Th>
+                <Th dense>Estado</Th>
+                <Th dense align="right">Fecha</Th>
+                <Th dense align="right">Vencimiento</Th>
+                <Th dense align="center">Acciones</Th>
+              </Thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
                 {(paginatedDocuments as CommercialDocument[]).map(doc => (
                   <React.Fragment key={doc.id}>

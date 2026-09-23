@@ -8,13 +8,14 @@ import { supabase } from '@/lib/supabaseClient';
 import { fixResponse } from '@/lib/utils/encoding';
 import { matchesQuery } from '@/lib/utils/text';
 import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Pagination } from '@/components/ui/pagination';
+import { LoadingState } from '@/components/ui/loading-state';
+import { EmptyState } from '@/components/ui/empty-state';
+import { SearchInput } from '@/components/ui/search-input';
 import {
   QrCode,
-  Search,
   Loader2,
   Download,
   Printer,
@@ -197,15 +198,12 @@ export default function CodigosPage() {
       {/* Filters */}
       <Card className="p-4 border border-gray-100 dark:border-gray-800">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-            <Input
+          <div>
+            <SearchInput
               ref={searchInputRef}
-              type="text"
               placeholder="Buscar por nombre, SKU o código..."
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-              className="pl-9"
             />
           </div>
           <div>
@@ -224,16 +222,9 @@ export default function CodigosPage() {
 
       {/* QR Grid */}
       {isLoading || generating ? (
-        <div className="flex flex-col items-center justify-center py-20 space-y-4">
-          <Loader2 className="h-10 w-10 animate-spin text-indigo-500" />
-          <p className="text-sm text-gray-500">Generando códigos QR...</p>
-        </div>
+        <LoadingState label="Generando códigos QR..." />
       ) : filtered.length === 0 ? (
-        <div className="text-center py-20">
-          <Package className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
-          <p className="text-lg font-medium text-gray-900 dark:text-gray-100">Sin productos</p>
-          <p className="text-sm text-gray-500 mt-1">No hay productos que coincidan con la búsqueda.</p>
-        </div>
+        <EmptyState icon={Package} title="Sin productos" description="No hay productos que coincidan con la búsqueda." />
       ) : (
         <Card className="border border-gray-100 dark:border-gray-800">
           <div ref={printRef} className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 p-4">

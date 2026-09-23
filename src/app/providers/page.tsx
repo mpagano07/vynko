@@ -10,6 +10,10 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { Modal } from '@/components/ui/modal';
+import { LoadingState } from '@/components/ui/loading-state';
+import { EmptyState } from '@/components/ui/empty-state';
+import { SearchInput } from '@/components/ui/search-input';
+import { Thead, Th } from '@/components/ui/table-header';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import {
@@ -17,7 +21,6 @@ import {
   Plus,
   Edit,
   Trash2,
-  Search,
   Loader2,
   Check,
 } from 'lucide-react';
@@ -425,41 +428,29 @@ export default function ProvidersPage() {
       </div>
 
       <Card className="p-4 border border-gray-100 dark:border-gray-800">
-        <div className="relative">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-          <Input
-            ref={searchInputRef}
-            type="text"
-            placeholder="Buscar proveedor por nombre, contacto o email..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+        <SearchInput
+          ref={searchInputRef}
+          placeholder="Buscar proveedor por nombre, contacto o email..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
       </Card>
 
       <Card className="overflow-hidden border border-gray-100 dark:border-gray-800 p-0">
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-          </div>
+          <LoadingState compact />
         ) : filteredSuppliers.length === 0 ? (
-          <div className="text-center py-16">
-            <Truck className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
-            <p className="text-gray-500">No hay proveedores registrados</p>
-          </div>
+          <EmptyState icon={Truck} title="No hay proveedores registrados" />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold uppercase tracking-wider">
-                  <SortableTh label="Nombre" sortFor="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                  <SortableTh label="Contacto" sortFor="contact" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                  <SortableTh label="Email / Teléfono" sortFor="email" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                  <SortableTh label="Dirección" sortFor="address" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                  <th className="py-4 px-6 text-right text-gray-500">Acciones</th>
-                </tr>
-              </thead>
+              <Thead>
+                <SortableTh label="Nombre" sortFor="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                <SortableTh label="Contacto" sortFor="contact" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                <SortableTh label="Email / Teléfono" sortFor="email" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                <SortableTh label="Dirección" sortFor="address" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                <Th align="right">Acciones</Th>
+              </Thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
                 {sortedSuppliers.map((supplier) => (
                   <React.Fragment key={supplier.id}>

@@ -10,10 +10,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
+import { LoadingState } from '@/components/ui/loading-state';
+import { EmptyState } from '@/components/ui/empty-state';
+import { SearchInput } from '@/components/ui/search-input';
+import { Thead, Th } from '@/components/ui/table-header';
 import toast from 'react-hot-toast';
 import {
   ShieldAlert, Package, TrendingDown, AlertTriangle,
-  Loader2, Search, Scale, BarChart3, ClipboardList, FilterX,
+  Scale, BarChart3, ClipboardList, FilterX,
   PieChart as PieChartIcon
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
@@ -317,9 +321,8 @@ export default function LossPreventionPage() {
       {/* Historial */}
       <Card className="overflow-hidden border border-gray-100 dark:border-gray-800 p-0">
         <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex flex-col lg:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-            <Input ref={searchInputRef} placeholder="Buscar por producto..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          <div className="flex-1">
+            <SearchInput ref={searchInputRef} placeholder="Buscar por producto..." value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <div className="w-full sm:w-48">
             <Select value={reasonFilter} onChange={(e) => setReasonFilter(e.target.value)}>
@@ -345,26 +348,20 @@ export default function LossPreventionPage() {
         </div>
 
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-indigo-500 mb-3" /><p className="text-sm text-gray-500">Cargando...</p></div>
+          <LoadingState compact label="Cargando..." />
         ) : filtered.length === 0 ? (
-          <div className="text-center py-16">
-            <ShieldAlert className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
-            <p className="text-lg font-medium text-gray-900 dark:text-gray-100">Sin ajustes registrados</p>
-            <p className="text-sm text-gray-500 mt-1">Los ajustes de stock aparecerán aquí.</p>
-          </div>
+          <EmptyState icon={ShieldAlert} title="Sin ajustes registrados" description="Los ajustes de stock aparecerán aquí." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  <th className="py-3 px-4">Fecha</th>
-                  <th className="py-3 px-4">Producto / SKU</th>
-                  <th className="py-3 px-4">Motivo</th>
-                  <th className="py-3 px-4 text-right">Cantidad</th>
-                  <th className="py-3 px-4 text-right">Costo ($)</th>
-                  <th className="py-3 px-4">Nota</th>
-                </tr>
-              </thead>
+              <Thead>
+                <Th dense>Fecha</Th>
+                <Th dense>Producto / SKU</Th>
+                <Th dense>Motivo</Th>
+                <Th dense align="right">Cantidad</Th>
+                <Th dense align="right">Costo ($)</Th>
+                <Th dense>Nota</Th>
+              </Thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
                 {filtered.map((h) => {
                   const reasonInfo = reasonMap[h.reason?.split(':')[0] || ''] || reasonMap.correction;

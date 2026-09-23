@@ -4,10 +4,14 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { Modal } from '@/components/ui/modal';
-import { Search, Plus, Edit, Trash2, Users, Loader2, ShoppingBag, DollarSign, CalendarDays } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { LoadingState } from '@/components/ui/loading-state';
+import { EmptyState } from '@/components/ui/empty-state';
+import { SearchInput } from '@/components/ui/search-input';
+import { Thead, Th } from '@/components/ui/table-header';
+import { Plus, Edit, Trash2, Users, Loader2, ShoppingBag, DollarSign, CalendarDays } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import { matchesQuery } from '@/lib/utils/text';
 import { SortableTh, SortDir } from '@/components/ui/sortable-th';
@@ -203,36 +207,24 @@ export default function CustomersPage() {
       </div>
 
       <Card className="p-4 border border-gray-100 dark:border-gray-800">
-        <div className="relative">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-          <Input ref={searchInputRef} placeholder="Buscar por nombre, email o teléfono..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-        </div>
+        <SearchInput ref={searchInputRef} placeholder="Buscar por nombre, email o teléfono..." value={search} onChange={(e) => setSearch(e.target.value)} />
       </Card>
 
       <Card className="overflow-hidden border border-gray-100 dark:border-gray-800 p-0">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 space-y-4">
-            <Loader2 className="h-10 w-10 animate-spin text-indigo-500" />
-            <p className="text-sm text-gray-500">Cargando clientes...</p>
-          </div>
+          <LoadingState label="Cargando clientes..." />
         ) : filtered.length === 0 ? (
-          <div className="text-center py-20">
-            <Users className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
-            <p className="text-lg font-medium text-gray-900 dark:text-gray-100">No se encontraron clientes</p>
-            <p className="text-sm text-gray-500 mt-1">Agrega tu primer cliente para comenzar.</p>
-          </div>
+          <EmptyState icon={Users} title="No se encontraron clientes" description="Agrega tu primer cliente para comenzar." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold uppercase tracking-wider">
-                  <SortableTh label="Nombre" sortFor="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                  <SortableTh label="Email" sortFor="email" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                  <SortableTh label="Teléfono" sortFor="phone" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                  <SortableTh label="Dirección" sortFor="address" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                  <th className="py-4 px-6 text-right text-gray-500">Acciones</th>
-                </tr>
-              </thead>
+              <Thead>
+                <SortableTh label="Nombre" sortFor="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                <SortableTh label="Email" sortFor="email" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                <SortableTh label="Teléfono" sortFor="phone" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                <SortableTh label="Dirección" sortFor="address" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                <Th align="right">Acciones</Th>
+              </Thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
                 {sortedCustomers.map((c) => (
                   <tr key={c.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">

@@ -13,6 +13,10 @@ import { Select } from '@/components/ui/select';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { Modal } from '@/components/ui/modal';
 import { Pagination } from '@/components/ui/pagination';
+import { LoadingState } from '@/components/ui/loading-state';
+import { EmptyState } from '@/components/ui/empty-state';
+import { SearchInput } from '@/components/ui/search-input';
+import { Thead, Th } from '@/components/ui/table-header';
 import type { Product } from '@/lib/types/product';
 import toast from 'react-hot-toast';
 import {
@@ -670,15 +674,12 @@ function ProductsPageContent() {
       {/* Filters Card */}
       <Card className="p-4 border border-gray-100 dark:border-gray-800">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-            <Input
+          <div>
+            <SearchInput
               ref={searchInputRef}
-              type="text"
               placeholder="Buscar por nombre, SKU o barras..."
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-              className="pl-9"
             />
           </div>
 
@@ -714,30 +715,21 @@ function ProductsPageContent() {
       {/* Products Table */}
       <Card className="overflow-hidden border border-gray-100 dark:border-gray-800 p-0">
         {productsLoading ? (
-          <div className="flex flex-col items-center justify-center py-20 space-y-4">
-            <Loader2 className="h-10 w-10 animate-spin text-indigo-500" />
-            <p className="text-sm text-gray-500">Cargando inventario...</p>
-          </div>
+          <LoadingState label="Cargando inventario..." />
         ) : filteredProducts.length === 0 ? (
-          <div className="text-center py-20">
-            <Package className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
-            <p className="text-lg font-medium text-gray-900 dark:text-gray-100">No se encontraron productos</p>
-            <p className="text-sm text-gray-500 mt-1">Intenta ajustando los filtros de búsqueda.</p>
-          </div>
+          <EmptyState icon={Package} title="No se encontraron productos" description="Intenta ajustando los filtros de búsqueda." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold uppercase tracking-wider">
-                  <SortableTh label="Producto" sortFor="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                  <SortableTh label="Categoría" sortFor="category" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-3" />
-                  <SortableTh label="Ubicación" sortFor="location" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-3" />
-                  <SortableTh label="SKU / Código" sortFor="sku" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                  <SortableTh label="Precios (Costo / Venta)" sortFor="price" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                  <SortableTh label="Stock" sortFor="stock" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" align="center" />
-                  <th className="py-4 px-6 text-right text-gray-500">Acciones</th>
-                </tr>
-              </thead>
+              <Thead>
+                <SortableTh label="Producto" sortFor="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                <SortableTh label="Categoría" sortFor="category" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-3" />
+                <SortableTh label="Ubicación" sortFor="location" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-3" />
+                <SortableTh label="SKU / Código" sortFor="sku" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                <SortableTh label="Precios (Costo / Venta)" sortFor="price" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                <SortableTh label="Stock" sortFor="stock" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" align="center" />
+                <Th align="right">Acciones</Th>
+              </Thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
                 {paginatedProducts.map((product) => {
                   const category = categories.find((c) => c.id === product.category_id);
