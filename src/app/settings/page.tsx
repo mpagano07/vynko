@@ -15,6 +15,7 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Select } from '@/components/ui/select';
 import { FormLabel } from '@/components/ui/form-label';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { PageHeader } from '@/components/ui/page-header';
 import toast from 'react-hot-toast';
 import {
   PAYMENT_METHODS,
@@ -531,15 +532,11 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-          <Settings className="h-8 w-8 text-gray-600 dark:text-gray-400" />
-          Configuración
-        </h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-          Administra tu perfil y los datos de tu empresa.
-        </p>
-      </div>
+      <PageHeader
+        icon={<Settings className="h-8 w-8 text-gray-600 dark:text-gray-400" />}
+        title="Configuración"
+        subtitle="Administra tu perfil y los datos de tu empresa."
+      />
 
       <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 

@@ -7,6 +7,7 @@ import { useProducts } from '@/lib/hooks/useProducts';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/ui/page-header';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
@@ -183,18 +184,17 @@ export default function LossPreventionPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <ShieldAlert className="h-8 w-8 text-rose-500" />
-            Antipérdidas
-          </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Control de mermas, ajustes de stock y prevención de pérdidas.</p>
-        </div>
-        <Button onClick={() => setShowForm(true)} className="flex items-center gap-2">
-          <ClipboardList className="h-4 w-4" /> Reportar ajuste
-        </Button>
-      </div>
+      <PageHeader
+        icon={<ShieldAlert className="h-8 w-8 text-rose-500" />}
+        title="Antipérdidas"
+        subtitle="Control de mermas, ajustes de stock y prevención de pérdidas."
+        subtitleClassName="text-gray-500 dark:text-gray-400"
+        actions={
+          <Button onClick={() => setShowForm(true)} className="flex items-center gap-2">
+            <ClipboardList className="h-4 w-4" /> Reportar ajuste
+          </Button>
+        }
+      />
 
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

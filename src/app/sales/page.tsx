@@ -13,6 +13,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { SearchInput } from '@/components/ui/search-input';
 import { Thead, Th } from '@/components/ui/table-header';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { PageHeader } from '@/components/ui/page-header';
 import dynamicImport from 'next/dynamic';
 const BarcodeScanner = dynamicImport(
   () => import('@/components/scanner/BarcodeScanner').then((m) => ({ default: m.BarcodeScanner })),
@@ -667,14 +668,11 @@ export default function SalesPage() {
           }
         }
       `}</style>
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-          <ShoppingCart className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
-          Registrar Venta
-        </h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-          Busca productos, arma el carrito y confirma la venta.
-        </p>
+      <PageHeader
+        icon={<ShoppingCart className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />}
+        title="Registrar Venta"
+        subtitle="Busca productos, arma el carrito y confirma la venta."
+      >
         <div className="hidden md:flex flex-wrap items-center gap-2 mt-2.5">
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
             <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-[11px] shadow-xs">F2</kbd>
@@ -693,7 +691,7 @@ export default function SalesPage() {
             Cancelar carrito
           </span>
         </div>
-      </div>
+      </PageHeader>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">

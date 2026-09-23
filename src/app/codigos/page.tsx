@@ -10,6 +10,7 @@ import { matchesQuery } from '@/lib/utils/text';
 import { Card } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/ui/page-header';
 import { Pagination } from '@/components/ui/pagination';
 import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -177,23 +178,17 @@ export default function CodigosPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <QrCode className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
-            Códigos QR
-          </h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Generá códigos QR para imprimir y pegar en góndolas, bultos o productos fraccionados.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        icon={<QrCode className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />}
+        title="Códigos QR"
+        subtitle="Generá códigos QR para imprimir y pegar en góndolas, bultos o productos fraccionados."
+        actions={
           <Button variant="outline" size="sm" onClick={handlePrint} className="flex items-center gap-1.5">
             <Printer className="h-3.5 w-3.5 shrink-0" />
             <span className="hidden md:inline">Imprimir</span>
           </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Filters */}
       <Card className="p-4 border border-gray-100 dark:border-gray-800">

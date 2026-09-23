@@ -15,6 +15,7 @@ import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SearchInput } from '@/components/ui/search-input';
 import { Thead, Th } from '@/components/ui/table-header';
+import { PageHeader } from '@/components/ui/page-header';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import {
@@ -407,27 +408,23 @@ export default function ProvidersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <Truck className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
-            Proveedores
-          </h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Administra tus proveedores.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button onClick={openPoModal} className="flex items-center gap-2">
-            <Plus className="h-4 w-4" />
-            Nueva compra
-          </Button>
-          <Button variant="outline" onClick={() => openSupplierModal(null)} className="flex items-center gap-2">
-            <Plus className="h-4 w-4" />
-            Nuevo Proveedor
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        icon={<Truck className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />}
+        title="Proveedores"
+        subtitle="Administra tus proveedores."
+        actions={
+          <>
+            <Button onClick={openPoModal} className="flex items-center gap-2">
+              <Plus className="h-4 w-4" />
+              Nueva compra
+            </Button>
+            <Button variant="outline" onClick={() => openSupplierModal(null)} className="flex items-center gap-2">
+              <Plus className="h-4 w-4" />
+              Nuevo Proveedor
+            </Button>
+          </>
+        }
+      />
 
       <Card className="p-4 border border-gray-100 dark:border-gray-800">
         <SearchInput

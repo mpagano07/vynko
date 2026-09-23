@@ -11,6 +11,7 @@ import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SearchInput } from '@/components/ui/search-input';
 import { Thead, Th } from '@/components/ui/table-header';
+import { PageHeader } from '@/components/ui/page-header';
 import { Plus, Edit, Trash2, Users, Loader2, ShoppingBag, DollarSign, CalendarDays } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import { matchesQuery } from '@/lib/utils/text';
@@ -194,18 +195,17 @@ export default function CustomersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <Users className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
-            Clientes
-          </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Gestiona tus clientes y consulta su historial de compras.</p>
-        </div>
-        <Button onClick={openCreate} className="flex items-center gap-2">
-          <Plus className="h-4 w-4" /> Nuevo Cliente
-        </Button>
-      </div>
+      <PageHeader
+        icon={<Users className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />}
+        title="Clientes"
+        subtitle="Gestiona tus clientes y consulta su historial de compras."
+        subtitleClassName="text-gray-500 dark:text-gray-400"
+        actions={
+          <Button onClick={openCreate} className="flex items-center gap-2">
+            <Plus className="h-4 w-4" /> Nuevo Cliente
+          </Button>
+        }
+      />
 
       <Card className="p-4 border border-gray-100 dark:border-gray-800">
         <SearchInput ref={searchInputRef} placeholder="Buscar por nombre, email o teléfono..." value={search} onChange={(e) => setSearch(e.target.value)} />

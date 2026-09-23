@@ -12,6 +12,7 @@ import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Thead, Th } from '@/components/ui/table-header';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { PageHeader } from '@/components/ui/page-header';
 import toast from 'react-hot-toast';
 import {
   Loader2,
@@ -595,34 +596,30 @@ export default function ActivityLogsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <ScrollText className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
-            Historial de Actividad
-          </h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Registro detallado de todas las acciones realizadas en el sistema.
-          </p>
-        </div>
-        {activeTab === 'activity' && !loading && logs.length > 0 && (
-          <div className="relative group">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportExcel}
-              className="flex items-center gap-2 text-xs border-gray-300 dark:border-gray-700 w-full sm:w-auto justify-center"
-            >
-              <FileSpreadsheet className="h-4 w-4 text-green-600" />
-              Exportar a Excel
-            </Button>
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
-              Se descargará todo lo filtrado
-              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700" />
+      <PageHeader
+        icon={<ScrollText className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />}
+        title="Historial de Actividad"
+        subtitle="Registro detallado de todas las acciones realizadas en el sistema."
+        actions={
+          activeTab === 'activity' && !loading && logs.length > 0 ? (
+            <div className="relative group">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportExcel}
+                className="flex items-center gap-2 text-xs border-gray-300 dark:border-gray-700 w-full sm:w-auto justify-center"
+              >
+                <FileSpreadsheet className="h-4 w-4 text-green-600" />
+                Exportar a Excel
+              </Button>
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+                Se descargará todo lo filtrado
+                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700" />
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          ) : undefined
+        }
+      />
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-gray-200 dark:border-gray-800">

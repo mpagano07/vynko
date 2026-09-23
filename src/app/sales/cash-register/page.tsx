@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Modal } from '@/components/ui/modal';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { PageHeader } from '@/components/ui/page-header';
 import toast from 'react-hot-toast';
 import {
   Banknote,
@@ -223,15 +224,11 @@ export default function CashRegisterPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 text-left flex items-center gap-2">
-          <Banknote className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
-          Caja y Arqueo
-        </h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-          Apertura, movimientos manuales y cierre de turno con arqueo ciego.
-        </p>
-      </div>
+      <PageHeader
+        icon={<Banknote className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />}
+        title="Caja y Arqueo"
+        subtitle="Apertura, movimientos manuales y cierre de turno con arqueo ciego."
+      />
 
       {loading ? (
         <div className="flex items-center justify-center py-16">

@@ -18,6 +18,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { SearchInput } from '@/components/ui/search-input';
 import { Thead, Th } from '@/components/ui/table-header';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { PageHeader } from '@/components/ui/page-header';
 import type { Product } from '@/lib/types/product';
 import toast from 'react-hot-toast';
 import {
@@ -576,17 +577,12 @@ function ProductsPageContent() {
   return (
     <div className="space-y-6">
       {/* Upper Control Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <Package className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
-            Gestión de Inventario
-          </h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Administra tus productos, códigos de barras y niveles de stock crítico.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        icon={<Package className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />}
+        title="Gestión de Inventario"
+        subtitle="Administra tus productos, códigos de barras y niveles de stock crítico."
+        actions={
+          <>
           {/* Actions Dropdown */}
           <div className="relative" ref={actionsMenuRef}>
             <Button
@@ -665,8 +661,9 @@ function ProductsPageContent() {
             <Plus className="h-3.5 w-3.5 shrink-0" />
             Nuevo
           </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Transfer Inbox — active transfers for multi-branch */}
       {multiBranch && tenantId && (

@@ -7,6 +7,7 @@ import { SearchInput } from './search-input';
 import { Thead, Th } from './table-header';
 import { FormLabel } from './form-label';
 import { StatusBadge } from './status-badge';
+import { PageHeader } from './page-header';
 
 describe('LoadingState', () => {
   it('renders an optional label', () => {
@@ -147,5 +148,54 @@ describe('StatusBadge', () => {
     const badge = screen.getByText('Crítico');
     expect(badge.querySelector('svg')).toBeInTheDocument();
     expect(badge).toHaveClass('bg-rose-50', 'text-rose-600', 'font-bold', 'capitalize');
+  });
+});
+
+describe('PageHeader', () => {
+  it('renders title, subtitle and icon', () => {
+    render(
+      <PageHeader
+        icon={<Users className="h-8 w-8" />}
+        title="Clientes"
+        subtitle="Gestiona tus clientes."
+      />
+    );
+
+    expect(screen.getByText('Clientes')).toBeInTheDocument();
+    expect(screen.getByText('Gestiona tus clientes.')).toBeInTheDocument();
+    expect(screen.getByText('Clientes').querySelector('svg')).toBeInTheDocument();
+  });
+
+  it('applies the responsive container by default and compact variant', () => {
+    const { container } = render(<PageHeader title="Header" />);
+    expect(container.querySelector('header')).toHaveClass('sm:justify-between', 'gap-4');
+
+    const { container: compactContainer } = render(<PageHeader title="Header" compact />);
+    expect(compactContainer.querySelector('header')).toHaveClass('justify-between');
+    expect(compactContainer.querySelector('header')).not.toHaveClass('gap-4');
+  });
+
+  it('renders actions on the right and merges subtitle className', () => {
+    render(
+      <PageHeader
+        title="Antipérdidas"
+        subtitle="Control de mermas."
+        subtitleClassName="text-gray-500"
+        actions={<button>Reportar</button>}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: 'Reportar' })).toBeInTheDocument();
+    expect(screen.getByText('Control de mermas.')).toHaveClass('text-gray-500');
+  });
+
+  it('renders extra children below the subtitle', () => {
+    render(
+      <PageHeader title="Registrar Venta">
+        <span>Atajo F2</span>
+      </PageHeader>
+    );
+
+    expect(screen.getByText('Atajo F2')).toBeInTheDocument();
   });
 });

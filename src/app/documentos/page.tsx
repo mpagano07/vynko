@@ -16,6 +16,7 @@ import { SearchInput } from '@/components/ui/search-input';
 import { Thead, Th } from '@/components/ui/table-header';
 import { FormLabel } from '@/components/ui/form-label';
 import { StatusBadge, type StatusTone } from '@/components/ui/status-badge';
+import { PageHeader } from '@/components/ui/page-header';
 import toast from 'react-hot-toast';
 import {
   FileText,
@@ -876,21 +877,18 @@ export default function DocumentosPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <FileText className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
-            Documentos Comerciales
-          </h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Gestión de remitos, presupuestos y órdenes
-          </p>
-        </div>
-        <Button onClick={handleNewDocument} className="flex items-center gap-2">
-          <Plus className="h-4 w-4" />
-          Nuevo Documento
-        </Button>
-      </div>
+      <PageHeader
+        compact
+        icon={<FileText className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />}
+        title="Documentos Comerciales"
+        subtitle="Gestión de remitos, presupuestos y órdenes"
+        actions={
+          <Button onClick={handleNewDocument} className="flex items-center gap-2">
+            <Plus className="h-4 w-4" />
+            Nuevo Documento
+          </Button>
+        }
+      />
 
       <Card className="p-4 border border-gray-100 dark:border-gray-800">
         <div className="flex items-center gap-2 flex-wrap">
