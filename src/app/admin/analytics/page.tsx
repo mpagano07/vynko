@@ -12,7 +12,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 
-const ADMIN_EMAIL = 'matias.pagano07@gmail.com';
+import { isAdminEmail } from '@/lib/admin';
 
 interface AnalyticsData {
   totalSignups: number;
@@ -43,7 +43,7 @@ export default function AdminAnalyticsPage() {
 
   useEffect(() => {
     if (authLoading) return;
-    if (!user || user.email !== ADMIN_EMAIL) {
+    if (!user || !isAdminEmail(user.email)) {
       router.replace('/dashboard');
       return;
     }
@@ -83,7 +83,7 @@ export default function AdminAnalyticsPage() {
     );
   }
 
-  if (error || !data || !user || user.email !== ADMIN_EMAIL) {
+  if (error || !data || !user || !isAdminEmail(user.email)) {
     return (
       <div className="p-6 max-w-6xl mx-auto">
         <Card className="p-8 text-center">
