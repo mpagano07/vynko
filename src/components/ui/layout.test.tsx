@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { Users } from 'lucide-react';
 import { LoadingState } from './loading-state';
@@ -10,6 +10,7 @@ import { StatusBadge } from './status-badge';
 import { PageHeader } from './page-header';
 import { IconAction } from './icon-action';
 import { StatCard } from './stat-card';
+import { ExportButton } from './export-button';
 
 describe('LoadingState', () => {
   it('renders an optional label', () => {
@@ -262,5 +263,27 @@ describe('StatCard', () => {
 
     expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
     expect(screen.queryByText('$10')).not.toBeInTheDocument();
+  });
+});
+
+describe('ExportButton', () => {
+  it('blocks clicks and shows a loader while exporting', () => {
+    render(<ExportButton label="Exportar a Excel" onExport={() => new Promise(() => {})} />);
+
+    const button = screen.getByRole('button', { name: 'Exportar a Excel' });
+    fireEvent.click(button);
+
+    expect(button).toBeDisabled();
+    expect(screen.getByText('Exportando...')).toBeInTheDocument();
+  });
+
+  it('temporarily locks clicks after a completed export', async () => {
+    render(<ExportButton label="Exportar" lockMs={100} onExport={() => Promise.resolve()} />);
+
+    const button = screen.getByRole('button', { name: 'Exportar' });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(button).toBeDisabled());
+    await waitFor(() => expect(button).toBeEnabled(), { timeout: 1000 });
   });
 });

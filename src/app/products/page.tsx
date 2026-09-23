@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useProducts } from '@/lib/hooks/useProducts';
 import { useCategories } from '@/lib/hooks/useCategories';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { useExport } from '@/lib/hooks/useExport';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -141,7 +142,7 @@ function ProductsPageContent() {
   const [showColumnInfo, setShowColumnInfo] = useState(false);
 
   // Export State
-  const [exporting, setExporting] = useState(false);
+  const { exporting, busy, run } = useExport();
 
   // Transfer State
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -255,41 +256,40 @@ function ProductsPageContent() {
       return;
     }
 
-    setExporting(true);
-    try {
-      const XLSX = await import('xlsx');
+    await run(async () => {
+      try {
+        const XLSX = await import('xlsx');
 
-      const data = filteredProducts.map((p) => {
-        const cat = categories.find((c) => c.id === p.category_id);
-        return {
-          'Nombre': p.name,
-          'Categoría': cat?.name || '',
-          'SKU': p.sku || '',
-          'Código de Barras': p.barcode || '',
-          'Costo': p.cost ?? 0,
-          'Precio Venta': p.price ?? 0,
-          'Stock': p.stock ?? 0,
-          'Stock Mínimo': p.min_stock ?? 0,
-          'Stock Máximo': p.max_stock ?? 0,
-          'Depósito': p.deposito || '',
-          'Pasillo': p.pasillo || '',
-          'Estantería': p.estanteria || '',
-        };
-      });
+        const data = filteredProducts.map((p) => {
+          const cat = categories.find((c) => c.id === p.category_id);
+          return {
+            'Nombre': p.name,
+            'Categoría': cat?.name || '',
+            'SKU': p.sku || '',
+            'Código de Barras': p.barcode || '',
+            'Costo': p.cost ?? 0,
+            'Precio Venta': p.price ?? 0,
+            'Stock': p.stock ?? 0,
+            'Stock Mínimo': p.min_stock ?? 0,
+            'Stock Máximo': p.max_stock ?? 0,
+            'Depósito': p.deposito || '',
+            'Pasillo': p.pasillo || '',
+            'Estantería': p.estanteria || '',
+          };
+        });
 
-      const ws = XLSX.utils.json_to_sheet(data);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Productos');
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Productos');
 
-      const now = new Date().toISOString().slice(0, 10);
-      XLSX.writeFile(wb, `productos_${now}.xlsx`);
+        const now = new Date().toISOString().slice(0, 10);
+        XLSX.writeFile(wb, `productos_${now}.xlsx`);
 
-      toast.success(`${data.length} producto(s) exportados`);
-    } catch {
-      toast.error('Error al exportar');
-    } finally {
-      setExporting(false);
-    }
+        toast.success(`${data.length} producto(s) exportados`);
+      } catch {
+        toast.error('Error al exportar');
+      }
+    });
   };
 
   const handlePriceAdjust = async () => {
@@ -630,7 +630,7 @@ function ProductsPageContent() {
                   </button>
                   <button
                     onClick={() => { handleExport(); setIsActionsMenuOpen(false); }}
-                    disabled={exporting}
+                    disabled={busy}
                     className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
                   >
                     {exporting ? (
