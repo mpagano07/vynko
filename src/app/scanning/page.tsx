@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { FormLabel } from '@/components/ui/form-label';
 import { Package, Scan, Loader2, CheckCircle2, PackagePlus } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import toast from 'react-hot-toast';
@@ -203,9 +204,9 @@ function ScanningPageContent() {
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <FormLabel>
                     {stockinMode ? 'Cantidad a cargar' : 'Cantidad a ajustar'}
-                  </label>
+                  </FormLabel>
                   <Input
                     type="number"
                     min={1}
@@ -215,9 +216,9 @@ function ScanningPageContent() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <FormLabel>
                     Motivo
-                  </label>
+                  </FormLabel>
                   <Select
                     value={addReason}
                     onChange={(e) => setAddReason(e.target.value)}

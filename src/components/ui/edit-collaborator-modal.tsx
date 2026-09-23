@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
+import { FormLabel } from '@/components/ui/form-label';
 import { Pencil, Loader2, Shield, ShieldCheck, HelpCircle } from 'lucide-react';
 
 export interface TenantOption {
@@ -74,7 +75,7 @@ export function EditCollaboratorModal({
 
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+            <FormLabel className="mb-1.5 flex items-center gap-1">
               Rol
               <span
                 className="inline-flex cursor-help text-gray-400"
@@ -82,7 +83,7 @@ export function EditCollaboratorModal({
               >
                 <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
               </span>
-            </label>
+            </FormLabel>
             <Select
               value={editRole}
               disabled={!canEditRole || role === 'owner'}

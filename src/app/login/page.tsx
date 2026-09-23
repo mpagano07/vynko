@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { FormLabel } from '@/components/ui/form-label';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff } from 'lucide-react';
@@ -148,9 +149,9 @@ function LoginContent() {
 
           <form onSubmit={handleLogin} noValidate className="space-y-4">
             <div>
-              <label htmlFor="login-email" className="block text-sm font-medium mb-1.5 text-gray-300">
+              <FormLabel variant="default" htmlFor="login-email" className="text-gray-300 mb-1.5">
                 Email
-              </label>
+              </FormLabel>
               <Input
                 type="email"
                 name="email"
@@ -164,9 +165,9 @@ function LoginContent() {
             </div>
 
             <div>
-              <label htmlFor="login-password" className="block text-sm font-medium mb-1.5 text-gray-300">
+              <FormLabel variant="default" htmlFor="login-password" className="text-gray-300 mb-1.5">
                 Contraseña
-              </label>
+              </FormLabel>
               <div className="relative">
                 <Input
                   type={showPassword ? 'text' : 'password'}

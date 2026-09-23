@@ -30,6 +30,7 @@ import type { Product } from '@/lib/types/product';
 import { formatARS } from '@/lib/utils/currency';
 import { matchesQuery } from '@/lib/utils/text';
 import { SortableTh, SortDir } from '@/components/ui/sortable-th';
+import { FormLabel } from '@/components/ui/form-label';
 
 const PO_INTENT_KEY = 'create_po_intent';
 
@@ -564,9 +565,9 @@ export default function ProvidersPage() {
         >
           <form onSubmit={handleSaveSupplier} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                <FormLabel>
                   Nombre *
-                </label>
+                </FormLabel>
                 <Input
                   type="text"
                   required
@@ -578,9 +579,9 @@ export default function ProvidersPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <FormLabel>
                     Persona de Contacto
-                  </label>
+                  </FormLabel>
                   <Input
                     type="text"
                     placeholder="Nombre del contacto"
@@ -589,9 +590,9 @@ export default function ProvidersPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <FormLabel>
                     Teléfono
-                  </label>
+                  </FormLabel>
                   <Input
                     type="text"
                     placeholder="Teléfono"
@@ -602,9 +603,9 @@ export default function ProvidersPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                <FormLabel>
                   Email
-                </label>
+                </FormLabel>
                 <Input
                   type="email"
                   placeholder="proveedor@ejemplo.com"
@@ -614,9 +615,9 @@ export default function ProvidersPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                <FormLabel>
                   Dirección
-                </label>
+                </FormLabel>
                 <Input
                   type="text"
                   placeholder="Dirección"
@@ -626,9 +627,9 @@ export default function ProvidersPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                <FormLabel>
                   Notas
-                </label>
+                </FormLabel>
                 <textarea
                   className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                   rows={3}
@@ -660,9 +661,9 @@ export default function ProvidersPage() {
           <form onSubmit={handleCreatePo} className="space-y-4 overflow-y-auto pr-1 flex-1">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <FormLabel>
                     Proveedor *
-                  </label>
+                  </FormLabel>
                   <Select value={poSupplierId} onChange={(e) => setPoSupplierId(e.target.value)} required>
                     <option value="">Seleccionar proveedor...</option>
                     {suppliers.map((s) => (
@@ -671,9 +672,9 @@ export default function ProvidersPage() {
                   </Select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <FormLabel>
                     Fecha Esperada
-                  </label>
+                  </FormLabel>
                   <Input
                     type="date"
                     value={poExpectedDate}
@@ -681,9 +682,9 @@ export default function ProvidersPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <FormLabel>
                     Estado
-                  </label>
+                  </FormLabel>
                   <Select value={poStatus} onChange={(e) => setPoStatus(e.target.value as 'draft' | 'sent')}>
                     <option value="draft">Borrador</option>
                     <option value="sent">Enviado</option>
@@ -788,9 +789,9 @@ export default function ProvidersPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                <FormLabel>
                   Notas del pedido
-                </label>
+                </FormLabel>
                 <textarea
                   className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                   rows={2}

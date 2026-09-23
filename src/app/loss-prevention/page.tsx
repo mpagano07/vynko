@@ -14,6 +14,7 @@ import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SearchInput } from '@/components/ui/search-input';
 import { Thead, Th } from '@/components/ui/table-header';
+import { FormLabel } from '@/components/ui/form-label';
 import toast from 'react-hot-toast';
 import {
   ShieldAlert, Package, TrendingDown, AlertTriangle,
@@ -412,7 +413,7 @@ export default function LossPreventionPage() {
         >
           <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Producto *</label>
+                <FormLabel>Producto *</FormLabel>
                 <Select searchable value={form.productId} onChange={(e) => setForm({ ...form, productId: e.target.value })}>
                   <option value="">Seleccionar producto...</option>
                   {(products || []).map((p) => (
@@ -421,7 +422,7 @@ export default function LossPreventionPage() {
                 </Select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Tipo de ajuste *</label>
+                <FormLabel>Tipo de ajuste *</FormLabel>
                 <Select value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })}>
                   {reasonOptions.map(r => (
                     <option key={r.value} value={r.value}>{r.label}</option>
@@ -429,7 +430,7 @@ export default function LossPreventionPage() {
                 </Select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Cantidad *</label>
+                <FormLabel>Cantidad *</FormLabel>
                 <Input
                   type="number"
                   min={1}
@@ -445,7 +446,7 @@ export default function LossPreventionPage() {
                 </p>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Notas (opcional)</label>
+                <FormLabel>Notas (opcional)</FormLabel>
                 <textarea
                   className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                   rows={2}

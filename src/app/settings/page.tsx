@@ -13,6 +13,7 @@ import { EditCollaboratorModal } from '@/components/ui/edit-collaborator-modal';
 import { Settings, User, Building2, Loader2, Save, KeyRound, Users, Mail, X, Shield, ShieldCheck, FileText, MapPin, Palette, ListChecks, Percent, Ticket, Pencil, HelpCircle, RefreshCw } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Select } from '@/components/ui/select';
+import { FormLabel } from '@/components/ui/form-label';
 import toast from 'react-hot-toast';
 import {
   PAYMENT_METHODS,
@@ -552,9 +553,9 @@ export default function SettingsPage() {
 
                 <form onSubmit={handleSaveProfile} className="space-y-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel>
                       Email
-                    </label>
+                    </FormLabel>
                     <Input
                       type="email"
                       value={user?.email || ''}
@@ -565,9 +566,9 @@ export default function SettingsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel>
                       Nombre completo
-                    </label>
+                    </FormLabel>
                     <Input
                       type="text"
                       required
@@ -597,9 +598,9 @@ export default function SettingsPage() {
 
                 <form onSubmit={handleChangePassword} className="space-y-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel>
                       Contraseña actual
-                    </label>
+                    </FormLabel>
                     <Input
                       type="password"
                       required
@@ -610,9 +611,9 @@ export default function SettingsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel>
                       Nueva contraseña
-                    </label>
+                    </FormLabel>
                     <Input
                       type="password"
                       required
@@ -624,9 +625,9 @@ export default function SettingsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel>
                       Confirmar contraseña
-                    </label>
+                    </FormLabel>
                     <Input
                       type="password"
                       required
@@ -666,9 +667,9 @@ export default function SettingsPage() {
                 <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Información General</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel>
                       Nombre de la empresa
-                    </label>
+                    </FormLabel>
                     <Input
                       type="text"
                       placeholder="Nombre de tu empresa"
@@ -677,9 +678,9 @@ export default function SettingsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel>
                       Teléfono
-                    </label>
+                    </FormLabel>
                     <Input
                       type="text"
                       placeholder="11-1234-5678"
@@ -688,9 +689,9 @@ export default function SettingsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel>
                       Email de contacto
-                    </label>
+                    </FormLabel>
                     <Input
                       type="email"
                       placeholder="empresa@ejemplo.com"
@@ -700,9 +701,9 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 <div className="mt-4">
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                  <FormLabel>
                     Descripción
-                  </label>
+                  </FormLabel>
                   <textarea
                     className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                     rows={2}
@@ -720,9 +721,9 @@ export default function SettingsPage() {
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel>
                       Razón Social
-                    </label>
+                    </FormLabel>
                     <Input
                       type="text"
                       placeholder="Razón social (si difiere del nombre)"
@@ -731,9 +732,9 @@ export default function SettingsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel>
                       CUIT
-                    </label>
+                    </FormLabel>
                     <Input
                       type="text"
                       placeholder="XX-XXXXXXXX-X"
@@ -742,9 +743,9 @@ export default function SettingsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel>
                       Condición frente al IVA
-                    </label>
+                    </FormLabel>
                     <Select
                       value={tenantForm.iva_condition}
                       onChange={(e) => setTenantForm({ ...tenantForm, iva_condition: e.target.value })}
@@ -757,9 +758,9 @@ export default function SettingsPage() {
                     </Select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel>
                       Punto de Venta
-                    </label>
+                    </FormLabel>
                     <Input
                       type="number"
                       min={1}
@@ -770,9 +771,9 @@ export default function SettingsPage() {
                     <p className="text-xs text-gray-400 mt-1">Corresponde al punto de venta de esta sucursal</p>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel>
                       Ingresos Brutos
-                    </label>
+                    </FormLabel>
                     <Input
                       type="text"
                       placeholder="N° de ingresos brutos"
@@ -781,9 +782,9 @@ export default function SettingsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel>
                       Inicio de Actividades
-                    </label>
+                    </FormLabel>
                     <Input
                       type="date"
                       value={tenantForm.inicio_actividades}
@@ -800,9 +801,9 @@ export default function SettingsPage() {
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="md:col-span-3">
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel>
                       Dirección
-                    </label>
+                    </FormLabel>
                     <Input
                       type="text"
                       placeholder="Calle y número"
@@ -811,9 +812,9 @@ export default function SettingsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel>
                       Ciudad
-                    </label>
+                    </FormLabel>
                     <Input
                       type="text"
                       placeholder="Ciudad"
@@ -822,9 +823,9 @@ export default function SettingsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel>
                       Provincia
-                    </label>
+                    </FormLabel>
                     <Select
                       value={tenantForm.business_province}
                       onChange={(e) => setTenantForm({ ...tenantForm, business_province: e.target.value })}
@@ -857,9 +858,9 @@ export default function SettingsPage() {
                     </Select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel>
                       Código Postal
-                    </label>
+                    </FormLabel>
                     <Input
                       type="text"
                       placeholder="CP"
@@ -1039,9 +1040,9 @@ export default function SettingsPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel>
                       Nombre
-                    </label>
+                    </FormLabel>
                     <Input
                       type="text"
                       placeholder="Nombre"
@@ -1050,9 +1051,9 @@ export default function SettingsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    <FormLabel>
                       Email
-                    </label>
+                    </FormLabel>
                     <Input
                       type="email"
                       required
@@ -1062,7 +1063,7 @@ export default function SettingsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <FormLabel className="flex items-center gap-1">
                       Rol
                       <span
                         className="inline-flex cursor-help text-gray-400"
@@ -1070,7 +1071,7 @@ export default function SettingsPage() {
                       >
                         <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
                       </span>
-                    </label>
+                    </FormLabel>
                     <Select
                       value={inviteRole}
                       onChange={(e) => setInviteRole(e.target.value)}
@@ -1242,9 +1243,9 @@ export default function SettingsPage() {
 
                 <form onSubmit={handleSaveTicket} className="space-y-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    <FormLabel className="mb-2">
                       Tamaño de ticket
-                    </label>
+                    </FormLabel>
                     <Select
                       disabled={!canEditCheckout || savingTicket}
                       value={checkoutPaperSize}

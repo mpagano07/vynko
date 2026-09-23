@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
+import { FormLabel } from '@/components/ui/form-label';
 import { useAuth } from '@/lib/hooks/useAuth';
 import toast from 'react-hot-toast';
 
@@ -223,9 +224,9 @@ export default function OnboardingPage() {
 
         <form onSubmit={handleCreateCompany} className="space-y-4">
           <div>
-            <label htmlFor="company-name" className="block text-sm font-medium mb-2 text-gray-300">
+            <FormLabel variant="default" htmlFor="company-name" className="text-gray-300 mb-2">
               Nombre de la empresa
-            </label>
+            </FormLabel>
             <Input
               type="text"
               id="company-name"
@@ -241,9 +242,9 @@ export default function OnboardingPage() {
           </div>
 
           <div>
-            <label htmlFor="owner-name" className="block text-sm font-medium mb-2 text-gray-300">
+            <FormLabel variant="default" htmlFor="owner-name" className="text-gray-300 mb-2">
               Tu nombre
-            </label>
+            </FormLabel>
             <Input
               type="text"
               id="owner-name"
