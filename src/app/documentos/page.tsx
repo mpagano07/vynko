@@ -15,6 +15,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { SearchInput } from '@/components/ui/search-input';
 import { Thead, Th } from '@/components/ui/table-header';
 import { FormLabel } from '@/components/ui/form-label';
+import { StatusBadge, type StatusTone } from '@/components/ui/status-badge';
 import toast from 'react-hot-toast';
 import {
   FileText,
@@ -38,7 +39,6 @@ import type {
 import {
   DOCUMENT_TYPE_LABELS,
   DOCUMENT_STATUS_LABELS,
-  DOCUMENT_STATUS_COLORS,
   VALID_STATUSES_PER_TYPE,
 } from '@/lib/types/document';
 import type { PurchaseOrder } from '@/lib/types/supplier';
@@ -60,6 +60,14 @@ const PO_STATUS_LABELS: Record<string, string> = {
   partial: 'Recibido Parcial',
   received: 'Recibido',
   cancelled: 'Cancelado',
+};
+
+const DOCUMENT_STATUS_COLORS_TONE: Record<DocumentStatus, StatusTone> = {
+  pending: 'yellow',
+  approved: 'green',
+  rejected: 'red',
+  completed: 'blue',
+  cancelled: 'grayMuted',
 };
 
 interface DocumentItem {
@@ -823,27 +831,32 @@ export default function DocumentosPage() {
     });
   };
 
+  const documentTone = (status: DocumentStatus): StatusTone =>
+    DOCUMENT_STATUS_COLORS_TONE[status] ?? 'gray';
+
   const statusBadge = (status: DocumentStatus) => (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${DOCUMENT_STATUS_COLORS[status]}`}>
+    <StatusBadge tone={documentTone(status)} className="px-2.5">
       {DOCUMENT_STATUS_LABELS[status]}
-    </span>
+    </StatusBadge>
   );
 
-  const poStatusBadge = (status: string) => (
-    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+  const poStatusBadge = (status: string) => {
+    const tone: StatusTone =
       status === 'draft'
-        ? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+        ? 'gray'
         : status === 'sent'
-        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+        ? 'amber'
         : status === 'partial'
-        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+        ? 'blue'
         : status === 'received'
-        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-        : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-    }`}>
-      {PO_STATUS_LABELS[status]}
-    </span>
-  );
+        ? 'green'
+        : 'red';
+    return (
+      <StatusBadge size="sm" tone={tone}>
+        {PO_STATUS_LABELS[status]}
+      </StatusBadge>
+    );
+  };
 
   const getDocumentTypeLabel = (type: DocumentType) => DOCUMENT_TYPE_LABELS[type];
 

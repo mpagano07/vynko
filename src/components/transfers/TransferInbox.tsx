@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
+import { StatusBadge as StatusPill } from '@/components/ui/status-badge';
 import toast from 'react-hot-toast';
 
 interface TransferItem {
@@ -58,25 +59,22 @@ async function enrichItems(items: TransferItem[], token?: string): Promise<Trans
 function StatusBadge({ status }: { status: Transfer['status'] }) {
   if (status === 'pending') {
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-        <Clock className="h-3 w-3" />
+      <StatusPill size="md" tone="amber" icon={<Clock className="h-3 w-3" />}>
         Pendiente
-      </span>
+      </StatusPill>
     );
   }
   if (status === 'in_transit') {
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-        <Truck className="h-3 w-3 animate-[truck_1.5s_ease-in-out_infinite]" />
+      <StatusPill size="md" tone="blue" icon={<Truck className="h-3 w-3 animate-[truck_1.5s_ease-in-out_infinite]" />}>
         En tránsito
-      </span>
+      </StatusPill>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
-      <CheckCircle2 className="h-3 w-3" />
+    <StatusPill size="md" tone="emerald" icon={<CheckCircle2 className="h-3 w-3" />}>
       Recibida
-    </span>
+    </StatusPill>
   );
 }
 

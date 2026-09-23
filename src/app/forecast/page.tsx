@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Pagination } from '@/components/ui/pagination';
 import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { TrendingUp, AlertTriangle, ShoppingCart, Banknote, Activity, BarChart3, Sparkles, Flame, Filter, ExternalLink } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -402,21 +403,13 @@ export default function ForecastPage() {
                     </td>
                     <td className="py-3 px-6 text-center">
                       {p.totalSoldLast30 === 0 ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-500 bg-gray-100 dark:bg-gray-800 dark:text-gray-400 rounded-full px-2 py-0.5">
-                          Sin movimiento
-                        </span>
+                        <StatusBadge size="xs" tone="gray">Sin movimiento</StatusBadge>
                       ) : p.currentStock <= p.minStock ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600 bg-rose-50 dark:bg-rose-950/30 dark:text-rose-400 rounded-full px-2 py-0.5">
-                          Crítico
-                        </span>
+                        <StatusBadge size="xs" tone="rose">Crítico</StatusBadge>
                       ) : p.needsReorder ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400 rounded-full px-2 py-0.5">
-                          Alerta
-                        </span>
+                        <StatusBadge size="xs" tone="amberSoft">Alerta</StatusBadge>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-400 rounded-full px-2 py-0.5">
-                          Saludable
-                        </span>
+                        <StatusBadge size="xs" tone="emeraldSoft">Saludable</StatusBadge>
                       )}
                     </td>
                     <td className="py-3 px-6 text-center">

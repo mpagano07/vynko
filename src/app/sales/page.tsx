@@ -12,6 +12,7 @@ import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SearchInput } from '@/components/ui/search-input';
 import { Thead, Th } from '@/components/ui/table-header';
+import { StatusBadge } from '@/components/ui/status-badge';
 import dynamicImport from 'next/dynamic';
 const BarcodeScanner = dynamicImport(
   () => import('@/components/scanner/BarcodeScanner').then((m) => ({ default: m.BarcodeScanner })),
@@ -106,18 +107,16 @@ function StockBadge({ product }: { product: ProductOption }) {
   const level = getStockLevel(product.stock, product.min_stock ?? 0);
   if (level === 'critical') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 px-2 py-0.5 text-[11px] font-bold whitespace-nowrap">
-        <TriangleAlert className="h-3 w-3" />
+      <StatusBadge size="xs" tone="orange" className="font-bold gap-1" icon={<TriangleAlert className="h-3 w-3" />}>
         Stock crítico · {product.stock}
-      </span>
+      </StatusBadge>
     );
   }
   if (level === 'low') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-0.5 text-[11px] font-bold whitespace-nowrap">
-        <TriangleAlert className="h-3 w-3" />
+      <StatusBadge size="xs" tone="amber" className="font-bold gap-1" icon={<TriangleAlert className="h-3 w-3" />}>
         Stock bajo · {product.stock}
-      </span>
+      </StatusBadge>
     );
   }
   return (
@@ -866,9 +865,9 @@ export default function SalesPage() {
               <Receipt className="h-5 w-5 text-indigo-600" />
               Carrito
               {cart.length > 0 && (
-                <span className="ml-auto text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/40 px-2 py-0.5 rounded-full">
+                <StatusBadge size="sm" tone="indigo" className="ml-auto text-sm font-semibold">
                   {cart.length} productos
-                </span>
+                </StatusBadge>
               )}
             </h2>
 
@@ -1169,12 +1168,10 @@ export default function SalesPage() {
                                     </div>
                                     <div className="text-right">
                                       <div className="flex items-center justify-end gap-1.5">
-                                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400">
-                                          Completada
-                                        </span>
-                                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                                        <StatusBadge tone="indigo">Completada</StatusBadge>
+                                        <StatusBadge tone="grayMuted">
                                           {getPaymentMethodLabel(sale.payment_method)}
-                                        </span>
+                                        </StatusBadge>
                                       </div>
                                       <div className="flex items-center justify-end gap-2 mt-3">
                                         <button

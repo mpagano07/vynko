@@ -14,6 +14,7 @@ import { Settings, User, Building2, Loader2, Save, KeyRound, Users, Mail, X, Shi
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Select } from '@/components/ui/select';
 import { FormLabel } from '@/components/ui/form-label';
+import { StatusBadge } from '@/components/ui/status-badge';
 import toast from 'react-hot-toast';
 import {
   PAYMENT_METHODS,
@@ -928,15 +929,13 @@ export default function SettingsPage() {
 
                     <div className="flex items-center gap-2 flex-shrink-0 ml-3">
                       {c.role === 'owner' ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-1 rounded-full">
-                          <ShieldCheck className="h-3 w-3" />
+                        <StatusBadge tone="amberSoft" className="py-1" icon={<ShieldCheck className="h-3 w-3" />}>
                           Propietario
-                        </span>
+                        </StatusBadge>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-full whitespace-nowrap">
-                          <Shield className="h-3 w-3" />
+                        <StatusBadge tone="grayMuted" className="py-1" icon={<Shield className="h-3 w-3" />}>
                           {c.role === 'manager' ? 'Manager' : 'Miembro'}
-                        </span>
+                        </StatusBadge>
                       )}
 
                       {isOwner && c.role !== 'owner' && (

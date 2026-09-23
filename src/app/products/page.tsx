@@ -17,6 +17,7 @@ import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SearchInput } from '@/components/ui/search-input';
 import { Thead, Th } from '@/components/ui/table-header';
+import { StatusBadge } from '@/components/ui/status-badge';
 import type { Product } from '@/lib/types/product';
 import toast from 'react-hot-toast';
 import {
@@ -1157,15 +1158,15 @@ function ProductsPageContent() {
             ) : importResults ? (
               <div className="space-y-4">
                 <div className="flex items-center gap-3 text-sm">
-                  <span className="px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-medium">
+                  <StatusBadge size="md" tone="emerald" className="font-medium">
                     {importResults.filter(r => r.status === 'created').length} creados
-                  </span>
-                  <span className="px-2.5 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium">
+                  </StatusBadge>
+                  <StatusBadge size="md" tone="blue" className="font-medium">
                     {importResults.filter(r => r.status === 'updated').length} actualizados
-                  </span>
-                  <span className="px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 font-medium">
+                  </StatusBadge>
+                  <StatusBadge size="md" tone="grayMuted" className="font-medium">
                     {importResults.filter(r => r.status === 'skipped').length} omitidos
-                  </span>
+                  </StatusBadge>
                 </div>
                 <div className="max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
                   <table className="w-full text-sm">

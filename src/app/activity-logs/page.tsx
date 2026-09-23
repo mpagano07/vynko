@@ -11,6 +11,7 @@ import { Pagination } from '@/components/ui/pagination';
 import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Thead, Th } from '@/components/ui/table-header';
+import { StatusBadge } from '@/components/ui/status-badge';
 import toast from 'react-hot-toast';
 import {
   Loader2,
@@ -153,20 +154,20 @@ function buildDescription(log: ActivityLog): string {
 function TransferStatusBadge({ status }: { status: Transfer['status'] }) {
   if (status === 'pending')
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-        <Clock className="h-3 w-3" /> Pendiente
-      </span>
+      <StatusBadge tone="amber" className="font-semibold" icon={<Clock className="h-3 w-3" />}>
+        Pendiente
+      </StatusBadge>
     );
   if (status === 'in_transit')
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-        <Truck className="h-3 w-3" /> En tránsito
-      </span>
+      <StatusBadge tone="blue" className="font-semibold" icon={<Truck className="h-3 w-3" />}>
+        En tránsito
+      </StatusBadge>
     );
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
-      <CheckCircle2 className="h-3 w-3" /> Recibida
-    </span>
+    <StatusBadge tone="emerald" className="font-semibold" icon={<CheckCircle2 className="h-3 w-3" />}>
+      Recibida
+    </StatusBadge>
   );
 }
 
@@ -711,9 +712,9 @@ export default function ActivityLogsPage() {
                           </span>
                         </td>
                         <td className="py-4 px-6">
-                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400">
+                          <StatusBadge tone="indigo">
                             {buildDescription(log)}
-                          </span>
+                          </StatusBadge>
                         </td>
                         <td className="py-4 px-6 text-xs text-gray-500 max-w-xs truncate">
                           {log.details?.name || log.details?.folio || log.details?.sku || '—'}
@@ -752,9 +753,9 @@ export default function ActivityLogsPage() {
                                     </p>
                                   </div>
                                   <div className="text-right">
-                                    <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 capitalize">
+                                    <StatusBadge tone="indigo" className="capitalize">
                                       {ACTION_LABELS[log.action] || log.action}
-                                    </span>
+                                    </StatusBadge>
                                     <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
                                       {log.user_name || 'Usuario'}
                                     </p>

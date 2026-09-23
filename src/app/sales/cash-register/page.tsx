@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Modal } from '@/components/ui/modal';
+import { StatusBadge } from '@/components/ui/status-badge';
 import toast from 'react-hot-toast';
 import {
   Banknote,
@@ -632,13 +633,10 @@ return (
       aria-label={type === 'in' ? 'Ingreso manual' : 'Egreso manual'}
       className="max-w-sm"
       header={
-        <span className={cn('inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold',
-          type === 'in'
-            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-            : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300')}>
-          {type === 'in' ? <Plus className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
+        <StatusBadge size="lg" tone={type === 'in' ? 'emerald' : 'red'}
+          icon={type === 'in' ? <Plus className="h-4 w-4" /> : <Minus className="h-4 w-4" />}>
           {type === 'in' ? 'Ingreso manual' : 'Egreso manual'}
-        </span>
+        </StatusBadge>
       }
     >
       <div className="p-5 space-y-4">

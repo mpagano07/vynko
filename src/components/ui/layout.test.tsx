@@ -6,6 +6,7 @@ import { EmptyState } from './empty-state';
 import { SearchInput } from './search-input';
 import { Thead, Th } from './table-header';
 import { FormLabel } from './form-label';
+import { StatusBadge } from './status-badge';
 
 describe('LoadingState', () => {
   it('renders an optional label', () => {
@@ -114,5 +115,37 @@ describe('FormLabel', () => {
     const label = screen.getByText('Nombre');
     expect(label).toHaveAttribute('for', 'product-name');
     expect(label).toHaveClass('text-[10px]');
+  });
+});
+
+describe('StatusBadge', () => {
+  it('renders children with the default gray / sm styles', () => {
+    render(<StatusBadge>Pendiente</StatusBadge>);
+
+    const badge = screen.getByText('Pendiente');
+    expect(badge).toHaveClass('inline-flex', 'rounded-full', 'bg-gray-100', 'px-2', 'py-0.5');
+  });
+
+  it('applies the requested tone and size', () => {
+    render(
+      <StatusBadge tone="emerald" size="md">
+        Recibida
+      </StatusBadge>
+    );
+
+    const badge = screen.getByText('Recibida');
+    expect(badge).toHaveClass('bg-emerald-100', 'text-emerald-700', 'px-2.5', 'py-1', 'text-xs', 'font-semibold');
+  });
+
+  it('renders an icon and merges className overrides', () => {
+    render(
+      <StatusBadge tone="rose" icon={<Users className="h-3 w-3" />} className="font-bold capitalize">
+        Crítico
+      </StatusBadge>
+    );
+
+    const badge = screen.getByText('Crítico');
+    expect(badge.querySelector('svg')).toBeInTheDocument();
+    expect(badge).toHaveClass('bg-rose-50', 'text-rose-600', 'font-bold', 'capitalize');
   });
 });

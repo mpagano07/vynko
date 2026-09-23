@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { Modal } from '@/components/ui/modal';
+import { StatusBadge as StatusBadgePanel, type StatusTone } from '@/components/ui/status-badge';
 import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SearchInput } from '@/components/ui/search-input';
@@ -837,23 +838,19 @@ export default function ProvidersPage() {
   );
 }
 
-const statusLabels: Record<string, { label: string; color: string }> = {
-  draft: { label: 'Borrador', color: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' },
-  sent: { label: 'Enviado', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
-  partial: { label: 'Recibido Parcial', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' },
-  received: { label: 'Recibido', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' },
-  cancelled: { label: 'Cancelado', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
-  pending: { label: 'Pendiente', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
-  completed: { label: 'Completado', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' },
+const statusLabels: Record<string, { label: string; tone: StatusTone }> = {
+  draft: { label: 'Borrador', tone: 'gray' },
+  sent: { label: 'Enviado', tone: 'amber' },
+  partial: { label: 'Recibido Parcial', tone: 'blue' },
+  received: { label: 'Recibido', tone: 'green' },
+  cancelled: { label: 'Cancelado', tone: 'red' },
+  pending: { label: 'Pendiente', tone: 'amber' },
+  completed: { label: 'Completado', tone: 'green' },
 };
 
 function StatusBadge({ status }: { status: string }) {
-  const s = statusLabels[status] ?? { label: status, color: 'bg-gray-100 text-gray-700' };
-  return (
-    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${s.color}`}>
-      {s.label}
-    </span>
-  );
+  const s = statusLabels[status] ?? { label: status, tone: 'gray' as StatusTone };
+  return <StatusBadgePanel tone={s.tone}>{s.label}</StatusBadgePanel>;
 }
 
 function formatCents(cents: number): string {
