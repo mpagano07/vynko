@@ -252,7 +252,7 @@ export default function ForecastPage() {
                   formatter={(value: unknown) => [`${value} productos`, 'Cantidad']}
                   contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '12px' }}
                 />
-                <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={60}>
+                <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={60} isAnimationActive={false}>
                   {inventoryDistribution.map((d) => (
                     <Cell key={d.name} fill={d.color} />
                   ))}

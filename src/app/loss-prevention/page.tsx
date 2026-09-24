@@ -282,6 +282,7 @@ export default function LossPreventionPage() {
                         outerRadius={70}
                         paddingAngle={3}
                         strokeWidth={0}
+                        isAnimationActive={false}
                       >
                         {donutData.map((d) => (
                           <Cell key={d.name} fill={d.color} />

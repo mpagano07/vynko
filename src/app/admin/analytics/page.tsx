@@ -144,9 +144,9 @@ export default function AdminAnalyticsPage() {
                 labelStyle={{ color: chartTooltipLabel }}
               />
               <Legend />
-              <Bar dataKey="Registros" fill="#3B82F6" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="Activados" fill="#F97316" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="Pagos" fill="#22C55E" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="Registros" fill="#3B82F6" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+              <Bar dataKey="Activados" fill="#F97316" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+              <Bar dataKey="Pagos" fill="#22C55E" radius={[4, 4, 0, 0]} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
         ) : (

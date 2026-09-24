@@ -10,6 +10,8 @@ import { formatARS } from '@/lib/utils/currency';
 // Recharts' ResponsiveContainer warns with width/height -1 when it mounts in
 // the same frame as its parent is being sized (typical on account remount).
 // Mount it only after the container has a real width to keep the console clean.
+// Usamos el contentRect del ResizeObserver (asíncrono) en vez de leer
+// offsetWidth para no forzar un reflow síncrono en el render.
 function ChartFrame({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -17,10 +19,13 @@ function ChartFrame({ children }: { children: ReactNode }) {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const measure = () => setWidth(el.offsetWidth);
-    measure();
-    if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(measure);
+    if (typeof ResizeObserver === 'undefined') {
+      setWidth(el.getBoundingClientRect().width);
+      return;
+    }
+    const ro = new ResizeObserver(([entry]) => {
+      if (entry) setWidth(entry.contentRect.width);
+    });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
@@ -110,7 +115,7 @@ export default function SalesChart() {
                 formatter={(value) => [formatARS(Number(value) || 0), 'Total']}
                 contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '11px' }}
               />
-              <Bar dataKey="total" fill="#6366f1" radius={[3, 3, 0, 0]} maxBarSize={32} />
+              <Bar dataKey="total" fill="#6366f1" radius={[3, 3, 0, 0]} maxBarSize={32} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
         </ChartFrame>
