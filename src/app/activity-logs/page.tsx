@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { supabase } from '@/lib/supabaseClient';
+import { authFetch } from '@/lib/fetchWithTenant';
 import { Card } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { ExportButton } from '@/components/ui/export-button';
@@ -190,13 +190,7 @@ function TransfersHistoryTab() {
   const fetchTransfers = useCallback(async () => {
     setLoading(true);
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      const res = await fetch('/api/stock-transfers', {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const res = await authFetch('/api/stock-transfers');
       if (res.ok) {
         const data: Transfer[] = await res.json();
         setTransfers(data);
@@ -437,10 +431,7 @@ export default function ActivityLogsPage() {
 
     if (!isOpen && log.entity_type === 'sale' && log.entity_id && !saleDetails[log.id]) {
       (async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const headers: Record<string, string> = {};
-        if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-        const res = await fetch(`/api/sales/${log.entity_id}`, { headers });
+        const res = await authFetch(`/api/sales/${log.entity_id}`);
         if (res.ok) {
           const data: SaleDetail = await res.json();
           setSaleDetails((prev) => ({ ...prev, [log.id]: data }));
@@ -451,10 +442,6 @@ export default function ActivityLogsPage() {
 
   const handleExportExcel = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
       let allLogs: ActivityLog[] = [];
       let offset = 0;
       const batchSize = 200;
@@ -463,7 +450,7 @@ export default function ActivityLogsPage() {
       while (hasMore) {
         const params = new URLSearchParams({ limit: String(batchSize), offset: String(offset) });
         if (entityFilter) params.set('entity_type', entityFilter);
-        const res = await fetch(`/api/activity-logs?${params}`, { headers });
+        const res = await authFetch(`/api/activity-logs?${params}`);
         if (!res.ok) break;
         const json = await res.json();
         const batch = json.data || [];
@@ -485,7 +472,7 @@ export default function ActivityLogsPage() {
         await Promise.all(
           chunk.map(async (log) => {
             try {
-              const res = await fetch(`/api/sales/${log.entity_id}`, { headers });
+              const res = await authFetch(`/api/sales/${log.entity_id}`);
               if (res.ok) {
                 const data: SaleDetail = await res.json();
                 saleDetailMap[log.id] = data;
@@ -549,16 +536,10 @@ export default function ActivityLogsPage() {
   };
 
   const fetchLogs = useCallback(async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    const headers: Record<string, string> = {};
-    if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
     const params = new URLSearchParams({ limit: String(limit), offset: String(page * limit) });
     if (entityFilter) params.set('entity_type', entityFilter);
 
-    const res = await fetch(`/api/activity-logs?${params}`, { headers });
+    const res = await authFetch(`/api/activity-logs?${params}`);
     if (!res.ok) {
       if (res.status === 403) setLoading(false);
       return;

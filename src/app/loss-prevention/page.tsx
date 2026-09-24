@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
+import { authFetch } from '@/lib/fetchWithTenant';
 import { useProducts } from '@/lib/hooks/useProducts';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Card } from '@/components/ui/card';
@@ -74,10 +74,7 @@ export default function LossPreventionPage() {
 
   const fetchHistory = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-      const res = await fetch('/api/stock-history?type=adjustment&days=365&limit=500', { headers });
+      const res = await authFetch('/api/stock-history?type=adjustment&days=365&limit=500');
       if (res.ok) {
         const data = await res.json();
         setHistory(data.items || []);
@@ -114,13 +111,9 @@ export default function LossPreventionPage() {
 
     setSubmitting(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
-      const res = await fetch(`/api/products/${form.productId}/adjust`, {
+      const res = await authFetch(`/api/products/${form.productId}/adjust`, {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ quantity: qty, reason: form.reason, notes: form.notes }),
       });
       const data = await res.json();

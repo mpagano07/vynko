@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Modal } from '@/components/ui/modal';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -24,7 +23,7 @@ import {
   X,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
-import { getTenantHeaders } from '@/lib/fetchWithTenant';
+import { authFetch } from '@/lib/fetchWithTenant';
 import {
   PAYMENT_METHODS,
   getPaymentMethodLabel,
@@ -114,12 +113,7 @@ export default function CashRegisterPage() {
   const [report, setReport] = useState<CloseReport | null>(null);
 
   const fetchState = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const headers = {
-      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-      ...getTenantHeaders(),
-    };
-    const res = await fetch('/api/cash-register', { headers });
+    const res = await authFetch('/api/cash-register');
     if (!res.ok) return;
     const data = await res.json();
     setOpenSession(data.open ?? null);
@@ -142,13 +136,11 @@ export default function CashRegisterPage() {
   }, [tenantId]);
 
   const apiPost = async (url: string, body: unknown) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const headers = {
-      'Content-Type': 'application/json',
-      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-      ...getTenantHeaders(),
-    };
-    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+    const res = await authFetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || 'Ocurrió un error');
     return data;

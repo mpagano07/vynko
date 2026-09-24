@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useTheme } from '@/lib/hooks/useTheme';
-import { supabase } from '@/lib/supabaseClient';
+import { authFetch } from '@/lib/fetchWithTenant';
 import { Card } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { StatCard } from '@/components/ui/stat-card';
@@ -52,12 +52,7 @@ export default function AdminAnalyticsPage() {
 
     async function fetchData() {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch('/api/admin/analytics', {
-          headers: {
-            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-          },
-        });
+        const res = await authFetch('/api/admin/analytics');
         if (!res.ok) throw new Error('Error al cargar datos');
         const json = await res.json();
         setData(json);

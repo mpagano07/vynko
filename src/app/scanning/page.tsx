@@ -2,9 +2,8 @@
 
 import { useState, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { getTenantHeaders } from '@/lib/fetchWithTenant';
+import { authFetch } from '@/lib/fetchWithTenant';
 import dynamicImport from 'next/dynamic';
 const BarcodeScanner = dynamicImport(
   () => import('@/components/scanner/BarcodeScanner').then((m) => ({ default: m.BarcodeScanner })),
@@ -99,17 +98,12 @@ function ScanningPageContent() {
 
     setIsAddingStock(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
       const reason = reasons.find((r) => r.value === addReason);
       const quantity = reason?.sign === -1 ? -Math.abs(addQuantity) : addQuantity;
 
-      const res = await fetch(`/api/products/${product.id}/adjust`, {
+      const res = await authFetch(`/api/products/${product.id}/adjust`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getTenantHeaders(),
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ quantity, reason: addReason }),
       });
 
