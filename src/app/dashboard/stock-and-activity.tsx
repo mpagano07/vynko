@@ -8,14 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Clock } from 'lucide-react';
 import OnboardingChecklist from '@/components/dashboard/OnboardingChecklist';
 import { authFetch } from '@/lib/fetchWithTenant';
-
-function timeAgo(dateStr: string): string {
-  const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (diff < 60) return 'ahora';
-  if (diff < 3600) return `hace ${Math.floor(diff / 60)}m`;
-  if (diff < 86400) return `hace ${Math.floor(diff / 3600)}h`;
-  return `hace ${Math.floor(diff / 86400)}d`;
-}
+import { formatDate, timeAgo } from '@/lib/utils/format';
 
 function actionInfo(action: string, entityType: string, details: Record<string, unknown>): { emoji: string; label: string; detail: string } {
   const name = (details.products as string) || (details.name as string) || '';
@@ -66,10 +59,6 @@ interface PendingOrder {
   supplier_name: string;
   tenant_name?: string;
   items: PendingOrderItem[];
-}
-
-function formatShortDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 }
 
 export default function StockAndActivity({
@@ -200,7 +189,7 @@ export default function StockAndActivity({
                         </p>
                         <p className="text-[11px] text-gray-600 dark:text-gray-400">
                           {order.items.length} producto{order.items.length !== 1 ? 's' : ''} · {totalPending} u. por recibir
-                          {order.expected_date && <> · Llega {formatShortDate(order.expected_date)}</>}
+                          {order.expected_date && <> · Llega {formatDate(order.expected_date, { day: '2-digit', month: 'short' }, 'es-ES')}</>}
                         </p>
                         <p className="text-[11px] text-gray-600 dark:text-gray-400 truncate">{productList}</p>
                       </div>

@@ -26,6 +26,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
+import { formatDate } from '@/lib/utils/format';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 
@@ -283,26 +284,14 @@ function TransfersHistoryTab() {
 
                 {/* Created date */}
                 <td className="py-4 px-6 text-xs text-gray-500 whitespace-nowrap">
-                  {new Date(t.created_at).toLocaleDateString('es-AR', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
+                  {formatDate(t.created_at, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </td>
 
                 {/* Received date */}
                 <td className="py-4 px-6 text-xs whitespace-nowrap">
                   {t.received_at ? (
                     <span className="text-emerald-600 dark:text-emerald-400">
-                      {new Date(t.received_at).toLocaleDateString('es-AR', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                      {formatDate(t.received_at, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </span>
                   ) : (
                     <span className="text-gray-400">—</span>
@@ -325,13 +314,7 @@ function TransfersHistoryTab() {
                               {t.to_tenant_name}
                             </p>
                             <p className="text-xs text-gray-500 mt-1">
-                              {new Date(t.created_at).toLocaleDateString('es-AR', {
-                                day: '2-digit',
-                                month: 'long',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
+                              {formatDate(t.created_at, { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                             </p>
                           </div>
                           <div className="text-right">
@@ -696,13 +679,7 @@ export default function ActivityLogsPage() {
                           {log.details?.name || log.details?.folio || log.details?.sku || '—'}
                         </td>
                         <td className="py-4 px-6 text-right text-xs text-gray-500 whitespace-nowrap">
-                          {new Date(log.created_at).toLocaleDateString('es-ES', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                          {formatDate(log.created_at, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }, 'es-ES')}
                         </td>
                       </tr>
                       {expandedLogs.has(log.id) && (
@@ -719,13 +696,7 @@ export default function ActivityLogsPage() {
                                       {buildDescription(log)}
                                     </p>
                                     <p className="text-xs text-gray-500 mt-1">
-                                      {new Date(log.created_at).toLocaleDateString('es-ES', {
-                                        day: '2-digit',
-                                        month: 'long',
-                                        year: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                      })}
+                                      {formatDate(log.created_at, { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }, 'es-ES')}
                                     </p>
                                   </div>
                                   <div className="text-right">

@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { StatusBadge as StatusPill } from '@/components/ui/status-badge';
 import { IconAction } from '@/components/ui/icon-action';
+import { formatDate } from '@/lib/utils/format';
 import toast from 'react-hot-toast';
 
 interface TransferItem {
@@ -150,7 +151,7 @@ function TransferCard({
     }
   };
 
-  const formattedDate = new Date(transfer.created_at).toLocaleDateString('es-AR', {
+  const formattedDate = formatDate(transfer.created_at, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',

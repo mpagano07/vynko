@@ -15,6 +15,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { IconAction } from '@/components/ui/icon-action';
 import { Plus, Edit, Trash2, Users, Loader2, ShoppingBag, DollarSign, CalendarDays } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
+import { formatDate } from '@/lib/utils/format';
 import { matchesQuery } from '@/lib/utils/text';
 import { SortableTh, SortDir } from '@/components/ui/sortable-th';
 import { FormLabel } from '@/components/ui/form-label';
@@ -304,7 +305,7 @@ export default function CustomersPage() {
                       </div>
                       <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
                         <CalendarDays className="h-3 w-3" />
-                        {new Date(s.created_at).toLocaleDateString('es-AR', { dateStyle: 'medium' })}
+                        {formatDate(s.created_at, { dateStyle: 'medium' })}
                       </div>
                       <div className="space-y-1">
                         {s.items?.map((i) => (

@@ -31,6 +31,7 @@ import type { Supplier, PurchaseOrder } from '@/lib/types/supplier';
 import type { CommercialDocument } from '@/lib/types/document';
 import type { Product } from '@/lib/types/product';
 import { formatARS } from '@/lib/utils/currency';
+import { formatDate } from '@/lib/utils/format';
 import { matchesQuery } from '@/lib/utils/text';
 import { SortableTh, SortDir } from '@/components/ui/sortable-th';
 import { FormLabel } from '@/components/ui/form-label';
@@ -832,12 +833,6 @@ function formatCents(cents: number): string {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(cents / 100);
 }
 
-function formatDate(dateStr?: string): string {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
-
 function DocumentChainItem({
   label,
   number,
@@ -864,7 +859,7 @@ function DocumentChainItem({
       <span className="font-medium text-indigo-700 dark:text-indigo-300">{label}</span>
       <span className="font-mono text-gray-900 dark:text-gray-100">#{number}</span>
       <StatusBadge status={status} />
-      <span className="text-xs text-gray-400 ml-2">{date ? formatDate(date) : ''}</span>
+      <span className="text-xs text-gray-400 ml-2">{date ? formatDate(date, { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</span>
       <span className="text-gray-500 ml-auto">{formatCents(total)}</span>
     </div>
   );

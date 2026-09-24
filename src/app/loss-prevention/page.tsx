@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatARS } from '@/lib/utils/currency';
+import { formatDate } from '@/lib/utils/format';
 import { matchesQuery } from '@/lib/utils/text';
 import { NEW_ACCOUNT_PLAN } from '@/lib/plans';
 
@@ -363,7 +364,7 @@ export default function LossPreventionPage() {
                   return (
                     <tr key={h.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
                       <td className="py-2.5 px-4 whitespace-nowrap text-xs text-gray-500">
-                        {new Date(h.createdAt).toLocaleDateString('es-AR', { dateStyle: 'medium' })}
+                        {formatDate(h.createdAt, { dateStyle: 'medium' })}
                       </td>
                       <td className="py-2.5 px-4">
                         <div className="font-medium text-gray-900 dark:text-gray-100">{h.productName}</div>

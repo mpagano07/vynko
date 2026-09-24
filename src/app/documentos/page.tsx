@@ -31,6 +31,7 @@ import {
   Package,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
+import { formatDate } from '@/lib/utils/format';
 import { matchesQuery } from '@/lib/utils/text';
 import type {
   CommercialDocument,
@@ -718,9 +719,9 @@ export default function DocumentosPage() {
           </div>
           <div class="info-section">
             <h3>Fecha</h3>
-            <p>${new Date(doc.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
-            ${doc.delivery_date ? `<p><strong>Entrega:</strong> ${new Date(doc.delivery_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}</p>` : ''}
-            ${doc.valid_until ? `<p><strong>Válido hasta:</strong> ${new Date(doc.valid_until).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}</p>` : ''}
+            <p>${formatDate(doc.created_at, 'es-ES')}</p>
+            ${doc.delivery_date ? `<p><strong>Entrega:</strong> ${formatDate(doc.delivery_date, 'es-ES')}</p>` : ''}
+            ${doc.valid_until ? `<p><strong>Válido hasta:</strong> ${formatDate(doc.valid_until, 'es-ES')}</p>` : ''}
             ${doc.supplier_name ? `<p><strong>Proveedor:</strong> ${doc.supplier_name}</p>` : ''}
           </div>
         </div>
@@ -754,7 +755,7 @@ export default function DocumentosPage() {
         ` : ''}
 
         <div class="footer">
-          ${typeLabel} N° ${String(doc.document_number).padStart(6, '0')} - Generado el ${new Date().toLocaleDateString('es-ES')}
+          ${typeLabel} N° ${String(doc.document_number).padStart(6, '0')} - Generado el ${formatDate(new Date(), { day: '2-digit', month: '2-digit', year: 'numeric' }, 'es-ES')}
         </div>
       </body>
       </html>
@@ -951,9 +952,7 @@ export default function DocumentosPage() {
                         )}
                       </td>
                       <td className="py-3 px-4 text-right text-xs text-gray-500 whitespace-nowrap">
-                        {order.created_at ? new Date(order.created_at).toLocaleDateString('es-ES', {
-                          day: '2-digit', month: '2-digit', year: 'numeric',
-                        }) : '—'}
+                        {order.created_at ? formatDate(order.created_at, { day: '2-digit', month: '2-digit', year: 'numeric' }, 'es-ES') : '—'}
                       </td>
                       <td className="py-3 px-4 text-center" onClick={e => e.stopPropagation()}>
                         {(order.status === 'draft' || order.status === 'sent' || order.status === 'partial') && (
@@ -994,7 +993,7 @@ export default function DocumentosPage() {
                                   </h3>
                                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{order.supplier_name || '—'}</p>
                                   <p className="text-xs text-gray-500 mt-1">
-                                    {order.created_at ? new Date(order.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'}
+                                    {order.created_at ? formatDate(order.created_at, 'es-ES') : '—'}
                                   </p>
                                 </div>
                                 <div className="text-right">
@@ -1015,7 +1014,7 @@ export default function DocumentosPage() {
                                     <p className="text-sm">
                                       <span className="text-gray-500">Fecha esperada:</span>{' '}
                                       <span className="text-gray-900 dark:text-gray-100">
-                                        {new Date(order.expected_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                        {formatDate(order.expected_date, 'es-ES')}
                                       </span>
                                     </p>
                                   )}
@@ -1023,7 +1022,7 @@ export default function DocumentosPage() {
                                     <p className="text-sm">
                                       <span className="text-gray-500">Recibido el:</span>{' '}
                                       <span className="text-gray-900 dark:text-gray-100">
-                                        {new Date(order.received_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                        {formatDate(order.received_date, 'es-ES')}
                                       </span>
                                     </p>
                                   )}
@@ -1123,9 +1122,7 @@ export default function DocumentosPage() {
                       </td>
                       <td className="py-3 px-4">{statusBadge(doc.status)}</td>
                       <td className="py-3 px-4 text-right text-xs text-gray-500 whitespace-nowrap">
-                        {new Date(doc.created_at).toLocaleDateString('es-ES', {
-                          day: '2-digit', month: '2-digit', year: 'numeric',
-                        })}
+                        {formatDate(doc.created_at, { day: '2-digit', month: '2-digit', year: 'numeric' }, 'es-ES')}
                       </td>
                       <td className="py-3 px-4 text-right text-xs whitespace-nowrap">
                         {doc.valid_until ? (
@@ -1134,9 +1131,7 @@ export default function DocumentosPage() {
                               ? 'text-red-600 dark:text-red-400 font-medium'
                               : 'text-gray-500'
                           }>
-                            {new Date(doc.valid_until).toLocaleDateString('es-ES', {
-                              day: '2-digit', month: '2-digit', year: 'numeric',
-                            })}
+                            {formatDate(doc.valid_until, { day: '2-digit', month: '2-digit', year: 'numeric' }, 'es-ES')}
                           </span>
                         ) : (
                           <span className="text-gray-300 dark:text-gray-600">-</span>
@@ -1197,7 +1192,7 @@ export default function DocumentosPage() {
                                   </h3>
                                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{doc.customer_name}</p>
                                   <p className="text-xs text-gray-500 mt-1">
-                                    {new Date(doc.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                    {formatDate(doc.created_at, 'es-ES')}
                                   </p>
                                 </div>
                                 <div className="text-right">
@@ -1227,11 +1222,11 @@ export default function DocumentosPage() {
                                           ? 'text-red-600 dark:text-red-400 font-medium'
                                           : 'text-gray-900 dark:text-gray-100'
                                       }>
-                                        {new Date(doc.valid_until).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                        {formatDate(doc.valid_until, 'es-ES')}
                                       </span>
                                     </p>
                                   )}
-                                  {doc.delivery_date && <p className="text-sm"><span className="text-gray-500">Fecha entrega:</span> <span className="text-gray-900 dark:text-gray-100">{new Date(doc.delivery_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}</span></p>}
+                                  {doc.delivery_date && <p className="text-sm"><span className="text-gray-500">Fecha entrega:</span> <span className="text-gray-900 dark:text-gray-100">{formatDate(doc.delivery_date, 'es-ES')}</span></p>}
                                   {doc.notes && <p className="text-sm"><span className="text-gray-500">Notas:</span> <span className="text-gray-900 dark:text-gray-100">{doc.notes}</span></p>}
                                 </div>
                                 <div>

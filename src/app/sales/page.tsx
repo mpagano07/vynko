@@ -41,6 +41,7 @@ import {
   MessageCircle,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
+import { formatDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { authFetch } from '@/lib/fetchWithTenant';
 import { matchesQuery } from '@/lib/utils/text';
@@ -1095,13 +1096,7 @@ export default function SalesPage() {
                             {formatARS(sale.total_cents / 100)}
                           </td>
                           <td className="py-3 px-4 text-right text-xs text-gray-500">
-                            {new Date(sale.created_at).toLocaleDateString('es-ES', {
-                              day: '2-digit',
-                              month: '2-digit',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
+                            {formatDate(sale.created_at, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }, 'es-ES')}
                           </td>
                         </tr>
                         {expandedSales.has(sale.id) && (
@@ -1118,13 +1113,7 @@ export default function SalesPage() {
                                         {sale.customer_name || 'Mostrador'}
                                       </p>
                                       <p className="text-xs text-gray-500 mt-1">
-                                        {new Date(sale.created_at).toLocaleDateString('es-ES', {
-                                          day: '2-digit',
-                                          month: 'long',
-                                          year: 'numeric',
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                        })}
+                                        {formatDate(sale.created_at, { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }, 'es-ES')}
                                       </p>
                                     </div>
                                     <div className="text-right">

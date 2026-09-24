@@ -19,6 +19,7 @@ import {
 } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import { formatARS } from '@/lib/utils/currency';
+import { formatDate } from '@/lib/utils/format';
 import { CreditCard, CheckCircle2, XCircle, Loader2, ArrowRight, AlertTriangle, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -298,7 +299,7 @@ function BillingContent() {
                 <p className="text-xs mt-0.5 text-amber-600 dark:text-amber-400">
                   {daysUntilRenewal === 0
                     ? 'El cobro se procesará hoy'
-                    : `El ${new Date(subscription.currentPeriodEnd!).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })} se renovará tu suscripción`}
+                    : `El ${formatDate(subscription.currentPeriodEnd!, { weekday: 'long', day: 'numeric', month: 'long' })} se renovará tu suscripción`}
                 </p>
               </>
             ) : null}
@@ -335,7 +336,7 @@ function BillingContent() {
                 </span>
                 {subscription.currentPeriodEnd && (
                   <span className="text-xs text-gray-500">
-                    Próximo ciclo: {new Date(subscription.currentPeriodEnd).toLocaleDateString('es-AR')}
+                    Próximo ciclo: {formatDate(subscription.currentPeriodEnd, { day: '2-digit', month: '2-digit', year: 'numeric' })}
                   </span>
                 )}
               </div>

@@ -3,14 +3,7 @@
 import { useState, useEffect, startTransition } from 'react';
 import { Card } from '@/components/ui/card';
 import { authFetch } from '@/lib/fetchWithTenant';
-
-function timeAgo(dateStr: string): string {
-  const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (diff < 60) return 'ahora';
-  if (diff < 3600) return `hace ${Math.floor(diff / 60)}m`;
-  if (diff < 86400) return `hace ${Math.floor(diff / 3600)}h`;
-  return `hace ${Math.floor(diff / 86400)}d`;
-}
+import { timeAgo } from '@/lib/utils/format';
 
 export default function DashboardResumen({ tenantId, allTenants }: { tenantId: string; allTenants?: boolean }) {
   const [data, setData] = useState<{
