@@ -8,6 +8,7 @@ import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { StatCard } from '@/components/ui/stat-card';
+import { PageHeader } from '@/components/ui/page-header';
 import { TrendingUp, AlertTriangle, ShoppingCart, Banknote, Activity, BarChart3, Sparkles, Flame, Filter, ExternalLink } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -110,22 +111,47 @@ export default function ForecastPage() {
   const isStarter = !authLoading && tenant && (tenant.subscription_plan === 'free' || tenant.subscription_plan === 'starter');
   if (!authLoading && isStarter) return null;
 
+  const header = (
+    <PageHeader
+      title="Pronóstico de Demanda"
+      subtitle="Planeá tus compras: qué reponer, cuánto gastar y qué productos te están haciendo perder plata."
+      icon={
+        <div className="p-2.5 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600">
+          <TrendingUp className="h-6 w-6 text-white" />
+        </div>
+      }
+    />
+  );
+
   if (loading) {
-    return <LoadingState label="Calculando proyecciones de demanda..." />;
+    return (
+      <div className="space-y-6">
+        {header}
+        <LoadingState label="Calculando proyecciones de demanda..." />
+      </div>
+    );
   }
 
   if (error) {
     return (
-      <div className="text-center py-20">
-        <AlertTriangle className="h-12 w-12 mx-auto text-amber-500 mb-3" />
-        <p className="text-lg font-medium text-gray-900 dark:text-gray-100">Error al cargar proyecciones</p>
-        <p className="text-sm text-gray-500 mt-1">{error}</p>
+      <div className="space-y-6">
+        {header}
+        <div className="text-center py-20">
+          <AlertTriangle className="h-12 w-12 mx-auto text-amber-500 mb-3" />
+          <p className="text-lg font-medium text-gray-900 dark:text-gray-100">Error al cargar proyecciones</p>
+          <p className="text-sm text-gray-500 mt-1">{error}</p>
+        </div>
       </div>
     );
   }
 
   if (!data || data.predictions.length === 0 || data.predictions.every((p) => p.totalSoldLast30 === 0)) {
-    return <EmptyState icon={BarChart3} title="Sin datos suficientes" description="Se necesitan ventas en los últimos 30 días para generar proyecciones." />;
+    return (
+      <div className="space-y-6">
+        {header}
+        <EmptyState icon={BarChart3} title="Sin datos suficientes" description="Se necesitan ventas en los últimos 30 días para generar proyecciones." />
+      </div>
+    );
   }
 
   const totalDailySales = data.predictions.reduce((s, p) => s + p.avgDailySales, 0);
@@ -170,17 +196,7 @@ export default function ForecastPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="p-2.5 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600">
-          <TrendingUp className="h-6 w-6 text-white" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Pronóstico de Demanda</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Planeá tus compras: qué reponer, cuánto gastar y qué productos te están haciendo perder plata.
-          </p>
-        </div>
-      </div>
+      {header}
 
       {/* KPIs orientados a la acción */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -332,7 +348,7 @@ export default function ForecastPage() {
                 }`}
               >
                 {tab.label}
-                <span className={`ml-1.5 ${filterTab === tab.key ? 'opacity-70' : 'opacity-50'}`}>{tab.count}</span>
+                <span className={`ml-1.5 ${filterTab === tab.key ? 'text-gray-400 dark:text-gray-500' : 'text-gray-600 dark:text-gray-400'}`}>{tab.count}</span>
               </button>
             ))}
           </div>
@@ -345,7 +361,7 @@ export default function ForecastPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                   <th className="py-3 px-6">Producto</th>
                   <th className="py-3 px-6 text-center">Stock</th>
                   <th className="py-3 px-6 text-center">Demanda/día</th>
@@ -360,17 +376,17 @@ export default function ForecastPage() {
                   <tr key={p.productId} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
                     <td className="py-3 px-6 font-medium text-gray-900 dark:text-gray-100">{p.productName}</td>
                     <td className="py-3 px-6 text-center">
-                      <span className={`font-semibold ${p.totalSoldLast30 === 0 ? 'text-gray-900 dark:text-gray-100' : p.currentStock <= p.minStock ? 'text-rose-600' : p.needsReorder ? 'text-amber-600' : 'text-gray-900 dark:text-gray-100'}`}>
+                      <span className={`font-semibold ${p.totalSoldLast30 === 0 ? 'text-gray-900 dark:text-gray-100' : p.currentStock <= p.minStock ? 'text-rose-600 dark:text-rose-400' : p.needsReorder ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-gray-100'}`}>
                         {p.currentStock}
                       </span>
                     </td>
-                    <td className="py-3 px-6 text-center text-gray-600">{formatDailyDemand(p)}</td>
-                    <td className="py-3 px-6 text-center text-gray-600">
+                    <td className="py-3 px-6 text-center text-gray-600 dark:text-gray-400">{formatDailyDemand(p)}</td>
+                    <td className="py-3 px-6 text-center text-gray-600 dark:text-gray-400">
                       {p.daysUntilStockout !== null ? `${p.daysUntilStockout}d` : '—'}
                     </td>
                     <td className="py-3 px-6 text-center">
                       {p.suggestedOrder15 > 0 ? (
-                        <span className="font-semibold text-indigo-600">{p.suggestedOrder15} u.</span>
+                        <span className="font-semibold text-indigo-600 dark:text-indigo-400">{p.suggestedOrder15} u.</span>
                       ) : (
                         <span className="text-gray-400">—</span>
                       )}
