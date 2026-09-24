@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { supabase } from '@/lib/supabaseClient';
+import { authFetch } from '@/lib/fetchWithTenant';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -152,17 +152,12 @@ export default function DocumentosPage() {
     let cancelled = false;
 
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers = {
-        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-      };
-
       const [docsRes, custRes, prodRes, suppRes, poRes] = await Promise.all([
-        fetch('/api/documents', { headers }),
-        fetch('/api/customers', { headers }),
-        fetch('/api/products', { headers }),
-        fetch('/api/suppliers', { headers }),
-        fetch('/api/purchase-orders', { headers }),
+        authFetch('/api/documents'),
+        authFetch('/api/customers'),
+        authFetch('/api/products'),
+        authFetch('/api/suppliers'),
+        authFetch('/api/purchase-orders'),
       ]);
 
       if (cancelled) return;
@@ -264,6 +259,16 @@ export default function DocumentosPage() {
     }));
   };
 
+  const refreshDocuments = async () => {
+    const docsRes = await authFetch('/api/documents');
+    if (docsRes.ok) setDocuments(await docsRes.json());
+  };
+
+  const refreshPurchaseOrders = async () => {
+    const poRes = await authFetch('/api/purchase-orders');
+    if (poRes.ok) setPurchaseOrders(await poRes.json());
+  };
+
   const createDocument = async () => {
     if (!formData.customer_name || formData.items.length === 0) {
       toast.error('Completá los datos obligatorios (cliente y productos)');
@@ -272,13 +277,9 @@ export default function DocumentosPage() {
 
     setCreating(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/documents', {
+      const res = await authFetch('/api/documents', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           document_type: typeFilter,
           customer_id: formData.customer_id || undefined,
@@ -298,12 +299,7 @@ export default function DocumentosPage() {
       setShowCreateForm(false);
       resetForm();
 
-      const { data: { session: s2 } } = await supabase.auth.getSession();
-      const h2 = {
-        ...(s2?.access_token ? { Authorization: `Bearer ${s2.access_token}` } : {}),
-      };
-      const docsRes = await fetch('/api/documents', { headers: h2 });
-      if (docsRes.ok) setDocuments(await docsRes.json());
+      await refreshDocuments();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al crear documento');
     } finally {
@@ -340,13 +336,9 @@ export default function DocumentosPage() {
       onConfirm: async () => {
         setConfirmModal(prev => ({ ...prev, open: false }));
         try {
-          const { data: { session } } = await supabase.auth.getSession();
-          const res = await fetch(`/api/documents/${docId}`, {
+          const res = await authFetch(`/api/documents/${docId}`, {
             method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status: newStatus }),
           });
 
@@ -357,12 +349,7 @@ export default function DocumentosPage() {
 
           toast.success(`Documento actualizado a ${DOCUMENT_STATUS_LABELS[newStatus]}`);
 
-          const { data: { session: s2 } } = await supabase.auth.getSession();
-          const h2 = {
-            ...(s2?.access_token ? { Authorization: `Bearer ${s2.access_token}` } : {}),
-          };
-          const docsRes = await fetch('/api/documents', { headers: h2 });
-          if (docsRes.ok) setDocuments(await docsRes.json());
+          await refreshDocuments();
         } catch (err: unknown) {
           toast.error(err instanceof Error ? err.message : 'Error al actualizar documento');
         }
@@ -380,12 +367,8 @@ export default function DocumentosPage() {
       onConfirm: async () => {
         setConfirmModal(prev => ({ ...prev, open: false }));
         try {
-          const { data: { session } } = await supabase.auth.getSession();
-          const res = await fetch(`/api/documents/${docId}`, {
+          const res = await authFetch(`/api/documents/${docId}`, {
             method: 'DELETE',
-            headers: {
-              ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-            },
           });
 
           if (!res.ok) {
@@ -395,12 +378,7 @@ export default function DocumentosPage() {
 
           toast.success('Documento eliminado');
 
-          const { data: { session: s2 } } = await supabase.auth.getSession();
-          const h2 = {
-            ...(s2?.access_token ? { Authorization: `Bearer ${s2.access_token}` } : {}),
-          };
-          const docsRes = await fetch('/api/documents', { headers: h2 });
-          if (docsRes.ok) setDocuments(await docsRes.json());
+          await refreshDocuments();
         } catch (err: unknown) {
           toast.error(err instanceof Error ? err.message : 'Error al eliminar documento');
         }
@@ -512,15 +490,9 @@ export default function DocumentosPage() {
 
     setIsSubmittingPo(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
-      const res = await fetch('/api/purchase-orders', {
+      const res = await authFetch('/api/purchase-orders', {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           supplier_id: poSupplierId,
           expected_date: poExpectedDate || null,
@@ -541,12 +513,7 @@ export default function DocumentosPage() {
       setIsPoModalOpen(false);
       resetPoForm();
 
-      const { data: { session: s2 } } = await supabase.auth.getSession();
-      const h2 = {
-        ...(s2?.access_token ? { Authorization: `Bearer ${s2.access_token}` } : {}),
-      };
-      const poRes = await fetch('/api/purchase-orders', { headers: h2 });
-      if (poRes.ok) setPurchaseOrders(await poRes.json());
+      await refreshPurchaseOrders();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al crear pedido');
     } finally {
@@ -617,30 +584,17 @@ export default function DocumentosPage() {
       onConfirm: async () => {
         setConfirmModal(prev => ({ ...prev, open: false }));
         try {
-          const { data: { session } } = await supabase.auth.getSession();
-          const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-          };
-          if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
-          const res = await fetch(`/api/purchase-orders/${id}`, {
+          const res = await authFetch(`/api/purchase-orders/${id}`, {
             method: 'PATCH',
-            headers,
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status: 'cancelled' }),
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || 'Error al cancelar pedido');
           toast.success('Pedido cancelado');
 
-          const { data: { session: s2 } } = await supabase.auth.getSession();
-          const h2 = {
-            ...(s2?.access_token ? { Authorization: `Bearer ${s2.access_token}` } : {}),
-          };
-      const poRes = await fetch('/api/purchase-orders', { headers: h2 });
-      if (poRes.ok) setPurchaseOrders(await poRes.json());
-
-      const docsRes = await fetch('/api/documents', { headers: h2 });
-      if (docsRes.ok) setDocuments(await docsRes.json());
+          await refreshPurchaseOrders();
+          await refreshDocuments();
         } catch (err: unknown) {
           toast.error(err instanceof Error ? err.message : 'Error al cancelar pedido');
         }
@@ -652,13 +606,9 @@ export default function DocumentosPage() {
     if (!receiveOrderId) return;
     setIsSubmittingReceive(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
-      const res = await fetch(`/api/purchase-orders/${receiveOrderId}/receive`, {
+      const res = await authFetch(`/api/purchase-orders/${receiveOrderId}/receive`, {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           received_date: receiveDate,
           deposito: receiveDeposito || undefined,
@@ -683,15 +633,8 @@ export default function DocumentosPage() {
       }
       setIsReceiveModalOpen(false);
 
-      const { data: { session: s2 } } = await supabase.auth.getSession();
-      const h2 = {
-        ...(s2?.access_token ? { Authorization: `Bearer ${s2.access_token}` } : {}),
-      };
-      const poRes = await fetch('/api/purchase-orders', { headers: h2 });
-      if (poRes.ok) setPurchaseOrders(await poRes.json());
-
-      const docsRes = await fetch('/api/documents', { headers: h2 });
-      if (docsRes.ok) setDocuments(await docsRes.json());
+      await refreshPurchaseOrders();
+      await refreshDocuments();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al recibir pedido');
     } finally {

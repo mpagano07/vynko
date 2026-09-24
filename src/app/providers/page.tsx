@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { supabase } from '@/lib/supabaseClient';
+import { authFetch } from '@/lib/fetchWithTenant';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -130,13 +130,9 @@ export default function ProvidersPage() {
     let cancelled = false;
 
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
       const [supRes, prodRes] = await Promise.all([
-        fetch('/api/suppliers', { headers }),
-        fetch('/api/products', { headers }),
+        authFetch('/api/suppliers'),
+        authFetch('/api/products'),
       ]);
 
       if (cancelled) return;
@@ -161,23 +157,16 @@ export default function ProvidersPage() {
   }, [tenantId, allTenants]);
 
   const refreshSuppliers = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const headers: Record<string, string> = {};
-    if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-    const res = await fetch('/api/suppliers', { headers });
+    const res = await authFetch('/api/suppliers');
     if (res.ok) setSuppliers(await res.json());
   };
 
   const fetchDocumentChain = async (supplierId: string) => {
     setLoadingChain(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
       const [posRes, docsRes] = await Promise.all([
-        fetch(`/api/purchase-orders?supplier_id=${supplierId}`, { headers }),
-        fetch('/api/documents?type=remito_ingreso', { headers }),
+        authFetch(`/api/purchase-orders?supplier_id=${supplierId}`),
+        authFetch('/api/documents?type=remito_ingreso'),
       ]);
 
       const pos: PurchaseOrder[] = posRes.ok ? await posRes.json() : [];
@@ -254,15 +243,9 @@ export default function ProvidersPage() {
 
     setIsSubmittingPo(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
-      const res = await fetch('/api/purchase-orders', {
+      const res = await authFetch('/api/purchase-orders', {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           supplier_id: poSupplierId,
           expected_date: poExpectedDate || null,
@@ -352,16 +335,14 @@ export default function ProvidersPage() {
 
     try {
       setIsSubmittingSupplier(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
       const url = editingSupplier ? `/api/suppliers/${editingSupplier.id}` : '/api/suppliers';
       const method = editingSupplier ? 'PATCH' : 'POST';
 
-      const res = await fetch(url, { method, headers, body: JSON.stringify(supplierForm) });
+      const res = await authFetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(supplierForm),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al guardar');
 
@@ -385,11 +366,7 @@ export default function ProvidersPage() {
     setSupplierIdToDelete(null);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
-      const res = await fetch(`/api/suppliers/${id}`, { method: 'DELETE', headers });
+      const res = await authFetch(`/api/suppliers/${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al eliminar');
       toast.success('Proveedor eliminado');

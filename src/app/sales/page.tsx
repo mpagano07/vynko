@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
@@ -43,7 +42,7 @@ import {
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import { cn } from '@/lib/utils/cn';
-import { getTenantHeaders } from '@/lib/fetchWithTenant';
+import { authFetch } from '@/lib/fetchWithTenant';
 import { matchesQuery } from '@/lib/utils/text';
 import type { Customer } from '@/lib/types/sale';
 import { CheckoutModal, type CheckoutPayload } from '@/components/sales/checkout-modal';
@@ -233,8 +232,8 @@ export default function SalesPage() {
     searchInputRef.current?.focus();
   }, []);
 
-  const fetchSales = async (page: number, headers: Record<string, string>) => {
-    const res = await fetch(`/api/sales?days=15&page=${page}&limit=${SALES_PER_PAGE}`, { headers: { ...headers, ...getTenantHeaders() } });
+  const fetchSales = async (page: number) => {
+    const res = await authFetch(`/api/sales?days=15&page=${page}&limit=${SALES_PER_PAGE}`);
     if (res.ok) {
       const d = await res.json();
       setSales(d.data ?? []);
@@ -246,10 +245,7 @@ export default function SalesPage() {
     if (!tenantId || loadingData) return;
     let cancelled = false;
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-      await fetchSales(salesPage, headers);
+      await fetchSales(salesPage);
       if (cancelled) return;
     })();
     return () => { cancelled = true; };
@@ -260,22 +256,16 @@ export default function SalesPage() {
     let cancelled = false;
 
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers = {
-        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        ...getTenantHeaders(),
-      };
-
       const [prodRes, custRes] = await Promise.all([
-        fetch('/api/products', { headers }),
-        fetch('/api/customers', { headers }),
+        authFetch('/api/products'),
+        authFetch('/api/customers'),
       ]);
 
       if (cancelled) return;
       if (prodRes.ok) setProducts(await prodRes.json());
       if (custRes.ok) setCustomers(await custRes.json());
 
-      await fetchSales(salesPage, headers);
+      await fetchSales(salesPage);
     })().catch((err) => {
       console.error('Error loading data:', err);
     }).finally(() => {
@@ -290,12 +280,7 @@ export default function SalesPage() {
     if (!tenantId) return;
     let cancelled = false;
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers = {
-        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        ...getTenantHeaders(),
-      };
-      const res = await fetch('/api/settings/checkout', { headers });
+      const res = await authFetch('/api/settings/checkout');
       if (!res.ok || cancelled) return;
       const data = await res.json();
       if (cancelled) return;
@@ -402,13 +387,7 @@ export default function SalesPage() {
 
   const handleScanBarcode = async (code: string) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`/api/products/barcode/${encodeURIComponent(code)}`, {
-        headers: {
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-          ...getTenantHeaders(),
-        },
-      });
+      const res = await authFetch(`/api/products/barcode/${encodeURIComponent(code)}`);
       const data = await res.json();
       if (data.product) {
         const p = data.product;
@@ -474,15 +453,9 @@ export default function SalesPage() {
 
     setIsSubmitting(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const tenantHeaders = getTenantHeaders();
-      const res = await fetch('/api/sales', {
+      const res = await authFetch('/api/sales', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-          ...tenantHeaders,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customer_id: selectedCustomerId || null,
           notes: notes || null,
@@ -546,19 +519,14 @@ export default function SalesPage() {
         }
       }
 
-      const { data: { session: s2 } } = await supabase.auth.getSession();
-      const h2 = {
-        ...(s2?.access_token ? { Authorization: `Bearer ${s2.access_token}` } : {}),
-        ...getTenantHeaders(),
-      };
       const [pRes, cRes] = await Promise.all([
-        fetch('/api/products', { headers: h2 }),
-        fetch('/api/customers', { headers: h2 }),
+        authFetch('/api/products'),
+        authFetch('/api/customers'),
       ]);
       if (pRes.ok) setProducts(await pRes.json());
       if (cRes.ok) setCustomers(await cRes.json());
       setSalesPage(1);
-      await fetchSales(1, h2);
+      await fetchSales(1);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al registrar la venta');
     } finally {
