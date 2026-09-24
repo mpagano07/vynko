@@ -21,7 +21,7 @@ export default function DashboardPreviewChart() {
         <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
         <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#9ca3af' }} />
         <YAxis hide />
-        <Bar dataKey="ventas" fill="#06b6d4" radius={[4, 4, 0, 0]} maxBarSize={24} />
+        <Bar dataKey="ventas" fill="#06b6d4" radius={[4, 4, 0, 0]} maxBarSize={24} isAnimationActive={false} />
       </BarChart>
     </ResponsiveContainer>
   );
