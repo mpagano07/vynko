@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { createActivityLog } from '@/lib/activity-log';
+import { updateProduct, deleteProduct } from '@/lib/product-service';
 
 export async function PATCH(
   request: Request,
@@ -11,97 +10,16 @@ export async function PATCH(
   const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
+  let body: Record<string, unknown>;
   try {
-    const scopeTenantIds = auth.allTenants ? auth.tenantIds : [auth.tenantId];
-    const { data: membership } = await supabaseAdmin
-      .from('product_stock')
-      .select('product_id')
-      .eq('product_id', id)
-      .in('tenant_id', scopeTenantIds)
-      .maybeSingle();
-
-    if (!membership) {
-      return NextResponse.json({ error: 'Producto no encontrado o sin permisos' }, { status: 403 });
-    }
-
-    const body = await request.json();
-    const allowedFields = [
-      'category_id', 'sku', 'barcode', 'name', 'description',
-      'cost', 'image_url', 'metadata',
-    ];
-    const updateData: Record<string, unknown> = {};
-    if (body.price !== undefined) updateData.price_cents = Math.round(body.price * 100);
-    for (const key of allowedFields) {
-      if (body[key] !== undefined) updateData[key] = body[key];
-    }
-    if (updateData.category_id === '') updateData.category_id = null;
-    updateData.updated_at = new Date().toISOString();
-
-    const { data, error } = await supabaseAdmin
-      .from('products')
-      .update(updateData)
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) {
-      { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
-    }
-    if (!data) {
-      return NextResponse.json({ error: 'Producto no encontrado o sin permisos' }, { status: 403 });
-    }
-
-    if (data && (body.stock !== undefined || body.min_stock !== undefined || body.max_stock !== undefined || body.deposito !== undefined || body.pasillo !== undefined || body.estanteria !== undefined)) {
-      const stockUpdate: Record<string, unknown> = { updated_at: new Date().toISOString() };
-      if (body.stock !== undefined) stockUpdate.stock = body.stock;
-      if (body.min_stock !== undefined) stockUpdate.min_stock = body.min_stock;
-      if (body.max_stock !== undefined) stockUpdate.max_stock = body.max_stock;
-      if (body.deposito !== undefined) stockUpdate.deposito = body.deposito;
-      if (body.pasillo !== undefined) stockUpdate.pasillo = body.pasillo;
-      if (body.estanteria !== undefined) stockUpdate.estanteria = body.estanteria;
-
-      const { error: stockError } = await supabaseAdmin
-        .from('product_stock')
-        .upsert({
-          product_id: id,
-          tenant_id: auth.tenantId,
-          ...stockUpdate,
-        }, { onConflict: 'product_id,tenant_id' });
-
-      if (stockError) {
-        { console.error('DB error:', stockError); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
-      }
-    }
-
-    await createActivityLog({
-      tenantId: auth.tenantId,
-      userId: auth.userId,
-      action: 'updated',
-      entityType: 'product',
-      entityId: id,
-      details: { name: data?.name },
-    });
-
-    const stockData = data ? await supabaseAdmin
-      .from('product_stock')
-      .select('stock, min_stock, max_stock, deposito, pasillo, estanteria')
-      .eq('product_id', id)
-      .eq('tenant_id', auth.tenantId)
-      .maybeSingle() : null;
-
-    return NextResponse.json({
-      ...data,
-      price: data.price_cents != null ? data.price_cents / 100 : 0,
-      stock: stockData?.data?.stock ?? 0,
-      min_stock: stockData?.data?.min_stock ?? 0,
-      max_stock: stockData?.data?.max_stock ?? 0,
-      deposito: stockData?.data?.deposito ?? null,
-      pasillo: stockData?.data?.pasillo ?? null,
-      estanteria: stockData?.data?.estanteria ?? null,
-    });
+    body = await request.json();
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
+
+  const result = await updateProduct(auth, id, body);
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+  return NextResponse.json(result.product);
 }
 
 export async function DELETE(
@@ -112,32 +30,7 @@ export async function DELETE(
   const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-  const { data: stockRow, error: stockError } = await supabaseAdmin
-    .from('product_stock')
-    .update({ active: false, updated_at: new Date().toISOString() })
-    .eq('product_id', id)
-    .eq('tenant_id', auth.tenantId)
-    .select('id')
-    .single();
-
-  if (stockError || !stockRow) {
-    return NextResponse.json({ error: 'Producto no encontrado o sin permisos' }, { status: 403 });
-  }
-
-  const { data: productName } = await supabaseAdmin
-    .from('products')
-    .select('name')
-    .eq('id', id)
-    .maybeSingle();
-
-  await createActivityLog({
-    tenantId: auth.tenantId,
-    userId: auth.userId,
-    action: 'deleted',
-    entityType: 'product',
-    entityId: id,
-    details: { name: productName?.name ?? null },
-  });
-
+  const result = await deleteProduct(auth, id);
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
   return NextResponse.json({ success: true });
 }

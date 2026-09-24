@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { updateProfile } from '@/lib/settings-service';
 
 export async function PATCH(request: Request) {
   try {
@@ -12,35 +12,10 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json();
-    const { full_name } = body;
 
-    if (!full_name || typeof full_name !== 'string') {
-      return NextResponse.json({ error: 'full_name is required' }, { status: 400 });
-    }
-
-    const { data: tenantUser } = await supabaseAdmin
-      .from('tenant_users')
-      .select('tenant_id')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    const { data, error } = await supabaseAdmin
-      .from('profiles')
-      .upsert({
-        id: user.id,
-        full_name: full_name.trim(),
-        email: user.email,
-        tenant_id: tenantUser?.tenant_id || null,
-        updated_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (error) {
-      { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
-    }
-
-    return NextResponse.json({ profile: data });
+    const result = await updateProfile(user, body);
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    return NextResponse.json(result.data);
   } catch (err) {
     console.error('Error updating profile:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

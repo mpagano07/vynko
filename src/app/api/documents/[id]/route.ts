@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import type { DocumentStatus } from '@/lib/types/document';
+import { deleteDocument, getDocument, updateDocument } from '@/lib/document-service';
 import { fixResponse } from '@/lib/utils/encoding';
 
 export async function GET(
@@ -12,16 +11,9 @@ export async function GET(
   if (!auth) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
 
   const { id } = await params;
-
-  const { data: document, error } = await supabaseAdmin
-    .from('commercial_documents')
-    .select('*, items:commercial_document_items(*)')
-    .eq('id', id)
-    .eq('tenant_id', auth.tenantId)
-    .single();
-
-  if (error) return NextResponse.json({ error: 'Documento no encontrado' }, { status: 404 });
-  return NextResponse.json(fixResponse(document));
+  const result = await getDocument(auth, id);
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+  return NextResponse.json(fixResponse(result.data));
 }
 
 export async function PATCH(
@@ -33,32 +25,9 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await request.json();
-  const { status, notes, valid_until, delivery_date } = body as {
-    status?: DocumentStatus;
-    notes?: string;
-    valid_until?: string;
-    delivery_date?: string;
-  };
-
-  const updateData: Record<string, unknown> = {
-    updated_at: new Date().toISOString(),
-  };
-
-  if (status !== undefined) updateData.status = status;
-  if (notes !== undefined) updateData.notes = notes;
-  if (valid_until !== undefined) updateData.valid_until = valid_until;
-  if (delivery_date !== undefined) updateData.delivery_date = delivery_date;
-
-  const { data, error } = await supabaseAdmin
-    .from('commercial_documents')
-    .update(updateData)
-    .eq('id', id)
-    .eq('tenant_id', auth.tenantId)
-    .select()
-    .single();
-
-  if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
-  return NextResponse.json(data);
+  const result = await updateDocument(auth, id, body);
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+  return NextResponse.json(result.data);
 }
 
 export async function DELETE(
@@ -69,13 +38,7 @@ export async function DELETE(
   if (!auth) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
 
   const { id } = await params;
-
-  const { error } = await supabaseAdmin
-    .from('commercial_documents')
-    .delete()
-    .eq('id', id)
-    .eq('tenant_id', auth.tenantId);
-
-  if (error) { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
-  return NextResponse.json({ success: true });
+  const result = await deleteDocument(auth, id);
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+  return NextResponse.json(result.data);
 }

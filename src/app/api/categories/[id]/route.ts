@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { deleteCategory, updateCategory } from '@/lib/category-service';
 
 export async function PATCH(
   request: Request,
@@ -10,30 +10,16 @@ export async function PATCH(
   const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
+  let body: unknown;
   try {
-    const body = await request.json();
-    const { data, error } = await supabaseAdmin
-      .from('categories')
-      .update({
-        name: body.name,
-        description: body.description,
-        icon: body.icon,
-        color: body.color,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', id)
-      .eq('tenant_id', auth.tenantId)
-      .select()
-      .single();
-
-    if (error) {
-      { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
-    }
-
-    return NextResponse.json(data);
+    body = await request.json();
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
+
+  const result = await updateCategory(auth, id, body as Record<string, unknown>);
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+  return NextResponse.json(result.data);
 }
 
 export async function DELETE(
@@ -44,15 +30,7 @@ export async function DELETE(
   const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-  const { error } = await supabaseAdmin
-    .from('categories')
-    .delete()
-    .eq('id', id)
-    .eq('tenant_id', auth.tenantId);
-
-  if (error) {
-    { console.error('DB error:', error); return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 400 }); }
-  }
-
-  return NextResponse.json({ success: true });
+  const result = await deleteCategory(auth, id);
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+  return NextResponse.json(result.data);
 }
