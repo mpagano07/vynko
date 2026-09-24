@@ -200,8 +200,9 @@ describe('DashboardPage: carga de datos de un tenant', () => {
     expect(screen.getByText('2 ventas')).toBeInTheDocument();
 
     const authHeaderCalls = fetchHandler.mock.calls.filter(([, init]) => {
-      const headers = (init as RequestInit | undefined)?.headers as Record<string, string> | undefined;
-      return headers?.Authorization === 'Bearer tok';
+      const headers = (init as RequestInit | undefined)?.headers;
+      if (headers instanceof Headers) return headers.get('Authorization') === 'Bearer tok';
+      return (headers as Record<string, string> | undefined)?.Authorization === 'Bearer tok';
     });
     expect(authHeaderCalls.length).toBeGreaterThan(0);
   });

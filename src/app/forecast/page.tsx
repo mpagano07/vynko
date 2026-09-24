@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Pagination } from '@/components/ui/pagination';
 import { LoadingState } from '@/components/ui/loading-state';
@@ -16,6 +15,7 @@ import {
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { formatARS } from '@/lib/utils/currency';
+import { authFetch } from '@/lib/fetchWithTenant';
 
 interface Prediction {
   productId: string;
@@ -85,10 +85,7 @@ export default function ForecastPage() {
   useEffect(() => {
     (async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const headers: Record<string, string> = {};
-        if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-        const res = await fetch('/api/ai/forecast', { headers });
+        const res = await authFetch('/api/ai/forecast');
         if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Error'); }
         setData(await res.json());
       } catch (err) {

@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, startTransition } from 'react';
+import { useState, useEffect, startTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Clock } from 'lucide-react';
 import OnboardingChecklist from '@/components/dashboard/OnboardingChecklist';
+import { authFetch } from '@/lib/fetchWithTenant';
 
 function timeAgo(dateStr: string): string {
   const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
@@ -103,25 +103,17 @@ export default function StockAndActivity({
   // pedirlo igual genera ruido de 403 en la consola.
   const canViewActivity = role === 'owner' || role === 'manager';
 
-  const getHeaders = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const headers: Record<string, string> = {};
-    if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-    return headers;
-  }, []);
-
   useEffect(() => {
     if (!tenantId && !allTenants) return;
     let cancelled = false;
 
     (async () => {
       try {
-        const headers = await getHeaders();
         const requests: [Promise<Response>, Promise<Response>?] = [
-          fetch('/api/products/stock-analysis', { headers }),
+          authFetch('/api/products/stock-analysis'),
         ];
         if (canViewActivity) {
-          requests.push(fetch('/api/activity-logs?limit=5', { headers }));
+          requests.push(authFetch('/api/activity-logs?limit=5'));
         }
         const [stockRes, activityRes] = await Promise.all(requests);
 
@@ -142,7 +134,7 @@ export default function StockAndActivity({
       }
     })();
     return () => { cancelled = true; };
-  }, [tenantId, getHeaders, allTenants, canViewActivity]);
+  }, [tenantId, allTenants, canViewActivity]);
 
   const activityPanel = (
     <div>
