@@ -59,6 +59,7 @@ import {
   type CheckoutSettings,
 } from '@/lib/payment-methods';
 import { getPaymentMethodLabel } from '@/lib/payment-methods';
+import { usePagination } from '@/lib/hooks/usePagination';
 
 interface CartItem {
   product_id: string;
@@ -171,7 +172,6 @@ export default function SalesPage() {
   const [waTargetId, setWaTargetId] = useState<string | null>(null);
   const [waPhone, setWaPhone] = useState('');
   const [productSearch, setProductSearch] = useState('');
-  const [productPage, setProductPage] = useState(1);
   const PRODUCTS_PER_PAGE = 10;
   const LIST_PER_PAGE = 30;
   const [productView, setProductView] = useState<ProductView>(() => {
@@ -315,11 +315,7 @@ export default function SalesPage() {
   }, [filteredProducts, sales]);
 
   const productsPerPage = productView === 'list' ? LIST_PER_PAGE : PRODUCTS_PER_PAGE;
-  const totalProductPages = Math.ceil(sortedProducts.length / productsPerPage);
-  const paginatedProducts = sortedProducts.slice(
-    (productPage - 1) * productsPerPage,
-    productPage * productsPerPage
-  );
+  const { currentPage: productPage, setCurrentPage: setProductPage, totalPages: totalProductPages, pageItems: paginatedProducts } = usePagination(sortedProducts, productsPerPage);
 
   const changeView = (view: ProductView) => {
     setProductView(view);

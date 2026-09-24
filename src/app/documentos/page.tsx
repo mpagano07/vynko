@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { authFetch } from '@/lib/fetchWithTenant';
+import { usePagination } from '@/lib/hooks/usePagination';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -99,8 +100,6 @@ export default function DocumentosPage() {
   const [typeFilter, setTypeFilter] = useState<DocumentType>('remito_ingreso');
   const [creating, setCreating] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
   const [confirmModal, setConfirmModal] = useState<{
     open: boolean;
     title: string;
@@ -240,16 +239,7 @@ export default function DocumentosPage() {
 
   const isPoTab = typeFilter === 'orden_compra';
   const currentItems = isPoTab ? filteredOrders : filteredDocuments;
-  const totalPages = Math.ceil(currentItems.length / itemsPerPage);
-
-  const paginatedDocuments = useMemo(() => {
-    if (isPoTab) {
-      const start = (currentPage - 1) * itemsPerPage;
-      return filteredOrders.slice(start, start + itemsPerPage);
-    }
-    const start = (currentPage - 1) * itemsPerPage;
-    return filteredDocuments.slice(start, start + itemsPerPage);
-  }, [filteredDocuments, filteredOrders, currentPage, isPoTab]);
+  const { currentPage, setCurrentPage, totalPages, pageItems: paginatedDocuments } = usePagination<CommercialDocument | PurchaseOrder>(currentItems, 10);
 
   const handleCustomerSelect = (custId: string) => {
     const customer = customers.find(c => c.id === custId);

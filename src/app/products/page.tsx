@@ -6,6 +6,7 @@ import { useProducts } from '@/lib/hooks/useProducts';
 import { useCategories } from '@/lib/hooks/useCategories';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useExport } from '@/lib/hooks/useExport';
+import { usePagination } from '@/lib/hooks/usePagination';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -344,11 +345,6 @@ function ProductsPageContent() {
     id: string;
   } | null>(null);
 
-  // Pagination State
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8;
-
-  // Sort State
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
@@ -393,11 +389,7 @@ function ProductsPageContent() {
     : filteredProducts;
 
   // Pagination Logic
-  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
-  const paginatedProducts = sortedProducts.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  const { currentPage, setCurrentPage, totalPages, pageItems: paginatedProducts } = usePagination(sortedProducts, 8);
 
   // Handlers
   const handleOpenProductModal = (product: Product | null = null) => {
