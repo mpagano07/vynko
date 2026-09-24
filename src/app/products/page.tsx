@@ -1145,14 +1145,12 @@ function ProductsPageContent() {
                 </div>
                 <div className="max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
                   <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 dark:bg-gray-800 text-xs text-gray-500 uppercase">
-                        <th className="py-2 px-4 text-left">Fila</th>
-                        <th className="py-2 px-4 text-left">Producto</th>
-                        <th className="py-2 px-4 text-left">Resultado</th>
-                        <th className="py-2 px-4 text-left">Error</th>
-                      </tr>
-                    </thead>
+                    <Thead>
+                      <Th>Fila</Th>
+                      <Th>Producto</Th>
+                      <Th>Resultado</Th>
+                      <Th>Error</Th>
+                    </Thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                       {importResults.map(r => (
                         <tr key={r.row} className="text-xs">
@@ -1190,14 +1188,12 @@ function ProductsPageContent() {
                 </div>
                 <div className="max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
                   <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 dark:bg-gray-800 text-xs text-gray-500 uppercase">
-                        <th className="py-2 px-4 text-left">#</th>
-                        {importColumns.map(col => (
-                          <th key={col} className="py-2 px-4 text-left">{col}</th>
-                        ))}
-                      </tr>
-                    </thead>
+                    <Thead>
+                      <Th>#</Th>
+                      {importColumns.map(col => (
+                        <Th key={col}>{col}</Th>
+                      ))}
+                    </Thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                       {importRows.slice(0, 50).map((row, i) => (
                         <tr key={i} className="text-xs hover:bg-gray-50 dark:hover:bg-gray-800/30">
