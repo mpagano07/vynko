@@ -217,7 +217,7 @@ Ventas totales últimos 30 días: ${formatARS(totalSales30)} (${totalTransaction
 
 Dame un análisis breve (3-4 oraciones) en español destacando tendencias y recomendaciones.`;
 
-      const result = await model.generateContent(prompt);
+      const result = await model.generateContent(prompt, { timeout: 2500 });
       aiAnalysis = result.response.text();
     } catch (e) {
       console.error('Gemini forecast analysis error:', e);
