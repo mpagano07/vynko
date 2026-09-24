@@ -9,6 +9,7 @@ import { Clock } from 'lucide-react';
 import OnboardingChecklist from '@/components/dashboard/OnboardingChecklist';
 import { authFetch } from '@/lib/fetchWithTenant';
 import { formatDate, timeAgo } from '@/lib/utils/format';
+import type { CriticalProduct, PendingOrder } from '@/lib/types/dashboard';
 
 function actionInfo(action: string, entityType: string, details: Record<string, unknown>): { emoji: string; label: string; detail: string } {
   const name = (details.products as string) || (details.name as string) || '';
@@ -34,31 +35,6 @@ interface ActivityLog {
   entity_type: string;
   details: Record<string, unknown>;
   created_at: string;
-}
-
-interface CriticalProduct {
-  id: string;
-  name: string;
-  stock: number;
-  min_stock: number;
-}
-
-interface PendingOrderItem {
-  product_id: string | null;
-  product_name: string;
-  quantity_ordered: number;
-  quantity_received: number;
-  quantity_pending: number;
-}
-
-interface PendingOrder {
-  id: string;
-  status: string;
-  expected_date: string | null;
-  created_at: string;
-  supplier_name: string;
-  tenant_name?: string;
-  items: PendingOrderItem[];
 }
 
 export default function StockAndActivity({

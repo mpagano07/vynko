@@ -29,6 +29,7 @@ import { formatARS } from '@/lib/utils/currency';
 import { formatDate } from '@/lib/utils/format';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
+import type { Transfer } from '@/lib/types/stock-transfer';
 
 interface ActivityDetails {
   name?: string;
@@ -53,28 +54,6 @@ interface SaleDetail {
   customer_name?: string;
   created_at: string;
   items: { id: string; product_name?: string; quantity: number; unit_price_cents: number; subtotal_cents: number }[];
-}
-
-interface TransferItem {
-  id: string;
-  product_id: string;
-  product_name?: string;
-  quantity: number;
-}
-
-interface Transfer {
-  id: string;
-  from_tenant_id: string;
-  to_tenant_id: string;
-  from_tenant_name: string;
-  to_tenant_name: string;
-  status: 'pending' | 'in_transit' | 'received';
-  notes?: string;
-  created_at: string;
-  updated_at: string;
-  received_at?: string;
-  created_by_name: string;
-  items: TransferItem[];
 }
 
 const ENTITY_LABELS: Record<string, string> = {

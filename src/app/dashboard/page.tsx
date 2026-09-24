@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import { authFetch } from '@/lib/fetchWithTenant';
+import type { CriticalProduct, PendingOrder } from '@/lib/types/dashboard';
 import Link from 'next/link';
 import dynamicImport from 'next/dynamic';
 import { LazyMount } from '@/components/ui/lazy-mount';
@@ -77,31 +78,6 @@ interface PerTenantData {
 
 interface SalesEntry {
   total_cents: number;
-}
-
-interface CriticalProduct {
-  id: string;
-  name: string;
-  stock: number;
-  min_stock: number;
-}
-
-interface PendingOrderItem {
-  product_id: string | null;
-  product_name: string;
-  quantity_ordered: number;
-  quantity_received: number;
-  quantity_pending: number;
-}
-
-interface PendingOrder {
-  id: string;
-  status: string;
-  expected_date: string | null;
-  created_at: string;
-  supplier_name: string;
-  tenant_name?: string;
-  items: PendingOrderItem[];
 }
 
 export default function DashboardPage() {

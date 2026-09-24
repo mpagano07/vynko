@@ -20,28 +20,7 @@ import { StatusBadge as StatusPill } from '@/components/ui/status-badge';
 import { IconAction } from '@/components/ui/icon-action';
 import { formatDate } from '@/lib/utils/format';
 import toast from 'react-hot-toast';
-
-interface TransferItem {
-  id: string;
-  product_id: string;
-  quantity: number;
-  product_name?: string;
-}
-
-interface Transfer {
-  id: string;
-  from_tenant_id: string;
-  to_tenant_id: string;
-  from_tenant_name: string;
-  to_tenant_name: string;
-  status: 'pending' | 'in_transit' | 'received';
-  notes?: string;
-  created_at: string;
-  updated_at: string;
-  received_at?: string;
-  created_by_name: string;
-  items: TransferItem[];
-}
+import type { Transfer, TransferItem } from '@/lib/types/stock-transfer';
 
 // Fetch product names for items that don't have them
 async function enrichItems(items: TransferItem[]): Promise<TransferItem[]> {

@@ -22,3 +22,25 @@ export interface StockTransferItem {
   created_at: string;
   product_name?: string;
 }
+
+export interface TransferItem {
+  id: string;
+  product_id: string;
+  product_name?: string;
+  quantity: number;
+}
+
+export interface Transfer {
+  id: string;
+  from_tenant_id: string;
+  to_tenant_id: string;
+  from_tenant_name: string;
+  to_tenant_name: string;
+  status: 'pending' | 'in_transit' | 'received';
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+  received_at?: string;
+  created_by_name: string;
+  items: TransferItem[];
+}
