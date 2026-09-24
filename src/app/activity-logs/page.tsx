@@ -29,7 +29,7 @@ import { formatARS } from '@/lib/utils/currency';
 import { formatDate } from '@/lib/utils/format';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
-import type { Transfer } from '@/lib/types/stock-transfer';
+import { TRANSFER_STATUS_LABELS, type Transfer, type TransferStatus } from '@/lib/types/stock-transfer';
 
 interface ActivityDetails {
   name?: string;
@@ -110,12 +110,7 @@ function formatDetailValue(key: string, value: unknown): string {
   if (['initial_fund_cents', 'total_expected_cents', 'total_counted_cents', 'total_difference_cents', 'amount_cents'].includes(key) && typeof value === 'number') return formatARS(value / 100);
   if (key === 'from_tenant_id' || key === 'to_tenant_id') return `#${String(value).slice(0, 8)}`;
   if (key === 'status' && typeof value === 'string') {
-    const statusLabels: Record<string, string> = {
-      pending: 'Pendiente',
-      in_transit: 'En tránsito',
-      received: 'Recibida',
-    };
-    return statusLabels[value] || value;
+    return TRANSFER_STATUS_LABELS[value as TransferStatus] ?? value;
   }
   return typeof value === 'string' || typeof value === 'number' ? String(value) : JSON.stringify(value);
 }
@@ -135,18 +130,18 @@ function TransferStatusBadge({ status }: { status: Transfer['status'] }) {
   if (status === 'pending')
     return (
       <StatusBadge tone="amber" className="font-semibold" icon={<Clock className="h-3 w-3" />}>
-        Pendiente
+        {TRANSFER_STATUS_LABELS.pending}
       </StatusBadge>
     );
   if (status === 'in_transit')
     return (
       <StatusBadge tone="blue" className="font-semibold" icon={<Truck className="h-3 w-3" />}>
-        En tránsito
+        {TRANSFER_STATUS_LABELS.in_transit}
       </StatusBadge>
     );
   return (
     <StatusBadge tone="emerald" className="font-semibold" icon={<CheckCircle2 className="h-3 w-3" />}>
-      Recibida
+      {TRANSFER_STATUS_LABELS.received}
     </StatusBadge>
   );
 }

@@ -45,7 +45,7 @@ import {
   DOCUMENT_STATUS_LABELS,
   VALID_STATUSES_PER_TYPE,
 } from '@/lib/types/document';
-import type { PurchaseOrder } from '@/lib/types/supplier';
+import { PO_STATUS_LABELS, PO_STATUS_TONES, type PurchaseOrder, type PurchaseOrderStatus } from '@/lib/types/supplier';
 import type { Customer } from '@/lib/types/sale';
 import type { Product } from '@/lib/types/product';
 import type { Supplier } from '@/lib/types/supplier';
@@ -56,14 +56,6 @@ const DOCUMENT_TYPE_COLORS: Record<DocumentType, { border: string; bg: string; t
   orden_compra: { border: 'border-l-blue-500', bg: 'bg-blue-50 dark:bg-blue-950/20', text: 'text-blue-700 dark:text-blue-400' },
   remito_salida: { border: 'border-l-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-950/20', text: 'text-indigo-700 dark:text-indigo-400' },
   remito_ingreso: { border: 'border-l-teal-500', bg: 'bg-teal-50 dark:bg-teal-950/20', text: 'text-teal-700 dark:text-teal-400' },
-};
-
-const PO_STATUS_LABELS: Record<string, string> = {
-  draft: 'Borrador',
-  sent: 'Enviado',
-  partial: 'Recibido Parcial',
-  received: 'Recibido',
-  cancelled: 'Cancelado',
 };
 
 const DOCUMENT_STATUS_COLORS_TONE: Record<DocumentStatus, StatusTone> = {
@@ -776,23 +768,11 @@ export default function DocumentosPage() {
     </StatusBadge>
   );
 
-  const poStatusBadge = (status: string) => {
-    const tone: StatusTone =
-      status === 'draft'
-        ? 'gray'
-        : status === 'sent'
-        ? 'amber'
-        : status === 'partial'
-        ? 'blue'
-        : status === 'received'
-        ? 'green'
-        : 'red';
-    return (
-      <StatusBadge size="sm" tone={tone}>
-        {PO_STATUS_LABELS[status]}
-      </StatusBadge>
-    );
-  };
+  const poStatusBadge = (status: PurchaseOrderStatus) => (
+    <StatusBadge size="sm" tone={PO_STATUS_TONES[status]}>
+      {PO_STATUS_LABELS[status]}
+    </StatusBadge>
+  );
 
   const getDocumentTypeLabel = (type: DocumentType) => DOCUMENT_TYPE_LABELS[type];
 
@@ -839,7 +819,7 @@ export default function DocumentosPage() {
           <Select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="w-36">
             <option value="all">Todos</option>
             {isPoTab
-              ? ['draft', 'sent', 'partial', 'received', 'cancelled'].map(s => (
+              ? (['draft', 'sent', 'partial', 'received', 'cancelled'] as const).map(s => (
                   <option key={s} value={s}>{PO_STATUS_LABELS[s]}</option>
                 ))
               : VALID_STATUSES_PER_TYPE[typeFilter].map(status => (

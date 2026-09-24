@@ -20,7 +20,7 @@ import { StatusBadge as StatusPill } from '@/components/ui/status-badge';
 import { IconAction } from '@/components/ui/icon-action';
 import { formatDate } from '@/lib/utils/format';
 import toast from 'react-hot-toast';
-import type { Transfer, TransferItem } from '@/lib/types/stock-transfer';
+import { TRANSFER_STATUS_LABELS, type Transfer, type TransferItem } from '@/lib/types/stock-transfer';
 
 // Fetch product names for items that don't have them
 async function enrichItems(items: TransferItem[]): Promise<TransferItem[]> {
@@ -39,20 +39,20 @@ function StatusBadge({ status }: { status: Transfer['status'] }) {
   if (status === 'pending') {
     return (
       <StatusPill size="md" tone="amber" icon={<Clock className="h-3 w-3" />}>
-        Pendiente
+        {TRANSFER_STATUS_LABELS.pending}
       </StatusPill>
     );
   }
   if (status === 'in_transit') {
     return (
       <StatusPill size="md" tone="blue" icon={<Truck className="h-3 w-3 animate-[truck_1.5s_ease-in-out_infinite]" />}>
-        En tránsito
+        {TRANSFER_STATUS_LABELS.in_transit}
       </StatusPill>
     );
   }
   return (
     <StatusPill size="md" tone="emerald" icon={<CheckCircle2 className="h-3 w-3" />}>
-      Recibida
+      {TRANSFER_STATUS_LABELS.received}
     </StatusPill>
   );
 }

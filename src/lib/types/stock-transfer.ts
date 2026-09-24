@@ -1,8 +1,16 @@
+export type TransferStatus = 'pending' | 'in_transit' | 'received';
+
+export const TRANSFER_STATUS_LABELS: Record<TransferStatus, string> = {
+  pending: 'Pendiente',
+  in_transit: 'En tránsito',
+  received: 'Recibida',
+};
+
 export interface StockTransfer {
   id: string;
   from_tenant_id: string;
   to_tenant_id: string;
-  status: 'pending' | 'in_transit' | 'received';
+  status: TransferStatus;
   notes?: string;
   created_by: string;
   created_at: string;
@@ -36,7 +44,7 @@ export interface Transfer {
   to_tenant_id: string;
   from_tenant_name: string;
   to_tenant_name: string;
-  status: 'pending' | 'in_transit' | 'received';
+  status: TransferStatus;
   notes?: string;
   created_at: string;
   updated_at: string;

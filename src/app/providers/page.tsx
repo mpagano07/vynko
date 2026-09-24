@@ -27,7 +27,7 @@ import {
   Loader2,
   Check,
 } from 'lucide-react';
-import type { Supplier, PurchaseOrder } from '@/lib/types/supplier';
+import { PO_STATUS_LABELS, PO_STATUS_TONES, type Supplier, type PurchaseOrder } from '@/lib/types/supplier';
 import type { CommercialDocument } from '@/lib/types/document';
 import type { Product } from '@/lib/types/product';
 import { formatARS } from '@/lib/utils/currency';
@@ -815,11 +815,11 @@ export default function ProvidersPage() {
 }
 
 const statusLabels: Record<string, { label: string; tone: StatusTone }> = {
-  draft: { label: 'Borrador', tone: 'gray' },
-  sent: { label: 'Enviado', tone: 'amber' },
-  partial: { label: 'Recibido Parcial', tone: 'blue' },
-  received: { label: 'Recibido', tone: 'green' },
-  cancelled: { label: 'Cancelado', tone: 'red' },
+  draft: { label: PO_STATUS_LABELS.draft, tone: PO_STATUS_TONES.draft },
+  sent: { label: PO_STATUS_LABELS.sent, tone: PO_STATUS_TONES.sent },
+  partial: { label: PO_STATUS_LABELS.partial, tone: PO_STATUS_TONES.partial },
+  received: { label: PO_STATUS_LABELS.received, tone: PO_STATUS_TONES.received },
+  cancelled: { label: PO_STATUS_LABELS.cancelled, tone: PO_STATUS_TONES.cancelled },
   pending: { label: 'Pendiente', tone: 'amber' },
   completed: { label: 'Completado', tone: 'green' },
 };
