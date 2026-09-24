@@ -22,6 +22,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { PageHeader } from '@/components/ui/page-header';
 import { IconAction } from '@/components/ui/icon-action';
 import type { Product } from '@/lib/types/product';
+import type { Category } from '@/lib/types/category';
 import toast from 'react-hot-toast';
 import {
   Search,
@@ -131,6 +132,12 @@ function ProductsPageContent() {
     color: '#3b82f6',
   });
   const [isSubmittingCategory, setIsSubmittingCategory] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    color: '#3b82f6',
+  });
+  const [isUpdatingCategory, setIsUpdatingCategory] = useState(false);
   const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
 
   // Import Excel State
@@ -520,6 +527,47 @@ function ProductsPageContent() {
 
   const handleDeleteCategory = async (id: string) => {
     setConfirmAction({ type: 'delete-category', id });
+  };
+
+  const handleStartEditCategory = (cat: Category) => {
+    if (editingCategoryId === cat.id) {
+      setEditingCategoryId(null);
+      return;
+    }
+    setEditingCategoryId(cat.id);
+    setEditForm({ name: cat.name, color: cat.color || '#3b82f6' });
+  };
+
+  const handleUpdateCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCategoryId) return;
+    if (!editForm.name) {
+      toast.error('El nombre de la categoría es requerido');
+      return;
+    }
+
+    setIsUpdatingCategory(true);
+    try {
+      const res = await authFetch(tenantId ? `/api/categories/${editingCategoryId}?tenantId=${tenantId}` : `/api/categories/${editingCategoryId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getTenantHeaders(),
+        },
+        body: JSON.stringify(editForm),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al actualizar la categoría');
+
+      toast.success('Categoría actualizada');
+      setEditingCategoryId(null);
+      mutateCategories();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
+    } finally {
+      setIsUpdatingCategory(false);
+    }
   };
 
   const handleConfirmAction = async () => {
@@ -1363,17 +1411,25 @@ function ProductsPageContent() {
         >
 
             {/* List of categories */}
-            <div className="mb-6 overflow-y-auto max-h-[40vh] border border-gray-100 dark:border-gray-800 rounded-md divide-y divide-gray-100 dark:divide-gray-800 p-2">
+            <div className="mb-4 overflow-y-auto max-h-[24vh] border border-gray-100 dark:border-gray-800 rounded-md divide-y divide-gray-100 dark:divide-gray-800 p-1.5">
               {categories.length === 0 ? (
                 <div className="text-center py-6 text-xs text-gray-500">
                   No hay categorías creadas.
                 </div>
               ) : (
                 categories.map((cat) => (
-                  <div key={cat.id} className="flex items-center justify-between py-2 px-3 text-sm">
+                  <div
+                    key={cat.id}
+                    onClick={() => handleStartEditCategory(cat)}
+                    className={`flex items-center justify-between py-1.5 px-2 text-sm rounded cursor-pointer transition-colors ${
+                      editingCategoryId === cat.id
+                        ? 'bg-indigo-50 dark:bg-indigo-500/10 ring-1 ring-indigo-200 dark:ring-indigo-500/30'
+                        : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                    }`}
+                  >
                     <div className="flex items-center gap-2">
                       <span
-                        className="w-3.5 h-3.5 rounded-full inline-block"
+                        className="w-3 h-3 rounded-full inline-block"
                         style={{ backgroundColor: cat.color || '#3b82f6' }}
                       />
                       <span className="font-medium text-gray-800 dark:text-gray-200">{cat.name}</span>
@@ -1384,18 +1440,36 @@ function ProductsPageContent() {
                       title="Eliminar Categoría"
                       size="xs"
                       className="rounded text-gray-400 hover:bg-red-50 hover:text-red-500"
-                      onClick={() => handleDeleteCategory(cat.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteCategory(cat.id);
+                      }}
                     />
                   </div>
                 ))
               )}
             </div>
 
-            {/* Add New Category Form */}
-            <form onSubmit={handleCreateCategory} className="space-y-4 border-t border-gray-100 dark:border-gray-800 pt-4">
-              <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                Nueva Categoría
-              </h3>
+            {/* Add New / Edit Category Form */}
+            <form
+              onSubmit={(e) => (editingCategoryId ? handleUpdateCategory(e) : handleCreateCategory(e))}
+              className="space-y-4 border-t border-gray-100 dark:border-gray-800 pt-4"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                  {editingCategoryId ? 'Editar Categoría' : 'Nueva Categoría'}
+                </h3>
+                {editingCategoryId && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingCategoryId(null)}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    aria-label="Cancelar edición"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
 
               <div>
                 <FormLabel>
@@ -1405,8 +1479,12 @@ function ProductsPageContent() {
                   type="text"
                   required
                   placeholder="Ej. Bebidas, Almacén"
-                  value={categoryForm.name}
-                  onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
+                  value={editingCategoryId ? editForm.name : categoryForm.name}
+                  onChange={(e) =>
+                    editingCategoryId
+                      ? setEditForm({ ...editForm, name: e.target.value })
+                      : setCategoryForm({ ...categoryForm, name: e.target.value })
+                  }
                 />
               </div>
 
@@ -1418,30 +1496,55 @@ function ProductsPageContent() {
                   <input
                     type="color"
                     className="w-10 h-10 border border-gray-300 dark:border-gray-700 rounded-md cursor-pointer bg-transparent"
-                    value={categoryForm.color}
-                    onChange={(e) => setCategoryForm({ ...categoryForm, color: e.target.value })}
+                    value={editingCategoryId ? editForm.color : categoryForm.color}
+                    onChange={(e) =>
+                      editingCategoryId
+                        ? setEditForm({ ...editForm, color: e.target.value })
+                        : setCategoryForm({ ...categoryForm, color: e.target.value })
+                    }
                   />
                   <Input
                     type="text"
                     className="font-mono"
-                    value={categoryForm.color}
-                    onChange={(e) => setCategoryForm({ ...categoryForm, color: e.target.value })}
+                    value={editingCategoryId ? editForm.color : categoryForm.color}
+                    onChange={(e) =>
+                      editingCategoryId
+                        ? setEditForm({ ...editForm, color: e.target.value })
+                        : setCategoryForm({ ...categoryForm, color: e.target.value })
+                    }
                   />
                 </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={() => setIsCategoryModalOpen(false)}>
-                  Cerrar
-                </Button>
-                <Button type="submit" disabled={isSubmittingCategory}>
-                  {isSubmittingCategory ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                      Creando...
-                    </>
+                {editingCategoryId ? (
+                  <Button type="button" variant="outline" onClick={() => setEditingCategoryId(null)}>
+                    Cancelar
+                  </Button>
+                ) : (
+                  <Button type="button" variant="outline" onClick={() => setIsCategoryModalOpen(false)}>
+                    Cerrar
+                  </Button>
+                )}
+                <Button type="submit" disabled={isSubmittingCategory || isUpdatingCategory}>
+                  {editingCategoryId ? (
+                    isUpdatingCategory ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                        Guardando...
+                      </>
+                    ) : (
+                      'Guardar'
+                    )
                   ) : (
-                    'Agregar'
+                    isSubmittingCategory ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                        Creando...
+                      </>
+                    ) : (
+                      'Agregar'
+                    )
                   )}
                 </Button>
               </div>
