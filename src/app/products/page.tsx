@@ -6,7 +6,7 @@ import { useProducts } from '@/lib/hooks/useProducts';
 import { useCategories } from '@/lib/hooks/useCategories';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useExport } from '@/lib/hooks/useExport';
-import { supabase } from '@/lib/supabaseClient';
+import { usePagination } from '@/lib/hooks/usePagination';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -44,7 +44,7 @@ import {
   Scan,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
-import { getTenantHeaders } from '@/lib/fetchWithTenant';
+import { getTenantHeaders, authFetch } from '@/lib/fetchWithTenant';
 import { filterProducts } from '@/lib/product-search';
 import { matchesQuery } from '@/lib/utils/text';
 import { TransferInbox } from '@/components/transfers/TransferInbox';
@@ -228,13 +228,9 @@ function ProductsPageContent() {
     setImportResults(null);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/products/import', {
+      const res = await authFetch('/api/products/import', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ products: importRows }),
       });
       const data = await res.json();
@@ -303,13 +299,9 @@ function ProductsPageContent() {
     setPriceAdjustResult(null);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/products/adjust-prices', {
+      const res = await authFetch('/api/products/adjust-prices', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           percentage: pct,
           category_id: priceAdjustScope === 'category' ? priceAdjustCategoryId : undefined,
@@ -353,11 +345,6 @@ function ProductsPageContent() {
     id: string;
   } | null>(null);
 
-  // Pagination State
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8;
-
-  // Sort State
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
@@ -402,11 +389,7 @@ function ProductsPageContent() {
     : filteredProducts;
 
   // Pagination Logic
-  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
-  const paginatedProducts = sortedProducts.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  const { currentPage, setCurrentPage, totalPages, pageItems: paginatedProducts } = usePagination(sortedProducts, 8);
 
   // Handlers
   const handleOpenProductModal = (product: Product | null = null) => {
@@ -466,10 +449,8 @@ function ProductsPageContent() {
       if (imageFile) {
         const formData = new FormData();
         formData.append('file', imageFile);
-        const { data: { session } } = await supabase.auth.getSession();
-        const uploadRes = await fetch('/api/upload', {
+        const uploadRes = await authFetch('/api/upload', {
           method: 'POST',
-          headers: session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {},
           body: formData,
         });
         const uploadData = await uploadRes.json();
@@ -477,16 +458,14 @@ function ProductsPageContent() {
         imageUrl = uploadData.url;
       }
 
-      const { data: { session } } = await supabase.auth.getSession();
       const url = editingProduct ? `/api/products/${editingProduct.id}` : '/api/products';
       const method = editingProduct ? 'PATCH' : 'POST';
       const sep = url.includes('?') ? '&' : '?';
-      const res = await fetch(tenantId ? `${url}${sep}tenantId=${tenantId}` : url, {
+      const res = await authFetch(tenantId ? `${url}${sep}tenantId=${tenantId}` : url, {
         method,
         headers: {
           'Content-Type': 'application/json',
           ...getTenantHeaders(),
-          ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
         },
         body: JSON.stringify({ ...productForm, image_url: imageUrl }),
       });
@@ -517,13 +496,11 @@ function ProductsPageContent() {
 
     setIsSubmittingCategory(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(tenantId ? `/api/categories?tenantId=${tenantId}` : `/api/categories`, {
+      const res = await authFetch(tenantId ? `/api/categories?tenantId=${tenantId}` : `/api/categories`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...getTenantHeaders(),
-          ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
         },
         body: JSON.stringify(categoryForm),
       });
@@ -551,20 +528,18 @@ function ProductsPageContent() {
     setConfirmAction(null);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {
+      const headers = {
         ...getTenantHeaders(),
       };
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
 
       if (type === 'delete-product') {
-        const res = await fetch(tenantId ? `/api/products/${id}?tenantId=${tenantId}` : `/api/products/${id}`, { method: 'DELETE', headers });
+        const res = await authFetch(tenantId ? `/api/products/${id}?tenantId=${tenantId}` : `/api/products/${id}`, { method: 'DELETE', headers });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Error al eliminar');
         toast.success('Producto eliminado');
         mutateProducts();
       } else if (type === 'delete-category') {
-        const res = await fetch(tenantId ? `/api/categories/${id}?tenantId=${tenantId}` : `/api/categories/${id}`, { method: 'DELETE', headers });
+        const res = await authFetch(tenantId ? `/api/categories/${id}?tenantId=${tenantId}` : `/api/categories/${id}`, { method: 'DELETE', headers });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Error al eliminar');
         toast.success('Categoría eliminada');
@@ -1170,14 +1145,12 @@ function ProductsPageContent() {
                 </div>
                 <div className="max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
                   <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 dark:bg-gray-800 text-xs text-gray-500 uppercase">
-                        <th className="py-2 px-4 text-left">Fila</th>
-                        <th className="py-2 px-4 text-left">Producto</th>
-                        <th className="py-2 px-4 text-left">Resultado</th>
-                        <th className="py-2 px-4 text-left">Error</th>
-                      </tr>
-                    </thead>
+                    <Thead>
+                      <Th>Fila</Th>
+                      <Th>Producto</Th>
+                      <Th>Resultado</Th>
+                      <Th>Error</Th>
+                    </Thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                       {importResults.map(r => (
                         <tr key={r.row} className="text-xs">
@@ -1215,14 +1188,12 @@ function ProductsPageContent() {
                 </div>
                 <div className="max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
                   <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 dark:bg-gray-800 text-xs text-gray-500 uppercase">
-                        <th className="py-2 px-4 text-left">#</th>
-                        {importColumns.map(col => (
-                          <th key={col} className="py-2 px-4 text-left">{col}</th>
-                        ))}
-                      </tr>
-                    </thead>
+                    <Thead>
+                      <Th>#</Th>
+                      {importColumns.map(col => (
+                        <Th key={col}>{col}</Th>
+                      ))}
+                    </Thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                       {importRows.slice(0, 50).map((row, i) => (
                         <tr key={i} className="text-xs hover:bg-gray-50 dark:hover:bg-gray-800/30">
@@ -1545,10 +1516,8 @@ function NewTransferModal({
     const loadProducts = async () => {
       setLoadingProducts(true);
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch('/api/products', {
+        const res = await authFetch('/api/products', {
           headers: {
-            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
             'x-active-tenant-id': fromTenantId,
           }
         });
@@ -1604,13 +1573,9 @@ function NewTransferModal({
 
     setSubmitting(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/stock-transfers', {
+      const res = await authFetch('/api/stock-transfers', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           from_tenant_id: fromTenantId,
           to_tenant_id: toTenantId,

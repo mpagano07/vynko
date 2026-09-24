@@ -1,16 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback, startTransition } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { useState, useEffect, startTransition } from 'react';
 import { Card } from '@/components/ui/card';
-
-function timeAgo(dateStr: string): string {
-  const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (diff < 60) return 'ahora';
-  if (diff < 3600) return `hace ${Math.floor(diff / 60)}m`;
-  if (diff < 86400) return `hace ${Math.floor(diff / 3600)}h`;
-  return `hace ${Math.floor(diff / 86400)}d`;
-}
+import { authFetch } from '@/lib/fetchWithTenant';
+import { timeAgo } from '@/lib/utils/format';
 
 export default function DashboardResumen({ tenantId, allTenants }: { tenantId: string; allTenants?: boolean }) {
   const [data, setData] = useState<{
@@ -21,21 +14,13 @@ export default function DashboardResumen({ tenantId, allTenants }: { tenantId: s
   } | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const getHeaders = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const headers: Record<string, string> = {};
-    if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-    return headers;
-  }, []);
-
   useEffect(() => {
     if (!tenantId && !allTenants) return;
     let cancelled = false;
 
     (async () => {
       try {
-        const headers = await getHeaders();
-        const res = await fetch('/api/dashboard/summary', { headers });
+        const res = await authFetch('/api/dashboard/summary');
         if (!cancelled && res.ok) {
           const d = await res.json();
           startTransition(() => setData(d));
@@ -47,7 +32,7 @@ export default function DashboardResumen({ tenantId, allTenants }: { tenantId: s
       }
     })();
     return () => { cancelled = true; };
-  }, [tenantId, allTenants, getHeaders]);
+  }, [tenantId, allTenants]);
 
   return (
     <div>

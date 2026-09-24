@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { supabase } from '@/lib/supabaseClient';
+import { authFetch } from '@/lib/fetchWithTenant';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -27,10 +27,11 @@ import {
   Loader2,
   Check,
 } from 'lucide-react';
-import type { Supplier, PurchaseOrder } from '@/lib/types/supplier';
+import { PO_STATUS_LABELS, PO_STATUS_TONES, type Supplier, type PurchaseOrder } from '@/lib/types/supplier';
 import type { CommercialDocument } from '@/lib/types/document';
 import type { Product } from '@/lib/types/product';
 import { formatARS } from '@/lib/utils/currency';
+import { formatDate } from '@/lib/utils/format';
 import { matchesQuery } from '@/lib/utils/text';
 import { SortableTh, SortDir } from '@/components/ui/sortable-th';
 import { FormLabel } from '@/components/ui/form-label';
@@ -130,13 +131,9 @@ export default function ProvidersPage() {
     let cancelled = false;
 
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
       const [supRes, prodRes] = await Promise.all([
-        fetch('/api/suppliers', { headers }),
-        fetch('/api/products', { headers }),
+        authFetch('/api/suppliers'),
+        authFetch('/api/products'),
       ]);
 
       if (cancelled) return;
@@ -161,23 +158,16 @@ export default function ProvidersPage() {
   }, [tenantId, allTenants]);
 
   const refreshSuppliers = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const headers: Record<string, string> = {};
-    if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-    const res = await fetch('/api/suppliers', { headers });
+    const res = await authFetch('/api/suppliers');
     if (res.ok) setSuppliers(await res.json());
   };
 
   const fetchDocumentChain = async (supplierId: string) => {
     setLoadingChain(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
       const [posRes, docsRes] = await Promise.all([
-        fetch(`/api/purchase-orders?supplier_id=${supplierId}`, { headers }),
-        fetch('/api/documents?type=remito_ingreso', { headers }),
+        authFetch(`/api/purchase-orders?supplier_id=${supplierId}`),
+        authFetch('/api/documents?type=remito_ingreso'),
       ]);
 
       const pos: PurchaseOrder[] = posRes.ok ? await posRes.json() : [];
@@ -254,15 +244,9 @@ export default function ProvidersPage() {
 
     setIsSubmittingPo(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
-      const res = await fetch('/api/purchase-orders', {
+      const res = await authFetch('/api/purchase-orders', {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           supplier_id: poSupplierId,
           expected_date: poExpectedDate || null,
@@ -352,16 +336,14 @@ export default function ProvidersPage() {
 
     try {
       setIsSubmittingSupplier(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
       const url = editingSupplier ? `/api/suppliers/${editingSupplier.id}` : '/api/suppliers';
       const method = editingSupplier ? 'PATCH' : 'POST';
 
-      const res = await fetch(url, { method, headers, body: JSON.stringify(supplierForm) });
+      const res = await authFetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(supplierForm),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al guardar');
 
@@ -385,11 +367,7 @@ export default function ProvidersPage() {
     setSupplierIdToDelete(null);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
-      const res = await fetch(`/api/suppliers/${id}`, { method: 'DELETE', headers });
+      const res = await authFetch(`/api/suppliers/${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al eliminar');
       toast.success('Proveedor eliminado');
@@ -837,11 +815,11 @@ export default function ProvidersPage() {
 }
 
 const statusLabels: Record<string, { label: string; tone: StatusTone }> = {
-  draft: { label: 'Borrador', tone: 'gray' },
-  sent: { label: 'Enviado', tone: 'amber' },
-  partial: { label: 'Recibido Parcial', tone: 'blue' },
-  received: { label: 'Recibido', tone: 'green' },
-  cancelled: { label: 'Cancelado', tone: 'red' },
+  draft: { label: PO_STATUS_LABELS.draft, tone: PO_STATUS_TONES.draft },
+  sent: { label: PO_STATUS_LABELS.sent, tone: PO_STATUS_TONES.sent },
+  partial: { label: PO_STATUS_LABELS.partial, tone: PO_STATUS_TONES.partial },
+  received: { label: PO_STATUS_LABELS.received, tone: PO_STATUS_TONES.received },
+  cancelled: { label: PO_STATUS_LABELS.cancelled, tone: PO_STATUS_TONES.cancelled },
   pending: { label: 'Pendiente', tone: 'amber' },
   completed: { label: 'Completado', tone: 'green' },
 };
@@ -853,12 +831,6 @@ function StatusBadge({ status }: { status: string }) {
 
 function formatCents(cents: number): string {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(cents / 100);
-}
-
-function formatDate(dateStr?: string): string {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 function DocumentChainItem({
@@ -887,7 +859,7 @@ function DocumentChainItem({
       <span className="font-medium text-indigo-700 dark:text-indigo-300">{label}</span>
       <span className="font-mono text-gray-900 dark:text-gray-100">#{number}</span>
       <StatusBadge status={status} />
-      <span className="text-xs text-gray-400 ml-2">{date ? formatDate(date) : ''}</span>
+      <span className="text-xs text-gray-400 ml-2">{date ? formatDate(date, { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</span>
       <span className="text-gray-500 ml-auto">{formatCents(total)}</span>
     </div>
   );

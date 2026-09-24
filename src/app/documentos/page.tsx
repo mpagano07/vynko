@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { supabase } from '@/lib/supabaseClient';
+import { authFetch } from '@/lib/fetchWithTenant';
+import { usePagination } from '@/lib/hooks/usePagination';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -31,6 +32,7 @@ import {
   Package,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
+import { formatDate } from '@/lib/utils/format';
 import { matchesQuery } from '@/lib/utils/text';
 import type {
   CommercialDocument,
@@ -43,7 +45,7 @@ import {
   DOCUMENT_STATUS_LABELS,
   VALID_STATUSES_PER_TYPE,
 } from '@/lib/types/document';
-import type { PurchaseOrder } from '@/lib/types/supplier';
+import { PO_STATUS_LABELS, PO_STATUS_TONES, type PurchaseOrder, type PurchaseOrderStatus } from '@/lib/types/supplier';
 import type { Customer } from '@/lib/types/sale';
 import type { Product } from '@/lib/types/product';
 import type { Supplier } from '@/lib/types/supplier';
@@ -54,14 +56,6 @@ const DOCUMENT_TYPE_COLORS: Record<DocumentType, { border: string; bg: string; t
   orden_compra: { border: 'border-l-blue-500', bg: 'bg-blue-50 dark:bg-blue-950/20', text: 'text-blue-700 dark:text-blue-400' },
   remito_salida: { border: 'border-l-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-950/20', text: 'text-indigo-700 dark:text-indigo-400' },
   remito_ingreso: { border: 'border-l-teal-500', bg: 'bg-teal-50 dark:bg-teal-950/20', text: 'text-teal-700 dark:text-teal-400' },
-};
-
-const PO_STATUS_LABELS: Record<string, string> = {
-  draft: 'Borrador',
-  sent: 'Enviado',
-  partial: 'Recibido Parcial',
-  received: 'Recibido',
-  cancelled: 'Cancelado',
 };
 
 const DOCUMENT_STATUS_COLORS_TONE: Record<DocumentStatus, StatusTone> = {
@@ -98,8 +92,6 @@ export default function DocumentosPage() {
   const [typeFilter, setTypeFilter] = useState<DocumentType>('remito_ingreso');
   const [creating, setCreating] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
   const [confirmModal, setConfirmModal] = useState<{
     open: boolean;
     title: string;
@@ -152,17 +144,12 @@ export default function DocumentosPage() {
     let cancelled = false;
 
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers = {
-        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-      };
-
       const [docsRes, custRes, prodRes, suppRes, poRes] = await Promise.all([
-        fetch('/api/documents', { headers }),
-        fetch('/api/customers', { headers }),
-        fetch('/api/products', { headers }),
-        fetch('/api/suppliers', { headers }),
-        fetch('/api/purchase-orders', { headers }),
+        authFetch('/api/documents'),
+        authFetch('/api/customers'),
+        authFetch('/api/products'),
+        authFetch('/api/suppliers'),
+        authFetch('/api/purchase-orders'),
       ]);
 
       if (cancelled) return;
@@ -244,16 +231,7 @@ export default function DocumentosPage() {
 
   const isPoTab = typeFilter === 'orden_compra';
   const currentItems = isPoTab ? filteredOrders : filteredDocuments;
-  const totalPages = Math.ceil(currentItems.length / itemsPerPage);
-
-  const paginatedDocuments = useMemo(() => {
-    if (isPoTab) {
-      const start = (currentPage - 1) * itemsPerPage;
-      return filteredOrders.slice(start, start + itemsPerPage);
-    }
-    const start = (currentPage - 1) * itemsPerPage;
-    return filteredDocuments.slice(start, start + itemsPerPage);
-  }, [filteredDocuments, filteredOrders, currentPage, isPoTab]);
+  const { currentPage, setCurrentPage, totalPages, pageItems: paginatedDocuments } = usePagination<CommercialDocument | PurchaseOrder>(currentItems, 10);
 
   const handleCustomerSelect = (custId: string) => {
     const customer = customers.find(c => c.id === custId);
@@ -264,6 +242,16 @@ export default function DocumentosPage() {
     }));
   };
 
+  const refreshDocuments = async () => {
+    const docsRes = await authFetch('/api/documents');
+    if (docsRes.ok) setDocuments(await docsRes.json());
+  };
+
+  const refreshPurchaseOrders = async () => {
+    const poRes = await authFetch('/api/purchase-orders');
+    if (poRes.ok) setPurchaseOrders(await poRes.json());
+  };
+
   const createDocument = async () => {
     if (!formData.customer_name || formData.items.length === 0) {
       toast.error('Completá los datos obligatorios (cliente y productos)');
@@ -272,13 +260,9 @@ export default function DocumentosPage() {
 
     setCreating(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/documents', {
+      const res = await authFetch('/api/documents', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           document_type: typeFilter,
           customer_id: formData.customer_id || undefined,
@@ -298,12 +282,7 @@ export default function DocumentosPage() {
       setShowCreateForm(false);
       resetForm();
 
-      const { data: { session: s2 } } = await supabase.auth.getSession();
-      const h2 = {
-        ...(s2?.access_token ? { Authorization: `Bearer ${s2.access_token}` } : {}),
-      };
-      const docsRes = await fetch('/api/documents', { headers: h2 });
-      if (docsRes.ok) setDocuments(await docsRes.json());
+      await refreshDocuments();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al crear documento');
     } finally {
@@ -340,13 +319,9 @@ export default function DocumentosPage() {
       onConfirm: async () => {
         setConfirmModal(prev => ({ ...prev, open: false }));
         try {
-          const { data: { session } } = await supabase.auth.getSession();
-          const res = await fetch(`/api/documents/${docId}`, {
+          const res = await authFetch(`/api/documents/${docId}`, {
             method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status: newStatus }),
           });
 
@@ -357,12 +332,7 @@ export default function DocumentosPage() {
 
           toast.success(`Documento actualizado a ${DOCUMENT_STATUS_LABELS[newStatus]}`);
 
-          const { data: { session: s2 } } = await supabase.auth.getSession();
-          const h2 = {
-            ...(s2?.access_token ? { Authorization: `Bearer ${s2.access_token}` } : {}),
-          };
-          const docsRes = await fetch('/api/documents', { headers: h2 });
-          if (docsRes.ok) setDocuments(await docsRes.json());
+          await refreshDocuments();
         } catch (err: unknown) {
           toast.error(err instanceof Error ? err.message : 'Error al actualizar documento');
         }
@@ -380,12 +350,8 @@ export default function DocumentosPage() {
       onConfirm: async () => {
         setConfirmModal(prev => ({ ...prev, open: false }));
         try {
-          const { data: { session } } = await supabase.auth.getSession();
-          const res = await fetch(`/api/documents/${docId}`, {
+          const res = await authFetch(`/api/documents/${docId}`, {
             method: 'DELETE',
-            headers: {
-              ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-            },
           });
 
           if (!res.ok) {
@@ -395,12 +361,7 @@ export default function DocumentosPage() {
 
           toast.success('Documento eliminado');
 
-          const { data: { session: s2 } } = await supabase.auth.getSession();
-          const h2 = {
-            ...(s2?.access_token ? { Authorization: `Bearer ${s2.access_token}` } : {}),
-          };
-          const docsRes = await fetch('/api/documents', { headers: h2 });
-          if (docsRes.ok) setDocuments(await docsRes.json());
+          await refreshDocuments();
         } catch (err: unknown) {
           toast.error(err instanceof Error ? err.message : 'Error al eliminar documento');
         }
@@ -512,15 +473,9 @@ export default function DocumentosPage() {
 
     setIsSubmittingPo(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
-      const res = await fetch('/api/purchase-orders', {
+      const res = await authFetch('/api/purchase-orders', {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           supplier_id: poSupplierId,
           expected_date: poExpectedDate || null,
@@ -541,12 +496,7 @@ export default function DocumentosPage() {
       setIsPoModalOpen(false);
       resetPoForm();
 
-      const { data: { session: s2 } } = await supabase.auth.getSession();
-      const h2 = {
-        ...(s2?.access_token ? { Authorization: `Bearer ${s2.access_token}` } : {}),
-      };
-      const poRes = await fetch('/api/purchase-orders', { headers: h2 });
-      if (poRes.ok) setPurchaseOrders(await poRes.json());
+      await refreshPurchaseOrders();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al crear pedido');
     } finally {
@@ -617,30 +567,17 @@ export default function DocumentosPage() {
       onConfirm: async () => {
         setConfirmModal(prev => ({ ...prev, open: false }));
         try {
-          const { data: { session } } = await supabase.auth.getSession();
-          const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-          };
-          if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
-          const res = await fetch(`/api/purchase-orders/${id}`, {
+          const res = await authFetch(`/api/purchase-orders/${id}`, {
             method: 'PATCH',
-            headers,
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status: 'cancelled' }),
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || 'Error al cancelar pedido');
           toast.success('Pedido cancelado');
 
-          const { data: { session: s2 } } = await supabase.auth.getSession();
-          const h2 = {
-            ...(s2?.access_token ? { Authorization: `Bearer ${s2.access_token}` } : {}),
-          };
-      const poRes = await fetch('/api/purchase-orders', { headers: h2 });
-      if (poRes.ok) setPurchaseOrders(await poRes.json());
-
-      const docsRes = await fetch('/api/documents', { headers: h2 });
-      if (docsRes.ok) setDocuments(await docsRes.json());
+          await refreshPurchaseOrders();
+          await refreshDocuments();
         } catch (err: unknown) {
           toast.error(err instanceof Error ? err.message : 'Error al cancelar pedido');
         }
@@ -652,13 +589,9 @@ export default function DocumentosPage() {
     if (!receiveOrderId) return;
     setIsSubmittingReceive(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
-      const res = await fetch(`/api/purchase-orders/${receiveOrderId}/receive`, {
+      const res = await authFetch(`/api/purchase-orders/${receiveOrderId}/receive`, {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           received_date: receiveDate,
           deposito: receiveDeposito || undefined,
@@ -683,15 +616,8 @@ export default function DocumentosPage() {
       }
       setIsReceiveModalOpen(false);
 
-      const { data: { session: s2 } } = await supabase.auth.getSession();
-      const h2 = {
-        ...(s2?.access_token ? { Authorization: `Bearer ${s2.access_token}` } : {}),
-      };
-      const poRes = await fetch('/api/purchase-orders', { headers: h2 });
-      if (poRes.ok) setPurchaseOrders(await poRes.json());
-
-      const docsRes = await fetch('/api/documents', { headers: h2 });
-      if (docsRes.ok) setDocuments(await docsRes.json());
+      await refreshPurchaseOrders();
+      await refreshDocuments();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al recibir pedido');
     } finally {
@@ -775,9 +701,9 @@ export default function DocumentosPage() {
           </div>
           <div class="info-section">
             <h3>Fecha</h3>
-            <p>${new Date(doc.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
-            ${doc.delivery_date ? `<p><strong>Entrega:</strong> ${new Date(doc.delivery_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}</p>` : ''}
-            ${doc.valid_until ? `<p><strong>Válido hasta:</strong> ${new Date(doc.valid_until).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}</p>` : ''}
+            <p>${formatDate(doc.created_at, 'es-ES')}</p>
+            ${doc.delivery_date ? `<p><strong>Entrega:</strong> ${formatDate(doc.delivery_date, 'es-ES')}</p>` : ''}
+            ${doc.valid_until ? `<p><strong>Válido hasta:</strong> ${formatDate(doc.valid_until, 'es-ES')}</p>` : ''}
             ${doc.supplier_name ? `<p><strong>Proveedor:</strong> ${doc.supplier_name}</p>` : ''}
           </div>
         </div>
@@ -811,7 +737,7 @@ export default function DocumentosPage() {
         ` : ''}
 
         <div class="footer">
-          ${typeLabel} N° ${String(doc.document_number).padStart(6, '0')} - Generado el ${new Date().toLocaleDateString('es-ES')}
+          ${typeLabel} N° ${String(doc.document_number).padStart(6, '0')} - Generado el ${formatDate(new Date(), { day: '2-digit', month: '2-digit', year: 'numeric' }, 'es-ES')}
         </div>
       </body>
       </html>
@@ -842,23 +768,11 @@ export default function DocumentosPage() {
     </StatusBadge>
   );
 
-  const poStatusBadge = (status: string) => {
-    const tone: StatusTone =
-      status === 'draft'
-        ? 'gray'
-        : status === 'sent'
-        ? 'amber'
-        : status === 'partial'
-        ? 'blue'
-        : status === 'received'
-        ? 'green'
-        : 'red';
-    return (
-      <StatusBadge size="sm" tone={tone}>
-        {PO_STATUS_LABELS[status]}
-      </StatusBadge>
-    );
-  };
+  const poStatusBadge = (status: PurchaseOrderStatus) => (
+    <StatusBadge size="sm" tone={PO_STATUS_TONES[status]}>
+      {PO_STATUS_LABELS[status]}
+    </StatusBadge>
+  );
 
   const getDocumentTypeLabel = (type: DocumentType) => DOCUMENT_TYPE_LABELS[type];
 
@@ -905,7 +819,7 @@ export default function DocumentosPage() {
           <Select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="w-36">
             <option value="all">Todos</option>
             {isPoTab
-              ? ['draft', 'sent', 'partial', 'received', 'cancelled'].map(s => (
+              ? (['draft', 'sent', 'partial', 'received', 'cancelled'] as const).map(s => (
                   <option key={s} value={s}>{PO_STATUS_LABELS[s]}</option>
                 ))
               : VALID_STATUSES_PER_TYPE[typeFilter].map(status => (
@@ -1008,9 +922,7 @@ export default function DocumentosPage() {
                         )}
                       </td>
                       <td className="py-3 px-4 text-right text-xs text-gray-500 whitespace-nowrap">
-                        {order.created_at ? new Date(order.created_at).toLocaleDateString('es-ES', {
-                          day: '2-digit', month: '2-digit', year: 'numeric',
-                        }) : '—'}
+                        {order.created_at ? formatDate(order.created_at, { day: '2-digit', month: '2-digit', year: 'numeric' }, 'es-ES') : '—'}
                       </td>
                       <td className="py-3 px-4 text-center" onClick={e => e.stopPropagation()}>
                         {(order.status === 'draft' || order.status === 'sent' || order.status === 'partial') && (
@@ -1051,7 +963,7 @@ export default function DocumentosPage() {
                                   </h3>
                                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{order.supplier_name || '—'}</p>
                                   <p className="text-xs text-gray-500 mt-1">
-                                    {order.created_at ? new Date(order.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'}
+                                    {order.created_at ? formatDate(order.created_at, 'es-ES') : '—'}
                                   </p>
                                 </div>
                                 <div className="text-right">
@@ -1072,7 +984,7 @@ export default function DocumentosPage() {
                                     <p className="text-sm">
                                       <span className="text-gray-500">Fecha esperada:</span>{' '}
                                       <span className="text-gray-900 dark:text-gray-100">
-                                        {new Date(order.expected_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                        {formatDate(order.expected_date, 'es-ES')}
                                       </span>
                                     </p>
                                   )}
@@ -1080,7 +992,7 @@ export default function DocumentosPage() {
                                     <p className="text-sm">
                                       <span className="text-gray-500">Recibido el:</span>{' '}
                                       <span className="text-gray-900 dark:text-gray-100">
-                                        {new Date(order.received_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                        {formatDate(order.received_date, 'es-ES')}
                                       </span>
                                     </p>
                                   )}
@@ -1180,9 +1092,7 @@ export default function DocumentosPage() {
                       </td>
                       <td className="py-3 px-4">{statusBadge(doc.status)}</td>
                       <td className="py-3 px-4 text-right text-xs text-gray-500 whitespace-nowrap">
-                        {new Date(doc.created_at).toLocaleDateString('es-ES', {
-                          day: '2-digit', month: '2-digit', year: 'numeric',
-                        })}
+                        {formatDate(doc.created_at, { day: '2-digit', month: '2-digit', year: 'numeric' }, 'es-ES')}
                       </td>
                       <td className="py-3 px-4 text-right text-xs whitespace-nowrap">
                         {doc.valid_until ? (
@@ -1191,9 +1101,7 @@ export default function DocumentosPage() {
                               ? 'text-red-600 dark:text-red-400 font-medium'
                               : 'text-gray-500'
                           }>
-                            {new Date(doc.valid_until).toLocaleDateString('es-ES', {
-                              day: '2-digit', month: '2-digit', year: 'numeric',
-                            })}
+                            {formatDate(doc.valid_until, { day: '2-digit', month: '2-digit', year: 'numeric' }, 'es-ES')}
                           </span>
                         ) : (
                           <span className="text-gray-300 dark:text-gray-600">-</span>
@@ -1254,7 +1162,7 @@ export default function DocumentosPage() {
                                   </h3>
                                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{doc.customer_name}</p>
                                   <p className="text-xs text-gray-500 mt-1">
-                                    {new Date(doc.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                    {formatDate(doc.created_at, 'es-ES')}
                                   </p>
                                 </div>
                                 <div className="text-right">
@@ -1284,11 +1192,11 @@ export default function DocumentosPage() {
                                           ? 'text-red-600 dark:text-red-400 font-medium'
                                           : 'text-gray-900 dark:text-gray-100'
                                       }>
-                                        {new Date(doc.valid_until).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                        {formatDate(doc.valid_until, 'es-ES')}
                                       </span>
                                     </p>
                                   )}
-                                  {doc.delivery_date && <p className="text-sm"><span className="text-gray-500">Fecha entrega:</span> <span className="text-gray-900 dark:text-gray-100">{new Date(doc.delivery_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}</span></p>}
+                                  {doc.delivery_date && <p className="text-sm"><span className="text-gray-500">Fecha entrega:</span> <span className="text-gray-900 dark:text-gray-100">{formatDate(doc.delivery_date, 'es-ES')}</span></p>}
                                   {doc.notes && <p className="text-sm"><span className="text-gray-500">Notas:</span> <span className="text-gray-900 dark:text-gray-100">{doc.notes}</span></p>}
                                 </div>
                                 <div>

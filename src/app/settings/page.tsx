@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { authFetch } from '@/lib/fetchWithTenant';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -168,12 +169,7 @@ export default function SettingsPage() {
   useEffect(() => {
     async function fetchCollaborators() {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch('/api/settings/collaborators', {
-          headers: session?.access_token
-            ? { Authorization: `Bearer ${session.access_token}` }
-            : {},
-        });
+        const res = await authFetch('/api/settings/collaborators');
         const data = await res.json();
         if (res.ok) {
           setCollaborators(data.collaborators || []);
@@ -193,12 +189,7 @@ export default function SettingsPage() {
     let cancelled = false;
     (async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch('/api/settings/checkout', {
-          headers: session?.access_token
-            ? { Authorization: `Bearer ${session.access_token}` }
-            : {},
-        });
+        const res = await authFetch('/api/settings/checkout');
         const data = await res.json();
         if (!res.ok || cancelled) return;
         const settings = normalizeCheckoutSettings(data.settings);
@@ -218,13 +209,9 @@ export default function SettingsPage() {
   }, [tenant, checkoutSynced]);
 
   const saveCheckoutConfig = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch('/api/settings/checkout', {
+    const res = await authFetch('/api/settings/checkout', {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         payment_adjustments: checkoutForm,
         paper_size: checkoutPaperSize,
@@ -273,13 +260,9 @@ export default function SettingsPage() {
 
     setInviting(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/settings/collaborators', {
+      const res = await authFetch('/api/settings/collaborators', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: inviteEmail.trim(),
           role: inviteRole,
@@ -313,13 +296,9 @@ export default function SettingsPage() {
   const handleResendInvite = useCallback(async (inv: PendingInvitation) => {
     setResendingInvite(inv.email);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/settings/collaborators', {
+      const res = await authFetch('/api/settings/collaborators', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: inv.email,
           role: inv.role === 'manager' ? 'manager' : 'member',
@@ -344,12 +323,8 @@ export default function SettingsPage() {
     if (!tenantUsersId) return;
     setRemovingId(tenantUsersId);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`/api/settings/collaborators/${tenantUsersId}`, {
+      const res = await authFetch(`/api/settings/collaborators/${tenantUsersId}`, {
         method: 'DELETE',
-        headers: session?.access_token
-          ? { Authorization: `Bearer ${session.access_token}` }
-          : {},
       });
 
       if (!res.ok) {
@@ -376,13 +351,9 @@ export default function SettingsPage() {
 
     setSavingProfile(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/settings/profile', {
+      const res = await authFetch('/api/settings/profile', {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ full_name: profileForm.full_name.trim() }),
       });
 
@@ -402,13 +373,9 @@ export default function SettingsPage() {
 
     setSavingTenant(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/settings/tenant', {
+      const res = await authFetch('/api/settings/tenant', {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           company_name: tenantForm.company_name.trim() || null,
           description: tenantForm.description,
@@ -483,13 +450,9 @@ export default function SettingsPage() {
 
   const handleUpdateCollab = useCallback(async (collab: Collaborator, payload: { role: string; tenant_ids: string[] }) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`/api/settings/collaborators/${collab.user_id}`, {
+      const res = await authFetch(`/api/settings/collaborators/${collab.user_id}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { authFetch } from '@/lib/fetchWithTenant';
 import {
   ArrowRightLeft,
   Truck,
@@ -18,38 +18,16 @@ import { Button } from '@/components/ui/button';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { StatusBadge as StatusPill } from '@/components/ui/status-badge';
 import { IconAction } from '@/components/ui/icon-action';
+import { formatDate } from '@/lib/utils/format';
 import toast from 'react-hot-toast';
-
-interface TransferItem {
-  id: string;
-  product_id: string;
-  quantity: number;
-  product_name?: string;
-}
-
-interface Transfer {
-  id: string;
-  from_tenant_id: string;
-  to_tenant_id: string;
-  from_tenant_name: string;
-  to_tenant_name: string;
-  status: 'pending' | 'in_transit' | 'received';
-  notes?: string;
-  created_at: string;
-  updated_at: string;
-  received_at?: string;
-  created_by_name: string;
-  items: TransferItem[];
-}
+import { TRANSFER_STATUS_LABELS, type Transfer, type TransferItem } from '@/lib/types/stock-transfer';
 
 // Fetch product names for items that don't have them
-async function enrichItems(items: TransferItem[], token?: string): Promise<TransferItem[]> {
+async function enrichItems(items: TransferItem[]): Promise<TransferItem[]> {
   const productIds = items.filter(i => !i.product_name).map(i => i.product_id);
   if (productIds.length === 0) return items;
 
-  const res = await fetch(`/api/products?ids=${productIds.join(',')}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  const res = await authFetch(`/api/products?ids=${productIds.join(',')}`);
   if (!res.ok) return items;
 
   const products: { id: string; name: string }[] = await res.json();
@@ -61,20 +39,20 @@ function StatusBadge({ status }: { status: Transfer['status'] }) {
   if (status === 'pending') {
     return (
       <StatusPill size="md" tone="amber" icon={<Clock className="h-3 w-3" />}>
-        Pendiente
+        {TRANSFER_STATUS_LABELS.pending}
       </StatusPill>
     );
   }
   if (status === 'in_transit') {
     return (
       <StatusPill size="md" tone="blue" icon={<Truck className="h-3 w-3 animate-[truck_1.5s_ease-in-out_infinite]" />}>
-        En tránsito
+        {TRANSFER_STATUS_LABELS.in_transit}
       </StatusPill>
     );
   }
   return (
     <StatusPill size="md" tone="emerald" icon={<CheckCircle2 className="h-3 w-3" />}>
-      Recibida
+      {TRANSFER_STATUS_LABELS.received}
     </StatusPill>
   );
 }
@@ -115,15 +93,9 @@ function TransferCard({
   const handleAction = async (newStatus: 'in_transit' | 'received') => {
     setLoading(true);
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const res = await fetch(`/api/stock-transfers/${transfer.id}`, {
+      const res = await authFetch(`/api/stock-transfers/${transfer.id}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
       const data = await res.json();
@@ -144,14 +116,8 @@ function TransferCard({
   const handleCancel = async () => {
     setLoading(true);
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const res = await fetch(`/api/stock-transfers/${transfer.id}`, {
+      const res = await authFetch(`/api/stock-transfers/${transfer.id}`, {
         method: 'DELETE',
-        headers: {
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al cancelar');
@@ -164,7 +130,7 @@ function TransferCard({
     }
   };
 
-  const formattedDate = new Date(transfer.created_at).toLocaleDateString('es-AR', {
+  const formattedDate = formatDate(transfer.created_at, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -343,22 +309,12 @@ export function TransferInbox({ currentTenantId, trigger = 0, onAction }: Transf
 
   const fetchTransfers = useCallback(async (silent = false) => {
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
       if (silent) setRefreshing(true);
 
-      const token = session?.access_token;
-
-      const res = await fetch('/api/stock-transfers?status=pending', {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const res = await authFetch('/api/stock-transfers?status=pending');
       const pendingData: Transfer[] = res.ok ? await res.json() : [];
 
-      const res2 = await fetch('/api/stock-transfers?status=in_transit', {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const res2 = await authFetch('/api/stock-transfers?status=in_transit');
       const transitData: Transfer[] = res2.ok ? await res2.json() : [];
 
       const all = [...pendingData, ...transitData];
@@ -367,7 +323,7 @@ export function TransferInbox({ currentTenantId, trigger = 0, onAction }: Transf
       const enriched: Transfer[] = await Promise.all(
         all.map(async t => ({
           ...t,
-          items: await enrichItems(t.items, token),
+          items: await enrichItems(t.items),
         }))
       );
 

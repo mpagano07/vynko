@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Image from 'next/image';
 import { useProducts } from '@/lib/hooks/useProducts';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { usePagination } from '@/lib/hooks/usePagination';
 import { supabase } from '@/lib/supabaseClient';
 import { fixResponse } from '@/lib/utils/encoding';
 import { matchesQuery } from '@/lib/utils/text';
@@ -32,8 +33,6 @@ export default function CodigosPage() {
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [qrs, setQrs] = useState<Map<string, string>>(new Map());
   const [generating, setGenerating] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 15;
   const printRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -80,11 +79,7 @@ export default function CodigosPage() {
     return matchesSearch && matchesCat;
   });
 
-  const totalPages = Math.ceil(filtered.length / itemsPerPage);
-  const paginatedProducts = filtered.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  const { currentPage, setCurrentPage, totalPages, pageItems: paginatedProducts } = usePagination(filtered, 15);
 
   const downloadQR = useCallback((productId: string, filename: string) => {
     const url = qrs.get(productId);

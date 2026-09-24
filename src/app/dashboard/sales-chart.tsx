@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
-import { supabase } from '@/lib/supabaseClient';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { formatARS } from '@/lib/utils/currency';
+import { authFetch } from '@/lib/fetchWithTenant';
 
 // Recharts' ResponsiveContainer warns with width/height -1 when it mounts in
 // the same frame as its parent is being sized (typical on account remount).
@@ -56,10 +56,7 @@ export default function SalesChart() {
 
   const fetchData = useCallback(async (days: number) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-      const res = await fetch(`/api/sales/summary?days=${days}`, { headers });
+      const res = await authFetch(`/api/sales/summary?days=${days}`);
       if (res.ok) {
         const d = await res.json();
         setData(d);

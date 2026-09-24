@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { authFetch } from '@/lib/fetchWithTenant';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
@@ -15,6 +15,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { IconAction } from '@/components/ui/icon-action';
 import { Plus, Edit, Trash2, Users, Loader2, ShoppingBag, DollarSign, CalendarDays } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
+import { formatDate } from '@/lib/utils/format';
 import { matchesQuery } from '@/lib/utils/text';
 import { SortableTh, SortDir } from '@/components/ui/sortable-th';
 import { FormLabel } from '@/components/ui/form-label';
@@ -74,10 +75,7 @@ export default function CustomersPage() {
 
   const fetchCustomers = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/customers', {
-        headers: session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {},
-      });
+      const res = await authFetch('/api/customers');
       if (res.ok) setCustomers(await res.json());
       else toast.error('No se pudieron cargar los clientes');
     } catch {
@@ -107,13 +105,9 @@ export default function CustomersPage() {
     if (!form.name.trim()) { toast.error('El nombre es requerido'); return; }
     setSubmitting(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
       const url = editing ? `/api/customers/${editing.id}` : '/api/customers';
       const method = editing ? 'PATCH' : 'POST';
-      const res = await fetch(url, { method, headers, body: JSON.stringify(form) });
+      const res = await authFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error || 'Error al guardar'); return; }
 
@@ -130,10 +124,7 @@ export default function CustomersPage() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-      const res = await fetch(`/api/customers/${deleteTarget.id}`, { method: 'DELETE', headers });
+      const res = await authFetch(`/api/customers/${deleteTarget.id}`, { method: 'DELETE' });
       if (!res.ok) { const d = await res.json(); toast.error(d.error || 'Error al eliminar'); return; }
       toast.success('Cliente eliminado');
       setDeleteTarget(null);
@@ -148,10 +139,7 @@ export default function CustomersPage() {
     setHistoryLoading(true);
     setHistoryData(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-      const res = await fetch(`/api/customers/${c.id}/history`, { headers });
+      const res = await authFetch(`/api/customers/${c.id}/history`);
       if (res.ok) setHistoryData(await res.json());
     } catch {
       toast.error('Error de conexión al cargar el historial');
@@ -317,7 +305,7 @@ export default function CustomersPage() {
                       </div>
                       <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
                         <CalendarDays className="h-3 w-3" />
-                        {new Date(s.created_at).toLocaleDateString('es-AR', { dateStyle: 'medium' })}
+                        {formatDate(s.created_at, { dateStyle: 'medium' })}
                       </div>
                       <div className="space-y-1">
                         {s.items?.map((i) => (

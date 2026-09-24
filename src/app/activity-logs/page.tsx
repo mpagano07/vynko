@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { supabase } from '@/lib/supabaseClient';
+import { authFetch } from '@/lib/fetchWithTenant';
 import { Card } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { ExportButton } from '@/components/ui/export-button';
@@ -26,8 +26,10 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
+import { formatDate } from '@/lib/utils/format';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
+import { TRANSFER_STATUS_LABELS, type Transfer, type TransferStatus } from '@/lib/types/stock-transfer';
 
 interface ActivityDetails {
   name?: string;
@@ -52,28 +54,6 @@ interface SaleDetail {
   customer_name?: string;
   created_at: string;
   items: { id: string; product_name?: string; quantity: number; unit_price_cents: number; subtotal_cents: number }[];
-}
-
-interface TransferItem {
-  id: string;
-  product_id: string;
-  product_name?: string;
-  quantity: number;
-}
-
-interface Transfer {
-  id: string;
-  from_tenant_id: string;
-  to_tenant_id: string;
-  from_tenant_name: string;
-  to_tenant_name: string;
-  status: 'pending' | 'in_transit' | 'received';
-  notes?: string;
-  created_at: string;
-  updated_at: string;
-  received_at?: string;
-  created_by_name: string;
-  items: TransferItem[];
 }
 
 const ENTITY_LABELS: Record<string, string> = {
@@ -130,12 +110,7 @@ function formatDetailValue(key: string, value: unknown): string {
   if (['initial_fund_cents', 'total_expected_cents', 'total_counted_cents', 'total_difference_cents', 'amount_cents'].includes(key) && typeof value === 'number') return formatARS(value / 100);
   if (key === 'from_tenant_id' || key === 'to_tenant_id') return `#${String(value).slice(0, 8)}`;
   if (key === 'status' && typeof value === 'string') {
-    const statusLabels: Record<string, string> = {
-      pending: 'Pendiente',
-      in_transit: 'En tránsito',
-      received: 'Recibida',
-    };
-    return statusLabels[value] || value;
+    return TRANSFER_STATUS_LABELS[value as TransferStatus] ?? value;
   }
   return typeof value === 'string' || typeof value === 'number' ? String(value) : JSON.stringify(value);
 }
@@ -155,18 +130,18 @@ function TransferStatusBadge({ status }: { status: Transfer['status'] }) {
   if (status === 'pending')
     return (
       <StatusBadge tone="amber" className="font-semibold" icon={<Clock className="h-3 w-3" />}>
-        Pendiente
+        {TRANSFER_STATUS_LABELS.pending}
       </StatusBadge>
     );
   if (status === 'in_transit')
     return (
       <StatusBadge tone="blue" className="font-semibold" icon={<Truck className="h-3 w-3" />}>
-        En tránsito
+        {TRANSFER_STATUS_LABELS.in_transit}
       </StatusBadge>
     );
   return (
     <StatusBadge tone="emerald" className="font-semibold" icon={<CheckCircle2 className="h-3 w-3" />}>
-      Recibida
+      {TRANSFER_STATUS_LABELS.received}
     </StatusBadge>
   );
 }
@@ -190,13 +165,7 @@ function TransfersHistoryTab() {
   const fetchTransfers = useCallback(async () => {
     setLoading(true);
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      const res = await fetch('/api/stock-transfers', {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const res = await authFetch('/api/stock-transfers');
       if (res.ok) {
         const data: Transfer[] = await res.json();
         setTransfers(data);
@@ -289,26 +258,14 @@ function TransfersHistoryTab() {
 
                 {/* Created date */}
                 <td className="py-4 px-6 text-xs text-gray-500 whitespace-nowrap">
-                  {new Date(t.created_at).toLocaleDateString('es-AR', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
+                  {formatDate(t.created_at, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </td>
 
                 {/* Received date */}
                 <td className="py-4 px-6 text-xs whitespace-nowrap">
                   {t.received_at ? (
                     <span className="text-emerald-600 dark:text-emerald-400">
-                      {new Date(t.received_at).toLocaleDateString('es-AR', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                      {formatDate(t.received_at, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </span>
                   ) : (
                     <span className="text-gray-400">—</span>
@@ -331,13 +288,7 @@ function TransfersHistoryTab() {
                               {t.to_tenant_name}
                             </p>
                             <p className="text-xs text-gray-500 mt-1">
-                              {new Date(t.created_at).toLocaleDateString('es-AR', {
-                                day: '2-digit',
-                                month: 'long',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
+                              {formatDate(t.created_at, { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                             </p>
                           </div>
                           <div className="text-right">
@@ -437,10 +388,7 @@ export default function ActivityLogsPage() {
 
     if (!isOpen && log.entity_type === 'sale' && log.entity_id && !saleDetails[log.id]) {
       (async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const headers: Record<string, string> = {};
-        if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-        const res = await fetch(`/api/sales/${log.entity_id}`, { headers });
+        const res = await authFetch(`/api/sales/${log.entity_id}`);
         if (res.ok) {
           const data: SaleDetail = await res.json();
           setSaleDetails((prev) => ({ ...prev, [log.id]: data }));
@@ -451,10 +399,6 @@ export default function ActivityLogsPage() {
 
   const handleExportExcel = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
       let allLogs: ActivityLog[] = [];
       let offset = 0;
       const batchSize = 200;
@@ -463,7 +407,7 @@ export default function ActivityLogsPage() {
       while (hasMore) {
         const params = new URLSearchParams({ limit: String(batchSize), offset: String(offset) });
         if (entityFilter) params.set('entity_type', entityFilter);
-        const res = await fetch(`/api/activity-logs?${params}`, { headers });
+        const res = await authFetch(`/api/activity-logs?${params}`);
         if (!res.ok) break;
         const json = await res.json();
         const batch = json.data || [];
@@ -485,7 +429,7 @@ export default function ActivityLogsPage() {
         await Promise.all(
           chunk.map(async (log) => {
             try {
-              const res = await fetch(`/api/sales/${log.entity_id}`, { headers });
+              const res = await authFetch(`/api/sales/${log.entity_id}`);
               if (res.ok) {
                 const data: SaleDetail = await res.json();
                 saleDetailMap[log.id] = data;
@@ -549,16 +493,10 @@ export default function ActivityLogsPage() {
   };
 
   const fetchLogs = useCallback(async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    const headers: Record<string, string> = {};
-    if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
     const params = new URLSearchParams({ limit: String(limit), offset: String(page * limit) });
     if (entityFilter) params.set('entity_type', entityFilter);
 
-    const res = await fetch(`/api/activity-logs?${params}`, { headers });
+    const res = await authFetch(`/api/activity-logs?${params}`);
     if (!res.ok) {
       if (res.status === 403) setLoading(false);
       return;
@@ -715,13 +653,7 @@ export default function ActivityLogsPage() {
                           {log.details?.name || log.details?.folio || log.details?.sku || '—'}
                         </td>
                         <td className="py-4 px-6 text-right text-xs text-gray-500 whitespace-nowrap">
-                          {new Date(log.created_at).toLocaleDateString('es-ES', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                          {formatDate(log.created_at, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }, 'es-ES')}
                         </td>
                       </tr>
                       {expandedLogs.has(log.id) && (
@@ -738,13 +670,7 @@ export default function ActivityLogsPage() {
                                       {buildDescription(log)}
                                     </p>
                                     <p className="text-xs text-gray-500 mt-1">
-                                      {new Date(log.created_at).toLocaleDateString('es-ES', {
-                                        day: '2-digit',
-                                        month: 'long',
-                                        year: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                      })}
+                                      {formatDate(log.created_at, { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }, 'es-ES')}
                                     </p>
                                   </div>
                                   <div className="text-right">

@@ -1,3 +1,5 @@
+import type { StatusTone } from '@/components/ui/status-badge';
+
 export interface Supplier {
   id: string;
   tenant_id: string;
@@ -11,12 +13,30 @@ export interface Supplier {
   updated_at?: string;
 }
 
+export type PurchaseOrderStatus = 'draft' | 'sent' | 'partial' | 'received' | 'cancelled';
+
+export const PO_STATUS_LABELS: Record<PurchaseOrderStatus, string> = {
+  draft: 'Borrador',
+  sent: 'Enviado',
+  partial: 'Recibido Parcial',
+  received: 'Recibido',
+  cancelled: 'Cancelado',
+};
+
+export const PO_STATUS_TONES: Record<PurchaseOrderStatus, StatusTone> = {
+  draft: 'gray',
+  sent: 'amber',
+  partial: 'blue',
+  received: 'green',
+  cancelled: 'red',
+};
+
 export interface PurchaseOrder {
   id: string;
   tenant_id: string;
   supplier_id: string;
   supplier_name?: string;
-  status: 'draft' | 'sent' | 'partial' | 'received' | 'cancelled';
+  status: PurchaseOrderStatus;
   total_cents: number;
   expected_date?: string;
   received_date?: string;

@@ -1,7 +1,6 @@
 'use client';
 
 import { Suspense, useState, useEffect, useRef } from 'react';
-import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { IconAction } from '@/components/ui/icon-action';
@@ -20,10 +19,11 @@ import {
 } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import { formatARS } from '@/lib/utils/currency';
+import { formatDate } from '@/lib/utils/format';
 import { CreditCard, CheckCircle2, XCircle, Loader2, ArrowRight, AlertTriangle, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { getTenantHeaders } from '@/lib/fetchWithTenant';
+import { authFetch } from '@/lib/fetchWithTenant';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function BillingPage() {
@@ -73,10 +73,7 @@ function BillingContent() {
   useEffect(() => {
     (async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const headers: Record<string, string> = {};
-        if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-        const res = await fetch('/api/billing/status', { headers });
+        const res = await authFetch('/api/billing/status');
         if (res.ok) setSubscription(await res.json());
       } catch { /* ignore */ }
       setLoading(false);
@@ -116,12 +113,9 @@ function BillingContent() {
 
     setCheckoutLoading(planId);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json', ...getTenantHeaders() };
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
-      const res = await fetch('/api/billing/create-checkout', {
-        method: 'POST', headers,
+      const res = await authFetch('/api/billing/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan: planId }),
       });
       const data = await res.json();
@@ -138,12 +132,9 @@ function BillingContent() {
     if (!pendingDowngrade) return;
     setDowngrading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
-      const res = await fetch('/api/billing/downgrade', {
-        method: 'POST', headers,
+      const res = await authFetch('/api/billing/downgrade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan: pendingDowngrade }),
       });
       const data = await res.json();
@@ -158,7 +149,7 @@ function BillingContent() {
       }
 
       toast.success(`Cambiaste al plan ${PLANS[pendingDowngrade as PlanId].name}`);
-      const statusRes = await fetch('/api/billing/status', { headers });
+      const statusRes = await authFetch('/api/billing/status');
       if (statusRes.ok) setSubscription(await statusRes.json());
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
@@ -167,44 +158,23 @@ function BillingContent() {
     }
   };
 
-  const handleCancelConfirm = async () => {
+  const cancelSubscription = async (revoke = false) => {
     setCancelling(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
-      const res = await fetch('/api/billing/portal', { method: 'POST', headers });
+      const res = await authFetch('/api/billing/portal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error || 'Error'); return; }
       toast.success('Suscripción cancelada');
       setSubscription(null);
+      if (revoke) setRevocationDone(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
     } finally {
       setCancelling(false);
       setShowCancelModal(false);
-      setShowRevocationModal(false);
-    }
-  };
-
-  const handleRevocationConfirm = async () => {
-    setCancelling(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
-      const res = await fetch('/api/billing/portal', { method: 'POST', headers });
-      const data = await res.json();
-      if (!res.ok) { toast.error(data.error || 'Error'); return; }
-      toast.success('Suscripción cancelada');
-      setSubscription(null);
-      setRevocationDone(true);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error');
-    } finally {
-      setCancelling(false);
       setShowRevocationModal(false);
     }
   };
@@ -329,7 +299,7 @@ function BillingContent() {
                 <p className="text-xs mt-0.5 text-amber-600 dark:text-amber-400">
                   {daysUntilRenewal === 0
                     ? 'El cobro se procesará hoy'
-                    : `El ${new Date(subscription.currentPeriodEnd!).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })} se renovará tu suscripción`}
+                    : `El ${formatDate(subscription.currentPeriodEnd!, { weekday: 'long', day: 'numeric', month: 'long' })} se renovará tu suscripción`}
                 </p>
               </>
             ) : null}
@@ -366,7 +336,7 @@ function BillingContent() {
                 </span>
                 {subscription.currentPeriodEnd && (
                   <span className="text-xs text-gray-500">
-                    Próximo ciclo: {new Date(subscription.currentPeriodEnd).toLocaleDateString('es-AR')}
+                    Próximo ciclo: {formatDate(subscription.currentPeriodEnd, { day: '2-digit', month: '2-digit', year: 'numeric' })}
                   </span>
                 )}
               </div>
@@ -545,11 +515,11 @@ function BillingContent() {
         message="¿Estás seguro de cancelar la suscripción? Perderás acceso a las funciones premium."
         confirmLabel="Sí, cancelar"
         cancelLabel="Volver"
-        variant="danger"
-        loading={cancelling}
-        onConfirm={handleCancelConfirm}
-        onCancel={() => setShowCancelModal(false)}
-      />
+variant="danger"
+          loading={cancelling}
+          onConfirm={() => cancelSubscription(false)}
+          onCancel={() => setShowCancelModal(false)}
+        />
 
       <ConfirmModal
         open={showRevocationModal}
@@ -557,11 +527,11 @@ function BillingContent() {
         message="Como consumidor tenés derecho a revocar la contratación dentro de los diez (10) días corridos desde la contratación, por el mismo medio electrónico (art. 34, Ley N° 24.240). Vynko no cobra penalidad ni exige trámite adicional. Al confirmar, se cancelará tu suscripción y podrás solicitar el reembolso del importe abonado. ¿Querés continuar?"
         confirmLabel="Sí, revocar"
         cancelLabel="Volver"
-        variant="danger"
-        loading={cancelling}
-        onConfirm={handleRevocationConfirm}
-        onCancel={() => setShowRevocationModal(false)}
-      />
+variant="danger"
+          loading={cancelling}
+          onConfirm={() => cancelSubscription(true)}
+          onCancel={() => setShowRevocationModal(false)}
+        />
 
       <ConfirmModal
         open={!!pendingDowngrade}

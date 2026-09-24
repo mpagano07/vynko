@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useTheme } from '@/lib/hooks/useTheme';
-import { supabase } from '@/lib/supabaseClient';
+import { authFetch } from '@/lib/fetchWithTenant';
+import { formatDate } from '@/lib/utils/format';
 import { Card } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { StatCard } from '@/components/ui/stat-card';
@@ -52,12 +53,7 @@ export default function AdminAnalyticsPage() {
 
     async function fetchData() {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch('/api/admin/analytics', {
-          headers: {
-            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-          },
-        });
+        const res = await authFetch('/api/admin/analytics');
         if (!res.ok) throw new Error('Error al cargar datos');
         const json = await res.json();
         setData(json);
@@ -174,9 +170,7 @@ export default function AdminAnalyticsPage() {
                 {data.recentEvents.map((event) => (
                   <tr key={event.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                     <td className="py-2.5 px-3 text-gray-600 dark:text-gray-300">
-                      {new Date(event.created_at).toLocaleDateString('es-AR', {
-                        day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit',
-                      })}
+                      {formatDate(event.created_at, { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </td>
                     <td className="py-2.5 px-3">
                       <StatusBadge tone={event.event_type === 'signup' ? 'blue' : 'green'}>

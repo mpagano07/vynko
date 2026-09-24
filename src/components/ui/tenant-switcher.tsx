@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { ChevronDown, ChevronUp, Check, Plus, Loader2, Pencil } from 'lucide-react';
-import { supabase } from '@/lib/supabaseClient';
+import { authFetch } from '@/lib/fetchWithTenant';
 import { IconAction } from '@/components/ui/icon-action';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
@@ -28,13 +28,11 @@ export function TenantSwitcher() {
   const handleRename = async (tenantId: string) => {
     if (!renameValue.trim()) return;
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/settings/tenant', {
+      const res = await authFetch('/api/settings/tenant', {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           'x-active-tenant-id': tenantId,
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
         },
         body: JSON.stringify({ name: renameValue.trim() }),
       });
@@ -57,13 +55,9 @@ export function TenantSwitcher() {
     if (!newTenantName.trim()) return;
     setCreating(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/tenants', {
+      const res = await authFetch('/api/tenants', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newTenantName.trim() }),
       });
       const data = await res.json();

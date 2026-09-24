@@ -1,21 +1,15 @@
 "use client";
 
-import { useState, useEffect, useCallback, startTransition } from 'react';
+import { useState, useEffect, startTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Clock } from 'lucide-react';
 import OnboardingChecklist from '@/components/dashboard/OnboardingChecklist';
-
-function timeAgo(dateStr: string): string {
-  const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (diff < 60) return 'ahora';
-  if (diff < 3600) return `hace ${Math.floor(diff / 60)}m`;
-  if (diff < 86400) return `hace ${Math.floor(diff / 3600)}h`;
-  return `hace ${Math.floor(diff / 86400)}d`;
-}
+import { authFetch } from '@/lib/fetchWithTenant';
+import { formatDate, timeAgo } from '@/lib/utils/format';
+import type { CriticalProduct, PendingOrder } from '@/lib/types/dashboard';
 
 function actionInfo(action: string, entityType: string, details: Record<string, unknown>): { emoji: string; label: string; detail: string } {
   const name = (details.products as string) || (details.name as string) || '';
@@ -41,35 +35,6 @@ interface ActivityLog {
   entity_type: string;
   details: Record<string, unknown>;
   created_at: string;
-}
-
-interface CriticalProduct {
-  id: string;
-  name: string;
-  stock: number;
-  min_stock: number;
-}
-
-interface PendingOrderItem {
-  product_id: string | null;
-  product_name: string;
-  quantity_ordered: number;
-  quantity_received: number;
-  quantity_pending: number;
-}
-
-interface PendingOrder {
-  id: string;
-  status: string;
-  expected_date: string | null;
-  created_at: string;
-  supplier_name: string;
-  tenant_name?: string;
-  items: PendingOrderItem[];
-}
-
-function formatShortDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 }
 
 export default function StockAndActivity({
@@ -103,25 +68,17 @@ export default function StockAndActivity({
   // pedirlo igual genera ruido de 403 en la consola.
   const canViewActivity = role === 'owner' || role === 'manager';
 
-  const getHeaders = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const headers: Record<string, string> = {};
-    if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-    return headers;
-  }, []);
-
   useEffect(() => {
     if (!tenantId && !allTenants) return;
     let cancelled = false;
 
     (async () => {
       try {
-        const headers = await getHeaders();
         const requests: [Promise<Response>, Promise<Response>?] = [
-          fetch('/api/products/stock-analysis', { headers }),
+          authFetch('/api/products/stock-analysis'),
         ];
         if (canViewActivity) {
-          requests.push(fetch('/api/activity-logs?limit=5', { headers }));
+          requests.push(authFetch('/api/activity-logs?limit=5'));
         }
         const [stockRes, activityRes] = await Promise.all(requests);
 
@@ -142,7 +99,7 @@ export default function StockAndActivity({
       }
     })();
     return () => { cancelled = true; };
-  }, [tenantId, getHeaders, allTenants, canViewActivity]);
+  }, [tenantId, allTenants, canViewActivity]);
 
   const activityPanel = (
     <div>
@@ -208,7 +165,7 @@ export default function StockAndActivity({
                         </p>
                         <p className="text-[11px] text-gray-600 dark:text-gray-400">
                           {order.items.length} producto{order.items.length !== 1 ? 's' : ''} · {totalPending} u. por recibir
-                          {order.expected_date && <> · Llega {formatShortDate(order.expected_date)}</>}
+                          {order.expected_date && <> · Llega {formatDate(order.expected_date, { day: '2-digit', month: 'short' }, 'es-ES')}</>}
                         </p>
                         <p className="text-[11px] text-gray-600 dark:text-gray-400 truncate">{productList}</p>
                       </div>

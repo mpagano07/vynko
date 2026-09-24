@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, startTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { supabase } from '@/lib/supabaseClient';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatCard } from '@/components/ui/stat-card';
@@ -11,6 +10,8 @@ import {
   TrendingUp, Plus, ShoppingCart, Package, Building2, AlertTriangle,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
+import { authFetch } from '@/lib/fetchWithTenant';
+import type { CriticalProduct, PendingOrder } from '@/lib/types/dashboard';
 import Link from 'next/link';
 import dynamicImport from 'next/dynamic';
 import { LazyMount } from '@/components/ui/lazy-mount';
@@ -79,31 +80,6 @@ interface SalesEntry {
   total_cents: number;
 }
 
-interface CriticalProduct {
-  id: string;
-  name: string;
-  stock: number;
-  min_stock: number;
-}
-
-interface PendingOrderItem {
-  product_id: string | null;
-  product_name: string;
-  quantity_ordered: number;
-  quantity_received: number;
-  quantity_pending: number;
-}
-
-interface PendingOrder {
-  id: string;
-  status: string;
-  expected_date: string | null;
-  created_at: string;
-  supplier_name: string;
-  tenant_name?: string;
-  items: PendingOrderItem[];
-}
-
 export default function DashboardPage() {
   const router = useRouter();
   const { profile, tenant, tenants, allTenants, loading: authLoading, isAuthenticated, switchTenant } = useAuth();
@@ -135,11 +111,7 @@ export default function DashboardPage() {
   }, [authLoading, isAuthenticated, tenant, allTenants, tenants, router, switchTenant]);
 
   const fetchWithTenant = useCallback(async (url: string, tenantId: string) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const headers: Record<string, string> = {};
-    if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-    headers['x-active-tenant-id'] = tenantId;
-    const res = await fetch(url, { headers });
+    const res = await authFetch(url, { headers: { 'x-active-tenant-id': tenantId } });
     return res.ok ? res.json() : null;
   }, []);
 
@@ -221,16 +193,12 @@ export default function DashboardPage() {
             });
           }
         } else if (tenant?.id) {
-          const { data: { session } } = await supabase.auth.getSession();
-          const headers: Record<string, string> = {};
-          if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
           const [salesRes, monthlyRes, criticalRes, pendingRes, productsRes] = await Promise.all([
-            fetch(`/api/sales?today=true&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, { headers }),
-            fetch('/api/sales/monthly', { headers }),
-            fetch('/api/products/critical', { headers }),
-            fetch('/api/purchase-orders/pending', { headers }),
-            fetch('/api/products', { headers }),
+            authFetch(`/api/sales?today=true&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`),
+            authFetch('/api/sales/monthly'),
+            authFetch('/api/products/critical'),
+            authFetch('/api/purchase-orders/pending'),
+            authFetch('/api/products'),
           ]);
 
           if (cancelled) return;
