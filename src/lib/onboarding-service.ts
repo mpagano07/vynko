@@ -1,0 +1,164 @@
+import { createServerSupabaseClient } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
+import type { PlanId } from '@/lib/plans';
+
+export type OnboardingResult<T = unknown> =
+  | { ok: true; data: T }
+  | { ok: false; error: string; status: number };
+
+const slugify = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+async function getAuthenticatedUser(request: Request) {
+  const authHeader = request.headers.get('authorization');
+  const refreshToken = request.headers.get('x-refresh-token');
+
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.replace('Bearer ', '');
+    const authClient = await createServerSupabaseClient();
+
+    const { data: sessionData, error: sessionError } = await authClient.auth.setSession({
+      access_token: token,
+      refresh_token: refreshToken ?? '',
+    });
+    if (!sessionData?.session || sessionError) {
+      return null;
+    }
+
+    const { data: userData, error: userError } = await authClient.auth.getUser();
+    if (userError || !userData.user) {
+      return null;
+    }
+
+    return userData.user;
+  }
+
+  const authClient = await createServerSupabaseClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await authClient.auth.getUser();
+
+  if (userError || !user) {
+    return null;
+  }
+
+  return user;
+}
+
+export async function completeOnboarding(
+  request: Request,
+  body: Record<string, unknown>
+): Promise<OnboardingResult> {
+  const { companyName, ownerName } = body;
+
+  if (!companyName || !ownerName) {
+    return { ok: false, error: 'companyName and ownerName are required', status: 400 };
+  }
+
+  const user = await getAuthenticatedUser(request);
+  if (!user) {
+    return { ok: false, error: 'No authenticated user', status: 401 };
+  }
+
+  const { data: existingMemberships } = await supabaseAdmin
+    .from('tenant_users')
+    .select('tenant_id')
+    .eq('user_id', user.id);
+
+  const existingTenantIds = (existingMemberships ?? []).map((m) => m.tenant_id);
+
+  if (existingTenantIds.length > 0) {
+    const { data: existingTenants } = await supabaseAdmin
+      .from('tenants')
+      .select('subscription_plan')
+      .in('id', existingTenantIds);
+
+    const planRank: Record<string, number> = { enterprise: 4, business: 3, starter: 2, free: 1 };
+    let bestPlan = NEW_ACCOUNT_PLAN;
+    for (const t of existingTenants ?? []) {
+      const p = t.subscription_plan || NEW_ACCOUNT_PLAN;
+      if ((planRank[p] || 0) > (planRank[bestPlan] || 0)) bestPlan = p;
+    }
+
+    const maxBranches = PLAN_LIMITS[bestPlan as PlanId]?.branches ?? 1;
+    if (existingTenantIds.length >= maxBranches) {
+      return {
+        ok: false,
+        error: `Tu plan actual (${bestPlan}) permite hasta ${maxBranches} sucursal${maxBranches !== 1 ? 'es' : ''}.`,
+        status: 403,
+      };
+    }
+  }
+
+  const tenantId = crypto.randomUUID();
+  const tenantSlug = `${slugify(companyName as string) || 'company'}-${crypto.randomUUID().slice(0, 8)}`;
+
+  const { error: tenantError } = await supabaseAdmin
+    .from('tenants')
+    .insert(
+      {
+        id: tenantId,
+        name: companyName,
+        slug: tenantSlug,
+        subscription_plan: NEW_ACCOUNT_PLAN,
+        subscription_status: 'free',
+      }
+    );
+
+  if (tenantError) {
+    console.error('DB error:', tenantError);
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
+  }
+
+  const { error: profileError } = await supabaseAdmin.from('profiles').upsert(
+    {
+      id: user.id,
+      email: user.email,
+      full_name: ownerName,
+      tenant_id: tenantId,
+      onboarding_pending: false,
+    },
+    {
+      onConflict: 'id',
+    }
+  );
+
+  if (profileError) {
+    console.error('DB error:', profileError);
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
+  }
+
+  const { error: tenantUserError } = await supabaseAdmin.from('tenant_users').upsert(
+    {
+      tenant_id: tenantId,
+      user_id: user.id,
+      role: 'owner',
+    },
+    {
+      onConflict: 'tenant_id,user_id',
+    }
+  );
+
+  if (tenantUserError) {
+    console.error('DB error:', tenantUserError);
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
+  }
+
+  await supabaseAdmin.from('analytics_events').insert({
+    event_type: 'signup',
+    user_email: user.email,
+    user_name: ownerName,
+    tenant_id: tenantId,
+    metadata: { plan: NEW_ACCOUNT_PLAN },
+  });
+
+  return { ok: true, data: { tenantId } };
+}

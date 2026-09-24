@@ -1,45 +1,13 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createServerSupabaseClient } from '@/lib/supabase';
-import { PLANS, NEW_ACCOUNT_PLAN, getTrialDays, getTrialPlan } from '@/lib/plans';
-import { consolidateOwnerSubscription, type TenantSubscription } from '@/lib/checkSubscription';
+import { getSubscriptionStatus } from '@/lib/billing-service';
 
 export async function GET() {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-  const { data: tu } = await supabaseAdmin
-    .from('tenant_users')
-    .select('tenant_id')
-    .eq('user_id', user.id);
-  if (!tu || tu.length === 0) return NextResponse.json({ error: 'No tenant' }, { status: 401 });
-
-  const tenantIds = tu.map((t) => t.tenant_id);
-  const { data: tenants } = await supabaseAdmin
-    .from('tenants')
-    .select('subscription_status, subscription_plan, subscription_current_period_end, created_at')
-    .in('id', tenantIds);
-
-  // Every branch of the owner shares a single subscription.
-  const tenant = consolidateOwnerSubscription(tenants as TenantSubscription[] | null);
-
-  const trialPlan = getTrialPlan() ?? NEW_ACCOUNT_PLAN;
-  const plan = (tenant?.subscription_plan as keyof typeof PLANS) || NEW_ACCOUNT_PLAN;
-  const planConfig = PLANS[plan] || PLANS[NEW_ACCOUNT_PLAN];
-
-  const TRIAL_DAYS = getTrialDays();
-  const trialEndsAt = trialPlan && plan === trialPlan && tenant?.created_at
-    ? new Date(new Date(tenant.created_at).getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString()
-    : null;
-
-  return NextResponse.json({
-    plan: plan,
-    planName: planConfig.name,
-    status: tenant?.subscription_status || 'inactive',
-    currentPeriodEnd: tenant?.subscription_current_period_end,
-    trialEndsAt,
-    createdAt: tenant?.created_at,
-    features: planConfig.features,
-  });
+  const result = await getSubscriptionStatus(user.id);
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+  return NextResponse.json(result.data);
 }

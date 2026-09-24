@@ -34,6 +34,172 @@ function flattenSale(row: Record<string, unknown>) {
   };
 }
 
+export type GetSaleResult =
+  | { ok: true; sale: Record<string, unknown> }
+  | { ok: false; error: string; status: number };
+
+export async function getSaleById(auth: AuthInfo, id: string): Promise<GetSaleResult> {
+  const { data: sale, error } = await supabaseAdmin
+    .from('sales')
+    .select(`
+      *,
+      items:sale_items(
+        *,
+        product:products(name)
+      ),
+      customer:customers(name)
+    `)
+    .eq('id', id)
+    .eq('tenant_id', auth.tenantId)
+    .single();
+
+  if (error) {
+    console.error('DB error:', error);
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 404 };
+  }
+
+  return { ok: true, sale: flattenSale(sale as Record<string, unknown>) };
+}
+
+async function getMonthTotals(tenantIds: string[], monthStart: Date) {
+  const month = monthStart.toISOString().slice(0, 10);
+
+  const query = supabaseAdmin
+    .from('sales_monthly_totals')
+    .select('total, sale_count')
+    .eq('month', month)
+    .in('tenant_id', tenantIds);
+
+  const res = (await query) as unknown as {
+    data: Array<{ total: number; sale_count: number }> | null;
+    error: { message: string } | null;
+  };
+  const { data, error } = res;
+  if (error) return { error };
+  const row = data?.[0];
+  return {
+    total: (row?.total as number) || 0,
+    count: (row?.sale_count as number) || 0,
+  };
+}
+
+export type MonthlySalesResult =
+  | { ok: true; data: Record<string, unknown> }
+  | { ok: false; error: string };
+
+export async function getMonthlySales(auth: AuthInfo): Promise<MonthlySalesResult> {
+  try {
+    const scopeTenantIds = auth.allTenants ? auth.tenantIds : [auth.tenantId];
+
+    const now = new Date();
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+    const [thisMonth, prevMonth] = await Promise.all([
+      getMonthTotals(scopeTenantIds, thisMonthStart),
+      getMonthTotals(scopeTenantIds, prevMonthStart),
+    ]);
+
+    if (thisMonth.error) { console.error('DB error:', thisMonth.error); return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' }; }
+    if (prevMonth.error) { console.error('DB error:', prevMonth.error); return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' }; }
+
+    const thisTotal = thisMonth.total / 100;
+    const prevTotal = prevMonth.total / 100;
+    const thisCount = thisMonth.count;
+    const prevCount = prevMonth.count;
+
+    const variationPercent = prevTotal > 0
+      ? Math.round(((thisTotal - prevTotal) / prevTotal) * 100)
+      : null;
+
+    const avgTicket = thisCount > 0 ? thisTotal / thisCount : 0;
+
+    return {
+      ok: true,
+      data: {
+        total: thisTotal,
+        saleCount: thisCount,
+        prevTotal,
+        prevSaleCount: prevCount,
+        variationPercent,
+        avgTicket,
+      },
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error in monthly sales';
+    return { ok: false, error: msg };
+  }
+}
+
+const SHORT_DAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+const SHORT_MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+export type SalesSummaryResult =
+  | { ok: true; data: Record<string, unknown>[] }
+  | { ok: false; error: string };
+
+export async function getSalesSummary(auth: AuthInfo, daysParam: number): Promise<SalesSummaryResult> {
+  try {
+    const tenantId = auth.tenantId;
+    const scopeTenantIds = auth.allTenants ? auth.tenantIds : [tenantId];
+
+    const days = [7, 30, 90, 365].includes(daysParam) ? daysParam : 7;
+
+    const since = new Date();
+    since.setDate(since.getDate() - (days - 1));
+    since.setHours(0, 0, 0, 0);
+    const sinceDay = since.toISOString().slice(0, 10);
+
+    const sQuery = supabaseAdmin
+      .from('sales_daily_totals')
+      .select('day, total')
+      .gte('day', sinceDay)
+      .in('tenant_id', scopeTenantIds);
+    const res = (await sQuery) as unknown as {
+      data: Array<{ day: string; total: number }> | null;
+      error: { message: string } | null;
+    };
+    const { data: grouped, error } = res;
+
+    if (error) { console.error('DB error:', error); return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' }; }
+
+    const dailyTotals: Record<string, number> = {};
+    for (let i = 0; i < days; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() - (days - 1 - i));
+      const key = date.toISOString().slice(0, 10);
+      dailyTotals[key] = 0;
+    }
+
+    for (const row of (grouped ?? [])) {
+      const day = String(row.day as string).slice(0, 10);
+      if (dailyTotals[day] !== undefined) {
+        dailyTotals[day] += (row.total as number) || 0;
+      }
+    }
+
+    const formatted = Object.entries(dailyTotals).map(([date, total]) => {
+      const d = new Date(date + 'T12:00:00');
+      let label: string;
+      if (days <= 31) {
+        label = SHORT_DAYS[d.getDay()];
+      } else {
+        label = `${d.getDate()} ${SHORT_MONTHS[d.getMonth()]}`;
+      }
+      return {
+        date,
+        day: label,
+        total: total / 100,
+      };
+    });
+
+    return { ok: true, data: formatted };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error in sales summary';
+    return { ok: false, error: msg };
+  }
+}
+
 export async function getTodaySales(auth: AuthInfo, tz: string): Promise<ListSalesResult> {
   const todayStart = formatTodayDate(tz);
   let query = supabaseAdmin
