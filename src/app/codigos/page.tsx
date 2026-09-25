@@ -14,6 +14,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Pagination } from '@/components/ui/pagination';
 import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
 import { SearchInput } from '@/components/ui/search-input';
 import {
   QrCode,
@@ -26,7 +27,7 @@ import {
 export default function CodigosPage() {
   const { tenant } = useAuth();
   const tenantId = tenant?.id ?? null;
-  const { products, isLoading } = useProducts(tenantId);
+  const { products, isLoading, isError, mutate } = useProducts(tenantId);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState('all');
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
@@ -214,7 +215,9 @@ export default function CodigosPage() {
       </Card>
 
       {/* QR Grid */}
-      {isLoading || generating ? (
+      {isError ? (
+        <ErrorState title="No se pudieron cargar los productos" onRetry={() => mutate()} />
+      ) : isLoading || generating ? (
         <LoadingState label="Generando códigos QR..." />
       ) : filtered.length === 0 ? (
         <EmptyState icon={Package} title="Sin productos" description="No hay productos que coincidan con la búsqueda." />

@@ -234,11 +234,17 @@ export default function SalesPage() {
   }, []);
 
   const fetchSales = async (page: number) => {
-    const res = await authFetch(`/api/sales?days=15&page=${page}&limit=${SALES_PER_PAGE}`);
-    if (res.ok) {
-      const d = await res.json();
-      setSales(d.data ?? []);
-      setSalesTotal(d.total ?? 0);
+    try {
+      const res = await authFetch(`/api/sales?days=15&page=${page}&limit=${SALES_PER_PAGE}`);
+      if (res.ok) {
+        const d = await res.json();
+        setSales(d.data ?? []);
+        setSalesTotal(d.total ?? 0);
+      } else {
+        toast.error('Error al cargar ventas');
+      }
+    } catch {
+      toast.error('Error al cargar ventas');
     }
   };
 
@@ -267,8 +273,8 @@ export default function SalesPage() {
       if (custRes.ok) setCustomers(await custRes.json());
 
       await fetchSales(salesPage);
-    })().catch((err) => {
-      console.error('Error loading data:', err);
+    })().catch(() => {
+      toast.error('Error al cargar productos y clientes');
     }).finally(() => {
       if (!cancelled) setLoadingData(false);
     });
@@ -286,7 +292,7 @@ export default function SalesPage() {
       const data = await res.json();
       if (cancelled) return;
       setCheckoutSettings(normalizeCheckoutSettings(data?.checkout));
-    })().catch((err) => console.error('Error loading checkout settings:', err));
+    })().catch(() => toast.error('No se pudieron cargar los ajustes de ticket'));
     return () => { cancelled = true; };
   }, [tenantId]);
 

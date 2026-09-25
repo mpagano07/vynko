@@ -16,6 +16,7 @@ import { Modal } from '@/components/ui/modal';
 import { Pagination } from '@/components/ui/pagination';
 import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
 import { SearchInput } from '@/components/ui/search-input';
 import { Thead, Th } from '@/components/ui/table-header';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -92,7 +93,7 @@ function ProductsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const multiBranch = (tenants?.length || 0) > 1;
-  const { products, isLoading: productsLoading, mutate: mutateProducts } = useProducts(tenantId);
+  const { products, isLoading: productsLoading, mutate: mutateProducts, isError: productsError } = useProducts(tenantId);
   const { categories, mutate: mutateCategories } = useCategories(tenantId);
 
   // Search & Filter State
@@ -737,7 +738,9 @@ function ProductsPageContent() {
 
       {/* Products Table */}
       <Card className="overflow-hidden border border-gray-100 dark:border-gray-800 p-0">
-        {productsLoading ? (
+        {productsError ? (
+          <ErrorState title="No se pudieron cargar los productos" onRetry={() => mutateProducts()} />
+        ) : productsLoading ? (
           <LoadingState label="Cargando inventario..." />
         ) : filteredProducts.length === 0 ? (
           <EmptyState icon={Package} title="No se encontraron productos" description="Intenta ajustando los filtros de búsqueda." />
@@ -1628,8 +1631,8 @@ function NewTransferModal({
           const data = await res.json();
           setAllProducts(data || []);
         }
-      } catch (err) {
-        console.error('Error loading products for transfer:', err);
+      } catch {
+        toast.error('Error al cargar los productos de la sucursal');
       } finally {
         setLoadingProducts(false);
       }

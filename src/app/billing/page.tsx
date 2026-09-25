@@ -74,8 +74,14 @@ function BillingContent() {
     (async () => {
       try {
         const res = await authFetch('/api/billing/status');
-        if (res.ok) setSubscription(await res.json());
-      } catch { /* ignore */ }
+        if (res.ok) {
+          setSubscription(await res.json());
+        } else {
+          toast.error('No se pudo verificar el estado de tu suscripción');
+        }
+      } catch {
+        toast.error('No se pudo verificar el estado de tu suscripción');
+      }
       setLoading(false);
     })();
   }, []);

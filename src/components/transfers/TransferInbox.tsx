@@ -306,10 +306,12 @@ export function TransferInbox({ currentTenantId, trigger = 0, onAction }: Transf
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(false);
 
   const fetchTransfers = useCallback(async (silent = false) => {
     try {
       if (silent) setRefreshing(true);
+      setError(false);
 
       const res = await authFetch('/api/stock-transfers?status=pending');
       const pendingData: Transfer[] = res.ok ? await res.json() : [];
@@ -329,7 +331,7 @@ export function TransferInbox({ currentTenantId, trigger = 0, onAction }: Transf
 
       setTransfers(enriched);
     } catch {
-      // silent fail
+      setError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -357,7 +359,20 @@ export function TransferInbox({ currentTenantId, trigger = 0, onAction }: Transf
     );
   }
 
-  if (transfers.length === 0) return null;
+  if (transfers.length === 0) {
+    if (error) {
+      return (
+        <div className="flex flex-col items-center justify-center gap-2 py-6 text-center">
+          <p className="text-sm text-gray-500 dark:text-gray-400">No se pudieron cargar las transferencias activas.</p>
+          <Button variant="outline" size="sm" onClick={() => fetchTransfers()}>
+            <RefreshCw className="h-3.5 w-3.5" />
+            Reintentar
+          </Button>
+        </div>
+      );
+    }
+    return null;
+  }
 
   return (
     <div className="space-y-3">

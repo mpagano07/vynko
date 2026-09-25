@@ -13,6 +13,7 @@ import { Modal } from '@/components/ui/modal';
 import { StatusBadge as StatusBadgePanel, type StatusTone } from '@/components/ui/status-badge';
 import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
 import { SearchInput } from '@/components/ui/search-input';
 import { Thead, Th } from '@/components/ui/table-header';
 import { PageHeader } from '@/components/ui/page-header';
@@ -47,6 +48,8 @@ export default function ProvidersPage() {
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   // Supplier form
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
@@ -129,6 +132,7 @@ export default function ProvidersPage() {
   useEffect(() => {
     if (!tenantId && !allTenants) return;
     let cancelled = false;
+    let failed = false;
 
     (async () => {
       const [supRes, prodRes] = await Promise.all([
@@ -137,6 +141,7 @@ export default function ProvidersPage() {
       ]);
 
       if (cancelled) return;
+      if (!supRes.ok && !prodRes.ok) failed = true;
       if (supRes.ok) setSuppliers(await supRes.json());
       if (prodRes.ok) {
         const allProducts: Product[] = await prodRes.json();
@@ -150,12 +155,18 @@ export default function ProvidersPage() {
           }
         }
       }
-    })().catch(console.error).finally(() => {
-      if (!cancelled) setLoading(false);
+    })().catch(() => {
+      failed = true;
+      toast.error('Error al cargar proveedores y productos');
+    }).finally(() => {
+      if (!cancelled) {
+        setLoading(false);
+        setLoadError(failed);
+      }
     });
 
     return () => { cancelled = true; };
-  }, [tenantId, allTenants]);
+  }, [tenantId, allTenants, reloadKey]);
 
   const refreshSuppliers = async () => {
     const res = await authFetch('/api/suppliers');
@@ -417,6 +428,15 @@ export default function ProvidersPage() {
       <Card className="overflow-hidden border border-gray-100 dark:border-gray-800 p-0">
         {loading ? (
           <LoadingState compact />
+        ) : loadError && suppliers.length === 0 ? (
+          <ErrorState
+            title="No se pudieron cargar los proveedores"
+            onRetry={() => {
+              setLoadError(false);
+              setLoading(true);
+              setReloadKey((k) => k + 1);
+            }}
+          />
         ) : filteredSuppliers.length === 0 ? (
           <EmptyState icon={Truck} title="No hay proveedores registrados" />
         ) : (
