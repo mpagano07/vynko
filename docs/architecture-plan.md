@@ -51,7 +51,7 @@ Fecha: 2026-09-24. Rama origen: `feature/modal-gestionar-categorias`.
 - [x] **3.2 Agregar `.catch()`** al `Promise.all` de `documentos/page.tsx:146-166` (unhandled rejection) — añadido catch, deja lista parcial/vacía
 - [ ] **3.3 Distinguir error vs vacío** — usar `isError` en products/codigos/loss-prevention
 - [ ] **3.4 Componente `ErrorState` compartido** + usarlo en dashboard, settings, providers, sales
-- [ ] **3.5 Error boundaries** — `global-error.tsx`, nested `error.tsx` (products/sales/dashboard), `unstable_retry` → `retry`
+- [x] **3.5 Error boundaries** — `global-error.tsx` (con `<html>/<body>` propio como exige la doc), `error.tsx` anidados en products/sales/dashboard, `unstable_retry` → `retry` (prop estable en Next v16.3+), componente compartido `ErrorState` creado en `components/ui/error-state.tsx`.
 - [ ] **3.6 Loading states faltantes** — `loading.tsx` de ruta; gaps en settings y dashboard
 - [ ] **3.7 Empty states faltantes** — `TransferInbox`, colaboradores en settings
 - [ ] **3.8 Errores silenciosos** — `billing/page.tsx:78`, `TransferInbox`, `providers/page.tsx:153`, `sales/page.tsx`
