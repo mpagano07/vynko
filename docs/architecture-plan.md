@@ -39,7 +39,7 @@ Fecha: 2026-09-24. Rama origen: `feature/modal-gestionar-categorias`.
 
 - [x] **2.1 Borrar `console.log` PII** — `src/app/auth/callback/route.ts:46-75` (logs de user_id/email/metadata/companyName eliminados; se conserva el `console.error`).
 - [x] **2.2 Quitar deps sin uso** — `@vercel/nft`, `@zxing/browser`, `class-variance-authority`, `date-fns` (ninguna se importa en `src/`; `@zxing/library` se mantiene porque el scanner la usa).
-- [ ] **2.3 Limpiar exports muertos** — Evaluado: `ReceiptModal` SÍ se usa en `sales/page.tsx` (falso positivo del plan original). Tipos `*Result` se conservan (son la API pública de los services). Punto descartado.
+- [x] **2.3 Limpiar exports muertos** — Evaluado y cerrado: `ReceiptModal` SÍ se usa en `sales/page.tsx` (falso positivo del plan original). Tipos `*Result` se conservan (son la API pública de los services). No hay nada que limpiar.
 
 ## Fase 3 — UX y robustez (media)
 
