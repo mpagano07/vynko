@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { authFetch } from '@/lib/fetchWithTenant';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabPanel } from '@/components/ui/tabs';
 import { EditCollaboratorModal } from '@/components/ui/edit-collaborator-modal';
@@ -176,7 +177,7 @@ export default function SettingsPage() {
           setPendingInvitations(data.pendingInvitations || []);
         }
       } catch {
-        // silent
+        toast.error('Error al cargar los colaboradores');
       } finally {
         setLoadingCollaborators(false);
       }
@@ -934,9 +935,11 @@ export default function SettingsPage() {
                 ))}
 
                 {collaborators.length === 0 && (
-                  <p className="text-sm text-gray-500 text-center py-4">
-                    No hay colaboradores
-                  </p>
+                  <EmptyState
+                    icon={Users}
+                    title="No hay colaboradores"
+                    description="Invitá a tu equipo para que trabaje con vos en las sucursales."
+                  />
                 )}
               </div>
             )}

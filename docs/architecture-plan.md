@@ -39,7 +39,7 @@ Fecha: 2026-09-24. Rama origen: `feature/modal-gestionar-categorias`.
 
 - [x] **2.1 Borrar `console.log` PII** — `src/app/auth/callback/route.ts:46-75` (logs de user_id/email/metadata/companyName eliminados; se conserva el `console.error`).
 - [x] **2.2 Quitar deps sin uso** — `@vercel/nft`, `@zxing/browser`, `class-variance-authority`, `date-fns` (ninguna se importa en `src/`; `@zxing/library` se mantiene porque el scanner la usa).
-- [ ] **2.3 Limpiar exports muertos** — Evaluado: `ReceiptModal` SÍ se usa en `sales/page.tsx` (falso positivo del plan original). Tipos `*Result` se conservan (son la API pública de los services). Punto descartado.
+- [x] **2.3 Limpiar exports muertos** — Evaluado y cerrado: `ReceiptModal` SÍ se usa en `sales/page.tsx` (falso positivo del plan original). Tipos `*Result` se conservan (son la API pública de los services). No hay nada que limpiar.
 
 ## Fase 3 — UX y robustez (media)
 
@@ -49,12 +49,12 @@ Fecha: 2026-09-24. Rama origen: `feature/modal-gestionar-categorias`.
   - `accept-invite/page.tsx:36` (`!res.ok` → `status='error'`, antes redirigía a `/dashboard`)
   - `settings` y `billing`: verificados, ya chequeaban `res.ok`
 - [x] **3.2 Agregar `.catch()`** al `Promise.all` de `documentos/page.tsx:146-166` (unhandled rejection) — añadido catch, deja lista parcial/vacía
-- [ ] **3.3 Distinguir error vs vacío** — usar `isError` en products/codigos/loss-prevention
-- [ ] **3.4 Componente `ErrorState` compartido** + usarlo en dashboard, settings, providers, sales
-- [x] **3.5 Error boundaries** — `global-error.tsx` (con `<html>/<body>` propio como exige la doc), `error.tsx` anidados en products/sales/dashboard, `unstable_retry` → `retry` (prop estable en Next v16.3+), componente compartido `ErrorState` creado en `components/ui/error-state.tsx`.
-- [ ] **3.6 Loading states faltantes** — `loading.tsx` de ruta; gaps en settings y dashboard
-- [ ] **3.7 Empty states faltantes** — `TransferInbox`, colaboradores en settings
-- [ ] **3.8 Errores silenciosos** — `billing/page.tsx:78`, `TransferInbox`, `providers/page.tsx:153`, `sales/page.tsx`
+- [x] **3.3 Distinguir error vs vacío** — `products` (ErrorState + retry con `mutateProducts`) y `codigos` (ErrorState + retry con `mutate`) en vez de trompetear "sin resultados" ante un 5xx. `loss-prevention`: el historial ya manejaba errores con toast.
+- [x] **3.4 Componente `ErrorState` compartido** — creado `components/ui/error-state.tsx`; usado en `products`, `codigos`, `providers` (inline con retry vía `reloadKey`) y en los error boundaries. `dashboard` ya tenía su banner de error con retry (se conserva, es más informativo). `sales`/`settings` muestran el error vía toast.
+- [x] **3.5 Error boundaries** — `global-error.tsx` (con `<html>/<body>` propio como exige la doc), `error.tsx` anidados en products/sales/dashboard, `unstable_retry` → `retry` (prop estable en Next v16.3+), componente compartido `ErrorState`.
+- [x] **3.6 Loading states faltantes** — `RouteLoading` compartido (`components/ui/route-loading.tsx`) y `loading.tsx` en dashboard, settings, products, sales, documentos, providers, codigos, loss-prevention, customers, activity-logs, forecast, billing. El resto ya tenía skeletons en contenido.
+- [x] **3.7 Empty states faltantes** — colaboradores en settings ahora usa `EmptyState`; `TransferInbox` muestra error + "Reintentar" cuando falla la carga (y sigue oculto cuando no hay transferencias, que es el caso normal).
+- [x] **3.8 Errores silenciosos** — `billing:78` (toast si cae el status de suscripción, incluso en `!res.ok`), `TransferInbox` (estado de error con retry), `providers:153` (toast + `ErrorState`), `sales/page.tsx` (toasts en ventas, productos/clientes y ajustes de ticket; `fetchSales` ya no tira unhandled rejection).
 
 ## Fase 1.5 — Trust boundary: el backend revalida (CRÍTICA)
 
