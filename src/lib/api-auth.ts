@@ -20,15 +20,21 @@ export async function getAuth(request?: Request): Promise<AuthInfo | null> {
 
   if (!tu || tu.length === 0) return null;
 
-  const tenantIds = (tu ?? []).map((t) => t.tenant_id);
+  const allTenantIds = (tu ?? []).map((t) => t.tenant_id);
+  let tenantIds = allTenantIds;
   let tenantId = tenantIds[0];
   let allTenants = false;
 
   const activeTenantId = request?.headers.get('x-active-tenant-id');
   if (activeTenantId === '__all__') {
-    // El consolidado de sucursales queda restringido a owners.
-    const isOwner = tu.some((t) => t.role === 'owner');
-    allTenants = isOwner;
+    // El consolidado queda restringido a los tenants donde el usuario es owner
+    // (no a todos sus tenants de pertenencia).
+    const ownerTenants = (tu ?? []).filter((t) => t.role === 'owner').map((t) => t.tenant_id);
+    if (ownerTenants.length > 0) {
+      allTenants = true;
+      tenantId = ownerTenants[0];
+      tenantIds = ownerTenants;
+    }
   } else if (activeTenantId && tenantIds.includes(activeTenantId)) {
     tenantId = activeTenantId;
   }

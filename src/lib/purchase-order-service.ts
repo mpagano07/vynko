@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
 import type { AuthInfo } from '@/lib/api-auth';
+import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
 
 export type PurchaseOrderResult<T = unknown> =
   | { ok: true; data: T; status: number }
@@ -63,6 +64,11 @@ export async function createPurchaseOrder(
 ): Promise<PurchaseOrderResult> {
   try {
     const { supplier_id, expected_date, notes, status, items } = body;
+
+    const role = await getRoleInTenant(auth.userId, auth.tenantId);
+    if (!canManageTenant(role)) {
+      return { ok: false, error: 'Solo el dueño o un administrador puede crear pedidos', status: 403 };
+    }
 
     if (!supplier_id) {
       return { ok: false, error: 'Debes seleccionar un proveedor', status: 400 };
@@ -191,6 +197,11 @@ export async function updatePurchaseOrder(
 ): Promise<PurchaseOrderResult> {
   try {
     const { status } = body;
+
+    const role = await getRoleInTenant(auth.userId, auth.tenantId);
+    if (!canManageTenant(role)) {
+      return { ok: false, error: 'Solo el dueño o un administrador puede modificar pedidos', status: 403 };
+    }
 
     if (!status) {
       return { ok: false, error: 'Estado requerido', status: 400 };
@@ -340,6 +351,11 @@ export async function receivePurchaseOrder(
   body: ReceiveBody
 ): Promise<ReceivePurchaseOrderResult> {
   const { received_date, deposito, pasillo, estanteria, notes, items } = body;
+
+  const role = await getRoleInTenant(auth.userId, auth.tenantId);
+  if (!canManageTenant(role)) {
+    return { ok: false, error: 'Solo el dueño o un administrador puede recibir pedidos', status: 403 };
+  }
 
   if (!items || !Array.isArray(items) || items.length === 0) {
     return { ok: false, error: 'Debe haber al menos un producto', status: 400 };

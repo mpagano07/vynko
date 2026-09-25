@@ -339,6 +339,18 @@ export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<
     return { ok: false, error: 'El descuento o recargo no puede superar el 100%', status: 400 };
   }
 
+  if (customer_id) {
+    const { data: customer } = await supabaseAdmin
+      .from('customers')
+      .select('id')
+      .eq('id', customer_id)
+      .eq('tenant_id', auth.tenantId)
+      .maybeSingle();
+    if (!customer) {
+      return { ok: false, error: 'El cliente no pertenece a esta sucursal', status: 400 };
+    }
+  }
+
   const productIds = items.map((i) => i.product_id);
   const { data: products, error: prodError } = await supabaseAdmin
     .from('products')

@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
 import type { AuthInfo } from '@/lib/api-auth';
+import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
 
 export type StockTransferResult<T = unknown> =
   | { ok: true; data: T; status: number }
@@ -85,6 +86,14 @@ export async function createTransfer(
     return { ok: false, error: 'No tienes permisos sobre esos tenants', status: 403 };
   }
 
+  const [fromRole, toRole] = await Promise.all([
+    getRoleInTenant(auth.userId, from_tenant_id),
+    getRoleInTenant(auth.userId, to_tenant_id),
+  ]);
+  if (!canManageTenant(fromRole) || !canManageTenant(toRole)) {
+    return { ok: false, error: 'Solo el dueño o un administrador puede crear transferencias', status: 403 };
+  }
+
   if (!items || !Array.isArray(items) || items.length === 0) {
     return { ok: false, error: 'Debe incluir al menos un producto', status: 400 };
   }
@@ -162,10 +171,22 @@ export async function updateTransferStatus(
     return { ok: false, error: 'Transferencia no encontrada', status: 404 };
   }
 
-  const userCanAccess =
-    auth.tenantIds.includes(transfer.from_tenant_id) || auth.tenantIds.includes(transfer.to_tenant_id);
-  if (!userCanAccess) {
-    return { ok: false, error: 'No tienes permisos sobre esta transferencia', status: 403 };
+  // Dirección: enviar exige estar en el tenant origen; recibir, en el destino.
+  // (El rol owner/manager se valida en el tenant correspondiente, no solo la pertenencia.)
+  const activeRole = await getRoleInTenant(auth.userId, auth.tenantId);
+  if (!canManageTenant(activeRole)) {
+    return { ok: false, error: 'Solo el dueño o un administrador puede operar transferencias', status: 403 };
+  }
+
+  const directsTransfer =
+    (status === 'in_transit' && auth.tenantId === transfer.from_tenant_id) ||
+    (status === 'received' && auth.tenantId === transfer.to_tenant_id);
+  if (!directsTransfer) {
+    return {
+      ok: false,
+      error: 'No tenés permisos para esta acción: el envío lo realiza la sucursal origen y la recepción, la sucursal destino',
+      status: 403,
+    };
   }
 
   // Transiciones estrictas: no se puede volver atrás ni saltar estados.
@@ -304,11 +325,13 @@ export async function deleteTransfer(auth: AuthInfo, id: string): Promise<StockT
     return { ok: false, error: 'Solo se pueden cancelar transferencias pendientes de envío', status: 400 };
   }
 
-  if (
-    auth.tenantIds.includes(transfer.from_tenant_id) === false &&
-    auth.tenantIds.includes(transfer.to_tenant_id) === false
-  ) {
-    return { ok: false, error: 'No tienes permisos sobre esta transferencia', status: 403 };
+  if (auth.tenantId !== transfer.from_tenant_id) {
+    return { ok: false, error: 'Solo la sucursal origen puede cancelar la transferencia', status: 403 };
+  }
+
+  const originRole = await getRoleInTenant(auth.userId, transfer.from_tenant_id);
+  if (!canManageTenant(originRole)) {
+    return { ok: false, error: 'Solo el dueño o un administrador puede cancelar transferencias', status: 403 };
   }
 
   const { error: deleteError } = await supabaseAdmin

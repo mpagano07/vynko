@@ -94,6 +94,19 @@ describe('getAuth', () => {
     expect(auth?.tenantId).toBe('t1');
   });
 
+  it('con __all__ restringe el consolidado a los tenants donde es owner', async () => {
+    supabaseMock.__queue('tenant_users', {
+      data: [
+        { tenant_id: 't1', user_id: 'user-1', role: 'owner' },
+        { tenant_id: 't2', user_id: 'user-1', role: 'member' },
+      ],
+    });
+    const auth = await getAuth(makeRequest('__all__'));
+    expect(auth?.allTenants).toBe(true);
+    expect(auth?.tenantId).toBe('t1');
+    expect(auth?.tenantIds).toEqual(['t1']);
+  });
+
   it('ignora una sucursal activa a la que el usuario no pertenece', async () => {
     supabaseMock.__queue('tenant_users', {
       data: [

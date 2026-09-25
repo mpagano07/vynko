@@ -31,9 +31,9 @@ Fecha: 2026-09-24. Rama origen: `feature/modal-gestionar-categorias`.
   - Reemplazar `supabase.from('categories')` por `GET /api/categories`.
 - [x] **1.3 Restringir `__all__` a rol owner** — `src/lib/api-auth.ts:29-30`
   - El header `x-active-tenant-id: __all__` solo habilita `allTenants` si el usuario es `owner` en al menos una sucursal. Test actualizado.
-- [ ] **1.4 `.env` en `.gitignore` + `.env.example`**
-  - Agregar `.env` plano al `.gitignore`.
-  - Crear `.env.example` con las 9 variables documentadas.
+- [x] **1.4 `.env` en `.gitignore` + `.env.example`**
+  - Agregado `.env` plano al `.gitignore` (con excepción `!.env.example`).
+  - Creado `.env.example` con las 14 variables documentadas.
 
 ## Fase 2 — Higiene (baja)
 
@@ -63,17 +63,17 @@ pero hay huecos donde el cliente manda valores absolutos o estados sin revalidac
 - [x] **1.5.1 `sales-service.ts:367`**: validar `quantity` entero positivo (`> 0`). Hoy un `quantity: -2` fabricado infla stock (CAS hace `stock - (-2)`).
 - [x] **1.5.2 `updateProduct` (PATCH) `product-service.ts:201-297`**: client manda stock absoluto sin validar (negativo/fraccionario permitido, `-50`). Reutilizar `validateProduct`/`validateStock` (>= 0, entero) y escribir `stock_history`.
 - [x] **1.5.3 `importProducts` `product-service.ts:370-510`**: idem — price/stock/cost sin validar; sin `stock_history`.
-- [ ] **1.5.4 Migración `033_stock_checks.sql`**: CHECK constraints a nivel DB como backstop (`stock >= 0`, price/cost >= 0).
-- [ ] **1.5.5 `customer_id` en ventas `sales-service.ts:515`**: validar que el customer pertenezca al tenant activo (hoy filtra foreign names en el join).
+- [x] **1.5.4 Migración `033_stock_checks.sql`**: CHECK constraints a nivel DB como backstop (`stock >= 0`, price/cost >= 0), con `NOT VALID` para no romper con datos legados.
+- [x] **1.5.5 `customer_id` en ventas `sales-service.ts:515`**: validar que el customer pertenezca al tenant activo (hoy filtra foreign names en el join).
 
 ### Estados
 - [x] **1.5.6 `stock-transfer-service.ts:145-173`**: prohibir `in_transit → pending` sin revertir el stock de origen (hoy re-envío deduce el stock dos veces). Hacer send/receive transaccional (CAS con reintentos).
 - [x] **1.5.7 `purchase-order-service.ts`**: state machine real en PATCH status (hoy cualquier estado → cualquier estado). `received` re-credita `quantity_ordered` completo cada vez (stock inflation). Freeze receive de órdenes ya `received`/`cancelled` y cap de `quantity_received` <= ordered.
 
 ### Permisos / ownership
-- [ ] **1.5.8 Role check server-side en transfers y POs** (hoy `member` puede crear/enviar/recibir/cancelar). Validar dirección sender/receiver con el tenant activo, no solo esconder botones en la UI.
-- [ ] **1.5.9 Caja registradora**: hoy el check solo bloquea `viewer`; confirmar si `member` puede operar caja (política).
-- [ ] **1.5.10 `__all__`**: restringir el consolidado a los tenants donde el usuario es owner (hoy abarca todos sus tenants; la restricción por owner quedó "aproximada").
+- [x] **1.5.8 Role check server-side en transfers y POs**: crear/enviar/recibir/cancelar exige `owner`/`manager`. Dirección validada con el tenant activo: envía solo la sucursal origen, recibe solo la destino, cancela solo el origen. Helper compartido `membership-role.ts`.
+- [x] **1.5.9 Caja registradora**: política confirmada con el dueño del proyecto: se **mantiene** que `member` puede operar caja (bloqueo solo a `viewer`). Sin cambios de código.
+- [x] **1.5.10 `__all__`**: el consolidado (`tenantIds`) queda restringido a los tenants donde el usuario es `owner`, no a todos sus tenants.
 
 ### Bien cubierto (verificado)
 - Ventas: precio re-leído de DB, ajustes por método desde config del tenant, split validado contra total server, stock con CAS atómico + rollback, status hardcodeado.

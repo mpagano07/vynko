@@ -40,6 +40,8 @@ yarn-error.log*
 .env*.local
 .env*.development
 .env*.production
+.env
+!.env.example
 
 # db sync (prod -> dev)
 .env.db
