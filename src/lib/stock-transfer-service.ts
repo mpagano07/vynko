@@ -146,6 +146,12 @@ export async function updateTransferStatus(
     return { ok: false, error: 'Estado inválido', status: 400 };
   }
 
+  const TRANSFER_TRANSITIONS: Record<string, string[]> = {
+    pending: ['in_transit'],
+    in_transit: ['received'],
+    received: [],
+  };
+
   const { data: transfer, error: fetchError } = await supabaseAdmin
     .from('stock_transfers')
     .select('*')
@@ -162,16 +168,12 @@ export async function updateTransferStatus(
     return { ok: false, error: 'No tienes permisos sobre esta transferencia', status: 403 };
   }
 
-  if (transfer.status === 'received') {
-    return { ok: false, error: 'La transferencia ya fue recibida', status: 400 };
-  }
-
-  if (status === 'in_transit' && transfer.status !== 'pending') {
-    return { ok: false, error: 'Solo se puede enviar una transferencia pendiente', status: 400 };
-  }
-
-  if (status === 'received' && transfer.status !== 'in_transit') {
-    return { ok: false, error: 'La transferencia debe estar en tránsito para recibirse', status: 400 };
+  // Transiciones estrictas: no se puede volver atrás ni saltar estados.
+  // En particular in_transit -> pending queda prohibido (el stock de origen
+  // ya fue descontado y no se revierte).
+  const allowedNext = TRANSFER_TRANSITIONS[transfer.status as string] ?? [];
+  if (!allowedNext.includes(status)) {
+    return { ok: false, error: `No se puede cambiar la transferencia de "${transfer.status}" a "${status}"`, status: 400 };
   }
 
   const { data: items, error: itemsError } = await supabaseAdmin
@@ -185,40 +187,46 @@ export async function updateTransferStatus(
 
   if (status === 'in_transit') {
     for (const item of items) {
-      const { data: stock } = await supabaseAdmin
-        .from('product_stock')
-        .select('stock')
-        .eq('product_id', item.product_id)
-        .eq('tenant_id', transfer.from_tenant_id)
-        .single();
+      let deducted = false;
+      for (let attempt = 0; attempt < 5 && !deducted; attempt++) {
+        const { data: stock } = await supabaseAdmin
+          .from('product_stock')
+          .select('stock')
+          .eq('product_id', item.product_id)
+          .eq('tenant_id', transfer.from_tenant_id)
+          .maybeSingle();
 
-      const currentStock = stock?.stock ?? 0;
-      if (currentStock < item.quantity) {
-        const itemWithProduct = item as { product?: { name?: string } };
-        const productName = itemWithProduct.product?.name || 'Producto';
-        return {
-          ok: false,
-          error: `Stock insuficiente de "${productName}" en origen. Disponible: ${currentStock}, requerido: ${item.quantity}`,
-          status: 400,
-        };
+        const currentStock = stock?.stock ?? 0;
+        if (currentStock < item.quantity) {
+          const itemWithProduct = item as { product?: { name?: string } };
+          const productName = itemWithProduct.product?.name || 'Producto';
+          return {
+            ok: false,
+            error: `Stock insuficiente de "${productName}" en origen. Disponible: ${currentStock}, requerido: ${item.quantity}`,
+            status: 400,
+          };
+        }
+
+        // Decremento con optimistic concurrency: solo aplica si nadie modificó
+        // el stock desde la lectura. Si no lo logra, reintenta.
+        const { data: updated, error: updateError } = await supabaseAdmin
+          .from('product_stock')
+          .update({ stock: currentStock - item.quantity, updated_at: new Date().toISOString() })
+          .eq('product_id', item.product_id)
+          .eq('tenant_id', transfer.from_tenant_id)
+          .eq('stock', currentStock)
+          .select('id')
+          .maybeSingle();
+
+        if (updateError) {
+          return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
+        }
+        if (updated) deducted = true;
       }
-    }
 
-    for (const item of items) {
-      const { data: stock } = await supabaseAdmin
-        .from('product_stock')
-        .select('stock')
-        .eq('product_id', item.product_id)
-        .eq('tenant_id', transfer.from_tenant_id)
-        .single();
-
-      const currentStock = stock?.stock ?? 0;
-
-      await supabaseAdmin
-        .from('product_stock')
-        .update({ stock: currentStock - item.quantity, updated_at: new Date().toISOString() })
-        .eq('product_id', item.product_id)
-        .eq('tenant_id', transfer.from_tenant_id);
+      if (!deducted) {
+        return { ok: false, error: 'No se pudo actualizar el stock de origen. Intenta de nuevo.', status: 409 };
+      }
 
       await supabaseAdmin
         .from('stock_history')
@@ -235,38 +243,16 @@ export async function updateTransferStatus(
 
   if (status === 'received') {
     for (const item of items) {
-      const { data: stock } = await supabaseAdmin
-        .from('product_stock')
-        .select('stock')
-        .eq('product_id', item.product_id)
-        .eq('tenant_id', transfer.to_tenant_id)
-        .single();
-
-      const currentStock = stock?.stock ?? 0;
-
-      await supabaseAdmin
-        .from('product_stock')
-        .upsert(
-          {
-            product_id: item.product_id,
-            tenant_id: transfer.to_tenant_id,
-            stock: currentStock + item.quantity,
-            min_stock: 0,
-            max_stock: 0,
-          },
-          { onConflict: 'product_id,tenant_id' }
-        );
-
-      await supabaseAdmin
-        .from('stock_history')
-        .insert({
-          tenant_id: transfer.to_tenant_id,
-          product_id: item.product_id,
-          quantity: item.quantity,
-          type: 'transfer',
-          reason: `Transferencia desde ${transfer.from_tenant_id}`,
-          created_by: auth.userId,
-        });
+      const creditResult = await creditDestinationStock(
+        transfer.from_tenant_id,
+        transfer.to_tenant_id,
+        item.product_id,
+        item.quantity,
+        auth.userId
+      );
+      if (!creditResult.ok) {
+        return { ok: false, error: creditResult.error, status: creditResult.status };
+      }
     }
   }
 
@@ -345,4 +331,81 @@ export async function deleteTransfer(auth: AuthInfo, id: string): Promise<StockT
   });
 
   return { ok: true, data: { success: true }, status: 200 };
+}
+
+type CreditResult = { ok: true } | { ok: false; error: string; status: number };
+
+/**
+ * Crédita stock en el tenant destino con optimistic concurrency:
+ * 1) si la fila existe, la actualiza con guarda `stock = currentStock`;
+ * 2) si no existe, la inserta (si otro request la creó en el mientras, el loop
+ *    reintenta con el update). Previene doble acreditación por requests
+ *    concurrentes contra la misma transferencia.
+ */
+async function creditDestinationStock(
+  fromTenantId: string,
+  toTenantId: string,
+  productId: string,
+  quantity: number,
+  createdBy: string
+): Promise<CreditResult> {
+  let credited = false;
+  for (let attempt = 0; attempt < 5 && !credited; attempt++) {
+    const { data: stock } = await supabaseAdmin
+      .from('product_stock')
+      .select('stock')
+      .eq('product_id', productId)
+      .eq('tenant_id', toTenantId)
+      .maybeSingle();
+
+    if (stock) {
+      const currentStock = Number(stock.stock) || 0;
+      const { data: updated, error } = await supabaseAdmin
+        .from('product_stock')
+        .update({ stock: currentStock + quantity, updated_at: new Date().toISOString() })
+        .eq('product_id', productId)
+        .eq('tenant_id', toTenantId)
+        .eq('stock', currentStock)
+        .select('id')
+        .maybeSingle();
+
+      if (error) {
+        return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
+      }
+      if (updated) credited = true;
+    } else {
+      const { data: inserted, error } = await supabaseAdmin
+        .from('product_stock')
+        .insert({
+          product_id: productId,
+          tenant_id: toTenantId,
+          stock: quantity,
+          min_stock: 0,
+          max_stock: 0,
+        })
+        .select('id')
+        .maybeSingle();
+
+      if (error) {
+        if (error.code === '23505') continue; // unique (product_id,tenant_id): reintentar update
+        return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
+      }
+      if (inserted) credited = true;
+    }
+  }
+
+  if (!credited) {
+    return { ok: false, error: 'No se pudo actualizar el stock de destino. Intenta de nuevo.', status: 409 };
+  }
+
+  await supabaseAdmin.from('stock_history').insert({
+    tenant_id: toTenantId,
+    product_id: productId,
+    quantity,
+    type: 'transfer',
+    reason: `Transferencia desde ${fromTenantId}`,
+    created_by: createdBy,
+  });
+
+  return { ok: true };
 }

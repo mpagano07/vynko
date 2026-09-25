@@ -364,7 +364,10 @@ export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<
     const product = productMap.get(item.product_id);
     if (!product) throw new Error(`Producto no encontrado: ${item.product_id}`);
 
-    const quantity = Number(item.quantity) || 1;
+    const quantity = Number(item.quantity);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new Error(`La cantidad de "${product.name}" debe ser un número entero mayor a 0`);
+    }
     const unit_price_cents = product.price_cents ?? Math.round(Number(product.price) * 100);
     const subtotal_cents = quantity * unit_price_cents;
 

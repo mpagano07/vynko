@@ -5,8 +5,7 @@ import Image from 'next/image';
 import { useProducts } from '@/lib/hooks/useProducts';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { usePagination } from '@/lib/hooks/usePagination';
-import { supabase } from '@/lib/supabaseClient';
-import { fixResponse } from '@/lib/utils/encoding';
+import { fetchWithTenant } from '@/lib/fetchWithTenant';
 import { matchesQuery } from '@/lib/utils/text';
 import { Card } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
@@ -43,12 +42,16 @@ export default function CodigosPage() {
   useEffect(() => {
     if (!tenantId) return;
     (async () => {
-      const { data } = await supabase
-        .from('categories')
-        .select('id, name')
-        .eq('tenant_id', tenantId)
-        .order('name');
-      if (data) setCategories(fixResponse(data));
+      try {
+        const res = await fetchWithTenant('/api/categories');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setCategories(data.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })));
+        }
+      } catch {
+        setCategories([]);
+      }
     })();
   }, [tenantId]);
 

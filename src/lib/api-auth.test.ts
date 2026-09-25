@@ -70,15 +70,27 @@ describe('getAuth', () => {
     expect(auth?.tenantIds).toEqual(['t1', 't2']);
   });
 
-  it('marca allTenants cuando la sucursal activa es __all__', async () => {
+  it('marca allTenants cuando la sucursal activa es __all__ y el usuario es owner', async () => {
     supabaseMock.__queue('tenant_users', {
       data: [
-        { tenant_id: 't1', user_id: 'user-1' },
-        { tenant_id: 't2', user_id: 'user-1' },
+        { tenant_id: 't1', user_id: 'user-1', role: 'owner' },
+        { tenant_id: 't2', user_id: 'user-1', role: 'owner' },
       ],
     });
     const auth = await getAuth(makeRequest('__all__'));
     expect(auth?.allTenants).toBe(true);
+    expect(auth?.tenantId).toBe('t1');
+  });
+
+  it('no marca allTenants con __all__ si el usuario no es owner', async () => {
+    supabaseMock.__queue('tenant_users', {
+      data: [
+        { tenant_id: 't1', user_id: 'user-1', role: 'staff' },
+        { tenant_id: 't2', user_id: 'user-1', role: 'staff' },
+      ],
+    });
+    const auth = await getAuth(makeRequest('__all__'));
+    expect(auth?.allTenants).toBe(false);
     expect(auth?.tenantId).toBe('t1');
   });
 

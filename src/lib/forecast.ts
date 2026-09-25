@@ -1,6 +1,4 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { formatARS } from '@/lib/utils/currency';
 
 export interface ForecastPrediction {
   productId: string;
@@ -54,43 +52,12 @@ export interface ForecastPayload {
   upcomingStockout: ForecastUpcomingStockout[];
   summary: ForecastSummary;
   trends: ForecastTrends;
-  aiAnalysis: string | null;
 }
 
 function trendPct(current: number, prior: number): number | null {
   if (prior === 0 && current === 0) return null;
   if (prior === 0) return 100;
   return Math.round(((current - prior) / prior) * 100);
-}
-
-async function generateAiAnalysis(params: {
-  apiKey: string;
-  topProducts: ForecastPrediction[];
-  needsReorder: ForecastPrediction[];
-  totalSales30: number;
-  totalTransactions: number;
-}): Promise<string | null> {
-  try {
-    const genAI = new GoogleGenerativeAI(params.apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-    const prompt = `Analizá estos datos de demanda de productos para un negocio:
-
-Productos con más demanda (top 5):
-${params.topProducts.map((p) => `- ${p.productName}: ${p.avgDailySales}/día, ${p.projectedMonthlyDemand}/mes proyectado, stock actual: ${p.currentStock}`).join('\n')}
-
-Productos que necesitan reposición:
-${params.needsReorder.map((p) => `- ${p.productName}: stock ${p.currentStock}, venta diaria ${p.avgDailySales}, sugerido: ${p.suggestedOrder}`).join('\n')}
-
-Ventas totales últimos 30 días: ${formatARS(params.totalSales30)} (${params.totalTransactions} transacciones)
-
-Dame un análisis breve (3-4 oraciones) en español destacando tendencias y recomendaciones.`;
-
-    const result = await model.generateContent(prompt, { timeout: 2500 });
-    return result.response.text();
-  } catch (e) {
-    console.error('Gemini forecast analysis error:', e);
-    return null;
-  }
 }
 
 export async function getForecast(tenantId: string): Promise<ForecastPayload> {
@@ -249,18 +216,6 @@ export async function getForecast(tenantId: string): Promise<ForecastPayload> {
     return stock <= projectedMonthly * 0.5 || stock <= minStock;
   }).length;
 
-  let aiAnalysis: string | null = null;
-  const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (apiKey && apiKey !== 'YOUR_GOOGLE_AI_API_KEY') {
-    aiAnalysis = await generateAiAnalysis({
-      apiKey,
-      topProducts,
-      needsReorder,
-      totalSales30,
-      totalTransactions,
-    });
-  }
-
   return {
     predictions,
     topProducts,
@@ -284,6 +239,5 @@ export async function getForecast(tenantId: string): Promise<ForecastPayload> {
       productsWithSales: trendPct(productsWithSales, priorProductsWithSales),
       needsReorder: trendPct(needsReorder.length, priorNeedsReorderCount),
     },
-    aiAnalysis,
   };
 }
