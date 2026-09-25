@@ -161,7 +161,10 @@ export default function DocumentosPage() {
       }
       if (suppRes.ok) setSuppliers(await suppRes.json());
       if (poRes.ok) setPurchaseOrders(await poRes.json());
-    })().finally(() => {
+    })().catch(() => {
+      // Sin manejo especial: si alguna request falla (red 5xx/offline), se evita
+      // un unhandled rejection y se deja la lista parcial/vacía.
+    }).finally(() => {
       if (!cancelled) setLoading(false);
     });
 

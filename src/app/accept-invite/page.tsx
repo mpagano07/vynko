@@ -33,6 +33,10 @@ export default function AcceptInvitePage() {
             'x-refresh-token': session.refresh_token ?? '',
           },
         });
+        if (!res.ok) {
+          setStatus('error');
+          return;
+        }
         const data = await res.json();
 
         if (data.accepted > 0) {

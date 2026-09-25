@@ -43,9 +43,12 @@ Fecha: 2026-09-24. Rama origen: `feature/modal-gestionar-categorias`.
 
 ## Fase 3 — UX y robustez (media)
 
-- [ ] **3.1 Corregir `res.json()` antes de `res.ok`** — `scanning/page.tsx`, `sales/page.tsx:387`, `accept-invite/page.tsx`, `settings/page.tsx`, `billing/page.tsx`
-  - Crítico: scanning interpreta un error 5xx como "código no encontrado" y deriva a crear producto.
-- [ ] **3.2 Agregar `.catch()`** al `Promise.all` de `documentos/page.tsx:146-166` (unhandled rejection)
+- [x] **3.1 Corregir `res.json()` antes de `res.ok`** — casos reales fixeados:
+  - `scanning/page.tsx:71` (crítico: un 5xx ya no crea un producto falso; ahora `!res.ok` → estado `error`)
+  - `sales/page.tsx:388` (`!res.ok` → throw → cae en toast de error, no "no encontrado")
+  - `accept-invite/page.tsx:36` (`!res.ok` → `status='error'`, antes redirigía a `/dashboard`)
+  - `settings` y `billing`: verificados, ya chequeaban `res.ok`
+- [x] **3.2 Agregar `.catch()`** al `Promise.all` de `documentos/page.tsx:146-166` (unhandled rejection) — añadido catch, deja lista parcial/vacía
 - [ ] **3.3 Distinguir error vs vacío** — usar `isError` en products/codigos/loss-prevention
 - [ ] **3.4 Componente `ErrorState` compartido** + usarlo en dashboard, settings, providers, sales
 - [ ] **3.5 Error boundaries** — `global-error.tsx`, nested `error.tsx` (products/sales/dashboard), `unstable_retry` → `retry`
