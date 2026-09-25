@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getAuth } from '@/lib/api-auth';
 import { supabaseMock } from '@/test/supabase-mock';
 import { GET } from './route';
@@ -11,6 +11,7 @@ const mockAuth = {
 };
 
 const rateLimitMock = vi.hoisted(() => vi.fn());
+const googleGenerativeAIMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/api-auth', () => ({
   getAuth: vi.fn(async () => mockAuth),
@@ -25,20 +26,8 @@ vi.mock('@/lib/rate-limit', () => ({
 }));
 
 vi.mock('@google/generative-ai', () => ({
-  GoogleGenerativeAI: vi.fn(function () {
-    return {
-      getGenerativeModel: function () {
-        return {
-          generateContent: async () => ({
-            response: { text: () => 'Análisis de prueba' },
-          }),
-        };
-      },
-    };
-  }),
+  GoogleGenerativeAI: googleGenerativeAIMock,
 }));
-
-const originalApiKey = process.env.GOOGLE_AI_API_KEY;
 
 function makeRequest(): Request {
   return new Request('http://localhost/api/ai/forecast', { method: 'GET' });
@@ -87,14 +76,9 @@ function queueForecastData() {
 describe('GET /api/ai/forecast', () => {
   beforeEach(() => {
     supabaseMock.__reset();
+    googleGenerativeAIMock.mockClear();
     vi.mocked(getAuth).mockResolvedValue(mockAuth);
     rateLimitMock.mockReturnValue({ ok: true, retryAfterSeconds: 0 });
-    process.env.GOOGLE_AI_API_KEY = 'test-key';
-  });
-
-  afterEach(() => {
-    if (originalApiKey === undefined) delete process.env.GOOGLE_AI_API_KEY;
-    else process.env.GOOGLE_AI_API_KEY = originalApiKey;
   });
 
   it('devuelve 401 sin autenticación', async () => {
@@ -108,6 +92,12 @@ describe('GET /api/ai/forecast', () => {
     const res = await GET(makeRequest());
     expect(res.status).toBe(429);
     expect(res.headers.get('Retry-After')).toBe('5');
+  });
+
+  it('no llama a Gemini al consultar el pronóstico', async () => {
+    queueForecastData();
+    await GET(makeRequest());
+    expect(googleGenerativeAIMock).not.toHaveBeenCalled();
   });
 
   it('incluye TODOS los productos activos, incluso sin ventas, con campos en cero', async () => {
@@ -175,7 +165,7 @@ describe('GET /api/ai/forecast', () => {
     expect(byId('p3').daysUntilStockout).toBeNull();
   });
 
-  it('calcula métricas y tendencias y agrega el análisis IA', async () => {
+  it('calcula métricas y tendencias', async () => {
     queueForecastData();
     const res = await GET(makeRequest());
     const json = await res.json();
@@ -184,7 +174,6 @@ describe('GET /api/ai/forecast', () => {
     expect(json.summary.totalTransactions30).toBe(5);
     expect(json.trends.totalSales).toBe(25);
     expect(json.trends.productsWithSales).toBe(100); // 2 ahora vs 0 en el período anterior
-    expect(json.aiAnalysis).toBe('Análisis de prueba');
   });
 
   it('exponen los KPIs de acción (sugerencia 15 días, quiebre, capital inmovilizado, efectividad)', async () => {

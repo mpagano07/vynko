@@ -24,7 +24,16 @@ vi.mock('recharts', async () => {
     React.createElement('div', null, children);
   const Null = () => React.createElement('div', null);
   return {
-    ResponsiveContainer: Stub,
+    ResponsiveContainer: ({
+      children,
+      initialDimension,
+    }: {
+      children?: React.ReactNode;
+      initialDimension?: { width: number; height: number };
+    }) => React.createElement('div', {
+      'data-initial-width': initialDimension?.width,
+      'data-initial-height': initialDimension?.height,
+    }, children),
     BarChart: Stub,
     Bar: Null,
     XAxis: Null,
@@ -139,7 +148,6 @@ const payload = {
     stockEffectivenessPct: 75,
   },
   trends: null,
-  aiAnalysis: null,
 };
 
 const fetchHandler = vi.fn();
@@ -174,6 +182,14 @@ describe('ForecastPage', () => {
     expect(within(panel).getByText('Medio')).toBeInTheDocument();
     expect(within(panel).getByText(/— quedan 2 u/)).toBeInTheDocument();
     expect(within(panel).getByText(/— quedan 20 u/)).toBeInTheDocument();
+  });
+
+  it('inicializa el gráfico con dimensiones válidas', async () => {
+    render(<ForecastPage />);
+    await screen.findByText('Efectividad del stock');
+
+    const chart = document.querySelector('[data-initial-width="100"]');
+    expect(chart).toHaveAttribute('data-initial-height', '160');
   });
 
   it('marca como "Sin movimiento" solo a los que vendieron 0 y muestra "—"/"<0.1" en demanda', async () => {

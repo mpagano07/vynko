@@ -385,6 +385,7 @@ export default function SalesPage() {
   const handleScanBarcode = async (code: string) => {
     try {
       const res = await authFetch(`/api/products/barcode/${encodeURIComponent(code)}`);
+      if (!res.ok) throw new Error('Error al buscar producto');
       const data = await res.json();
       if (data.product) {
         const p = data.product;

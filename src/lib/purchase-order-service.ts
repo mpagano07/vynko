@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
 import type { AuthInfo } from '@/lib/api-auth';
+import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
 
 export type PurchaseOrderResult<T = unknown> =
   | { ok: true; data: T; status: number }
@@ -64,6 +65,11 @@ export async function createPurchaseOrder(
   try {
     const { supplier_id, expected_date, notes, status, items } = body;
 
+    const role = await getRoleInTenant(auth.userId, auth.tenantId);
+    if (!canManageTenant(role)) {
+      return { ok: false, error: 'Solo el dueño o un administrador puede crear pedidos', status: 403 };
+    }
+
     if (!supplier_id) {
       return { ok: false, error: 'Debes seleccionar un proveedor', status: 400 };
     }
@@ -90,7 +96,11 @@ export async function createPurchaseOrder(
       const product = productMap.get(item.product_id);
       if (!product) throw new Error(`Producto no encontrado: ${item.product_id}`);
 
-      const quantity = Number(item.quantity) || 1;
+      const rawQuantity = Number(item.quantity);
+      if (!Number.isFinite(rawQuantity) || rawQuantity <= 0) {
+        throw new Error(`Cantidad inválida para "${product.name}"`);
+      }
+      const quantity = rawQuantity;
       const unit_cost_cents = item.unit_cost != null
         ? Math.round(Number(item.unit_cost) * 100)
         : (product.cost_cents ?? Math.round(Number(product.cost) * 100));
@@ -183,26 +193,61 @@ export async function createPurchaseOrder(
 export async function updatePurchaseOrder(
   auth: AuthInfo,
   id: string,
-  body: { status?: string; received_date?: string }
+  body: { status?: string }
 ): Promise<PurchaseOrderResult> {
   try {
-    const { status, received_date } = body;
+    const { status } = body;
 
-    const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
-
-    if (status) {
-      const validStatuses = ['draft', 'sent', 'partial', 'received', 'cancelled'];
-      if (!validStatuses.includes(status)) {
-        return { ok: false, error: 'Estado inválido', status: 400 };
-      }
-      updateData.status = status;
-
-      if (status === 'received') {
-        updateData.received_date = received_date || new Date().toISOString().split('T')[0];
-      }
+    const role = await getRoleInTenant(auth.userId, auth.tenantId);
+    if (!canManageTenant(role)) {
+      return { ok: false, error: 'Solo el dueño o un administrador puede modificar pedidos', status: 403 };
     }
 
-    const { data: order, error: poError } = await supabaseAdmin
+    if (!status) {
+      return { ok: false, error: 'Estado requerido', status: 400 };
+    }
+
+    const validStatuses = ['draft', 'sent', 'partial', 'received', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      return { ok: false, error: 'Estado inválido', status: 400 };
+    }
+
+    if (status === 'received') {
+      return { ok: false, error: 'Marca el pedido como recibido desde la recepción', status: 400 };
+    }
+
+    // State machine: transiciones válidas vía PATCH. El único camino a
+    // 'received' es receivePurchaseOrder (que acredita stock una sola vez).
+    const PATCH_TRANSITIONS: Record<string, string[]> = {
+      draft: ['sent', 'cancelled'],
+      sent: ['cancelled'],
+      partial: ['cancelled'],
+      received: [],
+      cancelled: [],
+    };
+
+    const { data: order, error: fetchError } = await supabaseAdmin
+      .from('purchase_orders')
+      .select('*')
+      .eq('id', id)
+      .eq('tenant_id', auth.tenantId)
+      .single();
+
+    if (fetchError || !order) {
+      return { ok: false, error: 'Pedido no encontrado', status: 404 };
+    }
+
+    const allowedNext = PATCH_TRANSITIONS[order.status as string] ?? [];
+    if (!allowedNext.includes(status)) {
+      return { ok: false, error: `No se puede cambiar el pedido de "${order.status}" a "${status}"`, status: 400 };
+    }
+
+    const updateData: Record<string, unknown> = {
+      status,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data: updatedOrder, error: poError } = await supabaseAdmin
       .from('purchase_orders')
       .update(updateData)
       .eq('id', id)
@@ -215,63 +260,16 @@ export async function updatePurchaseOrder(
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }
 
-    if (status === 'received') {
-      const { data: items } = await supabaseAdmin
-        .from('purchase_order_items')
-        .select('*, product:products(id, name)')
-        .eq('purchase_order_id', id);
-
-      for (const item of (items as Record<string, unknown>[] | undefined) ?? []) {
-        const product = item.product as Record<string, unknown> | undefined;
-        const qty = Number(item.quantity_ordered) || 0;
-        const productId = item.product_id as string;
-
-        if (product && qty > 0) {
-          const { data: stockRow } = await supabaseAdmin
-            .from('product_stock')
-            .select('stock')
-            .eq('product_id', productId)
-            .eq('tenant_id', auth.tenantId)
-            .maybeSingle();
-
-          const currentStock = Number((stockRow as Record<string, unknown> | null)?.stock) || 0;
-
-          await supabaseAdmin
-            .from('product_stock')
-            .upsert(
-              {
-                product_id: productId,
-                tenant_id: auth.tenantId,
-                stock: currentStock + qty,
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: 'product_id,tenant_id' }
-            );
-
-          await supabaseAdmin
-            .from('stock_history')
-            .insert({
-              tenant_id: auth.tenantId,
-              product_id: productId,
-              quantity: qty,
-              type: 'in',
-              reason: `Recepción PO #${id.slice(0, 8)}`,
-              created_by: auth.userId,
-            });
-        }
-      }
-    }
-
     await createActivityLog({
       tenantId: auth.tenantId,
       userId: auth.userId,
-      action: status === 'received' ? 'received' : 'cancelled',
+      action: 'cancelled',
       entityType: 'purchase_order',
       entityId: id,
       details: { folio: id.slice(0, 8) },
     });
 
-    return { ok: true, data: order, status: 200 };
+    return { ok: true, data: updatedOrder, status: 200 };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Error al actualizar pedido';
     return { ok: false, error: message, status: 400 };
@@ -354,6 +352,11 @@ export async function receivePurchaseOrder(
 ): Promise<ReceivePurchaseOrderResult> {
   const { received_date, deposito, pasillo, estanteria, notes, items } = body;
 
+  const role = await getRoleInTenant(auth.userId, auth.tenantId);
+  if (!canManageTenant(role)) {
+    return { ok: false, error: 'Solo el dueño o un administrador puede recibir pedidos', status: 403 };
+  }
+
   if (!items || !Array.isArray(items) || items.length === 0) {
     return { ok: false, error: 'Debe haber al menos un producto', status: 400 };
   }
@@ -367,6 +370,13 @@ export async function receivePurchaseOrder(
 
   if (poError || !order) {
     return { ok: false, error: 'Pedido no encontrado', status: 404 };
+  }
+
+  if (order.status === 'received') {
+    return { ok: false, error: 'El pedido ya fue recibido', status: 400 };
+  }
+  if (order.status === 'cancelled') {
+    return { ok: false, error: 'El pedido fue cancelado', status: 400 };
   }
 
   const supplier = order.supplier as Record<string, unknown> | undefined;
@@ -401,14 +411,40 @@ export async function receivePurchaseOrder(
     return { ok: false, error: 'El pedido no tiene productos', status: 400 };
   }
 
+  // Valida y capita cada cantidad a recibir: entero positivo, nunca mayor al
+  // saldo pendiente (quantity_ordered - quantity_received).
+  const receivingQuantities = new Map<string, number>();
+  let atLeastOne = false;
+  for (const item of poItems as Record<string, unknown>[]) {
+    const productId = item.product_id as string;
+    const orderedQty = Number(item.quantity_ordered) || 0;
+    const currentQtyReceived = Number(item.quantity_received) || 0;
+
+    const receivedItem = items.find((i: { product_id: string }) => i.product_id === productId);
+    const requested = Number(receivedItem?.quantity_received) || 0;
+
+    if (requested <= 0 || !Number.isInteger(requested)) {
+      receivingQuantities.set(productId, 0);
+      continue;
+    }
+
+    const pending = Math.max(0, orderedQty - currentQtyReceived);
+    const capped = Math.min(requested, pending);
+    receivingQuantities.set(productId, capped);
+    if (capped > 0) atLeastOne = true;
+  }
+
+  if (!atLeastOne) {
+    return { ok: false, error: 'Ingresa una cantidad válida para recibir', status: 400 };
+  }
+
   const remitoItems = poItems.map((item: Record<string, unknown>) => {
     const product = item.product as Record<string, unknown> | undefined;
     const productId = item.product_id as string;
     const productName = (product?.name as string) || 'Producto';
     const unitCostCents = Number(item.unit_cost_cents) || 0;
 
-    const receivedItem = items.find((i: { product_id: string }) => i.product_id === productId);
-    const qtyReceivingNow = receivedItem?.quantity_received || 0;
+    const qtyReceivingNow = receivingQuantities.get(productId) || 0;
 
     return {
       product_id: productId,
@@ -474,9 +510,7 @@ export async function receivePurchaseOrder(
     const productId = item.product_id as string;
     const orderedQty = Number(item.quantity_ordered) || 0;
     const currentQtyReceived = Number(item.quantity_received) || 0;
-
-    const receivedItem = items.find((i: { product_id: string }) => i.product_id === productId);
-    const qtyReceivingNow = receivedItem?.quantity_received || 0;
+    const qtyReceivingNow = receivingQuantities.get(productId) || 0;
 
     if (qtyReceivingNow > 0) {
       const newQtyReceived = currentQtyReceived + qtyReceivingNow;

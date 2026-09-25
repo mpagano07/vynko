@@ -15,19 +15,26 @@ export async function getAuth(request?: Request): Promise<AuthInfo | null> {
 
   const { data: tu } = await supabaseAdmin
     .from('tenant_users')
-    .select('tenant_id')
+    .select('tenant_id, role')
     .eq('user_id', user.id);
 
   if (!tu || tu.length === 0) return null;
 
-  /* v8 ignore next -- 'tu' siempre es un array no vacío acá (guard en línea 21) */
-  const tenantIds = (tu ?? []).map((t) => t.tenant_id);
+  const allTenantIds = (tu ?? []).map((t) => t.tenant_id);
+  let tenantIds = allTenantIds;
   let tenantId = tenantIds[0];
   let allTenants = false;
 
   const activeTenantId = request?.headers.get('x-active-tenant-id');
   if (activeTenantId === '__all__') {
-    allTenants = true;
+    // El consolidado queda restringido a los tenants donde el usuario es owner
+    // (no a todos sus tenants de pertenencia).
+    const ownerTenants = (tu ?? []).filter((t) => t.role === 'owner').map((t) => t.tenant_id);
+    if (ownerTenants.length > 0) {
+      allTenants = true;
+      tenantId = ownerTenants[0];
+      tenantIds = ownerTenants;
+    }
   } else if (activeTenantId && tenantIds.includes(activeTenantId)) {
     tenantId = activeTenantId;
   }

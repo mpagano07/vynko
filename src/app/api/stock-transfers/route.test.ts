@@ -64,6 +64,7 @@ describe('Stock Transfers API', () => {
 
     it('rejects without items (400)', async () => {
       vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 't1', 't2'] });
+      supabaseMock.__queue('tenant_users', { data: { role: 'owner' } }, { data: { role: 'owner' } });
       const res = await POST(makeRequest('POST', { from_tenant_id: 't1', to_tenant_id: 't2', items: [] }));
       expect(res.status).toBe(400);
 
@@ -71,8 +72,22 @@ describe('Stock Transfers API', () => {
       expect(json.error).toBe('Debe incluir al menos un producto');
     });
 
+    it('rejects transfer creation for miembros (403)', async () => {
+      vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 't1', 't2'] });
+      supabaseMock.__queue('tenant_users', { data: { role: 'member' } }, { data: { role: 'member' } });
+      const res = await POST(makeRequest('POST', {
+        from_tenant_id: 't1',
+        to_tenant_id: 't2',
+        items: [{ product_id: 'p1', quantity: 5 }]
+      }));
+      expect(res.status).toBe(403);
+      const json = await res.json();
+      expect(json.error).toBe('Solo el dueño o un administrador puede crear transferencias');
+    });
+
     it('creates transfer with valid data (201) and records activity log', async () => {
       vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 't1', 't2'] });
+      supabaseMock.__queue('tenant_users', { data: { role: 'owner' } }, { data: { role: 'owner' } });
       supabaseMock.__queue('stock_transfers', {
         data: { id: 'tr1', from_tenant_id: 't1', to_tenant_id: 't2', status: 'pending' },
       });
@@ -113,6 +128,7 @@ describe('Stock Transfers API', () => {
 
     it('cleans up transfer if items insert fails', async () => {
       vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 't1', 't2'] });
+      supabaseMock.__queue('tenant_users', { data: { role: 'owner' } }, { data: { role: 'owner' } });
       supabaseMock.__queue('stock_transfers', {
         data: { id: 'tr1', from_tenant_id: 't1', to_tenant_id: 't2', status: 'pending' },
       });
@@ -142,6 +158,7 @@ describe('Stock Transfers API', () => {
 
     it('returns 400 when the transfer could not be created without an error message', async () => {
       vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 't1', 't2'] });
+      supabaseMock.__queue('tenant_users', { data: { role: 'owner' } }, { data: { role: 'owner' } });
       supabaseMock.__queue('stock_transfers', { data: null, error: null });
 
       const res = await POST(makeRequest('POST', {

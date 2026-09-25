@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { StatCard } from '@/components/ui/stat-card';
 import { PageHeader } from '@/components/ui/page-header';
-import { TrendingUp, AlertTriangle, ShoppingCart, Banknote, Activity, BarChart3, Sparkles, Flame, Filter, ExternalLink } from 'lucide-react';
+import { TrendingUp, AlertTriangle, ShoppingCart, Banknote, Activity, BarChart3, Flame, Filter, ExternalLink } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
@@ -74,7 +74,6 @@ export default function ForecastPage() {
       productsWithSales: number | null;
       needsReorder: number | null;
     } | null;
-    aiAnalysis: string | null;
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -235,19 +234,6 @@ export default function ForecastPage() {
         />
       </div>
 
-      {/* AI Analysis */}
-      {data.aiAnalysis && (
-        <Card className="p-5 border-l-4 border-l-indigo-500">
-          <div className="flex items-start gap-3">
-            <Sparkles className="h-5 w-5 text-indigo-500 mt-0.5" />
-            <div>
-              <p className="text-sm font-semibold text-gray-900 dark:text-white mb-1">Análisis IA</p>
-              <p className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{data.aiAnalysis}</p>
-            </div>
-          </div>
-        </Card>
-      )}
-
       {/* Distribución del inventario + Próximo a agotarse */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
         <Card className="p-5 lg:col-span-3">
@@ -256,7 +242,13 @@ export default function ForecastPage() {
             Distribución del inventario
           </h2>
           <div className="h-40">
-            <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={160}>
+            <ResponsiveContainer
+              width="100%"
+              height="100%"
+              minWidth={100}
+              minHeight={160}
+              initialDimension={{ width: 100, height: 160 }}
+            >
               <BarChart data={inventoryDistribution} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke="#9ca3af" />

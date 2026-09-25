@@ -85,7 +85,7 @@ export async function sendChatQuery(auth: AuthInfo, message: string): Promise<Ai
   const context = await getTenantContext(auth.tenantId);
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-3.8-flash' });
 
   const prompt = `Sos un asistente de inteligencia artificial especializado en gestión de inventario y ventas para un negocio. 
 Tus respuestas deben ser breves, claras y en español. Usá un tono profesional pero amigable.
@@ -168,7 +168,7 @@ export async function analyzeImage(auth: AuthInfo, imageUrl: string): Promise<Ai
   const categoryNames = ((categoriesData.data as unknown[] | null) ?? []).map((c) => String((c as Record<string, unknown>).name ?? '')).join(', ');
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-3.8-flash' });
 
   const prompt = `Analizá esta foto de una góndola o estante de un negocio.
 Productos registrados en el sistema: ${productNames || 'No hay productos registrados'}.

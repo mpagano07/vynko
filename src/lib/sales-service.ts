@@ -339,6 +339,18 @@ export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<
     return { ok: false, error: 'El descuento o recargo no puede superar el 100%', status: 400 };
   }
 
+  if (customer_id) {
+    const { data: customer } = await supabaseAdmin
+      .from('customers')
+      .select('id')
+      .eq('id', customer_id)
+      .eq('tenant_id', auth.tenantId)
+      .maybeSingle();
+    if (!customer) {
+      return { ok: false, error: 'El cliente no pertenece a esta sucursal', status: 400 };
+    }
+  }
+
   const productIds = items.map((i) => i.product_id);
   const { data: products, error: prodError } = await supabaseAdmin
     .from('products')
@@ -364,7 +376,10 @@ export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<
     const product = productMap.get(item.product_id);
     if (!product) throw new Error(`Producto no encontrado: ${item.product_id}`);
 
-    const quantity = Number(item.quantity) || 1;
+    const quantity = Number(item.quantity);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new Error(`La cantidad de "${product.name}" debe ser un número entero mayor a 0`);
+    }
     const unit_price_cents = product.price_cents ?? Math.round(Number(product.price) * 100);
     const subtotal_cents = quantity * unit_price_cents;
 

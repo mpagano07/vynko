@@ -3,7 +3,7 @@ import type { AuthInfo } from '@/lib/api-auth';
 import { createActivityLog } from '@/lib/activity-log';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
-import { validateProduct } from '@/lib/product-validation';
+import { validatePrice, validateProduct, validateStock } from '@/lib/product-validation';
 import { adjustStock, buildStockMovement } from '@/lib/stock';
 
 export type ListProductsResult =
@@ -212,12 +212,30 @@ export async function updateProduct(auth: AuthInfo, id: string, body: Record<str
       return { ok: false, error: 'Producto no encontrado o sin permisos', status: 403 };
     }
 
+    const priceError = validatePrice(body.price);
+    if (priceError) return { ok: false, error: priceError, status: 400 };
+
+    if (body.cost !== undefined && body.cost !== null && body.cost !== '') {
+      const cost = Number(body.cost);
+      if (Number.isNaN(cost) || cost < 0) {
+        return { ok: false, error: 'El costo debe ser un número no negativo', status: 400 };
+      }
+    }
+
+    for (const field of ['stock', 'min_stock', 'max_stock'] as const) {
+      if (body[field] !== undefined) {
+        const stockError = validateStock(body[field]);
+        if (stockError) return { ok: false, error: stockError, status: 400 };
+      }
+    }
+
     const allowedFields = [
       'category_id', 'sku', 'barcode', 'name', 'description',
       'cost', 'image_url', 'metadata',
     ];
     const updateData: Record<string, unknown> = {};
-    if (body.price !== undefined) updateData.price_cents = Math.round(Number(body.price) * 100);
+    const hasPrice = body.price !== undefined && body.price !== null && body.price !== '';
+    if (hasPrice) updateData.price_cents = Math.round(Number(body.price) * 100);
     for (const key of allowedFields) {
       if (body[key] !== undefined) updateData[key] = body[key];
     }
@@ -248,6 +266,17 @@ export async function updateProduct(auth: AuthInfo, id: string, body: Record<str
       if (body.pasillo !== undefined) stockUpdate.pasillo = body.pasillo;
       if (body.estanteria !== undefined) stockUpdate.estanteria = body.estanteria;
 
+      let previousStock: number | null = null;
+      if (body.stock !== undefined) {
+        const { data: currentStockRow } = await supabaseAdmin
+          .from('product_stock')
+          .select('stock')
+          .eq('product_id', id)
+          .eq('tenant_id', auth.tenantId)
+          .maybeSingle();
+        previousStock = Number((currentStockRow as Record<string, unknown> | null)?.stock) || 0;
+      }
+
       const { error: stockError } = await supabaseAdmin
         .from('product_stock')
         .upsert({
@@ -259,6 +288,27 @@ export async function updateProduct(auth: AuthInfo, id: string, body: Record<str
       if (stockError) {
         console.error('DB error:', stockError);
         return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
+      }
+
+      if (previousStock !== null) {
+        const newStock = Number(body.stock);
+        const delta = newStock - previousStock;
+        if (delta !== 0) {
+          const movement = buildStockMovement({
+            tenantId: auth.tenantId,
+            productId: id,
+            quantity: delta,
+            type: 'adjustment',
+            reason: 'Edición de producto',
+            createdBy: auth.userId,
+          });
+          const { error: histError } = await supabaseAdmin
+            .from('stock_history')
+            .insert(movement);
+          if (histError) {
+            console.error('stock_history insert error:', JSON.stringify(histError));
+          }
+        }
       }
     }
 
@@ -404,6 +454,31 @@ export async function importProducts(
         continue;
       }
 
+      const priceError = (row.price !== undefined && row.price !== null && row.price !== '') ? validatePrice(row.price) : null;
+      if (priceError) {
+        results.push({ row: i + 1, status: 'skipped', name, error: priceError });
+        continue;
+      }
+      if (row.cost !== undefined && row.cost !== null && row.cost !== '') {
+        const cost = Number(row.cost);
+        if (Number.isNaN(cost) || cost < 0) {
+          results.push({ row: i + 1, status: 'skipped', name, error: 'El costo debe ser un número no negativo' });
+          continue;
+        }
+      }
+      let stockValidationError: string | null = null;
+      for (const field of ['stock', 'min_stock', 'max_stock'] as const) {
+        const stockFieldError = validateStock(row[field]);
+        if (stockFieldError) {
+          stockValidationError = stockFieldError;
+          break;
+        }
+      }
+      if (stockValidationError) {
+        results.push({ row: i + 1, status: 'skipped', name, error: stockValidationError });
+        continue;
+      }
+
       const upsertData: Record<string, unknown> = {};
       if (row.price !== undefined) upsertData.price_cents = Math.round(Number(row.price) * 100);
       for (const key of IMPORT_ALLOWED_FIELDS) {
@@ -460,9 +535,36 @@ export async function importProducts(
           if (hasLocation) stockUpdate.deposito = deposito;
           if (hasLocation) stockUpdate.pasillo = pasillo;
           if (hasLocation) stockUpdate.estanteria = estanteria;
+
+          const { data: prevStockRow } = await supabaseAdmin
+            .from('product_stock')
+            .select('stock')
+            .eq('product_id', existingId)
+            .eq('tenant_id', auth.tenantId)
+            .maybeSingle();
+          const previousStock = Number((prevStockRow as Record<string, unknown> | null)?.stock) || 0;
+
           await supabaseAdmin
             .from('product_stock')
             .upsert(stockUpdate, { onConflict: 'product_id,tenant_id' });
+
+          const delta = stock - previousStock;
+          if (delta !== 0) {
+            const movement = buildStockMovement({
+              tenantId: auth.tenantId,
+              productId: existingId,
+              quantity: delta,
+              type: 'adjustment',
+              reason: 'Importación de productos',
+              createdBy: auth.userId,
+            });
+            const { error: histError } = await supabaseAdmin
+              .from('stock_history')
+              .insert(movement);
+            if (histError) {
+              console.error('stock_history insert error:', JSON.stringify(histError));
+            }
+          }
           results.push({ row: i + 1, status: 'updated', name });
         }
       } else {
@@ -486,6 +588,23 @@ export async function importProducts(
           await supabaseAdmin
             .from('product_stock')
             .insert({ product_id: created.id, tenant_id: auth.tenantId, stock, min_stock, max_stock, deposito, pasillo, estanteria });
+
+          if (stock !== 0) {
+            const movement = buildStockMovement({
+              tenantId: auth.tenantId,
+              productId: created.id,
+              quantity: stock,
+              type: 'in',
+              reason: 'Importación de productos',
+              createdBy: auth.userId,
+            });
+            const { error: histError } = await supabaseAdmin
+              .from('stock_history')
+              .insert(movement);
+            if (histError) {
+              console.error('stock_history insert error:', JSON.stringify(histError));
+            }
+          }
           results.push({ row: i + 1, status: 'created', name });
         }
       }
