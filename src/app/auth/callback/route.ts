@@ -43,16 +43,11 @@ export async function GET(request: Request) {
   let redirectTo = `${origin}/dashboard`;
 
   if (user?.id) {
-    // DEBUG
-    console.log('[auth-callback] user_id', user.id, 'email', user.email);
-    console.log('[auth-callback] user_metadata', JSON.stringify(user.user_metadata));
-
     // 1. Acepta invitaciones pendientes (idempotente).
     await acceptInvitationsForUser({ id: user.id, email: user.email });
 
     // 2. ¿Ya tiene empresa (propia o por invitación)?
     const tenantIds = await getUserTenantIds(user.id);
-    console.log('[auth-callback] tenantIds', JSON.stringify(tenantIds));
 
     if (tenantIds.length === 0) {
       // 3. Sin empresa: si el usuario se registró con nombre/empresa
@@ -71,9 +66,6 @@ export async function GET(request: Request) {
       // Aplicado a user_metadata: la metadata puede quedar vacía para cuentas
       // existentes que no guardaron datos al registrarse. La actualizamos para
       // que el perfil quede completo.
-      console.log('[auth-callback] companyName', companyName, 'ownerName', ownerName);
-      console.log('[auth-callback] createCompany?', Boolean(companyName && ownerName));
-
       if (companyName && ownerName) {
         const tenantId = await createCompanyForUser(
           { id: user.id, email: user.email },
