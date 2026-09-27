@@ -37,6 +37,19 @@ function loadEnv() {
     }
     env[m[1]] = value;
   }
+
+  // Opt-in para apuntar a otro proyecto (p.ej. produccion) pasando las
+  // variables en el entorno del proceso, SIN editar .env.local. Exige
+  // VERIFY_RLS_ENV_FROM=process para que un shell con variables viejas no
+  // desvíe la verificacion a otra base sin querer. Solo se sobreescriben las
+  // claves que ya existen en .env.local, asi que PATH y similares no aplican.
+  if (process.env.VERIFY_RLS_ENV_FROM === 'process') {
+    for (const key of Object.keys(env)) {
+      const v = process.env[key];
+      if (v !== undefined && v !== '') env[key] = v;
+    }
+    console.log('[env] usando variables del proceso (no .env.local)');
+  }
   return env;
 }
 
@@ -207,7 +220,21 @@ async function ownTenantIds(userId) {
   return (data ?? []).map((t) => t.tenant_id);
 }
 
+// Barre las filas que el script intenta insertar para comprobar que RLS las
+// bloquea. Esas inserciones van contra el tenant real del usuario de prueba y
+// se esperan fallar; si una aparece es que RLS esta roto, y sin esta limpieza
+// quedaria basura 'hacked-*' en el tenant.
+async function sweepAttackRows() {
+  await admin.from('activity_logs').delete().eq('action', 'hacked');
+  await admin.from('invitations').delete().eq('email', 'attacker@evil.test');
+  await admin.from('analytics_events').delete().eq('user_email', 'attacker@evil.test');
+  await admin.from('notifications').delete().eq('title', 'hacked');
+  await admin.from('commercial_documents').delete().eq('customer_name', 'hacked');
+  await admin.from('suppliers').delete().like('name', 'hacked-%');
+}
+
 async function teardown() {
+  await sweepAttackRows();
   if (created.ownStorage) {
     await admin.storage.from('product-images').remove([created.ownStorage]);
   }
@@ -234,6 +261,9 @@ async function teardown() {
 
 const user = await loginAsUser();
 const ownTenants = await ownTenantIds(VICTIM_USER_ID);
+// Limpia restos de una corrida previa que haya quedado a medias antes de
+// empezar, para que el resultado no dependa de un fallo anterior.
+await sweepAttackRows();
 console.log(`usuario: ${USER_EMAIL}`);
 console.log(`tenants propios: ${ownTenants.length}, tenant victima: ${VICTIM.tenant ?? '(creandose)'}`);
 
