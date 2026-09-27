@@ -12,10 +12,30 @@ interface AuthFixture {
  * Fixture que proporciona una página autenticada reutilizable.
  * Se ejecuta una sola vez al inicio de la batería de tests.
  */
+/**
+ * El banner de consentimiento se muestra en cada contexto nuevo y se superpone
+ * al contenido, interceptando los clics: los tests agotaban el timeout sin
+ * llegar a interactuar con la app. Se acepta por defecto en E2E.
+ */
+export async function acceptCookies(page: Page) {
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      'vynko_cookie_consent',
+      JSON.stringify({ accepted: true, date: new Date().toISOString() }),
+    );
+  });
+}
+
 export const test = base.extend<AuthFixture>({
+  page: async ({ page }, use) => {
+    await acceptCookies(page);
+    await use(page);
+  },
+
   authenticatedPage: async ({ browser }, use) => {
     const context = await browser.newContext();
     const page = await context.newPage();
+    await acceptCookies(page);
 
     // Navegar a login
     await page.goto('/login');
@@ -38,6 +58,7 @@ export const test = base.extend<AuthFixture>({
   memberPage: async ({ browser }, use) => {
     const context = await browser.newContext();
     const page = await context.newPage();
+    await acceptCookies(page);
 
     await page.goto('/login');
     await page.getByPlaceholder('tu@email.com').fill(E2E_MEMBER_USER_EMAIL);
@@ -344,15 +365,22 @@ export async function adjustStockViaLossPrevention(
 
 const DESKTOP_SIDEBAR = 'aside.hidden.md\\:flex';
 
+// El selector de sucursales se localiza por `data-testid`: antes el harness
+// dependía de clases de Tailwind (`aside ... p.truncate.flex-1`) que quedaron
+// obsoletas cuando el switcher se movió del sidebar al header, y los tests
+// agotaban el timeout sin poder interactuar.
+const TENANT_SWITCHER = '[data-testid="tenant-switcher"]';
+const TENANT_SWITCHER_OPTION = '[data-testid="tenant-switcher-option"]';
+
 async function toggleTenantSwitcher(page: Page) {
-  await page.locator(`${DESKTOP_SIDEBAR} p.truncate.flex-1`).first().click();
+  await page.locator(TENANT_SWITCHER).first().click();
 }
 
 /**
- * Nombre de la sucursal activa (label del selector de sucursales del sidebar).
+ * Nombre de la sucursal activa (label del selector de sucursales del header).
  */
 export async function getCurrentTenantName(page: Page): Promise<string> {
-  return ((await page.locator(`${DESKTOP_SIDEBAR} p.truncate.flex-1`).first().textContent()) ?? '').trim();
+  return ((await page.locator(TENANT_SWITCHER).first().textContent()) ?? '').trim();
 }
 
 /**
@@ -360,8 +388,8 @@ export async function getCurrentTenantName(page: Page): Promise<string> {
  */
 export async function getTenantNames(page: Page): Promise<string[]> {
   await toggleTenantSwitcher(page);
-  const names = await page.locator(`${DESKTOP_SIDEBAR} span.truncate.flex-1.text-left`).allTextContents();
-  await page.locator(`${DESKTOP_SIDEBAR} .fixed.inset-0`).first().click({ position: { x: 30, y: 30 } }).catch(() => {});
+  const names = await page.locator(TENANT_SWITCHER_OPTION).allTextContents();
+  await page.locator('.fixed.inset-0').first().click({ position: { x: 30, y: 30 } }).catch(() => {});
   return names.map((n) => n.trim()).filter(Boolean);
 }
 
@@ -434,6 +462,7 @@ export async function cleanupBranchProducts(page: Page, productNames: string[]) 
  * Navega al login, completa credenciales y espera redirección a /dashboard.
  */
 export async function loginAsUser(page: Page, email: string, password: string) {
+  await acceptCookies(page);
   await page.goto('/login');
   await page.getByPlaceholder('tu@email.com').fill(email);
   await page.getByPlaceholder('••••••••').fill(password);
