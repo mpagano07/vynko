@@ -52,6 +52,22 @@ if ($missing.Count -gt 0) {
 }
 
 $env:VERIFY_RLS_ENV_FROM = 'process'
+
+# `vercel env run` deja pasar las variables del proceso padre, y si alguna
+# coincide con una de Vercel, la del padre gana. Una sesion que se haya
+# quedado con [SENSITIVE] de un `vercel env pull` viejo rompe el script con
+# 'Invalid supabaseUrl'. Las borramos para que mande el valor real de Vercel.
+$contaminadas = @()
+foreach ($k in @('NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY')) {
+  if (Test-Path "env:$k") {
+    $contaminadas += $k
+    Remove-Item "env:$k" -ErrorAction SilentlyContinue
+  }
+}
+if ($contaminadas.Count -gt 0) {
+  Write-Host ("Limpiadas de esta sesion (venian de un pull viejo): " + ($contaminadas -join ', ')) -ForegroundColor Yellow
+}
+
 Write-Host "verify-rls contra PRODUCCION (variables reales, sin escribir a disco)..." -ForegroundColor Cyan
 $run = Invoke-Native -Exe 'cmd' -Arguments @(
   '/c', 'vercel', 'env', 'run', '--environment=production',
@@ -70,7 +86,9 @@ Write-Host ""
 if ($run.Code -eq 0) {
   Write-Host "OK: 53 ok, 0 fail. Prod esta sano, podes mergear a main." -ForegroundColor Green
 } else {
-  Write-Host "FALLO (codigo $($run.Code)). NO merges a main." -ForegroundColor Red
+  # Node 24 en Windows puede abortar con un codigo negativo al apagar el
+  # event loop; el error real ya quedo impreso arriba.
+  Write-Host "FALLO. NO merges a main." -ForegroundColor Red
   Write-Host "Si el error es de login, el usuario no existe, no tiene contrasena, o no pertenece a ningun tenant."
   Write-Host "Las migraciones son re-ejecutables: podes volver a correr 034 sobre prod."
 }

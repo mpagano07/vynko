@@ -83,6 +83,29 @@ const VICTIM = {
 };
 const created = { ownStorage: null };
 
+// Si el script muere a mitad de camino, una excepcion en cualquier seccion lo
+// aborta sin llegar al teardown final y deja los fixtures en la base: un
+// tenant falso con productos, suppliers, customers, documents, notifications
+// y objetos de Storage. En produccion eso es basura real. Estos handlers
+// aseguran la limpieza ante cualquier fallo.
+let teardownHecho = false;
+async function teardownSeguro() {
+  if (teardownHecho) return;
+  teardownHecho = true;
+  try {
+await teardownSeguro();
+  } catch (e) {
+    console.error('teardown fallo:', e?.message ?? e);
+  }
+}
+for (const evento of ['unhandledRejection', 'uncaughtException']) {
+  process.on(evento, async (err) => {
+    await teardownSeguro();
+    console.error(err?.message ?? err);
+    process.exit(1);
+  });
+}
+
 let pass = 0;
 let fail = 0;
 const failures = [];
