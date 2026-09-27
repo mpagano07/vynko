@@ -517,6 +517,121 @@ await section('Trigger de inmutabilidad de profiles (backstop a nivel motor)', a
   check('service_role puede cambiar tenant_id (onboarding)', !error, error?.message);
 });
 
+await section('rate_limit_buckets es inaccesible desde el cliente', async () => {
+  // Las claves de los buckets son IP y email: no pueden quedar expuestas al
+  // cliente. Las funciones son SECURITY INVOKER con una guarda `current_user`
+  // que solo deja pasar a service_role, y el permiso EXECUTE quedo revocado
+  // para anon, authenticated y PUBLIC.
+  const anon = createClient(URL_BASE, ANON, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  // Clave unica por corrida: si quedara una fila de una corrida anterior, el
+  // primer intento ya vendria con el contador en 1 y el check de "permite el
+  // primer intento" fallaria por un motivo que no tiene que ver con la migracion.
+  const probeKey = `verify-rls:${stamp}`;
+
+  //
+  // OJO: aca NO se usa `blocked()` para la lectura, y con RLS no fallaria igual.
+  // Un SELECT con RLS y sin policies devuelve 200 con `[]` (RLS filtra filas),
+  // pero como la tabla ademas tiene REVOKE de PUBLIC, lo que llega es un error de
+  // permiso, que es un resultado mas fuerte todavia. Se aceptan los dos y lo que
+  // no se acepta es obtener una sola fila.
+  const noRows = (label, r) =>
+    check(
+      label,
+      (Boolean(r.error) || (Array.isArray(r.data) && r.data.length === 0)) &&
+        !(Array.isArray(r.data) && r.data.length > 0),
+      r.error ? `error=${r.error.message}` : `leyo ${r.data.length} filas`
+    );
+
+  noRows('anon NO lee filas de rate_limit_buckets', await anon.from('rate_limit_buckets').select('*'));
+  noRows('authenticated NO lee filas de rate_limit_buckets', await user.from('rate_limit_buckets').select('*'));
+
+  // `blocked()` por si solo no alcanza: un objeto inexistente tambien "falla" y
+  // pasaria el check en verde sin que haya nada que proteger. Se exige que el
+  // error sea de permiso (42501) y no de "no existe".
+  async function denied(label, promise) {
+    const { error } = await promise;
+    const deniedCode = Boolean(error) && error.code === '42501';
+    const missing =
+      !error ||
+      /does not exist|schema cache|Could not find/i.test(error.message ?? '');
+    check(
+      label,
+      deniedCode,
+      missing
+        ? `no denego por permiso, sino porque falta el objeto: ${error?.message ?? 'sin error'}`
+        : error?.message
+    );
+  }
+
+  await denied(
+    'anon NO puede escribir rate_limit_buckets',
+    anon
+      .from('rate_limit_buckets')
+      .insert({ key: probeKey, count: 1, reset_at: new Date().toISOString() })
+      .select()
+  );
+
+  // Estas dos son el ataque real, asi que se cubren para anon y para
+  // authenticated. La anon key va en el bundle del navegador: con la sola
+  // `NEXT_PUBLIC_SUPABASE_ANON_KEY` un atacante puede llamar la funcion por
+  // PostgREST, agotarle el limite a una victima y dejarla sin poder entrar, o
+  // inflar la tabla con claves inventadas de ventana larga.
+  for (const [who, client] of [
+    ['anon', anon],
+    ['authenticated', user],
+  ]) {
+    await denied(
+      `${who} NO puede ejecutar rate_limit_hit`,
+      client.rpc('rate_limit_hit', { p_key: probeKey, p_limit: 1, p_window_ms: 60000 })
+    );
+    await denied(`${who} NO puede ejecutar rate_limit_reset_if_expired`, client.rpc('rate_limit_reset_if_expired'));
+  }
+
+  // Y el service_role si tiene que poder, que es lo que usa la app.
+  const row = async () => {
+    const { data, error } = await admin.rpc('rate_limit_hit', {
+      p_key: probeKey,
+      p_limit: 1,
+      p_window_ms: 60000,
+    });
+    if (error) throw error;
+    return (Array.isArray(data) ? data[0] : data) ?? {};
+  };
+
+  // La ventana fija tiene que contar y cortar, no solo no fallar.
+  const first = await row();
+  const second = await row();
+  check('rate_limit_hit permite el primer intento', first.ok === true, JSON.stringify(first));
+  check('rate_limit_hit bloquea al superar el limite', second.ok === false, JSON.stringify(second));
+  check(
+    'rate_limit_hit informa cuanto esperar',
+    Number(second.retry_after_seconds) > 0,
+    JSON.stringify(second)
+  );
+
+  // La purga tambien la tiene que poder ejecutar el service role: es la que
+  // limpia las claves vencidas, y si la guarda la bloqueara las claves
+  // crecerian para siempre.
+  const purge = await admin.rpc('rate_limit_reset_if_expired');
+  check('service_role puede purgar claves vencidas', !purge.error, purge.error?.message);
+
+  // Y con la ventana abierta, el service role tiene que poder escribir en la
+  // tabla. Las funciones corren con SECURITY INVOKER, o sea que el INSERT lo
+  // hace el service role y no el dueno: si el REVOKE se hubiera pasado de la
+  // raya y le hubiera quitado permisos a la app, aqui se veria.
+  const { error: insertErr } = await admin.from('rate_limit_buckets').insert({
+    key: `${probeKey}:escritura`,
+    count: 1,
+    reset_at: new Date(Date.now() + 60_000).toISOString(),
+  });
+  check('service_role puede escribir en la tabla', !insertErr, insertErr?.message);
+
+  await admin.from('rate_limit_buckets').delete().in('key', [probeKey, `${probeKey}:escritura`]);
+});
+
 await teardown();
 
 console.log(`\n${'='.repeat(60)}`);

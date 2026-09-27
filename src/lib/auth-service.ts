@@ -15,7 +15,7 @@ export async function sendResetPasswordEmail(request: Request): Promise<ResetPas
     return { data: { error: 'Email requerido' }, status: 400 };
   }
 
-  const ipLimit = rateLimit(`fp:ip:${getClientIp(request)}`, 10, 15 * 60 * 1000);
+  const ipLimit = await rateLimit(`fp:ip:${getClientIp(request)}`, 10, 15 * 60 * 1000);
   if (!ipLimit.ok) {
     return {
       data: { error: 'Demasiados intentos. Probá de nuevo más tarde.' },
@@ -23,7 +23,7 @@ export async function sendResetPasswordEmail(request: Request): Promise<ResetPas
       headers: { 'Retry-After': String(ipLimit.retryAfterSeconds) },
     };
   }
-  const emailLimit = rateLimit(`fp:email:${email.toLowerCase()}`, 3, 15 * 60 * 1000);
+  const emailLimit = await rateLimit(`fp:email:${email.toLowerCase()}`, 3, 15 * 60 * 1000);
   if (!emailLimit.ok) {
     return {
       data: { success: true, message: 'Email enviado' },

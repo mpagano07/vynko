@@ -58,6 +58,23 @@ function createSupabaseMock() {
     remove: { error: null as unknown },
   };
 
+  // `rate_limit_hit` es la unica funcion que la app llama por RPC. El mock
+  // devuelve la ventana abierta: la suite ya fija `RATE_LIMIT_STORE=memory` en
+  // `vitest.setup.ts` para poder afirmar los 429, pero si un test alcanza esta
+  // ruta sin `rpc` explotaria con "rpc is not a function", que no dice nada del
+  // bug real.
+  const rpcResults: Record<string, unknown> = {
+    rate_limit_hit: { data: [{ ok: true, retry_after_seconds: 0 }], error: null },
+  };
+
+  const rpc = vi.fn(async (fn: string) => {
+    const result = rpcResults[fn];
+    if (result === undefined) {
+      return { data: null, error: { message: `mock: la funcion ${fn} no esta mockeada` } };
+    }
+    return result;
+  });
+
   const storageBucket = {
     upload: vi.fn(async (...args: unknown[]) => {
       storageCalls.push({ method: 'upload', args });
@@ -79,12 +96,14 @@ function createSupabaseMock() {
 
   return {
     from: (table: string) => createBuilder(table),
+    rpc,
     storage: {
       from: vi.fn(() => storageBucket),
     },
     __storage: storageBucket,
     __storageCalls: storageCalls,
     __storageResults: storageResults,
+    __rpcResults: rpcResults,
     auth: {
       getUser: vi.fn(async () => ({
         data: { user: null as null | Record<string, unknown> },
@@ -106,6 +125,7 @@ function createSupabaseMock() {
       storageResults.createSignedUrl = { data: { signedUrl: 'https://signed.example/image.png' }, error: null };
       storageResults.createSignedUrls = { data: [], error: null };
       storageResults.remove.error = null;
+      rpcResults.rate_limit_hit = { data: [{ ok: true, retry_after_seconds: 0 }], error: null };
       vi.clearAllMocks();
     },
     get __calls() {

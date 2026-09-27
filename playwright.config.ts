@@ -29,9 +29,21 @@ export default defineConfig({
   ],
   globalTeardown: './e2e/global-teardown.ts',
   webServer: {
+    // E2E=1 desactiva el rate limiting SOLO fuera de produccion (ver
+    // src/lib/rate-limit.ts). Sin esto el suite agota el limite de 20 intentos
+    // por IP cada 15 minutos, devuelve 429 y los tests de login fallan de
+    // forma intermitente segun cuantas corridas haya hecho el developer.
+    //
+    // Va en `env` y no en el comando porque `E2E=1 npm run dev` es sintaxis
+    // POSIX y en Windows (cmd.exe) rompe el arranque del server.
     command: 'npm run dev',
     url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
+    env: { E2E: '1' },
+    // False a proposito: si se reutilizara un `npm run dev` del developer
+    // (arrancado sin E2E=1), el suite correria contra un server con el rate
+    // limit activo y volverian los 429. Fallar de forma clara es mejor que
+    // fallar de forma intermitente y confusa.
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });
