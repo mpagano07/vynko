@@ -264,6 +264,17 @@ const ownTenants = await ownTenantIds(VICTIM_USER_ID);
 // Limpia restos de una corrida previa que haya quedado a medias antes de
 // empezar, para que el resultado no dependa de un fallo anterior.
 await sweepAttackRows();
+if (ownTenants.length === 0) {
+  // Sin este aborted, los checks de DML usarian tenant_id=undefined y
+  // "bloqueado" pasaria por una violacion de NOT NULL en vez de por RLS:
+  // el script reportaria ok sin haber probado nada.
+  console.error(
+    '[abort] el usuario de prueba no pertenece a ningun tenant. Invitalo a un ' +
+      'tenant y volve a correr; sin esto la verificacion daria un falso positivo.'
+  );
+  await teardown();
+  process.exit(1);
+}
 console.log(`usuario: ${USER_EMAIL}`);
 console.log(`tenants propios: ${ownTenants.length}, tenant victima: ${VICTIM.tenant ?? '(creandose)'}`);
 
