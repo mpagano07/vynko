@@ -14,6 +14,7 @@ vi.mock('@/lib/supabase', () => ({
 
 import { POST as login } from '@/app/api/auth/login/route';
 import { POST as signup } from '@/app/api/auth/signup/route';
+import { __resetRateLimitStateForTests } from '@/lib/rate-limit';
 
 function post(url: string, body: unknown, headers: Record<string, string> = {}): Request {
   return new Request(url, {
@@ -35,6 +36,10 @@ function uniqueEmail(): string {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // El store en memoria es un modulo compartido: sin reset, el bucket de IP
+  // 'unknown' (los Requests de test no traen headers de IP) acumula los
+  // incrementos de un test y el siguiente arranca ya cerca del limite.
+  __resetRateLimitStateForTests();
   serverAuthMock.auth.signInWithPassword.mockResolvedValue({ data: {}, error: null });
   serverAuthMock.auth.signUp.mockResolvedValue({
     data: { user: { identities: [{ id: 'i1' }] }, session: { access_token: 'x' } },
@@ -86,6 +91,30 @@ describe('POST /api/auth/login', () => {
     );
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual({ error: 'Credenciales inválidas' });
+  });
+
+  it('los logins exitosos no gastan presupuesto del limite', async () => {
+    // Regresion: el contador se incrementaba antes de autenticar, asi que un
+    // login correcto consumia presupuesto igual que uno fallido. Con el limite
+    // de cuenta en 5, el sexto login correcto de la misma IP recibia 429. Para
+    // un usuario detras de una IP compartida eso era un bloqueo sin haber
+    // fallado nunca una credencial.
+    const email = uniqueEmail();
+    for (let i = 0; i < 10; i++) {
+      const response = await login(
+        post('https://app.test/api/auth/login', { email, password: 'correcta' }, sameOrigin())
+      );
+      expect(response.status).toBe(200);
+    }
+
+    serverAuthMock.auth.signInWithPassword.mockResolvedValueOnce({
+      data: {},
+      error: { message: 'Invalid login credentials' },
+    });
+    const failed = await login(
+      post('https://app.test/api/auth/login', { email, password: 'incorrecta' }, sameOrigin())
+    );
+    expect(failed.status).toBe(401);
   });
 
   it('aplica rate limiting por cuenta e IP', async () => {

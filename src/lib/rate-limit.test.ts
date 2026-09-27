@@ -6,7 +6,7 @@ vi.mock('@/lib/supabaseAdmin', () => ({
   supabaseAdmin: { rpc: rpcMock },
 }));
 
-import { rateLimit, getClientIp, __resetRateLimitStateForTests } from '@/lib/rate-limit';
+import { rateLimit, rateLimitPeek, getClientIp, __resetRateLimitStateForTests } from '@/lib/rate-limit';
 
 /** Simula la respuesta de `rate_limit_hit`. */
 function mockRpc(ok: boolean, retryAfterSeconds = 0) {
@@ -165,6 +165,63 @@ describe('rateLimit (store distribuido)', () => {
     // Todas pasaron por el RPC fallido, no por un contador local: si cayera a
     // memoria, la segunda ya habria sido bloqueada.
     expect(rpcMock).toHaveBeenCalledTimes(5);
+    spy.mockRestore();
+  });
+});
+
+describe('rateLimitPeek (store en memoria)', () => {
+  it('consultar no incrementa el contador', async () => {
+    // Si peek contara, diez consultasarian agotar el limite solas. Es el
+    // motivo de existir de la funcion: separar "ya excedi" de "contar un fallo".
+    const key = `test:${Math.random()}`;
+    for (let i = 0; i < 10; i++) {
+      expect((await rateLimitPeek(key, 3)).ok).toBe(true);
+    }
+  });
+
+  it('bloquea cuando el contador ya alcanzo el limite, sin contar de mas', async () => {
+    const key = `test:${Math.random()}`;
+    for (let i = 0; i < 3; i++) expect((await rateLimit(key, 3, 60_000)).ok).toBe(true);
+
+    const blocked = await rateLimitPeek(key, 3);
+    expect(blocked.ok).toBe(false);
+    expect(blocked.retryAfterSeconds).toBeGreaterThan(0);
+    // Un peek mas sigue bloqueado y no_sigue_contando: el valor no se altera.
+    expect((await rateLimitPeek(key, 3)).ok).toBe(false);
+  });
+
+  it('vuelve a dejar pasar cuando la ventana expira', async () => {
+    const key = `test:${Math.random()}`;
+    await rateLimit(key, 1, 30);
+    await new Promise((r) => setTimeout(r, 60));
+    expect((await rateLimitPeek(key, 1)).ok).toBe(true);
+  });
+});
+
+describe('rateLimitPeek (store distribuido)', () => {
+  beforeEach(() => {
+    vi.stubEnv('RATE_LIMIT_STORE', 'postgres');
+  });
+
+  it('delega en rate_limit_peek y devuelve su resultado', async () => {
+    mockRpc(true);
+    expect(await rateLimitPeek('auth:login:ip:1.1.1.1', 5)).toEqual({ ok: true, retryAfterSeconds: 0 });
+    expect(rpcMock).toHaveBeenCalledWith('rate_limit_peek', {
+      p_key: 'auth:login:ip:1.1.1.1',
+      p_limit: 5,
+    });
+  });
+
+  it('propaga el retry-after que devuelve la base', async () => {
+    mockRpc(false, 42);
+    expect(await rateLimitPeek('k', 5)).toEqual({ ok: false, retryAfterSeconds: 42 });
+  });
+
+  it('permite el request si la funcion todavia no esta migrada', async () => {
+    rpcMock.mockResolvedValue({ data: null, error: { message: 'function does not exist' } });
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect((await rateLimitPeek('k', 5)).ok).toBe(true);
+    expect(String(spy.mock.calls[0]?.[1])).toContain('037_rate_limit_peek');
     spy.mockRestore();
   });
 });

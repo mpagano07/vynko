@@ -98,6 +98,93 @@ interface RateLimitRow {
   retry_after_seconds: number;
 }
 
+/**
+ * Consulta el estado del limite SIN incrementarlo.
+ *
+ * Existe para separar "preguntar si ya se excedio" de "contar un intento". Con un
+ * unico `rateLimit` que incrementa, no hay forma de bloquear un request que ya
+ * esta sobre el limite sin contar tambien el intento que se bloquea, y entonces
+ * un login exitoso tambien gasta presupuesto: con el limite en 5, al sexto login
+ * correcto de la misma IP la respuesta era 429. Para un usuario legitimo detras
+ * de una IP compartida (oficina, CGNAT de operador) eso es un bloqueo sin que
+ * nunca haya fallado una credencial.
+ *
+ * No recibe `windowMs` a proposito: sin escritura no hay bucket que crear ni
+ * ventana que renovar, asi que la ventana vigente es la que ya tiene el bucket.
+ */
+function rateLimitPeekInMemory(key: string, limit: number): RateLimitResult {
+  const now = Date.now();
+  const bucket = buckets.get(key);
+  if (!bucket || bucket.resetAt <= now) return { ok: true, retryAfterSeconds: 0 };
+  if (bucket.count >= limit) {
+    return { ok: false, retryAfterSeconds: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)) };
+  }
+  return { ok: true, retryAfterSeconds: 0 };
+}
+
+async function rateLimitPeekInPostgres(key: string, limit: number): Promise<RateLimitResult> {
+  const { data, error } = await supabaseAdmin.rpc('rate_limit_peek', {
+    p_key: key,
+    p_limit: limit,
+  });
+
+  if (error) {
+    throw new Error(`rate_limit_peek fallo: ${error.message}`);
+  }
+
+  const row = (Array.isArray(data) ? data[0] : data) as RateLimitRow | null;
+  if (!row || typeof row.ok !== 'boolean') {
+    throw new Error('rate_limit_peek devolvio una forma inesperada');
+  }
+  return { ok: row.ok, retryAfterSeconds: Number(row.retry_after_seconds) || 0 };
+}
+
+let peekUnavailableLogged = false;
+
+/**
+ * Dice si `key` ya esta sobre el limite, sin contar nada.
+ *
+ * El par `rateLimitPeek` + `rateLimit` es lo que permite que solo los intentos
+ * fallidos consuman presupuesto: se consulta antes de hacer el trabajo caro
+ * (autenticar contra Supabase) y se incrementa despues, si fallo.
+ *
+ * El trade-off es que peek y el incremento no son atomicos entre si, asi que N
+ * requests concurrentes pueden pasar el control y superar el limite por N. El
+ * incremento siguiente ya los ve y bloquea, asi que el exceso esta acotado por la
+ * concurrencia y no por el limite.
+ *
+ * El fail-open es el mismo que en `rateLimit` y por el mismo motivo: si Postgres
+ * no responde, la app entera esta caida igual, y cortar el login por eso
+ * amplifica un incidente.
+ */
+export async function rateLimitPeek(key: string, limit: number): Promise<RateLimitResult> {
+  if (isE2eBypassEnabled()) {
+    if (!warnedAboutE2eBypass) {
+      warnedAboutE2eBypass = true;
+      console.warn('[rate-limit] E2E=1 con NODE_ENV != production: rate limiting desactivado');
+    }
+    return { ok: true, retryAfterSeconds: 0 };
+  }
+
+  if (resolveStore() === 'memory') {
+    return rateLimitPeekInMemory(key, limit);
+  }
+
+  try {
+    return await rateLimitPeekInPostgres(key, limit);
+  } catch (error) {
+    if (!peekUnavailableLogged) {
+      peekUnavailableLogged = true;
+      console.error(
+        '[rate-limit] rate_limit_peek no respondio; se permite el request sin limite.',
+        'Sintoma tipico: falta aplicar migrations/037_rate_limit_peek.sql.',
+        error
+      );
+    }
+    return { ok: true, retryAfterSeconds: 0 };
+  }
+}
+
 async function rateLimitInPostgres(
   key: string,
   limit: number,
@@ -179,6 +266,7 @@ export function __resetRateLimitStateForTests(): void {
   buckets.clear();
   callsSinceCleanup = 0;
   postgresUnavailableLogged = false;
+  peekUnavailableLogged = false;
 }
 
 /** Headers que el edge de la plataforma sobrescribe, y que el cliente no puede forjar. */
