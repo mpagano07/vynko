@@ -50,8 +50,41 @@ function createSupabaseMock() {
     };
   }
 
+  const storageCalls: { method: string; args: unknown[] }[] = [];
+  const storageResults = {
+    upload: { error: null as unknown },
+    createSignedUrl: { data: { signedUrl: 'https://signed.example/image.png' } as unknown, error: null as unknown },
+    createSignedUrls: { data: [] as unknown, error: null as unknown },
+    remove: { error: null as unknown },
+  };
+
+  const storageBucket = {
+    upload: vi.fn(async (...args: unknown[]) => {
+      storageCalls.push({ method: 'upload', args });
+      return { error: storageResults.upload.error };
+    }),
+    createSignedUrl: vi.fn(async (...args: unknown[]) => {
+      storageCalls.push({ method: 'createSignedUrl', args });
+      return storageResults.createSignedUrl;
+    }),
+    createSignedUrls: vi.fn(async (...args: unknown[]) => {
+      storageCalls.push({ method: 'createSignedUrls', args });
+      return storageResults.createSignedUrls;
+    }),
+    remove: vi.fn(async (...args: unknown[]) => {
+      storageCalls.push({ method: 'remove', args });
+      return { error: storageResults.remove.error };
+    }),
+  };
+
   return {
     from: (table: string) => createBuilder(table),
+    storage: {
+      from: vi.fn(() => storageBucket),
+    },
+    __storage: storageBucket,
+    __storageCalls: storageCalls,
+    __storageResults: storageResults,
     auth: {
       getUser: vi.fn(async () => ({
         data: { user: null as null | Record<string, unknown> },
@@ -68,6 +101,11 @@ function createSupabaseMock() {
     __reset() {
       queues.clear();
       calls.length = 0;
+      storageCalls.length = 0;
+      storageResults.upload.error = null;
+      storageResults.createSignedUrl = { data: { signedUrl: 'https://signed.example/image.png' }, error: null };
+      storageResults.createSignedUrls = { data: [], error: null };
+      storageResults.remove.error = null;
       vi.clearAllMocks();
     },
     get __calls() {

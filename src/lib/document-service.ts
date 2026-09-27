@@ -1,10 +1,17 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import type { CreateDocumentRequest, DocumentStatus, DocumentType } from '@/lib/types/document';
 import type { AuthInfo } from '@/lib/api-auth';
+import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
 
 export type DocumentResult<T = unknown> =
   | { ok: true; data: T; status: number }
   | { ok: false; error: string; status: number };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUuidLike(value: string): boolean {
+  return UUID_RE.test(value);
+}
 
 export async function listDocuments(
   auth: AuthInfo,
@@ -61,6 +68,31 @@ export async function createDocument(
     const validTypes: DocumentType[] = ['remito_salida', 'remito_ingreso', 'presupuesto', 'orden_compra', 'orden_venta'];
     if (!validTypes.includes(document_type)) {
       return { ok: false, error: 'Tipo de documento inválido', status: 400 };
+    }
+
+    // Las referencias opcionales vienen del body: se validan contra el tenant
+    // del usuario para que un documento no pueda quedar vinculado (ni delatar
+    // la existencia de) una venta, orden de compra o cliente de otra sucursal.
+    const foreignRefs: Array<{ table: string; column: string; value: unknown; label: string }> = [
+      { table: 'sales', column: 'sale_id', value: sale_id, label: 'La venta' },
+      { table: 'purchase_orders', column: 'purchase_order_id', value: purchase_order_id, label: 'La orden de compra' },
+      { table: 'customers', column: 'customer_id', value: customer_id, label: 'El cliente' },
+    ];
+
+    for (const ref of foreignRefs) {
+      if (ref.value === undefined || ref.value === null || ref.value === '') continue;
+      if (typeof ref.value !== 'string' || !isUuidLike(ref.value)) {
+        return { ok: false, error: `${ref.label} no es válida`, status: 400 };
+      }
+      const { data: found } = await supabaseAdmin
+        .from(ref.table)
+        .select('id')
+        .eq('id', ref.value)
+        .eq('tenant_id', auth.tenantId)
+        .maybeSingle();
+      if (!found) {
+        return { ok: false, error: `${ref.label} no pertenece a tu sucursal`, status: 400 };
+      }
     }
 
     const totalCents = items.reduce((sum, item) => sum + item.unit_price_cents * item.quantity, 0);
@@ -177,6 +209,16 @@ export async function updateDocument(
   id: string,
   body: { status?: DocumentStatus; notes?: string; valid_until?: string; delivery_date?: string }
 ): Promise<DocumentResult> {
+  // Cambiar el estado de un documento comercial (anular, entregar, facturar) es
+  // una acción administrativa, no operativa: se limita a owner/manager.
+  if (!(await canManageTenant(await getRoleInTenant(auth.userId, auth.tenantId)))) {
+    return {
+      ok: false,
+      error: 'Sólo el dueño o un administrador pueden modificar documentos',
+      status: 403,
+    };
+  }
+
   const { status, notes, valid_until, delivery_date } = body;
 
   const updateData: Record<string, unknown> = {
@@ -204,6 +246,14 @@ export async function updateDocument(
 }
 
 export async function deleteDocument(auth: AuthInfo, id: string): Promise<DocumentResult> {
+  if (!(await canManageTenant(await getRoleInTenant(auth.userId, auth.tenantId)))) {
+    return {
+      ok: false,
+      error: 'Sólo el dueño o un administrador pueden eliminar documentos',
+      status: 403,
+    };
+  }
+
   const { error } = await supabaseAdmin
     .from('commercial_documents')
     .delete()

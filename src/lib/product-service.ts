@@ -5,6 +5,8 @@ import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import { validatePrice, validateProduct, validateStock } from '@/lib/product-validation';
 import { adjustStock, buildStockMovement } from '@/lib/stock';
+import { isAllowedImagePath, signProductImageUrls } from '@/lib/upload-service';
+import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
 
 export type ListProductsResult =
   | { ok: true; products: Array<Record<string, unknown>> }
@@ -38,7 +40,7 @@ export interface ImportSummary {
 
 export type ImportProductsResult =
   | { ok: true; body: { results: ImportRowResult[]; summary: ImportSummary } }
-  | { ok: false; error: string; status: 400 };
+  | { ok: false; error: string; status: 400 | 403 };
 
 export type AdjustProductStockResult =
   | {
@@ -57,7 +59,7 @@ export type AdjustProductStockResult =
 
 export type AdjustPricesResult =
   | { ok: true; data: Record<string, unknown> }
-  | { ok: false; error: string; status: 400 | 404 | 500 };
+  | { ok: false; error: string; status: 400 | 403 | 404 | 500 };
 
 export type CriticalProductsResult =
   | { ok: true; products: Array<Record<string, unknown>> }
@@ -70,6 +72,34 @@ export type StockAnalysisResult =
 export type LookupProductResult =
   | { ok: true; product: Record<string, unknown> | null }
   | { ok: false; error: string };
+
+function sanitizeImageStoragePath(value: unknown, tenantId: string): string | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value !== 'string') return null;
+  return isAllowedImagePath(value, tenantId) ? value : null;
+}
+
+/**
+ * `products` es una tabla GLOBAL (no tiene tenant_id): el scope por tenant vive
+ * en `product_stock`. Eso significa que cualquier escritura sobre `products`
+ * (precio, costo, SKU, nombre) es un write cross-tenant, y que el stock es lo
+ * único tenant-scoped. Por eso las operaciones que tocan el catálogo global
+ * exigen rol de gestión (owner/manager) en el tenant activo: un 'member' puede
+ * operar su stock pero no redefinir el producto compartido.
+ */
+async function requireCatalogManager(
+  auth: AuthInfo
+): Promise<{ ok: true } | { ok: false; error: string; status: 403 }> {
+  const role = await getRoleInTenant(auth.userId, auth.tenantId);
+  if (!canManageTenant(role)) {
+    return {
+      ok: false,
+      error: 'Sólo el dueño o un administrador puede modificar el catálogo de productos',
+      status: 403,
+    };
+  }
+  return { ok: true };
+}
 
 export async function listProducts(auth: AuthInfo): Promise<ListProductsResult> {
   let q = supabaseAdmin
@@ -107,10 +137,16 @@ export async function listProducts(auth: AuthInfo): Promise<ListProductsResult> 
     stock_data: undefined,
     price: p.price_cents != null ? p.price_cents / 100 : 0,
   })) || [];
-  return { ok: true, products };
+  return { ok: true, products: await signProductImageUrls(products) };
 }
 
 export async function createProduct(auth: AuthInfo, body: Record<string, unknown>): Promise<CreateProductResult> {
+  // Alta en el catálogo global: sin este chequeo un 'member' podría registrar
+  // SKUs/códigos de barras que colisionan con los de otro tenant (el SKU es la
+  // clave con la que `importProducts` resuelve productos existentes).
+  const managerCheck = await requireCatalogManager(auth);
+  if (!managerCheck.ok) return managerCheck;
+
   const { data: tenantRow } = await supabaseAdmin
     .from('tenants')
     .select('subscription_plan')
@@ -140,6 +176,8 @@ export async function createProduct(auth: AuthInfo, body: Record<string, unknown
   for (const key of allowedFields) {
     if (body[key] !== undefined) insertData[key] = body[key];
   }
+  const imageStoragePath = sanitizeImageStoragePath(body.image_storage_path, auth.tenantId);
+  if (imageStoragePath) insertData.image_storage_path = imageStoragePath;
 
   const validationErrors = validateProduct({ name: body.name, sku: body.sku, price: body.price, stock: body.stock });
   const firstError = Object.values(validationErrors)[0];
@@ -200,6 +238,9 @@ export async function createProduct(auth: AuthInfo, body: Record<string, unknown
 
 export async function updateProduct(auth: AuthInfo, id: string, body: Record<string, unknown>): Promise<UpdateProductResult> {
   try {
+    const managerCheck = await requireCatalogManager(auth);
+    if (!managerCheck.ok) return managerCheck;
+
     const scopeTenantIds = auth.allTenants ? auth.tenantIds : [auth.tenantId];
     const { data: membership } = await supabaseAdmin
       .from('product_stock')
@@ -238,6 +279,11 @@ export async function updateProduct(auth: AuthInfo, id: string, body: Record<str
     if (hasPrice) updateData.price_cents = Math.round(Number(body.price) * 100);
     for (const key of allowedFields) {
       if (body[key] !== undefined) updateData[key] = body[key];
+    }
+    if (body.image_storage_path !== undefined) {
+      const imageStoragePath = sanitizeImageStoragePath(body.image_storage_path, auth.tenantId);
+      updateData.image_storage_path = imageStoragePath;
+      if (!imageStoragePath && !body.image_url) updateData.image_url = null;
     }
     if (updateData.category_id === '') updateData.category_id = null;
     updateData.updated_at = new Date().toISOString();
@@ -424,6 +470,11 @@ export async function importProducts(
   if (!Array.isArray(products) || products.length === 0) {
     return { ok: false, error: 'No products provided', status: 400 };
   }
+
+  // La importación crea filas en `products` (global) y actualiza las que ya
+  // existen para este tenant: es una escritura sobre el catálogo compartido.
+  const managerCheck = await requireCatalogManager(auth);
+  if (!managerCheck.ok) return { ok: false, error: managerCheck.error, status: 403 };
 
   const { data: tenantRow } = await supabaseAdmin
     .from('tenants')
@@ -664,6 +715,13 @@ export async function adjustProductStock(auth: AuthInfo, id: string, body: {
     .eq('tenant_id', auth.tenantId)
     .maybeSingle();
 
+  // Si el producto no está en el tenant del usuario, el UPDATE posterior no
+  // matchearía ninguna fila: sin este chequeo devolvíamos "éxito" sin haber
+  // ajustado nada y dejábamos un movimiento de stock huérfano en el historial.
+  if (!stockRow) {
+    return { ok: false, error: 'Producto no encontrado en tu sucursal', status: 404 };
+  }
+
   const currentStock = Number((stockRow as Record<string, unknown> | null)?.stock) || 0;
   const result = adjustStock(currentStock, quantity);
   if (!result.ok) {
@@ -726,8 +784,14 @@ export async function adjustPrices(auth: AuthInfo, body: {
   };
   const tenantId = auth.tenantId;
 
-  if (percentage === undefined || typeof percentage !== 'number' || percentage <= 0) {
-    return { ok: false, error: 'Porcentaje inválido', status: 400 };
+  // Recalcula precio y costo sobre la fila GLOBAL de `products`: el efecto cae
+  // sobre todos los tenants que usan esos productos, así que exige rol de
+  // gestión y acota el porcentaje para que un member no dispare el catálogo.
+  const managerCheck = await requireCatalogManager(auth);
+  if (!managerCheck.ok) return managerCheck;
+
+  if (percentage === undefined || typeof percentage !== 'number' || percentage <= 0 || percentage > 100) {
+    return { ok: false, error: 'Porcentaje inválido (debe estar entre 0 y 100)', status: 400 };
   }
 
   const multiplier = 1 + percentage / 100;

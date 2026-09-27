@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import type { AuthInfo } from '@/lib/api-auth';
+import { canManageTenant } from '@/lib/membership-role';
 
 export type TenantResult<T = unknown> =
   | { ok: true; data: T }
@@ -24,6 +25,26 @@ export async function createTenant(
 
   if (typeof name !== 'string' || !name.trim()) {
     return { ok: false, error: 'El nombre de la sucursal es requerido', status: 400 };
+  }
+
+  // Crear una sucursal implica heredar el plan del owner y quedar como `owner`
+  // de la nueva: sin este chequeo, un simple 'member' podía abrir sucursales
+  // sobre el plan pagado de la empresa.
+  if (auth.tenantIds.length > 0) {
+    const { data: memberships } = await supabaseAdmin
+      .from('tenant_users')
+      .select('tenant_id, role')
+      .eq('user_id', auth.userId)
+      .in('tenant_id', auth.tenantIds);
+
+    const isManagerSomewhere = (memberships ?? []).some((m) => canManageTenant(m.role));
+    if (!isManagerSomewhere) {
+      return {
+        ok: false,
+        error: 'Sólo el dueño o un administrador pueden crear sucursales',
+        status: 403,
+      };
+    }
   }
 
   const tenantId = crypto.randomUUID();

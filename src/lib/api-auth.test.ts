@@ -117,4 +117,40 @@ describe('getAuth', () => {
     const auth = await getAuth(makeRequest('t3'));
     expect(auth?.tenantId).toBe('t1');
   });
+
+  it('rechaza mutaciones cross-site (CSRF) sin tocar la base', async () => {
+    const crossSite = new Request('http://localhost/api/x', {
+      method: 'POST',
+      headers: { origin: 'https://evil.test', host: 'localhost' },
+    });
+    await expect(getAuth(crossSite)).resolves.toBeNull();
+    expect(supabaseAuthMock.auth.getUser).not.toHaveBeenCalled();
+    expect(supabaseMock.__calls).toHaveLength(0);
+  });
+
+  it('rechaza Origin: null en mutaciones', async () => {
+    const nullOrigin = new Request('http://localhost/api/x', {
+      method: 'POST',
+      headers: { origin: 'null', host: 'localhost' },
+    });
+    await expect(getAuth(nullOrigin)).resolves.toBeNull();
+  });
+
+  it('permite lecturas same-site', async () => {
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 't1', user_id: 'user-1' }] });
+    const read = new Request('http://localhost/api/x', {
+      method: 'GET',
+      headers: { origin: 'https://evil.test', host: 'localhost' },
+    });
+    await expect(getAuth(read)).resolves.toMatchObject({ tenantId: 't1' });
+  });
+
+  it('permite mutaciones same-origin', async () => {
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 't1', user_id: 'user-1' }] });
+    const sameOrigin = new Request('http://localhost/api/x', {
+      method: 'PATCH',
+      headers: { origin: 'http://localhost', host: 'localhost' },
+    });
+    await expect(getAuth(sameOrigin)).resolves.toMatchObject({ tenantId: 't1' });
+  });
 });

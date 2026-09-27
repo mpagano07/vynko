@@ -82,7 +82,7 @@ describe('POST /api/cash-register', () => {
   });
 
   it('abre una caja con fondo inicial', async () => {
-    supabaseMock.__queue('tenant_users', { data: [{ role: 'member' }] });
+    supabaseMock.__queue('tenant_users', { data: [{ role: 'owner' }] });
     supabaseMock.__queue('cash_register_sessions', { data: null });
     supabaseMock.__queue('cash_register_sessions', {
       data: { id: 'sess-1', initial_fund_cents: 50000 },
@@ -105,7 +105,7 @@ describe('POST /api/cash-register', () => {
   });
 
   it('rechaza abrir si ya hay una caja abierta', async () => {
-    supabaseMock.__queue('tenant_users', { data: [{ role: 'member' }] });
+    supabaseMock.__queue('tenant_users', { data: [{ role: 'owner' }] });
     supabaseMock.__queue('cash_register_sessions', { data: { id: 'open-1' } });
 
     const res = await POST(makeRequest('http://localhost/api/cash-register', { initial_fund: 100 }));
@@ -113,14 +113,14 @@ describe('POST /api/cash-register', () => {
   });
 
   it('rechaza un fondo inicial inválido', async () => {
-    supabaseMock.__queue('tenant_users', { data: [{ role: 'member' }] });
+    supabaseMock.__queue('tenant_users', { data: [{ role: 'owner' }] });
 
     const res = await POST(makeRequest('http://localhost/api/cash-register', { initial_fund: -5 }));
     expect(res.status).toBe(400);
   });
 
-  it('rechaza apertura para un viewer', async () => {
-    supabaseMock.__queue('tenant_users', { data: [{ role: 'viewer' }] });
+  it('rechaza apertura para un member (solo owner/manager operan la caja)', async () => {
+    supabaseMock.__queue('tenant_users', { data: [{ role: 'member' }] });
 
     const res = await POST(makeRequest('http://localhost/api/cash-register', { initial_fund: 100 }));
     expect(res.status).toBe(403);

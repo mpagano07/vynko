@@ -141,21 +141,21 @@ describe('POST /api/products/[id]/adjust', () => {
     expect(json.notes).toBe('recontado');
   });
 
-  it('parte de stock 0 cuando el producto no tiene registro de stock', async () => {
+  it('devuelve 404 cuando el producto no tiene stock en la sucursal', async () => {
     supabaseMock.__queue('products', { data: { id: 'p1', name: 'Coca' } });
     supabaseMock.__queue('product_stock', { data: null, error: null });
-    supabaseMock.__queue('product_stock', { data: null, error: null }); // update
-    supabaseMock.__queue('stock_history', { data: null, error: null });
 
     const res = await POST(
       makeRequest({ id: 'p1' }, { quantity: 5, reason: 'found' }),
       { params: routeParams } as never
     );
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(404);
 
-    const json = await res.json();
-    expect(json.previousStock).toBe(0);
-    expect(json.newStock).toBe(5);
+    // Sin registro de stock no debe quedar ningún movimiento en el historial.
+    const historyInserts = supabaseMock.__calls.filter(
+      (c) => c.table === 'stock_history' && c.method === 'insert'
+    );
+    expect(historyInserts).toHaveLength(0);
   });
 
   it('devuelve 500 cuando falla la actualización del stock', async () => {

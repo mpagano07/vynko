@@ -36,6 +36,19 @@ describe('POST /api/products', () => {
     supabaseMock.__reset();
     vi.mocked(createActivityLog).mockClear();
     vi.mocked(getAuth).mockResolvedValue(mockAuth);
+    // La primera consulta es el rol en `tenant_users` (guard de catálogo global).
+    supabaseMock.__queue('tenant_users', { data: { role: 'owner' }, error: null });
+  });
+
+  it('rechaza a un member (no puede escribir en el catálogo global)', async () => {
+    supabaseMock.__reset();
+    supabaseMock.__queue('tenant_users', { data: { role: 'member' }, error: null });
+    const res = await POST(makeRequest({ name: 'Coca', price: 150 }));
+    expect(res.status).toBe(403);
+    const inserts = supabaseMock.__calls.filter(
+      (c) => c.table === 'products' && c.method === 'insert'
+    );
+    expect(inserts).toHaveLength(0);
   });
 
   it('crea un producto válido y su stock inicial', async () => {
@@ -289,6 +302,7 @@ describe('POST /api/products edge cases', () => {
     supabaseMock.__reset();
     vi.mocked(createActivityLog).mockClear();
     vi.mocked(getAuth).mockResolvedValue(mockAuth);
+    supabaseMock.__queue('tenant_users', { data: { role: 'owner' }, error: null });
   });
 
   it('asume plan starter cuando el tenant no tiene plan', async () => {

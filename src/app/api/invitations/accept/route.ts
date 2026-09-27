@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { acceptInvitationsForUser } from '@/lib/accept-invitations';
+import { isSameOriginRequest } from '@/lib/security/csrf';
 
 async function getAuthenticatedUser(request: Request) {
   const authHeader = request.headers.get('authorization');
@@ -40,6 +41,13 @@ async function getAuthenticatedUser(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // Acepta invitaciones en nombre del usuario autenticado: es una mutacion,
+  // asi que no puede dispararse desde otro origen. El flujo movil (Bearer sin
+  // Origin) sigue funcionando porque la ausencia de Origin no se rechaza.
+  if (!isSameOriginRequest(request)) {
+    return NextResponse.json({ error: 'Origen no permitido' }, { status: 403 });
+  }
+
   try {
     const user = await getAuthenticatedUser(request);
     if (!user || !user.email) {
