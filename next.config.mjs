@@ -32,24 +32,12 @@ const nextConfig = {
     optimizePackageImports: ['lucide-react', 'recharts'],
   },
   async headers() {
-    const isDev = process.env.NODE_ENV !== 'production';
-    const csp = [
-      "default-src 'self'",
-      `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' blob: data: https://*.supabase.co https://*.supabase.in https://*.mercadopago.com https://http2.mlstatic.com https://*.gravatar.com https://images.unsplash.com",
-      "font-src 'self' data:",
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
-      "frame-src https://*.mercadopago.com",
-      "media-src 'self' blob:",
-      "worker-src 'self' blob:",
-      "object-src 'none'",
-      "base-uri 'self'",
-      "form-action 'self'",
-      "frame-ancestors 'self'",
-      'upgrade-insecure-requests',
-    ].join('; ');
+    const isProd = process.env.NODE_ENV === 'production';
 
+    // La CSP NO va aca: necesita un nonce distinto por request, asi que se
+    // arma en `src/proxy.ts` (ver `src/lib/security/csp.ts`). Si se dejara una
+    // CSP estatica en este archivo, se pisaria con la del proxy y las paginas
+    // quedarian sin nonce en los scripts de RSC.
     return [
       {
         source: '/:path*',
@@ -68,13 +56,19 @@ const nextConfig = {
             key: 'X-DNS-Prefetch-Control',
             value: 'on',
           },
-          {
-            key: 'Strict-Transport-Security',
-            value: 'max-age=63072000; includeSubDomains; preload',
-          },
+          // HSTS sólo en producción: en local sería imposible volver a
+          // usar http:// sobre el dominio de desarrollo.
+          ...(isProd
+            ? [
+                {
+                  key: 'Strict-Transport-Security',
+                  value: 'max-age=63072000; includeSubDomains; preload',
+                },
+              ]
+            : []),
           {
             key: 'X-Frame-Options',
-            value: 'SAMEORIGIN',
+            value: 'DENY',
           },
           {
             key: 'X-Content-Type-Options',
@@ -82,20 +76,16 @@ const nextConfig = {
           },
           {
             key: 'Referrer-Policy',
-            value: 'origin-when-cross-origin',
+            value: 'strict-origin-when-cross-origin',
+          },
+          {
+            key: 'Cross-Origin-Opener-Policy',
+            value: 'same-origin',
           },
           {
             key: 'Permissions-Policy',
-            value: 'camera=(self), microphone=(), geolocation=(), browsing-topics=()',
+            value: 'camera=(self), microphone=(), geolocation=(), browsing-topics=(), payment=(), usb=()',
           },
-          ...(isDev
-            ? []
-            : [
-                {
-                  key: 'Content-Security-Policy',
-                  value: csp,
-                },
-              ]),
         ],
       },
     ];

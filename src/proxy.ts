@@ -3,24 +3,55 @@ import type { NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { checkSubscriptionBlocked, consolidateOwnerSubscription, type TenantSubscription } from '@/lib/checkSubscription';
+import { buildCsp } from '@/lib/security/csp';
 import { hardenSessionCookieOptions } from '@/lib/security/session-cookie';
 
 const publicPaths = ['/login', '/auth', '/accept-invite', '/privacidad', '/terminos', '/cookies'];
 const onboardingPath = '/onboarding';
 const billingPath = '/billing';
 
+/**
+ * Empaqueta la CSP con un nonce nuevo y la propaga a la request y a la
+ * respuesta.
+ *
+ * El nonce va en la REQUEST para que Next lo extraiga durante el render y se
+ * lo agregue a los scripts que genera; y en la RESPONSE para que el navegador
+ * lo exija. Next busca el nonce en el header `Content-Security-Policy`, por eso
+ * se copia ahi tambien.
+ *
+ * `next()` conserva los request headers, asi que el nonce sigue disponible
+ * para los Server Components aunque despues se devuelva una redireccion.
+ */
+function withCsp(response: NextResponse, nonce: string): NextResponse {
+  const csp = buildCsp(nonce);
+  response.headers.set('Content-Security-Policy', csp);
+  return response;
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (pathname === '/') return NextResponse.next();
+  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-nonce', nonce);
+  requestHeaders.set('Content-Security-Policy', buildCsp(nonce));
+
+  const next = () => {
+    const res = NextResponse.next({ request: { headers: requestHeaders } });
+    return withCsp(res, nonce);
+  };
+
+  const redirect = (url: URL) => withCsp(NextResponse.redirect(url), nonce);
+
+  if (pathname === '/') return next();
 
   const isOnboarding = pathname === onboardingPath || pathname.startsWith(`${onboardingPath}/`);
 
   if (publicPaths.some(p => pathname === p || pathname.startsWith(p + '/'))) {
-    return NextResponse.next();
+    return next();
   }
 
-  const response = NextResponse.next();
+  const response = next();
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -37,6 +68,9 @@ export async function proxy(request: NextRequest) {
             // desde el navegador en cada navegacion, aunque las rutas la
             // escribieran bien.
             const sessionOptions: Record<string, unknown> = { ...options };
+            // Session cookies: strip maxAge/expires when setting so the browser
+            // deletes them when fully closed. Deletions (empty value) keep the
+            // SDK's maxAge: 0 so the cookie is actually removed.
             if (value) {
               delete sessionOptions.maxAge;
               delete sessionOptions.expires;
@@ -53,7 +87,7 @@ export async function proxy(request: NextRequest) {
   if (!user) {
     const redirectUrl = new URL('/login', request.url);
     redirectUrl.searchParams.set('redirect_to', pathname);
-    return NextResponse.redirect(redirectUrl);
+    return redirect(redirectUrl);
   }
 
   // Admin client (service role) for DB checks: bypasses RLS so a policy or a
@@ -98,7 +132,7 @@ export async function proxy(request: NextRequest) {
       return response;
     }
     if (!onboardingPending || tenantIds.length > 0) {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+      return redirect(new URL('/dashboard', request.url));
     }
     return response;
   }
@@ -106,7 +140,7 @@ export async function proxy(request: NextRequest) {
   if (membershipError) {
     console.warn('proxy: tenant_users check failed, failing open:', membershipError.message);
   } else if (onboardingPending && (!tenantIds || tenantIds.length === 0)) {
-    return NextResponse.redirect(new URL('/onboarding', request.url));
+    return redirect(new URL('/onboarding', request.url));
   }
 
   // Self-healing: el flag quedó en TRUE pero el usuario ya tiene empresa
@@ -138,7 +172,7 @@ export async function proxy(request: NextRequest) {
     if (result?.blocked) {
       const url = new URL(billingPath, request.url);
       url.searchParams.set('blocked', result.reason);
-      return NextResponse.redirect(url);
+      return redirect(url);
     }
   }
 
@@ -161,7 +195,7 @@ export async function proxy(request: NextRequest) {
  * contenga un punto (assets: theme-init.js, favicon.ico, robots.txt, ...), para
  * que la logica de auth no bloquee la carga de CSS, JS e imagenes.
  *
- * `src/proxy-matcher.test.ts` verifica que estas rutas NO matchean y que las paginas
+ * `src/proxy.test.ts` verifica que estas rutas NO matchean y que las paginas
  * de la app SI, para que un error de escapado no vuelva a pasar inadvertido.
  */
 export const config = {
