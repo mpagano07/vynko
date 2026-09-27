@@ -3,7 +3,6 @@
 import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
-import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import Link from 'next/link';
@@ -92,44 +91,32 @@ function SignupContent() {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          data: {
-            company_name: companyName.trim(),
-            full_name: ownerName.trim(),
-          },
-          emailRedirectTo: `${window.location.origin}/auth/callback?company_name=${encodeURIComponent(
-            companyName.trim()
-          )}&full_name=${encodeURIComponent(ownerName.trim())}`,
-        },
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+          companyName: companyName.trim(),
+          fullName: ownerName.trim(),
+        }),
       });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'No se pudo crear la cuenta');
 
-      if (error) throw error;
-
-      if (data?.user?.identities?.length === 0) {
-        toast.error('Este email ya está registrado. Usá "Olvidé mi contraseña" para acceder.');
-        setEmail('');
-        setPassword('');
-        setConfirmPassword('');
-        return;
-      }
-
-      if (data?.session) {
+      if (!data.requiresConfirmation) {
         await fetch('/api/invitations/accept', { method: 'POST' });
         toast.success('Cuenta creada correctamente');
         router.push('/dashboard');
         router.refresh();
       } else {
         // Sin sesión hasta confirmar el email: nombre/empresa viajan en
-        // user_metadata (options.data) para que el server cree la empresa al
-        // confirmar. Solo mostramos el modal de verificación.
+        // user_metadata para que el server cree la empresa al confirmar.
         setRegisteredEmail(email.trim());
         setVerificationOpen(true);
       }
     } catch (error: unknown) {
-      toast.error(authErrorMessage(error));
+      toast.error(error instanceof Error ? error.message : authErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -143,11 +130,16 @@ function SignupContent() {
     setTermsError('');
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo: `${window.location.origin}/auth/callback` },
-      });
-      if (error) throw error;
+      // El flujo arranca en el servidor: el verifier PKCE queda en una cookie
+      // HttpOnly y el canje final lo hace `/auth/callback`, que ya es de servidor.
+      const res = await fetch('/api/auth/oauth?provider=google');
+      const data = await res.json();
+      if (!res.ok || !data?.url) {
+        throw new Error(data?.error || 'No se pudo iniciar el login con Google');
+      }
+      // Navegacion real: el proveedor toma el control de la pestana y el estado
+      // local (loading) no sobrevive al viaje de ida y vuelta.
+      window.location.href = data.url;
     } catch (error: unknown) {
       toast.error(authErrorMessage(error));
       setLoading(false);

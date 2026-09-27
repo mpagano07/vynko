@@ -47,6 +47,7 @@ function mockAuth(overrides: Partial<ReturnType<typeof useAuth>> = {}) {
     allTenants: false,
     loadProfileAndTenant: vi.fn(),
     switchTenant: vi.fn(),
+    refreshSession: vi.fn(async () => true),
     ...overrides,
   });
 }
@@ -199,12 +200,15 @@ describe('DashboardPage: carga de datos de un tenant', () => {
     expect(screen.getByText('+25%')).toBeInTheDocument();
     expect(screen.getByText('2 ventas')).toBeInTheDocument();
 
+    // La sesion viaja en la cookie HttpOnly. Si alguna request del dashboard
+    // mandara un header Authorization, el token estaria expuesto al JS que la
+    // app justamente acaba de dejar de usar para autenticarse.
     const authHeaderCalls = fetchHandler.mock.calls.filter(([, init]) => {
       const headers = (init as RequestInit | undefined)?.headers;
-      if (headers instanceof Headers) return headers.get('Authorization') === 'Bearer tok';
-      return (headers as Record<string, string> | undefined)?.Authorization === 'Bearer tok';
+      if (headers instanceof Headers) return Boolean(headers.get('Authorization'));
+      return Boolean((headers as Record<string, string> | undefined)?.Authorization);
     });
-    expect(authHeaderCalls.length).toBeGreaterThan(0);
+    expect(authHeaderCalls).toHaveLength(0);
   });
 
   it('muestra el estado sin ventas cuando la API no devuelve ventas hoy', async () => {

@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { checkSubscriptionBlocked, consolidateOwnerSubscription, type TenantSubscription } from '@/lib/checkSubscription';
+import { hardenSessionCookieOptions } from '@/lib/security/session-cookie';
 
 const publicPaths = ['/login', '/auth', '/accept-invite', '/privacidad', '/terminos', '/cookies'];
 const onboardingPath = '/onboarding';
@@ -29,15 +30,18 @@ export async function proxy(request: NextRequest) {
         getAll: () => request.cookies.getAll(),
         setAll: (cookiesToSet) => {
           cookiesToSet.forEach(({ name, value, options }) => {
-            // Session cookies: strip maxAge/expires when setting so the browser
-            // deletes them when fully closed. Deletions (empty value) keep the
-            // SDK's maxAge: 0 so the cookie is actually removed.
-            const sessionOptions = { ...options };
+            // El proxy refresca la sesion en cada request, asi que es el segundo
+            // escritor de cookies de sesion. Comparte el endurecimiento con las
+            // rutas de API para que no se puedan desincronizar: si esta copia
+            // reescribiera la cookie sin `httpOnly`, dejaria la sesion legible
+            // desde el navegador en cada navegacion, aunque las rutas la
+            // escribieran bien.
+            const sessionOptions: Record<string, unknown> = { ...options };
             if (value) {
               delete sessionOptions.maxAge;
               delete sessionOptions.expires;
             }
-            response.cookies.set(name, value, sessionOptions);
+            response.cookies.set(name, value, hardenSessionCookieOptions(sessionOptions));
           });
         },
       },
@@ -142,6 +146,24 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 
+/**
+ * Matcher del Proxy.
+ *
+ * OJO con el escapado: dentro de un string de JS, `"\."` NO es un punto
+ * literal, es solo `"."` (el backslash se pierde). Eso convertia el filtro de
+ * archivos con extension en `.*..*`, que matchea cualquier string no vacio:
+ * el negative lookahead fallaba siempre y el Proxy terminaba ejecutandose
+ * unicamente en `/`. Es decir, los gates de auth, onboarding, suscripcion y
+ * refresh de sesion NO se ejecutaban en ningun build de produccion.
+ * El doble backslash `\\.` si produce el punto escapado en la regex final.
+ *
+ * Este matcher excluye `_next`, `api`, `static`, `public` y cualquier ruta que
+ * contenga un punto (assets: theme-init.js, favicon.ico, robots.txt, ...), para
+ * que la logica de auth no bloquee la carga de CSS, JS e imagenes.
+ *
+ * `src/proxy-matcher.test.ts` verifica que estas rutas NO matchean y que las paginas
+ * de la app SI, para que un error de escapado no vuelva a pasar inadvertido.
+ */
 export const config = {
-  matcher: ['/((?!_next|api|static|public|.*\..*).*)'],
+  matcher: ['/((?!_next|api|static|public|.*\\..*).*)'],
 };

@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { supabase } from '@/lib/supabaseClient';
+import { useAuthContext } from '@/lib/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { FormLabel } from '@/components/ui/form-label';
@@ -16,6 +16,7 @@ export const dynamic = 'force-dynamic';
 
 function LoginContent() {
   const router = useRouter();
+  const { refreshSession } = useAuthContext();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -50,12 +51,15 @@ function LoginContent() {
     }
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: emailVal,
-        password: passwordVal,
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailVal.trim(), password: passwordVal }),
       });
-
-      if (error) throw error;
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'No se pudo iniciar sesión');
+      }
 
       if (remember) {
         localStorage.setItem('vynko_remember', JSON.stringify({ email: emailVal }));
@@ -65,9 +69,18 @@ function LoginContent() {
 
       toast.success('Sesión iniciada correctamente');
 
+      // El login ocurre en el servidor: la cookie de sesión ya existe, pero el
+      // cliente de Supabase no emite ningún evento por un cambio externo de
+      // cookie. Sin re-resolver la sesión, el AuthProvider seguía con el estado
+      // "deslogueado" de /login y el gate del dashboard expulsaba al usuario.
+      const sessionReady = await refreshSession();
+      if (!sessionReady) {
+        throw new Error('No se pudo iniciar sesión');
+      }
+
       router.replace('/dashboard');
     } catch (error: unknown) {
-      toast.error(authErrorMessage(error));
+      toast.error(error instanceof Error ? error.message : authErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -76,13 +89,16 @@ function LoginContent() {
   const handleGoogleLogin = async () => {
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
-      if (error) throw error;
+      // El flujo arranca en el servidor: el verifier PKCE queda en una cookie
+      // HttpOnly y el canje final lo hace `/auth/callback`, que ya es de servidor.
+      const res = await fetch('/api/auth/oauth?provider=google');
+      const data = await res.json();
+      if (!res.ok || !data?.url) {
+        throw new Error(data?.error || 'No se pudo iniciar el login con Google');
+      }
+      // Navegacion real: el proveedor toma el control de la pestana y el estado
+      // local (loading) no sobrevive al viaje de ida y vuelta.
+      window.location.href = data.url;
     } catch (error: unknown) {
       toast.error(authErrorMessage(error));
       setLoading(false);

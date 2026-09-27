@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient, type ServerCookie } from '@/lib/supabase';
 import { acceptInvitationsForUser, getUserTenantIds } from '@/lib/accept-invitations';
 import { createCompanyForUser } from '@/lib/create-company';
+import { getAppOrigin, safeInternalRedirect } from '@/lib/security/redirects';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,11 +16,12 @@ interface ResponseCookieOptions {
 }
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
+  const origin = getAppOrigin(request);
   const code = searchParams.get('code');
 
   if (!code) {
-    return NextResponse.redirect(`${origin}/login?error=missing_code`);
+    return NextResponse.redirect(safeInternalRedirect(request, null, '/login?error=missing_code'));
   }
 
   const capturedCookies: ServerCookie[] = [];
@@ -35,12 +37,12 @@ export async function GET(request: Request) {
     // confirmación (o si se abrió en otro navegador). El email ya quedó
     // confirmado en ese caso, así que lo mandamos a /login para que ingrese con
     // su email y contraseña.
-    console.error('Server side callback error:', error);
-    return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(error.message)}`);
+    console.error('Server side callback error:', error.message);
+    return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent('Link inválido o expirado. Ingresá con tu email y contraseña.')}`);
   }
 
   const user = data.user;
-  let redirectTo = `${origin}/dashboard`;
+  let redirectPath = '/dashboard';
 
   if (user?.id) {
     // 1. Acepta invitaciones pendientes (idempotente).
@@ -60,8 +62,8 @@ export async function GET(request: Request) {
       // Fallback: los datos también viajan como query params en el email de
       // confirmación (más confiable si la metadata de la cuenta ya existente
       // no se actualizó).
-      if (!companyName) companyName = searchParams.get('company_name') ?? '';
-      if (!ownerName) ownerName = searchParams.get('full_name') ?? '';
+      if (!companyName) companyName = (searchParams.get('company_name') ?? '').slice(0, 200);
+      if (!ownerName) ownerName = (searchParams.get('full_name') ?? '').slice(0, 200);
 
       // Aplicado a user_metadata: la metadata puede quedar vacía para cuentas
       // existentes que no guardaron datos al registrarse. La actualizamos para
@@ -72,18 +74,21 @@ export async function GET(request: Request) {
           companyName,
           ownerName
         );
-        if (tenantId) {
-          redirectTo = `${origin}/dashboard`;
-        } else {
-          redirectTo = `${origin}/onboarding`;
-        }
+        redirectPath = tenantId ? '/dashboard' : '/onboarding';
       } else {
-        redirectTo = `${origin}/onboarding`;
+        redirectPath = '/onboarding';
       }
     }
   }
 
-  const response = NextResponse.redirect(redirectTo);
+  // `next` sólo se acepta si es un path interno del propio origen: evita
+  // open redirect con un enlace de confirmación manipulado.
+  const requestedNext = searchParams.get('next');
+  if (requestedNext) {
+    redirectPath = new URL(safeInternalRedirect(request, requestedNext, '/dashboard')).pathname;
+  }
+
+  const response = NextResponse.redirect(safeInternalRedirect(request, redirectPath));
   for (const c of capturedCookies) {
     const opts = c.options as Partial<ResponseCookieOptions>;
     if (c.value === '') {

@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { usePagination } from '@/lib/hooks/usePagination';
 import { fetchWithTenant } from '@/lib/fetchWithTenant';
 import { matchesQuery } from '@/lib/utils/text';
+import { escapeAttribute, escapeHtml, isSafeImageUrl } from '@/lib/security/html-escape';
 import { Card } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -95,21 +96,22 @@ export default function CodigosPage() {
   }, [qrs]);
 
   const handlePrint = () => {
+    const printWindow = window.open('', '_blank', 'width=800,height=600,noopener,noreferrer');
+    if (!printWindow) return;
+    printWindow.opener = null;
+
     const cards = filtered.map((p) => {
       const qrUrl = qrs.get(p.id);
       const code = p.barcode || p.sku || p.id;
-      if (!qrUrl) return '';
+      if (!qrUrl || !isSafeImageUrl(qrUrl)) return '';
       return `
         <div class="qr-card">
-          <img src="${qrUrl}" alt="QR ${p.name}" width="120" height="120" />
-          <p class="qr-name">${p.name.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
-          <p class="qr-code">${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+          <img src="${escapeAttribute(qrUrl)}" alt="QR ${escapeAttribute(p.name)}" width="120" height="120" />
+          <p class="qr-name">${escapeHtml(p.name)}</p>
+          <p class="qr-code">${escapeHtml(code)}</p>
         </div>
       `;
     }).join('');
-
-    const printWindow = window.open('', '_blank', 'width=800,height=600');
-    if (!printWindow) return;
 
     printWindow.document.write(`<!DOCTYPE html>
 <html>
@@ -166,13 +168,15 @@ export default function CodigosPage() {
 </head>
 <body>
   <div class="grid">${cards}</div>
-  <script>
-    window.onafterprint = function() { window.close(); };
-    setTimeout(function() { window.print(); }, 300);
-  <\/script>
 </body>
 </html>`);
     printWindow.document.close();
+
+    // La ventana de impresión hereda la CSP de la pagina, asi que un <script>
+    // inline con este nonce (o sin CSP) queda bloqueado. Se dispara la
+    // impresion desde la ventana padre en lugar de incrustar un script.
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 300);
   };
 
   return (

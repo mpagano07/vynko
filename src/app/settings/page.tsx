@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -421,24 +420,30 @@ export default function SettingsPage() {
 
     setSavingPassword(true);
     try {
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      const email = currentUser?.email;
-      if (!email) throw new Error('No se pudo verificar tu identidad');
-
-      const { error: verifyError } = await supabase.auth.signInWithPassword({
-        email,
-        password: passwordForm.currentPassword,
+      // Verificar la contrasena actual y aplicarla lo hace el servidor: con la
+      // cookie de sesion HttpOnly el cliente ya no puede llamar a
+      // `signInWithPassword` ni a `updateUser`.
+      const res = await fetch('/api/auth/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'verify',
+          currentPassword: passwordForm.currentPassword,
+        }),
       });
-      if (verifyError) {
-        toast.error('La contraseña actual es incorrecta');
+      const verifyData = await res.json();
+      if (!res.ok) {
+        toast.error(verifyData?.error || 'La contraseña actual es incorrecta');
         return;
       }
 
-      const { error } = await supabase.auth.updateUser({
-        password: passwordForm.newPassword,
+      const changeRes = await fetch('/api/auth/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'change', newPassword: passwordForm.newPassword }),
       });
-
-      if (error) throw error;
+      const changeData = await changeRes.json();
+      if (!changeRes.ok) throw new Error(changeData?.error || 'Error al actualizar contraseña');
 
       toast.success('Contraseña actualizada');
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });

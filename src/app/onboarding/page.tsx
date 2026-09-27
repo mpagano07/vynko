@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -30,17 +29,13 @@ export default function OnboardingPage() {
   });
 
   const createCompany = useCallback(async (companyName: string, ownerName: string) => {
-    const sessionResult = await supabase.auth.getSession();
-    const accessToken = sessionResult.data.session?.access_token;
-    const refreshToken = sessionResult.data.session?.refresh_token;
-
+    // La sesion viaja en la cookie HttpOnly: no se manda ningun token. La ruta
+    // resuelve al usuario desde la cookie del servidor.
     const response = await fetch('/api/onboarding', {
       method: 'POST',
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        ...(refreshToken ? { 'x-refresh-token': refreshToken } : {}),
       },
       body: JSON.stringify({
         companyName: companyName.trim(),
@@ -62,19 +57,8 @@ export default function OnboardingPage() {
 
     async function checkExistingCompany() {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          if (!cancelled) router.replace('/login');
-          return;
-        }
-
         const response = await withTimeout(
-          fetch('/api/session', {
-            headers: {
-              Authorization: `Bearer ${session.access_token}`,
-              'x-refresh-token': session.refresh_token ?? '',
-            },
-          }),
+          fetch('/api/session', { credentials: 'include' }),
           10_000
         );
         if (cancelled) return;
@@ -93,9 +77,20 @@ export default function OnboardingPage() {
           return;
         }
 
-        const data: { tenants?: unknown[]; tenant?: unknown; onboarding_pending?: boolean } | null =
-          await response.json().catch(() => null);
+        const data: {
+          user?: { user_metadata?: Record<string, unknown> } | null;
+          tenants?: unknown[];
+          tenant?: unknown;
+          onboarding_pending?: boolean;
+        } | null = await response.json().catch(() => null);
         if (cancelled) return;
+
+        // Sin sesion no se muestra el formulario: se manda al login. La cookie es
+        // HttpOnly, asi que la unica forma de saberlo es la respuesta del servidor.
+        if (!data?.user) {
+          if (!cancelled) router.replace('/login');
+          return;
+        }
 
         const hasCompany = (data?.tenants?.length ?? 0) > 0 || !!data?.tenant;
         // Flag directo de la DB (onboarding_pending): FALSE = el usuario ya
@@ -111,7 +106,7 @@ export default function OnboardingPage() {
           // /auth/callback, code verifier perdido, registro sin confirmación).
           // Esos datos viajan en user_metadata: creá la empresa automáticamente
           // para no pedir dos veces lo mismo.
-          const meta = (session.user?.user_metadata ?? {}) as Record<string, unknown>;
+          const meta = (data.user?.user_metadata ?? {}) as Record<string, unknown>;
           const metaCompany = typeof meta.company_name === 'string' ? meta.company_name.trim() : '';
           const metaOwner = typeof meta.full_name === 'string' ? meta.full_name.trim() : '';
 

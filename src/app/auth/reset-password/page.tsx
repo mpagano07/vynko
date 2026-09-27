@@ -3,13 +3,11 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
-import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { authErrorMessage } from '@/lib/auth-errors';
 
 function ResetPasswordContent() {
   const router = useRouter();
@@ -26,26 +24,37 @@ function ResetPasswordContent() {
       code = url.searchParams.get('code');
     }
 
-    if (code) {
-      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
-        if (error) {
+    // El canje del codigo por una sesion lo hace el servidor, para que la
+    // cookie de recuperacion quede HttpOnly y ningun token llegue al JS.
+    const establish = async () => {
+      if (code) {
+        const res = await fetch('/api/auth/recover', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code }),
+        });
+        if (!res.ok) {
           toast.error('Link inválido o expirado');
           router.push('/login');
           return;
         }
         setReady(true);
-      });
-      return;
-    }
+        return;
+      }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
+      // Sin `code` (el enlace se abrio en otra pestana y ya se canjeo): se
+      // consulta al servidor si la sesion de recuperacion sigue vigente.
+      const res = await fetch('/api/session', { credentials: 'include' });
+      const data = await res.json();
+      if (res.ok && data?.user) {
         setReady(true);
       } else {
         toast.error('Link inválido o expirado');
         router.push('/login');
       }
-    });
+    };
+
+    void establish();
   }, [searchParams, router]);
 
   const handleReset = async (e: React.FormEvent) => {
@@ -64,14 +73,21 @@ function ResetPasswordContent() {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.updateUser({ password });
-      if (error) throw error;
+      const res = await fetch('/api/auth/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'change', newPassword: password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'No se pudo actualizar la contraseña');
 
       toast.success('Contraseña actualizada correctamente');
-      await supabase.auth.signOut({ scope: 'local' });
+      // La sesion de recuperacion ya no sirve: se cierra desde el servidor para
+      // no dejar viva la sesion con la que se entro por el link.
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
       router.push('/login');
     } catch (error: unknown) {
-      toast.error(authErrorMessage(error));
+      toast.error(error instanceof Error ? error.message : 'No se pudo actualizar la contraseña');
     } finally {
       setLoading(false);
     }

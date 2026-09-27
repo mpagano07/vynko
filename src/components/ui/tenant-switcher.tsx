@@ -87,7 +87,9 @@ export function TenantSwitcher() {
 
   return (
     <div className="relative">
-      <div className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700/50 hover:bg-gray-200/70 dark:hover:bg-gray-700/60 transition-colors cursor-pointer"
+      <div
+        data-testid="tenant-switcher"
+        className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700/50 hover:bg-gray-200/70 dark:hover:bg-gray-700/60 transition-colors cursor-pointer"
         onClick={() => setSwitcherOpen(!switcherOpen)}
       >
         <div className="w-6 h-6 rounded-md bg-blue-500/20 flex items-center justify-center flex-shrink-0">
@@ -118,7 +120,7 @@ export function TenantSwitcher() {
               )}
             </button>
             {tenants.map((t) => (
-              <div key={t.id} className="group flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+              <div key={t.id} data-testid="tenant-switcher-option" className="group flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
                 {renamingTenantId === t.id ? (
                   <form
                     onSubmit={(e) => { e.preventDefault(); handleRename(t.id); }}

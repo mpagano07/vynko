@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { safeInternalRedirect } from '@/lib/security/redirects';
 
 export type ResetPasswordResult = {
   data: Record<string, unknown>;
@@ -31,9 +32,9 @@ export async function sendResetPasswordEmail(request: Request): Promise<ResetPas
     };
   }
 
-  const origin = new URL(request.url).origin;
+  const redirectTo = safeInternalRedirect(request, '/auth/reset-password');
   const { error } = await supabaseAdmin.auth.resetPasswordForEmail(email.toLowerCase(), {
-    redirectTo: `${origin}/auth/reset-password`,
+    redirectTo,
   });
 
   if (error) {
