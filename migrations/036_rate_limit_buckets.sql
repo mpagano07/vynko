@@ -222,6 +222,23 @@ REVOKE ALL ON rate_limit_buckets FROM anon, authenticated;
 REVOKE ALL ON FUNCTION rate_limit_hit(TEXT, INTEGER, INTEGER, BOOLEAN) FROM PUBLIC;
 REVOKE ALL ON FUNCTION rate_limit_reset_if_expired() FROM PUBLIC;
 
+-- El revoke de arriba solo no alcanzaba, y esta es la parte que faltaba.
+--
+-- Supabase aplica `ALTER DEFAULT PRIVILEGES ... GRANT EXECUTE ON FUNCTIONS TO
+-- anon, authenticated` sobre el schema public. Ese permiso es DIRECTO sobre
+-- esos dos roles, no viene de PUBLIC, asi que revocar de PUBLIC no lo toca: los
+-- privilegios de un rol son la union de los suyos y los de PUBLIC, y el directo
+-- seguia granting. Comprobado en produccion despues de correr esta migracion
+-- solo con los revoke de PUBLIC: `has_function_privilege('anon', ...)` daba
+-- true, o sea que anon y authenticated llegaban a ejecutar la funcion.
+--
+-- Hay que revocar de los dos roles ademas de PUBLIC para que el ACL quede
+-- cerrado de verdad. La guarda `current_user` de mas arriba queda igual como
+-- defense in depth: si el default privilege vuelve a filtrar el permiso, la
+-- funcion se niega sola.
+REVOKE ALL ON FUNCTION rate_limit_hit(TEXT, INTEGER, INTEGER, BOOLEAN) FROM anon, authenticated;
+REVOKE ALL ON FUNCTION rate_limit_reset_if_expired() FROM anon, authenticated;
+
 GRANT EXECUTE ON FUNCTION rate_limit_hit(TEXT, INTEGER, INTEGER, BOOLEAN) TO service_role;
 GRANT EXECUTE ON FUNCTION rate_limit_reset_if_expired() TO service_role;
 
