@@ -2,7 +2,13 @@
 #
 #   $env:E2E_USER_EMAIL = "prueba@tuempresa.com"
 #   $env:E2E_USER_PASSWORD = "..."
+#   $env:VERIFY_RLS_EXPECT_REF = "abc123"   # recomendado: primeros 6 del ref
 #   .\scripts\verify-rls-prod.ps1
+#
+# Recomendado definir VERIFY_RLS_EXPECT_REF con los primeros 6 caracteres del
+# project ref de PRODUCCION. El script imprime el ref que realmente uso y
+# aborta si no coincide, para que un resultado "53 ok" sobre la base de dev no
+# se pueda leer como una aprobacion de produccion.
 #
 # No escribe ningun secreto en disco: `vercel env run` inyecta las variables
 # reales de produccion directo en el proceso de node. (No se usa `vercel env
@@ -53,6 +59,11 @@ if ($missing.Count -gt 0) {
 
 $env:VERIFY_RLS_ENV_FROM = 'process'
 
+if (-not (Test-Path Env:VERIFY_RLS_EXPECT_REF)) {
+  Write-Host "AVISO: no definiste VERIFY_RLS_EXPECT_REF, asi que no se puede comprobar que" -ForegroundColor Yellow
+  Write-Host "       apunte a produccion. Mirá el project ref que imprime el script." -ForegroundColor Yellow
+}
+
 # `vercel env run` deja pasar las variables del proceso padre, y si alguna
 # coincide con una de Vercel, la del padre gana. Una sesion que se haya
 # quedado con [SENSITIVE] de un `vercel env pull` viejo rompe el script con
@@ -69,10 +80,32 @@ if ($contaminadas.Count -gt 0) {
 }
 
 Write-Host "verify-rls contra PRODUCCION (variables reales, sin escribir a disco)..." -ForegroundColor Cyan
-$run = Invoke-Native -Exe 'cmd' -Arguments @(
-  '/c', 'vercel', 'env', 'run', '--environment=production',
-  '--', 'node', 'scripts/verify-rls.mjs'
-)
+
+# Limpiar el entorno del proceso padre NO alcanza: la CLI de Vercel tambien lee
+# los archivos .env* del directorio y los inyecta. Como .env.local apunta a dev,
+# sus valores le ganaban a los de Production y el script verificaba la base
+# equivocada anunciando que usaba produccion. Por eso apartamos .env.local
+# durante la corrida y lo restauramos siempre, pase lo que pase.
+$envLocal = Join-Path (Get-Location) '.env.local'
+$envLocalBak = $envLocal + '.verify-bak'
+$movido = $false
+if (Test-Path -LiteralPath $envLocal) {
+  Move-Item -LiteralPath $envLocal -Destination $envLocalBak -Force
+  $movido = $true
+  Write-Host "Apartado .env.local para que no contamination la corrida." -ForegroundColor Yellow
+}
+
+try {
+  $run = Invoke-Native -Exe 'cmd' -Arguments @(
+    '/c', 'vercel', 'env', 'run', '--environment=production',
+    '--', 'node', 'scripts/verify-rls.mjs'
+  )
+} finally {
+  if ($movido -and (Test-Path -LiteralPath $envLocalBak)) {
+    Move-Item -LiteralPath $envLocalBak -Destination $envLocal -Force
+    Write-Host "Restaurado .env.local." -ForegroundColor Yellow
+  }
+}
 Remove-Item Env:VERIFY_RLS_ENV_FROM -ErrorAction SilentlyContinue
 
 $run.Out -split "`n" | ForEach-Object {

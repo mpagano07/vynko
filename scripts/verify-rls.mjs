@@ -65,6 +65,26 @@ if (!URL_BASE || !ANON || !SERVICE || !USER_EMAIL || !USER_PASSWORD) {
   process.exit(2);
 }
 
+// Barrera contra verificar la base equivocada: `vercel env run` carga tambien
+// .env.local, asi que el proceso puede acabar con los valores de dev y el
+// script creeria estar apuntando a produccion. Imprimimos el project ref y, si
+// se paso VERIFY_RLS_EXPECT_REF, abortamos ante cualquier diferencia.
+const projectRef = (URL_BASE.match(/\/\/([a-z]{6})[a-z0-9]*\./) || [])[1] || 'desconocido';
+console.log('[db] project ref: ' + projectRef + '...');
+if (process.env.VERIFY_RLS_EXPECT_REF) {
+  if (projectRef !== process.env.VERIFY_RLS_EXPECT_REF.toLowerCase()) {
+    console.error(
+      'ABORTO: esperabamos el project ref ' +
+        process.env.VERIFY_RLS_EXPECT_REF.toLowerCase() +
+        '... y apunto a ' +
+        projectRef +
+        '...'
+    );
+    process.exit(2);
+  }
+  console.log('[db] coincide con VERIFY_RLS_EXPECT_REF, seguimos');
+}
+
 const admin = createClient(URL_BASE, SERVICE, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
