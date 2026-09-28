@@ -1,0 +1,27 @@
+version: 1
+
+# Los archivos de test y fixtures usan cadenas que parecen credenciales
+# (password, token) pero son valores inventados para las aserciones. El
+# detector las marca como secretos y cada corrida ensucia el reporte.
+# Acá se bajan los falsos positivos de una forma acotada: solo paths de test.
+#
+# OJO: esto NO desactiva el escaneo de src/ ni de scripts/. Si un secreto real
+# se cuela en la app, sigue apareciendo.
+
+filters:
+  - type: path
+    id: tests-y-fixtures
+    description: Valores ficticios de test, no credenciales reales
+    paths:
+      - 'src/test/**'
+      - 'e2e/**'
+      - '**/*.test.ts'
+      - '**/*.test.tsx'
+      - '**/*.spec.ts'
+      - '**/*.spec.tsx'
+
+  - type: path
+    id: plantillas-de-entorno
+    description: .env.example documenta nombres de variables, no valores
+    paths:
+      - '.env.example'
