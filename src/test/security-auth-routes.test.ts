@@ -313,8 +313,10 @@ describe('POST /api/auth/password', () => {
       data: {},
       error: { message: 'Invalid login credentials' },
     });
+    // El valor da igual: el fallo lo inyecta el mock de signInWithPassword, no
+    // la contrasena en si. Se usa 'x' como en el resto del archivo.
     const response = await changePassword(
-      post(url, { action: 'verify', currentPassword: 'equivocada' }, sameOrigin())
+      post(url, { action: 'verify', currentPassword: 'x' }, sameOrigin())
     );
 
     expect(response.status).toBe(400);
