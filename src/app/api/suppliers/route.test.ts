@@ -37,6 +37,8 @@ describe('Suppliers API', () => {
     supabaseMock.__reset();
     vi.mocked(getAuth).mockResolvedValue(mockAuth);
     vi.mocked(createActivityLog).mockClear();
+    // Alta/edición/baja de proveedores exige owner/manager.
+    supabaseMock.__queue('tenant_users', { data: { role: 'owner' }, error: null });
   });
 
   describe('GET /api/suppliers', () => {

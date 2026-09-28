@@ -7,7 +7,6 @@ import toast from 'react-hot-toast';
 
 const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
 
-const sessionMock = vi.hoisted(() => vi.fn());
 const fetchMock = vi.hoisted(() => vi.fn());
 
 vi.mock('next/navigation', () => ({
@@ -21,14 +20,6 @@ vi.mock('next/image', () => ({
   ),
 }));
 
-vi.mock('@/lib/supabaseClient', () => ({
-  supabase: {
-    auth: {
-      getSession: sessionMock,
-    },
-  },
-}));
-
 vi.mock('@/lib/hooks/useAuth', () => ({
   useAuth: vi.fn(),
 }));
@@ -39,14 +30,15 @@ vi.mock('react-hot-toast', () => ({
 
 const authMock = vi.mocked(useAuth);
 
-function mockSession(session: unknown) {
-  sessionMock.mockResolvedValue({ data: { session } });
-}
+// Con la cookie de sesion HttpOnly el componente no puede leer la sesion desde
+// el navegador: decide a partir de la respuesta de `/api/session`, que es la
+// unica fuente de verdad. Por eso `user` forma parte del body mockeado.
+const AUTHENTICATED_USER = { id: 'u1', user_metadata: {} as Record<string, unknown> };
 
-function mockApiSession(body: unknown, ok = true) {
+function mockApiSession(body: Record<string, unknown>, ok = true) {
   fetchMock.mockResolvedValue({
     ok,
-    json: async () => body,
+    json: async () => ('user' in body ? body : { user: AUTHENTICATED_USER, ...body }),
   });
 }
 
@@ -62,7 +54,6 @@ describe('OnboardingPage guard', () => {
     router.replace.mockClear();
     router.push.mockClear();
     fetchMock.mockReset();
-    sessionMock.mockReset();
     authMock.mockReturnValue({ switchTenant: vi.fn() } as unknown as ReturnType<typeof useAuth>);
     vi.stubGlobal('fetch', fetchMock);
     Object.defineProperty(window, 'location', {
@@ -73,7 +64,6 @@ describe('OnboardingPage guard', () => {
   });
 
   it('redirige al dashboard si el usuario ya tiene una empresa', async () => {
-    mockSession({ access_token: 'token', refresh_token: 'refresh' });
     mockApiSession({ tenants: [{ id: 't1' }], tenant: { id: 't1' } });
 
     render(<OnboardingPage />);
@@ -84,7 +74,6 @@ describe('OnboardingPage guard', () => {
   });
 
   it('redirige al dashboard si /api/session devuelve un tenant activo', async () => {
-    mockSession({ access_token: 'token', refresh_token: 'refresh' });
     mockApiSession({ tenants: [], tenant: { id: 't1' } });
 
     render(<OnboardingPage />);
@@ -94,7 +83,6 @@ describe('OnboardingPage guard', () => {
   });
 
   it('muestra el formulario solo para usuarios sin empresa', async () => {
-    mockSession({ access_token: 'token', refresh_token: 'refresh' });
     mockApiSession({ tenants: [], tenant: null });
 
     render(<OnboardingPage />);
@@ -106,7 +94,6 @@ describe('OnboardingPage guard', () => {
   it('NO muestra el formulario si la DB marca onboarding completado aunque no haya sucursales', async () => {
     // Regresión: cuenta admin con empresa cuyo listado de sucursales llegue
     // vacío queda protegida por el flag onboarding_pending=false.
-    mockSession({ access_token: 'token', refresh_token: 'refresh' });
     mockApiSession({ tenants: [], tenant: null, onboarding_pending: false });
 
     render(<OnboardingPage />);
@@ -116,7 +103,9 @@ describe('OnboardingPage guard', () => {
   });
 
   it('redirige a login si no hay sesión', async () => {
-    mockSession(null);
+    // `user: null` es la señal de "sin sesión": el navegador no puede leer la
+    // cookie, así que la respuesta del servidor es lo único que la delata.
+    mockApiSession({ user: null, tenants: [], tenant: null });
 
     render(<OnboardingPage />);
 
@@ -124,7 +113,6 @@ describe('OnboardingPage guard', () => {
   });
 
   it('NO muestra el formulario si la verificación falla: redirige al dashboard (fail closed)', async () => {
-    mockSession({ access_token: 'token', refresh_token: 'refresh' });
     fetchMock.mockRejectedValueOnce(new Error('network'));
 
     render(<OnboardingPage />);
@@ -134,7 +122,6 @@ describe('OnboardingPage guard', () => {
   });
 
   it('NO muestra el formulario si /api/session responde 404 con HTML (fail closed)', async () => {
-    mockSession({ access_token: 'token', refresh_token: 'refresh' });
     fetchMock.mockResolvedValueOnce({
       ok: false,
       status: 404,
@@ -148,17 +135,20 @@ describe('OnboardingPage guard', () => {
     await vi.waitFor(() => expect(window.location.replace).toHaveBeenCalledWith('/dashboard'));
     expect(screen.queryByText('Configura tu empresa')).not.toBeInTheDocument();
   });
-it('crea la empresa automáticamente si user_metadata trae nombre/empresa del registro', async () => {
+  it('crea la empresa automáticamente si user_metadata trae nombre/empresa del registro', async () => {
     const switchTenant = vi.fn().mockResolvedValue(undefined);
     authMock.mockReturnValue({ switchTenant } as unknown as ReturnType<typeof useAuth>);
-    mockSession({
-      access_token: 'token',
-      refresh_token: 'refresh',
-      user: { id: 'u1', user_metadata: { company_name: 'Mi Ropa', full_name: 'Ana' } },
-    });
 
     fetchMock
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ tenants: [], tenant: null }) }) // guard /api/session
+      // guard /api/session: la metadata llega dentro de `user`
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          user: { id: 'u1', user_metadata: { company_name: 'Mi Ropa', full_name: 'Ana' } },
+          tenants: [],
+          tenant: null,
+        }),
+      })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ tenantId: 't1' }) }); // POST /api/onboarding
 
     render(<OnboardingPage />);
@@ -170,14 +160,15 @@ it('crea la empresa automáticamente si user_metadata trae nombre/empresa del re
   });
 
   it('si la auto-creación falla, muestra el formulario con nombre/empresa precargados', async () => {
-    mockSession({
-      access_token: 'token',
-      refresh_token: 'refresh',
-      user: { id: 'u1', user_metadata: { company_name: 'Mi Ropa', full_name: 'Ana' } },
-    });
-
     fetchMock
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ tenants: [], tenant: null }) }) // guard /api/session
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          user: { id: 'u1', user_metadata: { company_name: 'Mi Ropa', full_name: 'Ana' } },
+          tenants: [],
+          tenant: null,
+        }),
+      })
       .mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'No se pudo crear' }) }); // POST /api/onboarding
 
     render(<OnboardingPage />);
@@ -194,10 +185,8 @@ describe('OnboardingPage formulario de empresa', () => {
     router.replace.mockClear();
     router.push.mockClear();
     fetchMock.mockReset();
-    sessionMock.mockReset();
     vi.mocked(toast.success).mockClear();
     vi.mocked(toast.error).mockClear();
-    mockSession({ access_token: 'token', refresh_token: 'refresh' });
     authMock.mockReturnValue({ switchTenant: vi.fn() } as unknown as ReturnType<typeof useAuth>);
     vi.stubGlobal('fetch', fetchMock);
   });
@@ -207,7 +196,11 @@ describe('OnboardingPage formulario de empresa', () => {
     authMock.mockReturnValue({ switchTenant } as unknown as ReturnType<typeof useAuth>);
 
     fetchMock
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ tenants: [], tenant: null }) }) // guard /api/session
+      // guard /api/session
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ user: AUTHENTICATED_USER, tenants: [], tenant: null }),
+      })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ tenantId: 't1' }) }); // POST /api/onboarding
 
     render(<OnboardingPage />);
@@ -225,7 +218,10 @@ describe('OnboardingPage formulario de empresa', () => {
 
   it('muestra toast de error cuando la API falla y mantiene el formulario', async () => {
     fetchMock
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ tenants: [], tenant: null }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ user: AUTHENTICATED_USER, tenants: [], tenant: null }),
+      })
       .mockResolvedValueOnce({
         ok: false,
         json: async () => ({ error: 'No se pudo crear la empresa' }),

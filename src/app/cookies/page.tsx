@@ -79,8 +79,8 @@ export default function CookiesPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-800/60 text-gray-300">
                   <tr>
-                    <td className="py-3 pr-4 font-mono text-xs text-cyan-400">sb-*-auth-token (cookies y/o LocalStorage Supabase)</td>
-                    <td className="py-3 pr-4">Cookie estricta / LocalStorage</td>
+                    <td className="py-3 pr-4 font-mono text-xs text-cyan-400">sb-*-auth-token (cookies de sesión Supabase)</td>
+                    <td className="py-3 pr-4">Cookie estricta, inaccesible para JavaScript (HttpOnly)</td>
                     <td className="py-3 pr-4">Mantener tu sesión iniciada de forma segura mediante tokens criptográficos.</td>
                     <td className="py-3">Sesión / Renovable</td>
                   </tr>
@@ -141,7 +141,7 @@ export default function CookiesPage() {
                   <tr>
                     <td className="py-3 pr-4 font-mono text-xs text-cyan-400">supabase.auth.token (heredado)</td>
                     <td className="py-3 pr-4">LocalStorage</td>
-                    <td className="py-3 pr-4">Token de sesión de versiones anteriores del sistema, migrado automáticamente al formato actual.</td>
+                    <td className="py-3 pr-4">Token de sesión de versiones anteriores del sistema. Se elimina al cerrar sesión o tras ~30 minutos de inactividad.</td>
                     <td className="py-3">Persistente</td>
                   </tr>
                 </tbody>

@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { isSameOriginRequest } from '@/lib/security/csrf';
 
 export interface AuthInfo {
   tenantId: string;
@@ -9,6 +10,11 @@ export interface AuthInfo {
 }
 
 export async function getAuth(request?: Request): Promise<AuthInfo | null> {
+  // Las mutaciones se rechazan si el navegador las envía desde otro origen
+  // (CSRF). Las cookies de sesión son SameSite=Lax, así que el POST
+  // cross-site ya viaja sin credenciales; esto es la segunda barrera.
+  if (request && !isSameOriginRequest(request)) return null;
+
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;

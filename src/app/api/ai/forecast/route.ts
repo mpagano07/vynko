@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-  const limit = rateLimit(`ai:forecast:${auth.tenantId}`, 30, 60 * 1000);
+  const limit = await rateLimit(`ai:forecast:${auth.tenantId}`, 30, 60 * 1000);
   if (!limit.ok) {
     return NextResponse.json(
       { error: 'Límite de consultas de pronóstico alcanzado. Esperá un momento.' },

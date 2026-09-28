@@ -32,6 +32,11 @@ describe('POST /api/tenants', () => {
     vi.mocked(getAuth).mockResolvedValue(mockAuth);
   });
 
+  // Crear sucursales exige owner/manager en al menos un tenant del usuario.
+  function queueManagerRole(role = 'owner') {
+    supabaseMock.__queue('tenant_users', { data: [{ role }], error: null });
+  }
+
   it('devuelve 401 sin autenticación', async () => {
     vi.mocked(getAuth).mockResolvedValueOnce(null);
     const res = await POST(makeRequest({ name: 'Sucursal 2' }));
@@ -46,6 +51,7 @@ describe('POST /api/tenants', () => {
   });
 
   it('bloquea cuando el plan alcanzó el límite de sucursales', async () => {
+    queueManagerRole();
     supabaseMock.__queue('tenants', {
       data: [{ subscription_plan: 'starter', subscription_status: 'active', subscription_current_period_end: null }],
     });
@@ -56,7 +62,16 @@ describe('POST /api/tenants', () => {
     expect(json.error).toContain('permite hasta 1 sucursal');
   });
 
+  it('rechaza que un member cree sucursales', async () => {
+    queueManagerRole('member');
+    const res = await POST(makeRequest({ name: 'Sucursal 2' }));
+    expect(res.status).toBe(403);
+    const inserts = supabaseMock.__calls.filter((c) => c.table === 'tenants' && c.method === 'insert');
+    expect(inserts).toHaveLength(0);
+  });
+
   it('crea una sucursal heredando el plan del usuario', async () => {
+    queueManagerRole();
     supabaseMock.__queue('tenants', {
       data: [{ subscription_plan: 'business', subscription_status: 'active', subscription_current_period_end: '2026-09-01T00:00:00.000Z' }],
     });
@@ -107,6 +122,7 @@ describe('POST /api/tenants', () => {
   });
 
   it('devuelve 500 cuando falla el insert del tenant', async () => {
+    queueManagerRole();
     supabaseMock.__queue('tenants', {
       data: [{ subscription_plan: 'business', subscription_status: 'active', subscription_current_period_end: null }],
     });
@@ -119,6 +135,7 @@ describe('POST /api/tenants', () => {
   });
 
   it('devuelve 500 cuando falla el insert del tenant_users', async () => {
+    queueManagerRole();
     supabaseMock.__queue('tenants', {
       data: [{ subscription_plan: 'business', subscription_status: 'active', subscription_current_period_end: null }],
     });

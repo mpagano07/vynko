@@ -54,6 +54,21 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
+/**
+ * La CSP usa un nonce por request (`src/proxy.ts`), y un nonce solo se puede
+ * inyectar durante el render. Con pre-render estatico el HTML se genera en
+ * build, cuando no existe request ni response: los scripts de RSC quedarían
+ * sin nonce y la CSP los bloquearía, dejando la app sin hidratar.
+ *
+ * `force-dynamic` en el layout raiz se hereda por todos los segmentos, asi que
+ * cubre toda la app con una sola linea en vez de editar pagina por pagina.
+ *
+ * Costo aceptable: el shell de las paginas se genera por request en lugar de
+ * servirse desde el build. No agrega consultas a base de datos, porque los
+ * datos igual se piden desde el cliente (con RLS) a traves de las API routes.
+ */
+export const dynamic = 'force-dynamic';
+
 export default function RootLayout({
   children,
 }: {
@@ -63,9 +78,9 @@ export default function RootLayout({
     <html lang="es" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
+        <ThemeInit />
       </head>
       <body className={`${inter.variable} min-h-screen bg-gray-50 antialiased dark:bg-gray-950 font-sans`}>
-        <ThemeInit />
         <AppProviders>
           <AuthProvider>
             <TenantHeaderProvider>

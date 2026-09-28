@@ -59,6 +59,7 @@ function mockAuth() {
     allTenants: false,
     loadProfileAndTenant: vi.fn(),
     switchTenant: vi.fn(),
+    refreshSession: vi.fn(async () => true),
   });
 }
 

@@ -19,6 +19,7 @@ import { FormLabel } from '@/components/ui/form-label';
 import { StatusBadge, type StatusTone } from '@/components/ui/status-badge';
 import { PageHeader } from '@/components/ui/page-header';
 import { IconAction } from '@/components/ui/icon-action';
+import { escapeHtml } from '@/lib/security/html-escape';
 import toast from 'react-hot-toast';
 import {
   FileText,
@@ -640,21 +641,23 @@ export default function DocumentosPage() {
 
     const itemsHtml = doc.items?.map(item => `
       <tr>
-        <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.description}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: center;">${item.quantity}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${formatARS(item.unit_price_cents / 100)}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${formatARS(item.subtotal_cents / 100)}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee;">${escapeHtml(item.description)}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: center;">${escapeHtml(item.quantity)}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${escapeHtml(formatARS(item.unit_price_cents / 100))}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${escapeHtml(formatARS(item.subtotal_cents / 100))}</td>
       </tr>
     `).join('') || '';
 
-    const statusLabel = DOCUMENT_STATUS_LABELS[doc.status];
-    const typeLabel = getDocumentTypeLabel(doc.document_type);
+    const statusLabel = escapeHtml(DOCUMENT_STATUS_LABELS[doc.status]);
+    const typeLabel = escapeHtml(getDocumentTypeLabel(doc.document_type));
+    const documentNumber = escapeHtml(String(doc.document_number).padStart(6, '0'));
+    const counterpartLabel = (doc.document_type === 'remito_ingreso' || doc.document_type === 'orden_compra') ? 'Proveedor' : 'Cliente';
 
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
       <head>
-        <title>${typeLabel} N° ${String(doc.document_number).padStart(6, '0')}</title>
+        <title>${typeLabel} N° ${documentNumber}</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
           .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px; }
@@ -684,30 +687,30 @@ export default function DocumentosPage() {
       <body>
         <div class="header">
           <div class="business-info">
-            <div class="business-name">${businessName}</div>
-            ${businessCuit ? `<div class="business-detail">CUIT: ${businessCuit}</div>` : ''}
-            ${businessAddress ? `<div class="business-detail">${businessAddress}</div>` : ''}
-            ${businessPhone ? `<div class="business-detail">Tel: ${businessPhone}</div>` : ''}
-            ${businessEmail ? `<div class="business-detail">${businessEmail}</div>` : ''}
+            <div class="business-name">${escapeHtml(businessName)}</div>
+            ${businessCuit ? `<div class="business-detail">CUIT: ${escapeHtml(businessCuit)}</div>` : ''}
+            ${businessAddress ? `<div class="business-detail">${escapeHtml(businessAddress)}</div>` : ''}
+            ${businessPhone ? `<div class="business-detail">Tel: ${escapeHtml(businessPhone)}</div>` : ''}
+            ${businessEmail ? `<div class="business-detail">${escapeHtml(businessEmail)}</div>` : ''}
           </div>
           <div class="doc-info">
             <div class="title">${typeLabel}</div>
-            <div class="doc-number">N° ${String(doc.document_number).padStart(6, '0')}</div>
+            <div class="doc-number">N° ${documentNumber}</div>
             <div class="status">${statusLabel}</div>
           </div>
         </div>
 
         <div class="info-grid">
           <div class="info-section">
-            <h3>${(doc.document_type === 'remito_ingreso' || doc.document_type === 'orden_compra') ? 'Proveedor' : 'Cliente'}</h3>
-            <p><strong>${doc.customer_name}</strong></p>
+            <h3>${counterpartLabel}</h3>
+            <p><strong>${escapeHtml(doc.customer_name)}</strong></p>
           </div>
           <div class="info-section">
             <h3>Fecha</h3>
-            <p>${formatDate(doc.created_at, 'es-ES')}</p>
-            ${doc.delivery_date ? `<p><strong>Entrega:</strong> ${formatDate(doc.delivery_date, 'es-ES')}</p>` : ''}
-            ${doc.valid_until ? `<p><strong>Válido hasta:</strong> ${formatDate(doc.valid_until, 'es-ES')}</p>` : ''}
-            ${doc.supplier_name ? `<p><strong>Proveedor:</strong> ${doc.supplier_name}</p>` : ''}
+            <p>${escapeHtml(formatDate(doc.created_at, 'es-ES'))}</p>
+            ${doc.delivery_date ? `<p><strong>Entrega:</strong> ${escapeHtml(formatDate(doc.delivery_date, 'es-ES'))}</p>` : ''}
+            ${doc.valid_until ? `<p><strong>Válido hasta:</strong> ${escapeHtml(formatDate(doc.valid_until, 'es-ES'))}</p>` : ''}
+            ${doc.supplier_name ? `<p><strong>Proveedor:</strong> ${escapeHtml(doc.supplier_name)}</p>` : ''}
           </div>
         </div>
 
@@ -728,19 +731,19 @@ export default function DocumentosPage() {
         <div class="total-section">
           <div class="total-box">
             <div class="total-label">TOTAL</div>
-            <div class="total-amount">${formatARS(doc.total_cents / 100)}</div>
+            <div class="total-amount">${escapeHtml(formatARS(doc.total_cents / 100))}</div>
           </div>
         </div>
 
         ${doc.notes ? `
           <div class="notes">
             <h3>Observaciones</h3>
-            <p>${doc.notes}</p>
+            <p>${escapeHtml(doc.notes)}</p>
           </div>
         ` : ''}
 
         <div class="footer">
-          ${typeLabel} N° ${String(doc.document_number).padStart(6, '0')} - Generado el ${formatDate(new Date(), { day: '2-digit', month: '2-digit', year: 'numeric' }, 'es-ES')}
+          ${typeLabel} N° ${documentNumber} - Generado el ${escapeHtml(formatDate(new Date(), { day: '2-digit', month: '2-digit', year: 'numeric' }, 'es-ES'))}
         </div>
       </body>
       </html>

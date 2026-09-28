@@ -1,5 +1,3 @@
-import { supabase } from './supabaseClient';
-
 const ACTIVE_TENANT_KEY = 'vynko_active_tenant_id';
 
 export async function fetchWithTenant(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -28,13 +26,22 @@ export function getTenantHeaders(): Record<string, string> {
   return headers;
 }
 
+/**
+ * La sesion viaja en la cookie, no en un header.
+ *
+ * Antes se adunaba `Authorization: Bearer <access_token>` leyendo el token con
+ * `supabase.auth.getSession()` desde el navegador. Eso es incompatible con una
+ * cookie de sesion HttpOnly: si el navegador no puede leerla, tampoco puede
+ * mandarla, y ademas dejar de hacerlo es justamente lo que impide que un XSS
+ * robe la sesion. Las rutas de API resuelven al usuario desde la cookie con el
+ * cliente de servidor (`supabase.auth.getUser()`), asi que el header no hace
+ * falta para ninguna.
+ *
+ * Se mantiene el nombre exportado porque hay muchos call sites; lo que cambia
+ * es que ya no intenta obtener un token.
+ */
 export async function getAuthHeaders(): Promise<Record<string, string>> {
-  const headers = getTenantHeaders();
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-  } catch {}
-  return headers;
+  return getTenantHeaders();
 }
 
 export async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {

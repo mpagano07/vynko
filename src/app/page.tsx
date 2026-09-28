@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 import { PLANS, getActivePromoPlan, getEffectivePrice, getPlanBadge, getTrialDays, getTrialPlan } from '@/lib/plans';
 import { isTrialExpired } from '@/lib/checkSubscription';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { hasStoredSession, type TenantInfo } from '@/lib/contexts/auth-context';
+import { type TenantInfo } from '@/lib/contexts/auth-context';
 import { SALES_EMAIL } from '@/lib/tenant-config';
 
 import { formatARS } from '@/lib/utils/currency';
@@ -89,15 +89,12 @@ export default function LandingPage() {
       return;
     }
 
-    // Safety net: the auth client can end up "settled logged-out" while a
-    // session cookie still exists (e.g. a failed token refresh after the email
-    // confirmation exchange). The user IS authenticated server-side, so don't
-    // leave them staring at the marketing navbar — /onboarding re-checks
-    // /api/session and bounces existing customers to /dashboard.
-    if (hasStoredSession()) {
-      redirectedRef.current = true;
-      router.replace('/onboarding');
-    }
+    // Nota: ya no hay red de seguridad basada en leer la cookie desde el
+    // navegador. Con la cookie de sesion HttpOnly el cliente no puede ver si hay
+    // sesion, y esa es la garantia buscada. Si el servidor tiene una sesion
+    // valida, `resolveSessionUser()` la devuelve y el bloque de arriba redirige;
+    // el caso "el cliente quedo deslogueado pero el servidor tiene sesion" ya no
+    // puede darse porque la unica fuente de verdad es `/api/session`.
   }, [authLoading, user, loadProfileAndTenant, router]);
 
   useEffect(() => {
@@ -107,7 +104,11 @@ export default function LandingPage() {
   }, []);
 
   const trialExpired = isTrialExpired(tenant);
-  const hasSession = hasStoredSession();
+  // La sesion vive en una cookie HttpOnly, asi que no se puede consultar desde
+  // el navegador: se usa el usuario que ya resolvió el contexto contra
+  // `/api/session`. Mientras está cargando no se decide, para no renderizar el
+  // navbar de visitante y cambiarlo a de usuario logueado al resolver.
+  const hasSession = !authLoading && !!user;
 
   const handleWaitlist = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -1,10 +1,25 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
 import type { AuthInfo } from '@/lib/api-auth';
+import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
 
 export type SupplierResult<T = unknown> =
   | { ok: true; data: T; status: number }
   | { ok: false; error: string; status: number };
+
+/**
+ * El alta/edición/baja de proveedores es datos maestros administrativos: se
+ * limita a owner/manager. La lectura sigue abierta a cualquier miembro del
+ * tenant.
+ */
+async function assertSupplierManager(auth: AuthInfo): Promise<SupplierResult<never> | null> {
+  if (await canManageTenant(await getRoleInTenant(auth.userId, auth.tenantId))) return null;
+  return {
+    ok: false,
+    error: 'Sólo el dueño o un administrador pueden gestionar proveedores',
+    status: 403,
+  };
+}
 
 export async function listSuppliers(auth: AuthInfo): Promise<SupplierResult> {
   let query = supabaseAdmin
@@ -28,6 +43,9 @@ export async function createSupplier(
   body: Record<string, unknown>
 ): Promise<SupplierResult> {
   try {
+    const forbidden = await assertSupplierManager(auth);
+    if (forbidden) return forbidden;
+
     if (!body.name) {
       return { ok: false, error: 'El nombre del proveedor es requerido', status: 400 };
     }
@@ -98,6 +116,9 @@ export async function updateSupplier(
   body: Record<string, unknown>
 ): Promise<SupplierResult> {
   try {
+    const forbidden = await assertSupplierManager(auth);
+    if (forbidden) return forbidden;
+
     const updateData: Record<string, unknown> = {};
     for (const key of SUPPLIER_ALLOWED_FIELDS) {
       if (body[key] !== undefined) updateData[key] = body[key];
@@ -145,6 +166,9 @@ export async function updateSupplier(
 }
 
 export async function deleteSupplier(auth: AuthInfo, id: string): Promise<SupplierResult> {
+  const forbidden = await assertSupplierManager(auth);
+  if (forbidden) return forbidden;
+
   const { data: deleted } = await supabaseAdmin
     .from('suppliers')
     .delete()

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { addCollaborator, listCollaborators } from '@/lib/collaborator-service';
 import { fixResponse } from '@/lib/utils/encoding';
+import { getAppOrigin } from '@/lib/security/redirects';
 
 export async function GET(request: Request) {
   const auth = await getAuth(request);
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 
-  const origin = new URL(request.url).origin;
+  const origin = getAppOrigin(request);
   const result = await addCollaborator(auth, body as Record<string, unknown>, origin);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
   return NextResponse.json(result.body, { status: result.status });

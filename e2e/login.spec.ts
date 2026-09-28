@@ -19,7 +19,9 @@ test('login con credenciales inválidas muestra error', async ({ page }) => {
   await page.getByPlaceholder('••••••••').fill('wrong-password');
   await page.getByRole('button', { name: 'Iniciar sesión' }).click();
 
-  await expect(page.getByText('Email o contraseña incorrectos')).toBeVisible({ timeout: 15_000 });
+  // La API responde deliberadamente un mensaje generico: revelar si el email
+  // existe permitiria enumerar cuentas. Ver src/app/api/auth/login/route.ts
+  await expect(page.getByText('Credenciales inválidas')).toBeVisible({ timeout: 15_000 });
   await expect(page).toHaveURL(/\/login$/);
 });
 
@@ -55,24 +57,14 @@ test('logout redirige al login', async ({ page }) => {
   // Esperar a estar en dashboard
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 20_000 });
 
-  // Buscar botón de logout (generalmente en header/avatar menu)
-  // Asumir estructura estándar: click avatar o menu de usuario
-  const userMenuButton = page.getByRole('button').filter({ hasText: /perfil|cuenta|salir/i }).first();
-  
-  // Si existe botón de logout directo
-  const logoutButton = page.getByRole('button', { name: /salir|logout|cerrar sesión/i });
-  
-  if (await logoutButton.isVisible().catch(() => false)) {
-    await logoutButton.click();
-  } else if (await userMenuButton.isVisible().catch(() => false)) {
-    // Click en menú de usuario y luego en logout
-    await userMenuButton.click();
-    await page.getByRole('button', { name: /salir|logout|cerrar sesión/i }).click();
-  } else {
-    // Fallback: buscar en nav o header
-    const navLogout = page.locator('nav, header').getByRole('button', { name: /salir|logout|cerrar sesión/i });
-    await navLogout.click({ timeout: 5_000 });
-  }
+  // "Cerrar sesión" vive dentro del dropdown "Menú de usuario", así que hay
+  // que abrir el menú antes de poder pulsarlo. Sin este paso el locator no lo
+  // encuentra y el test falla por un motivo que no es un bug de la app.
+  const userMenu = page.getByRole('button', { name: 'Menú de usuario' });
+  await userMenu.click();
+
+  const logoutButton = page.getByRole('button', { name: /cerrar sesión|salir|logout/i });
+  await logoutButton.click();
 
   // Debe redirigir a login
   await expect(page).toHaveURL(/\/login$/, { timeout: 15_000 });

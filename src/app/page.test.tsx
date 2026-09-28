@@ -3,7 +3,6 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import type { AnchorHTMLAttributes, ImgHTMLAttributes, ReactNode } from 'react';
 import LandingPage from './page';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { hasStoredSession } from '@/lib/contexts/auth-context';
 
 const { pushMock, replaceMock } = vi.hoisted(() => ({ pushMock: vi.fn(), replaceMock: vi.fn() }));
 
@@ -40,12 +39,7 @@ vi.mock('@/lib/hooks/useAuth', () => ({
   useAuth: vi.fn(),
 }));
 
-vi.mock('@/lib/contexts/auth-context', () => ({
-  hasStoredSession: vi.fn(),
-}));
-
 const authMock = vi.mocked(useAuth);
-const hasSessionMock = vi.mocked(hasStoredSession);
 
 function mockUseAuth(overrides: Partial<ReturnType<typeof useAuth>> = {}) {
   authMock.mockReturnValue({
@@ -60,6 +54,7 @@ function mockUseAuth(overrides: Partial<ReturnType<typeof useAuth>> = {}) {
     allTenants: false,
     loadProfileAndTenant: vi.fn(),
     switchTenant: vi.fn(),
+    refreshSession: vi.fn(async () => true),
     ...overrides,
   });
 }
@@ -90,25 +85,25 @@ describe('LandingPage navbar', () => {
     pushMock.mockClear();
     replaceMock.mockClear();
     authMock.mockReset();
-    hasSessionMock.mockReset();
     window.history.pushState({}, '', '/');
   });
 
-  it('con cookie de sesión y usuario aún cargando, muestra "Mi cuenta" y no el botón de logout vacío', () => {
-    hasSessionMock.mockReturnValue(true);
+  it('con la sesión todavía resolviéndose, muestra el skeleton y no el navbar de usuario', () => {
+    // Antes se decidia el navbar leyendo la cookie desde el navegador, así que
+    // mientras cargaba se mostraba "Mi cuenta" y después parpadeaba a
+    // "Iniciar sesión" si la sesión no existía. Con la cookie HttpOnly no se
+    // puede saber antes de preguntarle al servidor, así que se espera.
     mockUseAuth({ user: null, profile: null, loading: true });
 
     render(<LandingPage />);
 
-    const accountLink = getNavbar().getByRole('link', { name: 'Mi cuenta' });
-    expect(accountLink).toHaveAttribute('href', '/dashboard');
-    expect(getNavbar().getByRole('button', { name: 'Cerrar sesión' })).toBeInTheDocument();
+    expect(getNavbar().queryByRole('link', { name: 'Mi cuenta' })).not.toBeInTheDocument();
+    expect(getNavbar().queryByRole('button', { name: 'Cerrar sesión' })).not.toBeInTheDocument();
     expect(getNavbar().queryByRole('link', { name: 'Iniciar sesión' })).not.toBeInTheDocument();
     expect(getNavbar().queryByRole('link', { name: 'Comenzar gratis' })).not.toBeInTheDocument();
   });
 
   it('con usuario y profile cargados, muestra el nombre real', () => {
-    hasSessionMock.mockReturnValue(true);
     mockUseAuth({
       user: makeUser('ana@tienda.com'),
       profile: { id: 'u1', email: 'ana@tienda.com', full_name: 'Ana García' },
@@ -122,7 +117,6 @@ describe('LandingPage navbar', () => {
   });
 
   it('con usuario cargado pero sin profile, usa el email como fallback', () => {
-    hasSessionMock.mockReturnValue(true);
     mockUseAuth({
       user: makeUser('ana@tienda.com'),
       profile: null,
@@ -136,7 +130,6 @@ describe('LandingPage navbar', () => {
   });
 
   it('sin sesión y chequeando, muestra el skeleton sin botones', () => {
-    hasSessionMock.mockReturnValue(false);
     mockUseAuth({ user: null, profile: null, loading: true });
 
     render(<LandingPage />);
@@ -148,7 +141,6 @@ describe('LandingPage navbar', () => {
   });
 
   it('sin sesión y chequeo terminado, muestra Iniciar sesión / Comenzar gratis', () => {
-    hasSessionMock.mockReturnValue(false);
     mockUseAuth({ user: null, profile: null, loading: false });
 
     render(<LandingPage />);
@@ -158,19 +150,24 @@ describe('LandingPage navbar', () => {
     expect(getNavbar().queryByRole('button', { name: 'Cerrar sesión' })).not.toBeInTheDocument();
   });
 
-  it('con cookie de sesión, sin usuario y chequeo resuelto, redirige a /onboarding', async () => {
+  it('sesión resuelta como anónima: no redirige ni muestra navbar de usuario', async () => {
+    // El guard de "hay cookie pero el cliente no vio usuario" se elimino a
+    // proposito: dependia de leer la cookie desde el navegador. Ahora si no hay
+    // usuario es porque el servidor dijo que no hay sesion, y la respuesta
+    // correcta es quedarse en la landing como visitante, sin adivinar.
     window.history.pushState({}, '', '/?code=confirm');
-    hasSessionMock.mockReturnValue(true);
     mockUseAuth({ user: null, profile: null, loading: false, tenants: [] });
 
     render(<LandingPage />);
 
-    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('/onboarding'));
+    expect(getNavbar().getByRole('link', { name: 'Iniciar sesión' })).toBeInTheDocument();
+    expect(getNavbar().queryByRole('link', { name: 'Mi cuenta' })).not.toBeInTheDocument();
+    expect(getNavbar().queryByRole('button', { name: 'Cerrar sesión' })).not.toBeInTheDocument();
+    expect(replaceMock).not.toHaveBeenCalled();
   });
 
   it('con usuario autenticado sin empresa, redirige a /onboarding (post-confirmación)', async () => {
     window.history.pushState({}, '', '/?code=confirm');
-    hasSessionMock.mockReturnValue(true);
     mockUseAuth({
       user: makeUser('ana@tienda.com'),
       profile: null,
@@ -186,7 +183,6 @@ describe('LandingPage navbar', () => {
 
   it('con usuario autenticado con empresa, redirige a /dashboard', async () => {
     window.history.pushState({}, '', '/?code=confirm');
-    hasSessionMock.mockReturnValue(true);
     mockUseAuth({
       user: makeUser('ana@tienda.com'),
       profile: null,
@@ -203,7 +199,6 @@ describe('LandingPage navbar', () => {
 
   it('usuario logueado que navega a la landing sin código de confirmación, redirige a /dashboard', async () => {
     window.history.pushState({}, '', '/');
-    hasSessionMock.mockReturnValue(true);
     mockUseAuth({
       user: makeUser('ana@tienda.com'),
       profile: null,
@@ -220,7 +215,6 @@ describe('LandingPage navbar', () => {
 
   it('al hacer click en Cerrar sesión desloguea y vuelve al index', async () => {
     const logoutMock = vi.fn().mockResolvedValue(undefined);
-    hasSessionMock.mockReturnValue(true);
     mockUseAuth({
       user: makeUser('ana@tienda.com'),
       profile: null,
@@ -240,7 +234,6 @@ describe('LandingPage navbar', () => {
 describe('LandingPage waitlist', () => {
   beforeEach(() => {
     authMock.mockReset();
-    hasSessionMock.mockReset();
     pushMock.mockClear();
     replaceMock.mockClear();
     mockUseAuth({ loading: false });

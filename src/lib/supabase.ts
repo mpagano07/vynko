@@ -1,6 +1,9 @@
 import { cookies } from 'next/headers';
+import { hardenSessionCookieOptions } from '@/lib/security/session-cookie';
 
 type CookieOptions = Record<string, unknown>;
+
+export { hardenSessionCookieOptions };
 
 export interface ServerCookie {
   name: string;
@@ -31,12 +34,14 @@ export async function createServerSupabaseClient(opts?: CreateClientOptions) {
           const sessionOptions = { ...options };
           delete sessionOptions.maxAge;
           delete sessionOptions.expires;
-          cookieStore.set(name, value, sessionOptions);
-          opts?.cookieSetAll?.([{ name, value, options: sessionOptions }]);
+          const hardened = hardenSessionCookieOptions(sessionOptions);
+          cookieStore.set(name, value, hardened);
+          opts?.cookieSetAll?.([{ name, value, options: hardened }]);
         },
         remove(name: string, options: CookieOptions) {
-          cookieStore.set(name, '', { ...options, maxAge: 0 });
-          opts?.cookieSetAll?.([{ name, value: '', options: { ...options, maxAge: 0 } }]);
+          const removeOptions = hardenSessionCookieOptions({ ...options, maxAge: 0 });
+          cookieStore.set(name, '', removeOptions);
+          opts?.cookieSetAll?.([{ name, value: '', options: removeOptions }]);
         },
       },
     }

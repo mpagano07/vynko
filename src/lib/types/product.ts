@@ -6,6 +6,7 @@ export interface Product {
   name: string;
   description?: string;
   image_url?: string;
+  image_storage_path?: string;
   images?: string[];
   unit?: string;
   cost?: number;

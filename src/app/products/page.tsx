@@ -122,6 +122,7 @@ function ProductsPageContent() {
     estanteria: '',
     description: '',
     image_url: '',
+    image_storage_path: '',
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
 
@@ -418,6 +419,7 @@ function ProductsPageContent() {
         estanteria: product.estanteria || '',
         description: product.description || '',
         image_url: product.image_url || '',
+        image_storage_path: product.image_storage_path || '',
       });
     } else {
       setEditingProduct(null);
@@ -436,6 +438,7 @@ function ProductsPageContent() {
         estanteria: '',
         description: '',
         image_url: '',
+        image_storage_path: '',
       });
     }
     setImageFile(null);
@@ -452,7 +455,8 @@ function ProductsPageContent() {
     setIsSubmittingProduct(true);
 
     try {
-      let imageUrl = productForm.image_url;
+      const imageUrl = productForm.image_url;
+      let imageStoragePath = productForm.image_storage_path ?? '';
 
       if (imageFile) {
         const formData = new FormData();
@@ -463,7 +467,8 @@ function ProductsPageContent() {
         });
         const uploadData = await uploadRes.json();
         if (!uploadRes.ok) throw new Error(uploadData.error || 'Error al subir la imagen');
-        imageUrl = uploadData.url;
+        imageStoragePath = uploadData.storagePath ?? '';
+        if (!imageStoragePath) throw new Error('La imagen se subió pero no se pudo identificar');
       }
 
       const url = editingProduct ? `/api/products/${editingProduct.id}` : '/api/products';
@@ -475,7 +480,7 @@ function ProductsPageContent() {
           'Content-Type': 'application/json',
           ...getTenantHeaders(),
         },
-        body: JSON.stringify({ ...productForm, image_url: imageUrl }),
+        body: JSON.stringify({ ...productForm, image_url: imageUrl, image_storage_path: imageStoragePath }),
       });
 
       const data = await res.json();

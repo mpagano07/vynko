@@ -1,12 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { fetchWithTenant, getTenantHeaders } from './fetchWithTenant';
 
-const { getSessionMock } = vi.hoisted(() => ({ getSessionMock: vi.fn() }));
-
-vi.mock('./supabaseClient', () => ({
-  supabase: { auth: { getSession: getSessionMock } },
-}));
-
 const { getAuthHeaders, authFetch } = await import('./fetchWithTenant');
 
 describe('fetchWithTenant', () => {
@@ -100,40 +94,27 @@ describe('fetchWithTenant', () => {
 describe('getAuthHeaders', () => {
   beforeEach(() => {
     localStorage.clear();
-    getSessionMock.mockReset();
   });
 
-  it('returns x-active-tenant-id but no Authorization without a session', async () => {
-    getSessionMock.mockResolvedValue({ data: { session: null } });
+  it('returns only the tenant header, never an Authorization header', async () => {
     localStorage.setItem('vynko_active_tenant_id', 'tenant-123');
-    expect(await getAuthHeaders()).toEqual({ 'x-active-tenant-id': 'tenant-123' });
+    const headers = await getAuthHeaders();
+    expect(headers).toEqual({ 'x-active-tenant-id': 'tenant-123' });
+    expect(headers).not.toHaveProperty('Authorization');
   });
 
-  it('adds Bearer Authorization when a session exists', async () => {
-    getSessionMock.mockResolvedValue({ data: { session: { access_token: 'tok' } } });
-    localStorage.setItem('vynko_active_tenant_id', 'tenant-123');
-    expect(await getAuthHeaders()).toEqual({
-      'x-active-tenant-id': 'tenant-123',
-      Authorization: 'Bearer tok',
-    });
-  });
-
-  it('does not throw when supabase getSession rejects', async () => {
-    getSessionMock.mockRejectedValue(new Error('network'));
-    localStorage.setItem('vynko_active_tenant_id', 'tenant-123');
-    expect(await getAuthHeaders()).toEqual({ 'x-active-tenant-id': 'tenant-123' });
+  it('returns an empty object when no tenant is active', async () => {
+    expect(await getAuthHeaders()).toEqual({});
   });
 });
 
 describe('authFetch', () => {
   beforeEach(() => {
     localStorage.clear();
-    getSessionMock.mockReset();
     global.fetch = vi.fn().mockResolvedValue(new Response('ok'));
   });
 
-  it('merges Authorization, tenant and caller headers into the request', async () => {
-    getSessionMock.mockResolvedValue({ data: { session: { access_token: 'tok' } } });
+  it('merges tenant and caller headers, and never sends Authorization', async () => {
     localStorage.setItem('vynko_active_tenant_id', 'tenant-123');
 
     await authFetch('http://api/test', {
@@ -148,13 +129,24 @@ describe('authFetch', () => {
     );
     const callArgs = vi.mocked(global.fetch).mock.calls[0];
     const headers = callArgs[1]?.headers as Headers;
-    expect(headers.get('Authorization')).toBe('Bearer tok');
+    // La sesion viaja en la cookie HttpOnly. Si un header Authorization se
+    // colara, seria la sesion expuesta al JS que se esta intentando cerrar.
+    expect(headers.get('Authorization')).toBeNull();
     expect(headers.get('x-active-tenant-id')).toBe('tenant-123');
     expect(headers.get('Content-Type')).toBe('application/json');
   });
 
-  it('calls fetch even without a session', async () => {
-    getSessionMock.mockResolvedValue({ data: { session: null } });
+  it('preserves an explicit Authorization header set by the caller', async () => {
+    await authFetch('http://api/test', {
+      headers: { Authorization: 'Bearer explicito' },
+    });
+
+    const callArgs = vi.mocked(global.fetch).mock.calls[0];
+    const headers = callArgs[1]?.headers as Headers;
+    expect(headers.get('Authorization')).toBe('Bearer explicito');
+  });
+
+  it('calls fetch even without a tenant', async () => {
     await authFetch('http://api/test');
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });

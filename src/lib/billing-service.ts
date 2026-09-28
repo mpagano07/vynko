@@ -3,6 +3,8 @@ import { PLANS, getEffectivePrice, getTrialDays, getTrialPlan, PLAN_ORDER, PLAN_
 import type { PlanId } from '@/lib/plans';
 import { createPreApproval, cancelPreApproval } from '@/lib/mercadopago';
 import { consolidateOwnerSubscription, type TenantSubscription } from '@/lib/checkSubscription';
+import { canManageTenant } from '@/lib/membership-role';
+import { safeInternalRedirect } from '@/lib/security/redirects';
 
 export type BillingResult<T = unknown> =
   | { ok: true; data: T }
@@ -28,11 +30,12 @@ export async function createCheckoutSession(
   const membership = activeTenantId ? tu.find((t) => t.tenant_id === activeTenantId) : undefined;
   const tenantId = membership ? membership.tenant_id : tu[0].tenant_id;
 
-  const canManage = tu.some(
-    (t) => t.tenant_id === tenantId && (t.role === 'owner' || t.role === 'admin')
-  );
+  // 'admin' no es un rol válido en `tenant_users.role` (CHECK: owner|manager|member),
+  // así que la condición nunca era verdadera. La suscripción se gestiona con los
+  // mismos roles que el resto de acciones administrativas: owner o manager.
+  const canManage = tu.some((t) => t.tenant_id === tenantId && canManageTenant(t.role));
   if (!canManage) {
-    return { ok: false, error: 'Solo el owner o admins pueden gestionar la suscripción', status: 403 };
+    return { ok: false, error: 'Solo el owner o un administrador pueden gestionar la suscripción', status: 403 };
   }
 
   const { data: tenant } = await supabaseAdmin
@@ -55,13 +58,13 @@ export async function createCheckoutSession(
     return { ok: false, error: 'El plan Enterprise se activa por ventas', needsSalesContact: true, status: 400 };
   }
 
-  const origin = process.env.NEXT_PUBLIC_APP_URL || request.headers.get('origin') || '';
+  const backUrl = safeInternalRedirect(request, '/billing?success=true');
 
   try {
     const preapproval = await createPreApproval({
       payer_email: tenant?.billing_email || user.email!,
       reason: `Suscripción ${planConfig.name} - Vynko`,
-      back_url: `${origin}/billing?success=true`,
+      back_url: backUrl,
       external_reference: `${tenantId}:${planConfig.id}`,
       auto_recurring: {
         frequency: 1,
@@ -204,11 +207,11 @@ export async function downgradePlan(
   const targetPlanConfig = PLANS[plan];
   let url: string | null = null;
   try {
-    const origin = request.headers.get('origin') || '';
+    const backUrl = safeInternalRedirect(request, '/billing?success=true');
     const preapproval = await createPreApproval({
       payer_email: mainTenant.billing_email || user.email!,
       reason: `Suscripción ${targetPlanConfig.name} - Vynko`,
-      back_url: `${origin}/billing?success=true`,
+      back_url: backUrl,
       external_reference: mainTenant.id,
       auto_recurring: {
         frequency: 1,
@@ -235,14 +238,21 @@ export async function downgradePlan(
 export async function cancelSubscription(userId: string): Promise<BillingResult> {
   const { data: tu } = await supabaseAdmin
     .from('tenant_users')
-    .select('tenant_id')
+    .select('tenant_id, role')
     .eq('user_id', userId);
   if (!tu || tu.length === 0) return { ok: false, error: 'No tenant', status: 401 };
+
+  // Cancelar la suscripción afecta el cobro de todo el owner: sólo owner o
+  // manager del tenant pueden hacerlo. Antes bastaba con ser miembro.
+  const ownerTenant = tu.find((t) => canManageTenant(t.role));
+  if (!ownerTenant) {
+    return { ok: false, error: 'Solo el owner o un administrador pueden cancelar la suscripción', status: 403 };
+  }
 
   const { data: tenant } = await supabaseAdmin
     .from('tenants')
     .select('mercadopago_preapproval_id, subscription_current_period_end')
-    .eq('id', tu[0].tenant_id)
+    .eq('id', ownerTenant.tenant_id)
     .single();
 
   if (!tenant?.mercadopago_preapproval_id) {
@@ -259,7 +269,7 @@ export async function cancelSubscription(userId: string): Promise<BillingResult>
       mercadopago_preapproval_id: null,
       subscription_current_period_end: tenant.subscription_current_period_end ?? null,
     })
-    .eq('id', tu[0].tenant_id);
+    .eq('id', ownerTenant.tenant_id);
 
   return { ok: true, data: { success: true } };
 }

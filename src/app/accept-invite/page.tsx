@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loader2, CheckCircle2, XCircle, User, Lock } from 'lucide-react';
@@ -19,19 +18,12 @@ export default function AcceptInvitePage() {
   useEffect(() => {
     async function accept() {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-
-        if (!session) {
-          setStatus('error');
-          return;
-        }
-
+        // La sesion viaja en la cookie HttpOnly; la ruta la resuelve en el
+        // servidor. Antes se mandaba el Bearer y por eso la ruta tambien tenia
+        // esa rama: ya no hace falta.
         const res = await fetch('/api/invitations/accept', {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-            'x-refresh-token': session.refresh_token ?? '',
-          },
+          credentials: 'include',
         });
         if (!res.ok) {
           setStatus('error');
@@ -65,26 +57,28 @@ export default function AcceptInvitePage() {
     setSaving(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-
       const res = await fetch('/api/settings/profile', {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session?.access_token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ full_name: name.trim() }),
       });
 
       if (!res.ok) throw new Error('Failed to save name');
 
-      const { error: passError } = await supabase.auth.updateUser({ password });
-      if (passError) throw passError;
+      // La contrasena la cambia el servidor: `updateUser` necesita la sesion y
+      // con la cookie HttpOnly el cliente no puede replicarlo.
+      const passRes = await fetch('/api/auth/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'change', newPassword: password }),
+      });
+      const passData = await passRes.json();
+      if (!passRes.ok) throw new Error(passData?.error || 'No se pudo guardar la contraseña');
 
       toast.success('¡Bienvenido!');
       router.push('/dashboard');
-    } catch {
-      toast.error('Error al guardar');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error al guardar');
     } finally {
       setSaving(false);
     }

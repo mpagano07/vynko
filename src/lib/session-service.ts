@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { createServerSupabaseClient } from '@/lib/supabase';
 
 type SessionPayload = Record<string, unknown>;
 
@@ -6,22 +7,35 @@ function anonPayload(): SessionPayload {
   return { user: null, profile: null, tenant: null, tenants: [], onboarding_pending: true };
 }
 
+/**
+ * Resuelve el usuario de la request por el Bearer token o, si no viene, por la
+ * cookie de sesion.
+ *
+ * La rama por cookie es la que permite que la cookie sea HttpOnly: el navegador
+ * deja de poder leer el access token, asi que no puede mandarlo como header, y
+ * la sesion tiene queResolved por el lado del servidor.
+ */
 export async function getSessionData(request: Request): Promise<{ ok: true; data: SessionPayload }> {
   const authHeader = request.headers.get('authorization');
+  let user: Awaited<ReturnType<typeof supabaseAdmin.auth.getUser>>['data']['user'] = null;
 
-  if (!authHeader?.startsWith('Bearer ')) {
-    return { ok: true, data: anonPayload() };
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.replace('Bearer ', '');
+    const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
+    if (!userError) user = userData.user;
+  } else {
+    try {
+      const supabase = await createServerSupabaseClient();
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (!userError) user = userData.user;
+    } catch (error) {
+      console.error('Error resolving session from cookie:', error);
+    }
   }
 
-  const token = authHeader.replace('Bearer ', '');
-
-  const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
-
-  if (userError || !userData?.user) {
+  if (!user) {
     return { ok: true, data: anonPayload() };
   }
-
-  const user = userData.user;
 
   const { data: profile } = await supabaseAdmin
     .from('profiles')

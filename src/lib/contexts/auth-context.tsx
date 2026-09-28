@@ -2,8 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
 import { useSWRConfig } from 'swr';
-import { supabase } from '@/lib/supabaseClient';
-import type { Session, User } from '@supabase/supabase-js';
+import type { User } from '@supabase/supabase-js';
 import toast from 'react-hot-toast';
 import { clearAuthLinkErrorFromUrl, getAuthLinkErrorParams } from '@/lib/auth-link-error';
 import { NEW_ACCOUNT_PLAN } from '@/lib/plans';
@@ -51,6 +50,11 @@ export interface TenantInfo {
 const ACTIVE_TENANT_KEY = 'vynko_active_tenant_id';
 const LAST_ACTIVITY_KEY = 'vynko_last_activity';
 const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+// Cada cuanto se le pregunta al servidor si la sesion sigue viva. El token de
+// acceso caduca en ~1h y lo refresca el cliente de servidor al reescribir la
+// cookie, asi que este intervalo no compite con ese refresco: solo detecta que
+// la sesion ya no se puede renovar (refresh token revocado, cookie expirada).
+const SESSION_REVALIDATE_INTERVAL_MS = 5 * 60 * 1000;
 const INACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'wheel'] as const;
 
 function getLastActivity(): number {
@@ -114,21 +118,46 @@ function clearStoredActiveTenantId() {
   }
 }
 
-// The browser client persists the session as `supabase.auth.token` cookies
-// (chunked as `supabase.auth.token.0`, `.1`, ...). Check there so we can tell
-// "logged out" apart from "session exists but the first refresh failed".
-export function hasStoredSession(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    const cookieNames = document.cookie.split(';').map((c) => c.split('=')[0].trim());
-    if (cookieNames.some((n) => n === 'supabase.auth.token' || n.startsWith('supabase.auth.token.'))) {
-      return true;
-    }
-    return localStorage.getItem('supabase.auth.token') !== null;
-  } catch {
-    return false;
-  }
+// The browser client (`@supabase/ssr`) persists the session in a cookie named
+// `sb-<projectRef>-auth-token`, chunked as `.0`, `.1`, ... when the payload
+// exceeds the per-cookie limit. Older setups used `supabase.auth.token`, so
+// both are accepted. Matching on the shape instead of the project ref keeps
+// this correct across projects and Supabase upgrades.
+const LEGACY_AUTH_KEY = 'supabase.auth.token';
+const CHUNKED_AUTH_KEY = /^sb-.+-auth-token(\.\d+)?$/;
+
+export function isSupabaseAuthKey(name: string): boolean {
+  return name === LEGACY_AUTH_KEY || name.startsWith(`${LEGACY_AUTH_KEY}.`) || CHUNKED_AUTH_KEY.test(name);
 }
+
+function storedAuthKeys(): string[] {
+  const names: string[] = [];
+  try {
+    for (const c of document.cookie.split(';')) {
+      const name = c.split('=')[0]?.trim();
+      if (name && isSupabaseAuthKey(name)) names.push(name);
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && isSupabaseAuthKey(key)) names.push(key);
+    }
+  } catch {
+    // ignore
+  }
+  return names;
+}
+
+// Nota: ya no existe un `hasStoredSession()`. Antes servia para distinguir
+// "deslogueado" de "la sesion existe pero el primer refresh fallo", porque
+// `getSession()` del navegador devolvia null en ambos casos. Con la cookie de
+// sesion HttpOnly esa ambiguedad no puede ocurrir: la respuesta de
+// `/api/session` es la unica fuente de verdad y un `user: null` es definitivo.
+// Se evita deliberadamente reincorporar un chequeo de cookies desde el
+// navegador: volveria a exponer la sesion al JS, que es justo lo que secerra.
 
 function sameTenantsList(a: TenantInfo[] | null, b: TenantInfo[]): boolean {
   if (!a) return false;
@@ -152,26 +181,43 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 // stays true the app settles on "logged-in but stuck" until a manual reload.
 const PROFILE_LOAD_TIMEOUT_MS = 10_000;
 
-// When the app is opened after a long time the access token has expired, so
-// the first getSession() must hit the network to refresh it. If that request
-// transiently fails (flaky network, device just waking up, 5xx from the auth
-// server) getSession() resolves to null and the app settles on "logged out"
-// until a manual reload. Retry a few times while a stored session still
-// exists, and bound each attempt so a hung request can't leave `loading`
-// stuck forever.
-async function getSessionWithRetry(): Promise<Session | null> {
-  const TIMEOUT_MS = 8000;
+// Resolucion de sesion contra el servidor.
+//
+// Antes se leia la sesion con `supabase.auth.getSession()` en el navegador. Con
+// la cookie de sesion HttpOnly eso ya no es posible (y no debe ser: si el JS
+// puede leer el token, un XSS se lo lleva), asi que la pregunta "hay sesion?" la
+// contesta `/api/session`, que resuelve al usuario desde la cookie.
+//
+// Esto tambien elimina la ambiguedad que justificaba `hasStoredSession()`: la
+// respuesta del servidor es definitiva. "sin usuario" significa deslogueado de
+// verdad y no se reintenta; solo se reintenta cuando el request fallo, que es
+// el unico caso indistinguible de un problema de red.
+const SESSION_PROBE_TIMEOUT_MS = 8000;
+
+type SessionProbe = { kind: 'user'; user: User } | { kind: 'anonymous' } | { kind: 'error' };
+
+async function probeSession(): Promise<SessionProbe> {
+  try {
+    const response = await withTimeout(
+      fetch('/api/session', { credentials: 'include' }),
+      SESSION_PROBE_TIMEOUT_MS,
+    );
+    if (!response.ok) return { kind: 'error' };
+    const data = await response.json();
+    return data?.user ? { kind: 'user', user: data.user as User } : { kind: 'anonymous' };
+  } catch {
+    return { kind: 'error' };
+  }
+}
+
+async function resolveSessionUser(): Promise<User | null> {
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) {
       await new Promise((r) => setTimeout(r, 1000));
     }
-    try {
-      const { data } = await withTimeout(supabase.auth.getSession(), TIMEOUT_MS);
-      if (data.session) return data.session;
-    } catch (err) {
-      console.warn(`Auth session check attempt ${attempt + 1}/3 failed:`, err);
-    }
-    if (!hasStoredSession()) return null;
+    const probe = await probeSession();
+    if (probe.kind === 'user') return probe.user;
+    if (probe.kind === 'anonymous') return null;
   }
   return null;
 }
@@ -187,26 +233,21 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   allTenants: boolean;
   loadProfileAndTenant: () => Promise<void>;
+  refreshSession: () => Promise<boolean>;
   switchTenant: (tenantId: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 // Wipe every Supabase auth cookie from the browser. `signOut()` normally
-// clears them, but on flaky/slow networks it can leave stale `supabase.auth.token`
-// chunks behind, which would let a follow-up request authenticate as the previous
-// account (data leak between tenants). This is a belt-and-suspenders hard clear.
+// clears them, but on flaky/slow networks it can leave stale
+// `sb-*-auth-token` chunks behind, which would let a follow-up request
+// authenticate as the previous account (data leak between tenants). This is a
+// belt-and-suspenders hard clear.
 export function clearSupabaseAuthCookies() {
   if (typeof document === 'undefined') return;
   try {
-    const names: string[] = [];
-    for (const c of document.cookie.split(';')) {
-      const name = c.split('=')[0]?.trim();
-      if (name && (name === 'supabase.auth.token' || name.startsWith('supabase.auth.token.'))) {
-        names.push(name);
-      }
-    }
-    for (const name of names) {
+    for (const name of storedAuthKeys()) {
       document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0; SameSite=Lax`;
       document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0`;
     }
@@ -220,7 +261,7 @@ function clearStoredAuthStorage() {
   clearLastActivity();
   clearSupabaseAuthCookies();
   try {
-    window.localStorage.removeItem('supabase.auth.token');
+    for (const key of storedAuthKeys()) window.localStorage.removeItem(key);
   } catch {
     // ignore
   }
@@ -253,34 +294,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     allTenants: boolean;
     tenants: TenantInfo[];
   } | null>(null);
-  // True once a session has been established through onAuthStateChange. Guards
-  // the initial getSessionWithRetry() against clobbering that session when it
-  // finally resolves (e.g. after timing out on a stale-cookie refresh that the
-  // user already replaced by signing in).
-  const sessionViaEventRef = useRef(false);
+  // Espejo de `user` para que el callback de revalidacion pueda consultarlo.
+  // Va en un ref y no como dependencia del efecto porque `user` en la lista
+  // reiniciaria el efecto completo (volveria a correr `init()`) y la revalidacion
+  // volveria a disparar su propio cambio de estado, en bucle.
+  const userRef = useRef<User | null>(null);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   const loadProfileAndTenant = useCallback(async () => {
     if (activeFetchRef.current) return activeFetchRef.current;
 
     const promise = (async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user) {
-          setProfile(null);
-          setTenant(null);
-          setTenants([]);
-          setRole(null);
-          lastFetchedUserIdRef.current = null;
-          return;
-        }
-
         const storedId = localStorage.getItem('vynko_active_tenant_id');
         const isAll = storedId === '__all__';
         const activeTenantId = !isAll ? getStoredActiveTenantId() : null;
 
-        const headers: Record<string, string> = {
-          Authorization: `Bearer ${session.access_token}`,
-        };
+        const headers: Record<string, string> = {};
         if (isAll) {
           headers['x-active-tenant-id'] = '__all__';
         } else if (activeTenantId) {
@@ -294,6 +326,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Failed to fetch session');
+
+        // La cookie de sesion puede ser HttpOnly, asi que el navegador no puede
+        // leer el access token: la identidad viaja en la respuesta del servidor.
+        const sessionUser = (data.user as User | null) ?? null;
+        if (!sessionUser) {
+          setProfile(null);
+          setTenant(null);
+          setTenants([]);
+          setRole(null);
+          lastFetchedUserIdRef.current = null;
+          return;
+        }
 
         const tenantsList: TenantInfo[] = data.tenants || [];
 
@@ -362,7 +406,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Los datos ya estaban aplicados al estado; no recrear referencias
           // de arrays/objetos o los efectos de las páginas (que dependen de
           // `tenants`, `tenant`...) volverían a disparar sus fetches.
-          lastFetchedUserIdRef.current = session.user.id;
+          lastFetchedUserIdRef.current = sessionUser.id;
           return;
         }
         lastLoadedRef.current = nextSnapshot;
@@ -375,7 +419,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!isAll && data.tenant?.id) {
           setStoredActiveTenantId(data.tenant.id);
         }
-        lastFetchedUserIdRef.current = session.user.id;
+        lastFetchedUserIdRef.current = sessionUser.id;
       } catch (err) {
         console.error('Error loading profile/tenant:', err);
       } finally {
@@ -399,7 +443,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadProfileAndTenant]);
 
   const logout = useCallback(async () => {
-    sessionViaEventRef.current = false;
     setUser(null);
     setProfile(null);
     setTenant(null);
@@ -412,133 +455,138 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearStoredAuthStorage();
     void globalMutate(() => true, undefined, { revalidate: false });
     try {
-      await supabase.auth.signOut({ scope: 'local' });
+      // El borrado lo hace el servidor: con una cookie HttpOnly el navegador no
+      // puede invalidarla, y `signOut` ademas revoca el refresh token.
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
     } catch {
-      // signOut is best-effort; state is already cleared above.
+      // El estado local ya quedo limpiado, que es lo que ve el usuario. Si el
+      // request fallo, la cookie sigue viva hasta que expire: el proxy la
+      // seguira aceptando, asi que solo afecta al silencio de esta pestana.
     }
   }, [globalMutate]);
 
+  const refreshSession = useCallback(async () => {
+    setLoading(true);
+    const sessionUser = await resolveSessionUser();
+    if (!sessionUser) {
+      setUser(null);
+      setLoading(false);
+      return false;
+    }
+    setUser(sessionUser);
+    await loadProfileAndTenant();
+    setLoading(false);
+    return true;
+  }, [loadProfileAndTenant]);
+
   useEffect(() => {
     let mounted = true;
-    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const applySignedOut = () => {
+      clearStaleAuthLinkError();
+      setUser(null);
+      setProfile(null);
+      setTenant(null);
+      setTenants([]);
+      setRole(null);
+      setAllTenants(false);
+      lastFetchedUserIdRef.current = null;
+      lastLoadedRef.current = null;
+      activeFetchRef.current = null;
+    };
 
     const init = async () => {
-      // Session cookies are deleted by the browser on close, so a fresh start
-      // with no stored session means the previous one ended. Clear the residual
-      // tenant/activity state to begin clean instead of restoring stale cache.
-      if (!hasStoredSession()) {
-        clearStoredActiveTenantId();
-        clearLastActivity();
-      }
-
-      // If the tab was closed longer than the inactivity window ago, expire
-      // the session immediately instead of restoring it from cookies.
+      // Si la pestana estuvo cerrada mas alla del ventana de inactividad, la
+      // sesion se da por expirada sin siquiera restaurarla.
       const lastActivity = getLastActivity();
-      if (lastActivity > 0 && Date.now() - lastActivity > INACTIVITY_TIMEOUT_MS && hasStoredSession()) {
-        await supabase.auth.signOut({ scope: 'local' });
+      if (lastActivity > 0 && Date.now() - lastActivity > INACTIVITY_TIMEOUT_MS) {
+        await logout();
+        if (mounted) {
+          applySignedOut();
+          setLoading(false);
+        }
+        return;
       }
 
       try {
-        const session = await getSessionWithRetry();
+        const sessionUser = await resolveSessionUser();
         if (!mounted) return;
 
-        if (session?.user) {
-          setUser(session.user);
-          if (lastFetchedUserIdRef.current !== session.user.id) {
+        if (sessionUser) {
+          setUser(sessionUser);
+          if (lastFetchedUserIdRef.current !== sessionUser.id) {
             await loadProfileAndTenant();
           }
-        } else if (!sessionViaEventRef.current) {
-          clearStaleAuthLinkError();
-          setUser(null);
-          setProfile(null);
-          setTenant(null);
-          setTenants([]);
-          setRole(null);
-          setAllTenants(false);
+        } else {
+          // Sin sesion no hay nada que restaurar: se limpian los rastros de
+          // tenant/actividad del navegador para no arrastrar estado viejo.
+          clearStoredActiveTenantId();
+          clearLastActivity();
+          applySignedOut();
         }
 
-        // Safeguard para no quedar atrapados con loading=true si el evento de
-        // onAuthStateChange nunca llegó (ej: sesión restaurada desde cookies).
-        // Solo cuando ningún evento está manejando la carga: si el evento está
-        // en vuelo, él mismo resuelve loading recién después de cargar
-        // profile/tenant, evitando que el dashboard redirija a onboarding con
-        // tenant=null por una carrera.
-        if (mounted && !sessionViaEventRef.current) {
-          setLoading(false);
-        }
+        if (mounted) setLoading(false);
       } catch (err) {
         console.error('Auth initialization error:', err);
+        if (mounted) setLoading(false);
       }
-      // setLoading(false) is handled by the onAuthStateChange callback
-      // for INITIAL_SESSION. We must NOT set it here because
-      // loadProfileAndTenant() may still be in-flight (called from the
-      // INITIAL_SESSION handler), and setting loading=false prematurely
-      // causes the dashboard to redirect to /onboarding with tenant=null.
     };
 
     init();
 
-    // Safety fallback: if onAuthStateChange never fires, set loading to false
-    // after 15s so the user is not stuck forever.
-    fallbackTimer = setTimeout(() => {
-      setLoading((prev) => {
-        if (prev) return false;
-        return prev;
-      });
-    }, 15_000);
+    // Sin `onAuthStateChange`: con una cookie de sesion HttpOnly el navegador
+    // no puede observar la sesion, que es justamente lo que se quiere. El token
+    // de acceso lo refresca el cliente de servidor de forma transparente al
+    // reescribir la cookie, asi que del lado del cliente solo hace falta
+    // revalidar contra `/api/session` para enterarnos de que la sesion caduco o
+    // de que se cerro desde otra pestana.
+    let revalidating = false;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (!mounted) return;
+    const revalidate = async () => {
+      if (revalidating || !mounted) return;
+      revalidating = true;
+      try {
+        const sessionUser = await resolveSessionUser();
 
-        if (session?.user) {
-          sessionViaEventRef.current = true;
-          const userChanged = lastFetchedUserIdRef.current !== session.user.id;
-          setUser(session.user);
-          if (userChanged) {
-            // New account in this SPA session: drop any cached data from the
-            // previous user so no stale rows are rendered under the new one.
-            activeFetchRef.current = null;
-            lastFetchedUserIdRef.current = null;
-            void globalMutate(() => true, undefined, { revalidate: false });
-          }
-          // Al volver a la pestaña del navegador, Supabase puede re-emitir
-          // SIGNED_IN/INITIAL_SESSION/TOKEN_REFRESHED con la MISMA sesión (el
-          // usuario no cambió). Solo se hace el load completo cuando realmente
-          // hubo un cambio de cuenta o aún no se cargó el perfil/tenant.
-          const needReload = userChanged || !lastFetchedUserIdRef.current;
-          if (needReload) {
-            setLoading(true);
-            await loadProfileAndTenant();
-            // Si tras el reload seguimos sin perfil y la sesión aún no es
-            // válida, forzar logout en lugar de dejar la pantalla en blanco.
-            if (!lastFetchedUserIdRef.current && event === 'TOKEN_REFRESHED') {
-              void logout();
-            }
-          }
-        } else {
-          sessionViaEventRef.current = false;
-          setUser(null);
-          setProfile(null);
-          setTenant(null);
-          setTenants([]);
-          setRole(null);
-          setAllTenants(false);
-          lastFetchedUserIdRef.current = null;
-          lastLoadedRef.current = null;
+        if (!sessionUser) {
+          // Un fallo de red devuelve null igual que un cierre de sesion, asi que
+          // solo se desloguea si de verdad havia una sesion abierta. Asi un
+          // problema puntual de red no tira la sesion del usuario.
+          if (userRef.current) applySignedOut();
+          return;
+        }
+
+        const userChanged = lastFetchedUserIdRef.current !== sessionUser.id;
+        setUser(sessionUser);
+        if (userChanged) {
+          // Cambio de cuenta en este SPA: se descarta lo cacheado de la cuenta
+          // anterior para no renderizar filas suyas bajo la nueva.
           activeFetchRef.current = null;
+          lastFetchedUserIdRef.current = null;
+          void globalMutate(() => true, undefined, { revalidate: false });
+          await loadProfileAndTenant();
         }
-
-        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
-          setLoading(false);
-        }
+      } finally {
+        revalidating = false;
       }
-    );
+    };
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void revalidate();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+
+    // Cubre la pestana que queda en primer plano sin cambiar de pestana ni
+    // hacer foco: si el refresh token fue revocado desde otro lado, la sesion se
+    // cae en el servidor y hay que notarlo igual.
+    const poll = setInterval(() => void revalidate(), SESSION_REVALIDATE_INTERVAL_MS);
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
-      if (fallbackTimer) clearTimeout(fallbackTimer);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+      clearInterval(poll);
     };
   }, [loadProfileAndTenant, globalMutate, logout]);
 
@@ -582,6 +630,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAuthenticated: !!user,
     allTenants,
     loadProfileAndTenant,
+    refreshSession,
     switchTenant,
   };
 
