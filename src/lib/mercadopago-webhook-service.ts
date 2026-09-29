@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getPreApprovalById } from '@/lib/mercadopago';
+import { trackEvent } from '@/lib/track-event';
 
 export type MercadoPagoWebhookResult =
   | { ok: true; data: { received: true } }
@@ -35,6 +36,13 @@ export async function processMercadoPagoWebhook(id: string | undefined, topic: u
       // change applies to all of the owner's branches (not just the paying one).
       const ownerBranchIds: string[] = await resolveOwnerBranchIds(tenantId, [tenantId]);
 
+      // El webhook lo llama MercadoPago, no el usuario: no hay sesion de
+      // donde sacar el user_id. Se resuelve por la misma rama que ya se
+      // esta usando para el update. Sin esto el evento queda sin atribuir
+      // y la persona no cuenta en ningun paso del embudo, que es
+      // exactamente el paso ("pagan") que mas importa no perder.
+      const ownerUserId = await resolveOwnerUserId(tenantId);
+
       if (status === 'authorized') {
         const reason = preapproval.reason || '';
         let planToSet: 'starter' | 'business' | null = validRefPlan;
@@ -64,11 +72,20 @@ export async function processMercadoPagoWebhook(id: string | undefined, topic: u
             .in('tenant_id', ownerBranchIds);
         }
 
-        await supabaseAdmin.from('analytics_events').insert({
-          event_type: 'payment',
-          tenant_id: tenantId,
-          metadata: { plan: planToSet ?? 'business', preapproval_id: id },
-        });
+        // Antes era event_type 'payment'. Se renombra a subscription_started
+        // porque "payment" no distingue una suscripcion nueva de un renewal,
+        // y el embudo necesita la primera vez que la persona empezó a pagar.
+        // Las filas viejas con 'payment' siguen en la tabla; el service de
+        // analytics las cuenta como subscription_started para que no se
+        // pierda el historico.
+        if (ownerUserId) {
+          await trackEvent({
+            type: 'subscription_started',
+            userId: ownerUserId,
+            tenantId,
+            metadata: { plan: planToSet ?? 'business', preapproval_id: id },
+          });
+        }
       } else if (status === 'cancelled') {
         const { data: tenantRow } = await supabaseAdmin
           .from('tenants')
@@ -91,6 +108,18 @@ export async function processMercadoPagoWebhook(id: string | undefined, topic: u
           .from('tenants')
           .update(updateData)
           .in('id', ownerBranchIds);
+
+        // Se emite con el plan ANTERIOR, no con planToSet: planToSet es 'free'
+        // para business/enterprise, y guardar 'free' como plan cancelado
+        // pierde el dato de que cancelaba un plan pago.
+        if (ownerUserId) {
+          await trackEvent({
+            type: 'subscription_cancelled',
+            userId: ownerUserId,
+            tenantId,
+            metadata: { plan: currentPlan ?? 'unknown', preapproval_id: id, source: 'webhook' },
+          });
+        }
       } else if (status === 'paused') {
         // Subscription paused by MercadoPago (e.g. failed payment attempts)
         // Mark as past_due so the subscription gate blocks access. Applies to
@@ -119,6 +148,30 @@ export async function resolveOwnerBranchIds(
   fallback: string[] = [tenantId]
 ): Promise<string[]> {
   try {
+    const ownerUserId = await resolveOwnerUserId(tenantId);
+    if (!ownerUserId) return fallback;
+
+    const { data: branches } = await supabaseAdmin
+      .from('tenant_users')
+      .select('tenant_id')
+      .eq('user_id', ownerUserId);
+
+    if (!branches || branches.length === 0) return fallback;
+    return branches.map((b) => b.tenant_id);
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Dueño de la rama. El webhook de MercadoPago no tiene sesion de usuario,
+ * asi que el user_id del evento de suscripcion hay que sacarlo de la
+ * membresia. Devuelve null si la rama quedo sin owner, en cuyo caso el
+ * evento no se graba: es preferible perder un punto de datos a atribuirle
+ * la suscripcion al usuario equivocado.
+ */
+export async function resolveOwnerUserId(tenantId: string): Promise<string | null> {
+  try {
     const { data: owner } = await supabaseAdmin
       .from('tenant_users')
       .select('user_id')
@@ -126,16 +179,8 @@ export async function resolveOwnerBranchIds(
       .eq('role', 'owner')
       .maybeSingle();
 
-    if (!owner?.user_id) return fallback;
-
-    const { data: branches } = await supabaseAdmin
-      .from('tenant_users')
-      .select('tenant_id')
-      .eq('user_id', owner.user_id);
-
-    if (!branches || branches.length === 0) return fallback;
-    return branches.map((b) => b.tenant_id);
+    return owner?.user_id ?? null;
   } catch {
-    return fallback;
+    return null;
   }
 }

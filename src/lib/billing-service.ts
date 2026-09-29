@@ -5,6 +5,7 @@ import { createPreApproval, cancelPreApproval } from '@/lib/mercadopago';
 import { consolidateOwnerSubscription, type TenantSubscription } from '@/lib/checkSubscription';
 import { canManageTenant } from '@/lib/membership-role';
 import { safeInternalRedirect } from '@/lib/security/redirects';
+import { trackEvent } from '@/lib/track-event';
 
 export type BillingResult<T = unknown> =
   | { ok: true; data: T }
@@ -251,7 +252,7 @@ export async function cancelSubscription(userId: string): Promise<BillingResult>
 
   const { data: tenant } = await supabaseAdmin
     .from('tenants')
-    .select('mercadopago_preapproval_id, subscription_current_period_end')
+    .select('mercadopago_preapproval_id, subscription_current_period_end, subscription_plan')
     .eq('id', ownerTenant.tenant_id)
     .single();
 
@@ -270,6 +271,23 @@ export async function cancelSubscription(userId: string): Promise<BillingResult>
       subscription_current_period_end: tenant.subscription_current_period_end ?? null,
     })
     .eq('id', ownerTenant.tenant_id);
+
+  // El webhook tambien emite subscription_cancelled cuando llega la
+  // notificacion de MercadoPago. Este es el camino del portal, y son
+  // los dos un mismo hecho, asi que el evento se graba en los dos: el
+  // panel lo suma y la razon de baja no depende de si la notificacion
+  // llego. Para el webhook, que no tiene user_id, la fuente se guarda en
+  // metadata para poder distinguirlos despues.
+  await trackEvent({
+    type: 'subscription_cancelled',
+    userId,
+    tenantId: ownerTenant.tenant_id,
+    metadata: {
+      plan: tenant.subscription_plan ?? 'unknown',
+      preapproval_id: tenant.mercadopago_preapproval_id,
+      source: 'portal',
+    },
+  });
 
   return { ok: true, data: { success: true } };
 }

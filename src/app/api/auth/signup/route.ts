@@ -5,6 +5,7 @@ import { isSameOriginRequest } from '@/lib/security/csrf';
 import { safeInternalRedirect } from '@/lib/security/redirects';
 import { validatePassword } from '@/lib/password-policy';
 import { classifyAuthFailure } from '@/lib/auth-errors';
+import { trackEvent } from '@/lib/track-event';
 
 const MAX_IP_ATTEMPTS = 10;
 const MAX_EMAIL_ATTEMPTS = 3;
@@ -116,5 +117,21 @@ export async function POST(request: Request) {
   // solo eso, cualquiera puede scopar si una direccion esta en el sistema. Se
   // responde lo mismo que en el caso exitoso, asi que no se puede distinguir, y el
   // frontend muestra el cartel de "revisá tu email" para los dos casos.
+  //
+  // `data.user` es null justamente en ese caso de alta repetida, asi que el
+  // evento de analytics sale del if justamente: si no hay user, no hay
+  // registro nuevo que contar. El evento se graba igual cuando la cuenta
+  // queda pendiente de confirmar: una persona que se registra y nunca
+  // confirma es una fuga del embudo, y para verla hay que registrarla.
+  if (data?.user?.id) {
+    await trackEvent({
+      type: 'signup',
+      userId: data.user.id,
+      userEmail: data.user.email ?? normalizedEmail,
+      userName: ownerName.trim(),
+      metadata: { requiresConfirmation: !data.session, via: 'email' },
+    });
+  }
+
   return NextResponse.json({ success: true, requiresConfirmation: !data?.session });
 }

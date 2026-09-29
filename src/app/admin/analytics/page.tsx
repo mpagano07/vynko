@@ -8,34 +8,35 @@ import { authFetch } from '@/lib/fetchWithTenant';
 import { formatDate } from '@/lib/utils/format';
 import { Card } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { StatCard } from '@/components/ui/stat-card';
-import { Users, CreditCard, TrendingUp, ArrowLeft, Rocket } from 'lucide-react';
+import { ArrowLeft, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 
 import { isAdminProfile } from '@/lib/admin';
+import type { AdminAnalytics, EventBreakdown, FunnelStep } from '@/lib/analytics-service';
 
-interface AnalyticsData {
-  totalSignups: number;
-  totalActivated: number;
-  totalPayments: number;
-  activationRate: number;
-  conversionRate: number;
-  signupsByMonth: { month: string; count: number }[];
-  activationsByMonth: { month: string; count: number }[];
-  paymentsByMonth: { month: string; count: number }[];
-  recentEvents: {
-    id: string;
-    event_type: string;
-    user_email: string | null;
-    user_name: string | null;
-    tenant_id: string | null;
-    metadata: Record<string, unknown>;
-    created_at: string;
-  }[];
+interface AnalyticsData extends AdminAnalytics {
+  error?: string;
 }
+
+const EVENT_LABELS: Record<string, string> = {
+  signup: 'Registro',
+  company_created: 'Empresa creada',
+  trial_started: 'Trial iniciado',
+  product_created: 'Producto creado',
+  excel_import: 'Importó Excel',
+  first_sale: 'Primera venta',
+  first_cash_open: 'Primera caja',
+  first_purchase: 'Primera compra',
+  forecast_opened: 'Abrió pronóstico',
+  document_created: 'Documento creado',
+  whatsapp_ticket: 'WhatsApp',
+  app_return: 'Volvió',
+  subscription_started: 'Suscripción',
+  subscription_cancelled: 'Cancelación',
+};
 
 export default function AdminAnalyticsPage() {
   const router = useRouter();
@@ -54,8 +55,14 @@ export default function AdminAnalyticsPage() {
     async function fetchData() {
       try {
         const res = await authFetch('/api/admin/analytics');
-        if (!res.ok) throw new Error('Error al cargar datos');
         const json = await res.json();
+        // Un 503 significa que falta aplicar la migracion 040. Se muestra
+        // el cartel y no un panel vacio, para que quede claro que el
+        // problema es la base y no que todavia no hay datos.
+        if (!res.ok) {
+          setError(json?.error ?? 'Error al cargar datos');
+          return;
+        }
         setData(json);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Error desconocido');
@@ -85,6 +92,9 @@ export default function AdminAnalyticsPage() {
     return (
       <div className="p-6 max-w-6xl mx-auto">
         <Card className="p-8 text-center">
+          {error && /migracion 040/.test(error) && (
+            <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-amber-500" />
+          )}
           <p className="text-red-500 dark:text-red-400 text-lg font-medium">{error || 'Acceso denegado'}</p>
           <Link href="/dashboard" className="text-cyan-600 hover:text-cyan-700 dark:text-cyan-400 dark:hover:text-cyan-300 text-sm mt-2 inline-block">
             Volver al dashboard
@@ -97,8 +107,8 @@ export default function AdminAnalyticsPage() {
   const chartData = data.signupsByMonth.map((s, i) => ({
     month: s.month,
     Registros: s.count,
-    Activados: data.activationsByMonth[i]?.count ?? 0,
-    Pagos: data.paymentsByMonth[i]?.count ?? 0,
+    'Primera venta': data.activatedByMonth[i]?.count ?? 0,
+    Suscripciones: data.subscribedByMonth[i]?.count ?? 0,
   }));
 
   const chartGridStroke = isDark ? '#374151' : '#e5e7eb';
@@ -115,21 +125,16 @@ export default function AdminAnalyticsPage() {
         </Link>
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Analytics Admin</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Registros → Activados → Pagos</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Dónde se cae la gente entre el registro y el primer pago</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-        <StatCard horizontal title="Total registros" value={data.totalSignups} icon={Users} tone="blue" />
-        <StatCard horizontal title="Total activados" value={data.totalActivated} icon={Rocket} tone="orange" />
-        <StatCard horizontal title="Total pagos" value={data.totalPayments} icon={CreditCard} tone="green" />
-        <StatCard horizontal title="Activación" value={`${data.activationRate}%`} icon={TrendingUp} tone="amber" />
-        <StatCard horizontal title="Conversión" value={`${data.conversionRate}%`} icon={TrendingUp} tone="purple" />
-      </div>
+      <FunnelCard funnel={data.funnel} />
+      <BreakdownCard breakdown={data.breakdown} />
 
       <Card className="p-5">
-        <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">Registros vs Activados vs Pagos por mes</h2>
-        {chartData.some((d) => d.Registros > 0 || d.Activados > 0 || d.Pagos > 0) ? (
+        <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">Registros vs primeras ventas vs suscripciones por mes</h2>
+        {chartData.some((d) => d.Registros > 0 || d['Primera venta'] > 0 || d.Suscripciones > 0) ? (
           <ResponsiveContainer width="100%" height={300} minWidth={200} minHeight={128}>
             <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke} />
@@ -141,8 +146,8 @@ export default function AdminAnalyticsPage() {
               />
               <Legend />
               <Bar dataKey="Registros" fill="#3B82F6" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-              <Bar dataKey="Activados" fill="#F97316" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-              <Bar dataKey="Pagos" fill="#22C55E" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+              <Bar dataKey="Primera venta" fill="#F97316" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+              <Bar dataKey="Suscripciones" fill="#22C55E" radius={[4, 4, 0, 0]} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
         ) : (
@@ -173,8 +178,8 @@ export default function AdminAnalyticsPage() {
                       {formatDate(event.created_at, { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </td>
                     <td className="py-2.5 px-3">
-                      <StatusBadge tone={event.event_type === 'signup' ? 'blue' : 'green'}>
-                        {event.event_type === 'signup' ? 'Registro' : 'Pago'}
+                      <StatusBadge tone={event.event_type === 'subscription_cancelled' ? 'red' : 'blue'}>
+                        {EVENT_LABELS[event.event_type] ?? event.event_type}
                       </StatusBadge>
                     </td>
                     <td className="py-2.5 px-3 text-gray-600 dark:text-gray-300">{event.user_email || '-'}</td>
@@ -192,5 +197,112 @@ export default function AdminAnalyticsPage() {
         )}
       </Card>
     </div>
+  );
+}
+
+/**
+ * El embudo de activación. Cada fila es una puerta: el número cuenta
+ * personas que pasaron TODAS las anteriores, en orden. La barra es
+ * relativa al primer paso para que se lea la forma del embudo, y la
+ * columna "caen" es la que dice dónde está el problema real.
+ */
+function FunnelCard({ funnel }: { funnel: FunnelStep[] }) {
+  const total = funnel[0]?.users ?? 0;
+  const paying = funnel[funnel.length - 1]?.users ?? 0;
+
+  if (total === 0) {
+    return (
+      <Card className="p-5">
+        <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Embudo de activación</h2>
+        <p className="text-gray-500 text-sm text-center py-8">
+          Todavía no hay registros. Los eventos se empiezan a grabar con el deploy de esta rama.
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-baseline justify-between mb-4">
+        <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300">Embudo de activación</h2>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          {paying} de {total} llegaron a pagar ({total > 0 ? Math.round((paying / total) * 100) : 0}%)
+        </p>
+      </div>
+
+      <div className="space-y-1">
+        {funnel.map((step, i) => {
+          const width = step.ofTotal;
+          return (
+            <div key={step.step} className="flex items-center gap-3 py-1.5">
+              <div className="w-40 shrink-0 text-sm text-gray-600 dark:text-gray-300 truncate">
+                {step.label}
+              </div>
+              <div className="flex-1 h-8 bg-gray-100 dark:bg-gray-800 rounded overflow-hidden">
+                <div
+                  className="h-full bg-cyan-500 rounded transition-all"
+                  style={{ width: `${Math.max(width, step.users > 0 ? 2 : 0)}%` }}
+                />
+              </div>
+              <div className="w-12 shrink-0 text-right text-sm font-semibold text-gray-900 dark:text-white tabular-nums">
+                {step.users}
+              </div>
+              <div className="w-14 shrink-0 text-right text-xs text-gray-500 dark:text-gray-400 tabular-nums">
+                {step.ofTotal}%
+              </div>
+              <div className="w-28 shrink-0 text-right text-xs tabular-nums">
+                {i === 0 || step.dropped === 0 ? (
+                  <span className="text-gray-400 dark:text-gray-600">—</span>
+                ) : (
+                  <span className="text-red-500 dark:text-red-400">
+                    −{step.dropped} (−{100 - step.ofPrevious}%)
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+        Cada paso cuenta personas que pasaron todos los anteriores, en orden. La última
+        columna es dónde se cae la gente respecto del paso previo.
+      </p>
+    </Card>
+  );
+}
+
+/**
+ * Eventos que NO forman parte del embudo porque son acciones optativas: no
+ * todos los que venden abren caja ni comparten por WhatsApp. Encadenarlos
+ * daría una progresión falsa, así que van sueltos, con la cantidad de
+ * personas distintas y el total de ocurrencias (que difieren cuando el
+ * evento se repite, como app_return).
+ */
+function BreakdownCard({ breakdown }: { breakdown: EventBreakdown[] }) {
+  if (breakdown.length === 0) return null;
+
+  return (
+    <Card className="p-5">
+      <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
+        Eventos sueltos (no forman parte del embudo)
+      </h2>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        {breakdown.map((item) => (
+          <div
+            key={item.eventType}
+            className="rounded-lg border border-gray-200 dark:border-gray-700 p-3"
+          >
+            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+              {EVENT_LABELS[item.eventType] ?? item.eventType}
+            </p>
+            <p className="text-lg font-bold text-gray-900 dark:text-white tabular-nums">{item.users}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 tabular-nums">
+              {item.total} ocurrencias
+            </p>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }

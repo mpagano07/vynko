@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
+import { trackEvent } from '@/lib/track-event';
 
 interface UserLike {
   id: string;
@@ -100,12 +101,34 @@ export async function createCompanyForUser(
     return null;
   }
 
-  await supabaseAdmin.from('analytics_events').insert({
-    event_type: 'signup',
-    user_email: user.email,
-    user_name: ownerName,
-    tenant_id: tenantId,
+  // company_created, no signup. Antes este insert graba 'signup', que
+  // hacia que "100 registros" en el panel fuera en realidad 100 empresas
+  // creadas y no 100 personas registradas: un usuario que abandona el
+  // onboarding nunca se contaba, y uno que abre una segunda sucursal
+  // contaba dos veces. El 'signup' real se graba en
+  // POST /api/auth/signup, donde el alta de la persona ocurre.
+  await trackEvent({
+    type: 'company_created',
+    userId: user.id,
+    userEmail: user.email,
+    userName: ownerName,
+    tenantId,
     metadata: { plan: NEW_ACCOUNT_PLAN },
+  });
+
+  // El trial arranca con la empresa: la cuenta nueva cae en Business por
+  // 45 dias (PROMOS.business en plans.ts) y checkSubscription cuenta los
+  // dias desde tenants.created_at. Se graba aparte de company_created
+  // porque son dos hechos distintos y el embudo los necesita separados:
+  // hay gente que completa el onboarding mucho despues de que arranco el
+  // trial, y esa diferencia es justamente el gap que hay que ver.
+  await trackEvent({
+    type: 'trial_started',
+    userId: user.id,
+    userEmail: user.email,
+    userName: ownerName,
+    tenantId,
+    metadata: { plan: NEW_ACCOUNT_PLAN, source: 'create_company' },
   });
 
   return tenantId;

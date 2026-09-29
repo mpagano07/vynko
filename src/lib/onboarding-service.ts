@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
+import { trackEvent } from '@/lib/track-event';
 
 export type OnboardingResult<T = unknown> =
   | { ok: true; data: T }
@@ -152,12 +153,26 @@ export async function completeOnboarding(
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
 
-  await supabaseAdmin.from('analytics_events').insert({
-    event_type: 'signup',
-    user_email: user.email,
-    user_name: ownerName,
-    tenant_id: tenantId,
+  // company_created, no signup: ver el comentario en create-company.ts.
+  // El 'signup' real se graba en POST /api/auth/signup.
+  const ownerNameStr = String(ownerName);
+
+  await trackEvent({
+    type: 'company_created',
+    userId: user.id,
+    userEmail: user.email,
+    userName: ownerNameStr,
+    tenantId,
     metadata: { plan: NEW_ACCOUNT_PLAN },
+  });
+
+  await trackEvent({
+    type: 'trial_started',
+    userId: user.id,
+    userEmail: user.email,
+    userName: ownerNameStr,
+    tenantId,
+    metadata: { plan: NEW_ACCOUNT_PLAN, source: 'onboarding' },
   });
 
   return { ok: true, data: { tenantId } };

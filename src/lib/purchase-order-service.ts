@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
 import type { AuthInfo } from '@/lib/api-auth';
 import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
+import { trackEvent } from '@/lib/track-event';
 
 export type PurchaseOrderResult<T = unknown> =
   | { ok: true; data: T; status: number }
@@ -595,6 +596,19 @@ export async function receivePurchaseOrder(
     .select('*, items:commercial_document_items(*)')
     .eq('id', document.id)
     .single();
+
+  // first_purchase se graba en la RECEPCION, no en el alta de la orden.
+  // Dar de alta una orden no mueve stock ni cuesta plata: se puede hacer
+  // sola para dejarla lista. Lo que marca que el usuario compro de
+  // verdad es recibir la mercaderia, que es el mismo paso en el que el
+  // stock entra al deposito. Medirlo en el alta daria un numero
+  // inflado por gente que armo la orden y la dejo colgada.
+  await trackEvent({
+    type: 'first_purchase',
+    userId: auth.userId,
+    tenantId: auth.tenantId,
+    metadata: { purchaseOrderId, partial: !allFullyReceived },
+  });
 
   return {
     ok: true,

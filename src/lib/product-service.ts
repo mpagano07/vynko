@@ -7,6 +7,7 @@ import { validatePrice, validateProduct, validateStock } from '@/lib/product-val
 import { adjustStock, buildStockMovement } from '@/lib/stock';
 import { isAllowedImagePath, signProductImageUrls } from '@/lib/upload-service';
 import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
+import { trackEvent } from '@/lib/track-event';
 
 export type ListProductsResult =
   | { ok: true; products: Array<Record<string, unknown>> }
@@ -220,6 +221,13 @@ export async function createProduct(auth: AuthInfo, body: Record<string, unknown
       entityType: 'product',
       entityId: created.id,
       details: { name: created.name, sku: created.sku },
+    });
+
+    await trackEvent({
+      type: 'product_created',
+      userId: auth.userId,
+      tenantId: auth.tenantId,
+      metadata: { productId: created.id, name: created.name, sku: created.sku },
     });
   }
   return {
@@ -674,6 +682,18 @@ export async function importProducts(
     action: 'imported',
     entityType: 'import',
     details: { created, updated, skipped, total: products.length },
+  });
+
+  // Se graba aunque el import no haya creado nada (created = 0): la
+  // intención de cargar catálogo en volumen es la señal que se quiere
+  // medir, y un import que falla entero por formato es justamente el
+  // caso donde hace falta saber que lo intentaron. Los contadores
+  // viajan en el metadata para poder separar el import útil del fallido.
+  await trackEvent({
+    type: 'excel_import',
+    userId: auth.userId,
+    tenantId: auth.tenantId,
+    metadata: { created, updated, skipped, total: products.length },
   });
 
   return { ok: true, body: { results, summary: { created, updated, skipped, total: products.length } } };
