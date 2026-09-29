@@ -52,8 +52,10 @@ function mockUseAuth(overrides: Partial<ReturnType<typeof useAuth>> = {}) {
     logout: vi.fn(),
     isAuthenticated: false,
     allTenants: false,
+    noTenantAccess: false,
     loadProfileAndTenant: vi.fn(),
     switchTenant: vi.fn(),
+    setActiveTenant: vi.fn(),
     refreshSession: vi.fn(async () => true),
     ...overrides,
   });

@@ -4,7 +4,19 @@ import { createServerSupabaseClient } from '@/lib/supabase';
 type SessionPayload = Record<string, unknown>;
 
 function anonPayload(): SessionPayload {
-  return { user: null, profile: null, tenant: null, tenants: [], onboarding_pending: true };
+  // Las mismas claves que el payload autenticado, con `role` incluida. Antes el
+  // payload anon la omitia, asi que un cliente que leyera `data.role` recibia
+  // `undefined` sin sesion y `null` con sesion sin membresias: dos valores para
+  // "no hay rol". Un `data.role ?? 'owner'` en el cliente fallaba en un caso y
+  // no en el otro.
+  return {
+    user: null,
+    profile: null,
+    tenant: null,
+    tenants: [],
+    role: null,
+    onboarding_pending: true,
+  };
 }
 
 /**

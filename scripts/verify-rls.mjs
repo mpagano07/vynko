@@ -478,6 +478,67 @@ await section('DML directo con anon key + JWT esta bloqueado', async () => {
   );
 });
 
+await section('profiles.is_admin no se puede autopromocionar', async () => {
+  // La policy "Users can update their own profile" es FOR UPDATE USING (id =
+  // auth.uid()) y no restringe columnas: un usuario autenticado puede UPDATE de
+  // cualquier columna de SU PROPRIA fila con la anon key. Por eso `is_admin` lleva
+  // el trigger `profiles_admin_immutable`: sin el, esto seria una escalada de
+  // privilegios de una linea.
+  const { error: promoteErr } = await user
+    .from('profiles')
+    .update({ is_admin: true })
+    .eq('id', VICTIM_USER_ID)
+    .select();
+  check(
+    'UPDATE profiles.is_admin -> true bloqueado',
+    Boolean(promoteErr),
+    promoteErr ? undefined : 'el trigger NO bloqueo la autopromocion'
+  );
+
+  await blocked(
+    'UPDATE profiles.is_admin -> true (con .select())',
+    user.from('profiles').update({ is_admin: true }).eq('id', VICTIM_USER_ID).select()
+  );
+
+  // Y el service_role SI tiene que poder: es lo que usa el alta y la baja de admins.
+  // Si el trigger se pasara de la raya, aqui se veria que la app no puede operar.
+  const { data: before, error: readErr } = await admin
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', VICTIM_USER_ID)
+    .single();
+  if (readErr) {
+    check('la columna profiles.is_admin existe', false, readErr.message);
+    return;
+  }
+  check('la columna profiles.is_admin existe', true);
+
+  const desired = before?.is_admin === true ? false : true;
+  const { error: grantErr } = await admin
+    .from('profiles')
+    .update({ is_admin: desired })
+    .eq('id', VICTIM_USER_ID);
+  check(`service_role puede poner is_admin=${desired}`, !grantErr, grantErr?.message);
+
+  // Se restaura el valor original: el usuario de prueba puede ser el admin real.
+  const { error: restoreErr } = await admin
+    .from('profiles')
+    .update({ is_admin: before?.is_admin === true })
+    .eq('id', VICTIM_USER_ID);
+  check('service_role restaura el valor original', !restoreErr, restoreErr?.message);
+
+  const { data: final } = await admin
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', VICTIM_USER_ID)
+    .single();
+  check(
+    'is_admin quedo igual que antes de la prueba',
+    final?.is_admin === before?.is_admin,
+    `antes=${before?.is_admin} despues=${final?.is_admin}`
+  );
+});
+
 await section('profiles.tenant_id es inmutable para el cliente', async () => {
   const { data: ownProfile } = await admin
     .from('profiles')

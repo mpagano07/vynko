@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loader2, CheckCircle2, XCircle, User, Lock } from 'lucide-react';
+import { validatePassword, PASSWORD_MIN_LENGTH } from '@/lib/password-policy';
 import toast from 'react-hot-toast';
 
 export default function AcceptInvitePage() {
@@ -46,8 +47,10 @@ export default function AcceptInvitePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    if (password.length < 6) {
-      toast.error('La contraseña debe tener al menos 6 caracteres');
+
+    const check = validatePassword(password);
+    if (!check.ok) {
+      toast.error(check.error);
       return;
     }
     if (password !== confirmPassword) {
@@ -65,18 +68,37 @@ export default function AcceptInvitePage() {
 
       if (!res.ok) throw new Error('Failed to save name');
 
-      // La contrasena la cambia el servidor: `updateUser` necesita la sesion y
-      // con la cookie HttpOnly el cliente no puede replicarlo.
-      const passRes = await fetch('/api/auth/password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'change', newPassword: password }),
-      });
-      const passData = await passRes.json();
-      if (!passRes.ok) throw new Error(passData?.error || 'No se pudo guardar la contraseña');
+      // Endpoint propio, y no el de cambio de contrasena: ese pide la contrasena
+      // actual como prueba, y una cuenta que entra por primera vez no tiene
+      // ninguna. Aca la prueba es la invitacion pendiente del mismo email. El
+      // servidor revoca todas las sesiones al terminar, asi que despues hay que
+      // entrar de nuevo.
+        const passRes = await fetch('/api/auth/invitation-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ newPassword: password }),
+        });
+        const passData = await passRes.json();
+        if (!passRes.ok) {
+          // 403 con este mensaje es el caso de una cuenta que ya estaba en uso: el
+          // servidor no permite fijar la contrasena sin la anterior. No es un
+          // error de este formulario, asi que no se lo muestra como si lo fuera.
+          //
+          // Va a /dashboard y no a /settings porque /settings expulsa a los
+          // `member` (hace replace a /dashboard), y el `member` con una
+          // invitacion nueva es justo quien cae en este 403. La sesion sigue
+          // viva: el servidor solo revoca cuando efectivamente toco la
+          // contrasena, que aca no ocurrio.
+          if (passRes.status === 403 && /ya tiene una contraseña/i.test(passData?.error ?? '')) {
+            toast.error(passData.error, { duration: 8000 });
+            router.replace('/dashboard');
+            return;
+          }
+          throw new Error(passData?.error || 'No se pudo guardar la contraseña');
+        }
 
-      toast.success('¡Bienvenido!');
-      router.push('/dashboard');
+        toast.success('¡Listo! Iniciá sesión con tu nueva contraseña.');
+        router.replace('/login');
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al guardar');
     } finally {
@@ -115,13 +137,12 @@ export default function AcceptInvitePage() {
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
                   type="password"
-                  placeholder="Contraseña (mín. 6 caracteres)"
+                  placeholder={`Contraseña (mín. ${PASSWORD_MIN_LENGTH} caracteres)`}
                   aria-label="Contraseña"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-9"
                   required
-                  minLength={6}
+                  minLength={PASSWORD_MIN_LENGTH}
                 />
               </div>
               <div className="relative">
@@ -133,7 +154,7 @@ export default function AcceptInvitePage() {
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="pl-9"
                   required
-                  minLength={6}
+                  minLength={PASSWORD_MIN_LENGTH}
                 />
               </div>
               <Button type="submit" className="w-full" disabled={saving || !name.trim() || !password || !confirmPassword}>

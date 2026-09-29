@@ -4,6 +4,7 @@ import { Inter } from 'next/font/google';
 import { ThemeInit } from '@/components/ThemeInit';
 import { ClientLayoutWrapper } from '@/components/layout/ClientLayoutWrapper';
 import { AuthProvider } from '@/lib/contexts/auth-context';
+import { NoTenantAccessGuard } from '@/components/auth/no-tenant-access-guard';
 import { TenantHeaderProvider } from '@/components/TenantHeaderProvider';
 import { AppProviders } from '@/components/AppProviders';
 import type { Metadata, Viewport } from 'next';
@@ -83,6 +84,7 @@ export default function RootLayout({
       <body className={`${inter.variable} min-h-screen bg-gray-50 antialiased dark:bg-gray-950 font-sans`}>
         <AppProviders>
           <AuthProvider>
+            <NoTenantAccessGuard />
             <TenantHeaderProvider>
               <ClientLayoutWrapper>
                 {children}

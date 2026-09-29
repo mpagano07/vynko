@@ -1,61 +1,32 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { Loader2 } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { validatePassword, PASSWORD_MIN_LENGTH } from '@/lib/password-policy';
 
 function ResetPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [ready, setReady] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    let code = searchParams?.get('code');
-    if (!code && typeof window !== 'undefined') {
-      const url = new URL(window.location.href);
-      code = url.searchParams.get('code');
-    }
-
-    // El canje del codigo por una sesion lo hace el servidor, para que la
-    // cookie de recuperacion quede HttpOnly y ningun token llegue al JS.
-    const establish = async () => {
-      if (code) {
-        const res = await fetch('/api/auth/recover', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code }),
-        });
-        if (!res.ok) {
-          toast.error('Link inválido o expirado');
-          router.push('/login');
-          return;
-        }
-        setReady(true);
-        return;
-      }
-
-      // Sin `code` (el enlace se abrio en otra pestana y ya se canjeo): se
-      // consulta al servidor si la sesion de recuperacion sigue vigente.
-      const res = await fetch('/api/session', { credentials: 'include' });
-      const data = await res.json();
-      if (res.ok && data?.user) {
-        setReady(true);
-      } else {
-        toast.error('Link inválido o expirado');
-        router.push('/login');
-      }
-    };
-
-    void establish();
-  }, [searchParams, router]);
+  // El `code` viaja intacto hasta el envio: no se canjea al abrir la pagina.
+  // Canjearlo al abrir dejaba una sesion completa de por medio, y ademas hacia
+  // fallar el link entero si el usuario tardaba en escribir la contrasena. El
+  // canje ocurre junto con el cambio, en un solo pedido al servidor.
+  //
+  // Por eso no hay estado de "cargando": nada se verifica al montar. O hay `code`
+  // y se muestra el formulario, o no hay y se muestra el aviso.
+  const code = searchParams?.get('code') ?? '';
+  const linkUsable = Boolean(code) && !failed;
 
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,27 +36,34 @@ function ResetPasswordContent() {
       return;
     }
 
-    if (password.length < 6) {
-      toast.error('La contraseña debe tener al menos 6 caracteres');
+    const check = validatePassword(password);
+    if (!check.ok) {
+      toast.error(check.error);
       return;
     }
 
     setLoading(true);
 
     try {
-      const res = await fetch('/api/auth/password', {
+      const res = await fetch('/api/auth/recover', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'change', newPassword: password }),
+        body: JSON.stringify({ code, newPassword: password }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'No se pudo actualizar la contraseña');
+      if (!res.ok) {
+        // Un `code` sin su cookie de verifier llega como "Link invalido o
+        // expirado", pero la causa real suele ser que el link se abrio en otro
+        // navegador. El aviso de abajo lo dice, para no ficar en un loop de
+        // reintentos.
+        setFailed(true);
+        throw new Error(data?.error || 'Link inválido o expirado');
+      }
 
-      toast.success('Contraseña actualizada correctamente');
-      // La sesion de recuperacion ya no sirve: se cierra desde el servidor para
-      // no dejar viva la sesion con la que se entro por el link.
-      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-      router.push('/login');
+      // El servidor ya revoco todas las sesiones, asi que no hace falta un
+      // logout aparte: la cookie de recuperacion ya no existe.
+      toast.success('Contraseña actualizada. Podés iniciar sesión.');
+      router.replace('/login');
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : 'No se pudo actualizar la contraseña');
     } finally {
@@ -93,12 +71,23 @@ function ResetPasswordContent() {
     }
   };
 
-  if (!ready) {
+  if (!linkUsable) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+      <div className="min-h-screen flex items-center justify-center bg-gray-900 p-8">
         <Card className="w-full max-w-md p-8 text-center bg-gray-800 border border-gray-700">
-          <Loader2 className="h-8 w-8 animate-spin text-indigo-500 mx-auto" />
-          <p className="mt-4 text-gray-400">Verificando link...</p>
+          <AlertTriangle className="h-10 w-10 text-amber-500 mx-auto" />
+          <h1 className="text-2xl font-bold text-white mt-4 mb-2">Link inválido o expirado</h1>
+          <p className="text-gray-400">
+            Los links de recuperación son de un solo uso, vencen después de un rato y
+            solo funcionan en el navegador donde los pediste. Pedí uno nuevo para
+            seguir.
+          </p>
+          <a
+            href="/auth/forgot-password"
+            className="mt-6 inline-block text-indigo-400 hover:text-indigo-300 font-medium"
+          >
+            Pedir un link nuevo
+          </a>
         </Card>
       </div>
     );
@@ -120,15 +109,14 @@ function ResetPasswordContent() {
             <Input
               type="password"
               id="new-password"
-              placeholder="Mínimo 6 caracteres"
+              placeholder={`Mínimo ${PASSWORD_MIN_LENGTH} caracteres`}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              minLength={6}
+              minLength={PASSWORD_MIN_LENGTH}
               className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-400"
             />
           </div>
-
           <div>
             <label htmlFor="confirm-password" className="block text-sm font-medium mb-2 text-gray-300">
               Confirmar contraseña
@@ -140,10 +128,13 @@ function ResetPasswordContent() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
-              minLength={6}
+              minLength={PASSWORD_MIN_LENGTH}
               className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-400"
             />
           </div>
+          <p className="text-xs text-gray-500">
+            Al cambiarla se cierran todas las sesiones abiertas en cualquier dispositivo.
+          </p>
 
           <Button
             type="submit"

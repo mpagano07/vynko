@@ -54,7 +54,7 @@ describe('OnboardingPage guard', () => {
     router.replace.mockClear();
     router.push.mockClear();
     fetchMock.mockReset();
-    authMock.mockReturnValue({ switchTenant: vi.fn() } as unknown as ReturnType<typeof useAuth>);
+    authMock.mockReturnValue({ setActiveTenant: vi.fn() } as unknown as ReturnType<typeof useAuth>);
     vi.stubGlobal('fetch', fetchMock);
     Object.defineProperty(window, 'location', {
       value: { href: '', reload: vi.fn(), replace: vi.fn() },
@@ -136,8 +136,8 @@ describe('OnboardingPage guard', () => {
     expect(screen.queryByText('Configura tu empresa')).not.toBeInTheDocument();
   });
   it('crea la empresa automáticamente si user_metadata trae nombre/empresa del registro', async () => {
-    const switchTenant = vi.fn().mockResolvedValue(undefined);
-    authMock.mockReturnValue({ switchTenant } as unknown as ReturnType<typeof useAuth>);
+    const setActiveTenant = vi.fn();
+    authMock.mockReturnValue({ setActiveTenant } as unknown as ReturnType<typeof useAuth>);
 
     fetchMock
       // guard /api/session: la metadata llega dentro de `user`
@@ -154,8 +154,12 @@ describe('OnboardingPage guard', () => {
     render(<OnboardingPage />);
 
     expect(await screen.findByText(/¡Bienvenido!/)).toBeInTheDocument();
-    await waitFor(() => expect(switchTenant).toHaveBeenCalledWith('t1'));
-    expect(router.push).toHaveBeenCalledWith('/dashboard');
+    expect(setActiveTenant).toHaveBeenCalledWith('t1');
+    // Navegación dura, no `router.push`: si el router resuelve la transición sin
+    // desmontar, el componente queda en `step === 'success'` y el usuario mira un
+    // cartel que promete una redirección que no ocurre, sin error en consola.
+    expect(window.location.replace).toHaveBeenCalledWith('/dashboard');
+    expect(router.push).not.toHaveBeenCalledWith('/dashboard');
     expect(screen.queryByText('Configura tu empresa')).not.toBeInTheDocument();
   });
 
@@ -187,13 +191,18 @@ describe('OnboardingPage formulario de empresa', () => {
     fetchMock.mockReset();
     vi.mocked(toast.success).mockClear();
     vi.mocked(toast.error).mockClear();
-    authMock.mockReturnValue({ switchTenant: vi.fn() } as unknown as ReturnType<typeof useAuth>);
+    authMock.mockReturnValue({ setActiveTenant: vi.fn() } as unknown as ReturnType<typeof useAuth>);
     vi.stubGlobal('fetch', fetchMock);
+    Object.defineProperty(window, 'location', {
+      value: { href: '', reload: vi.fn(), replace: vi.fn() },
+      writable: true,
+      configurable: true,
+    });
   });
 
   it('crea la empresa, muestra el success y redirige al dashboard', async () => {
-    const switchTenant = vi.fn().mockResolvedValue(undefined);
-    authMock.mockReturnValue({ switchTenant } as unknown as ReturnType<typeof useAuth>);
+    const setActiveTenant = vi.fn();
+    authMock.mockReturnValue({ setActiveTenant } as unknown as ReturnType<typeof useAuth>);
 
     fetchMock
       // guard /api/session
@@ -211,9 +220,74 @@ describe('OnboardingPage formulario de empresa', () => {
     expect(await screen.findByText(/¡Bienvenido!/)).toBeInTheDocument();
     expect(screen.getByText(/Tu empresa Mi Shop ha sido creada/i)).toBeInTheDocument();
 
-    await waitFor(() => expect(switchTenant).toHaveBeenCalledWith('t1'));
-    expect(router.push).toHaveBeenCalledWith('/dashboard');
+    expect(setActiveTenant).toHaveBeenCalledWith('t1');
+    expect(window.location.replace).toHaveBeenCalledWith('/dashboard');
+    expect(router.push).not.toHaveBeenCalledWith('/dashboard');
     expect(toast.success).toHaveBeenCalled();
+  });
+
+  it('no deja la pantalla de éxito como callejón sin salida si la navegación no ocurre', async () => {
+    // Regresión del bug reportado: el usuario completaba el onboarding, veía
+    // "Tu empresa X ha sido creada. Redirigiendo al dashboard..." y se quedaba
+    // ahí indefinidamente, con la URL en /onboarding y la consola limpia.
+    // `/api/session` y `/api/onboarding` responden bien, así que el problema no
+    // era de datos: la redirección dependía de una navegación de cliente que
+    // podía no-opearse sin desmontar el componente, dejando `step` en 'success'
+    // y el cartel de "redirigiendo" colgado para siempre.
+    const setActiveTenant = vi.fn();
+    authMock.mockReturnValue({ setActiveTenant } as unknown as ReturnType<typeof useAuth>);
+
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ user: AUTHENTICATED_USER, tenants: [], tenant: null }),
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ tenantId: 't1' }) });
+
+    render(<OnboardingPage />);
+
+    await screen.findByText('Configura tu empresa');
+    fillCompanyForm();
+
+    expect(await screen.findByText(/¡Bienvenido!/)).toBeInTheDocument();
+
+    // Toda salida de esta página tiene que ser una navegación dura. Cualquier
+    // `router.push` al dashboard reintroduce el dead-end silencioso.
+    await waitFor(() => expect(window.location.replace).toHaveBeenCalledWith('/dashboard'));
+    expect(router.push).not.toHaveBeenCalledWith('/dashboard');
+    expect(router.replace).not.toHaveBeenCalledWith('/dashboard');
+  });
+
+  it('no espera al refetch de sesión antes de redirigir', async () => {
+    // El usuario reportaba que la pantalla de "Redirigiendo al dashboard..."
+    // duraba varios segundos. La causa era `await switchTenant(tenantId)`: esa
+    // llamada pega a `/api/session` y bloquea la navegación hasta que responde
+    // (con un techo de PROFILE_LOAD_TIMEOUT_MS, 10s), y en desarrollo se le
+    // suma la compilación en frío de la ruta. Peor: el trabajo era inútil, porque
+    // la navegación dura que viene después recarga la página entera y el
+    // AuthProvider resuelve perfil y rol desde cero.
+    // Acá el fetch de sesión no resuelve nunca, así que cualquier espera se
+    // manifiesta como un timeout. La navegación tiene que haber ocurrido igual.
+    const setActiveTenant = vi.fn();
+    authMock.mockReturnValue({ setActiveTenant } as unknown as ReturnType<typeof useAuth>);
+
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ user: AUTHENTICATED_USER, tenants: [], tenant: null }),
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ tenantId: 't1' }) })
+      // Cualquier request posterior se queda colgado para siempre.
+      .mockImplementation(() => new Promise(() => {}));
+
+    render(<OnboardingPage />);
+
+    await screen.findByText('Configura tu empresa');
+    fillCompanyForm();
+
+    expect(await screen.findByText(/¡Bienvenido!/)).toBeInTheDocument();
+    expect(setActiveTenant).toHaveBeenCalledWith('t1');
+    await waitFor(() => expect(window.location.replace).toHaveBeenCalledWith('/dashboard'));
   });
 
   it('muestra toast de error cuando la API falla y mantiene el formulario', async () => {

@@ -3,6 +3,8 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { isSameOriginRequest } from '@/lib/security/csrf';
 import { safeInternalRedirect } from '@/lib/security/redirects';
+import { validatePassword } from '@/lib/password-policy';
+import { classifyAuthFailure } from '@/lib/auth-errors';
 
 const MAX_IP_ATTEMPTS = 10;
 const MAX_EMAIL_ATTEMPTS = 3;
@@ -39,6 +41,14 @@ export async function POST(request: Request) {
 
   const normalizedEmail = email.trim().toLowerCase();
   const ip = getClientIp(request);
+
+  // La politica vive en un modulo compartido con los otros tres caminos que
+  // escriben una contrasena. Se valida antes de gastar presupuesto del limite
+  // para no consumirle los cupos al usuario por escribir mal.
+  const passwordCheck = validatePassword(password, { email: normalizedEmail });
+  if (!passwordCheck.ok) {
+    return NextResponse.json({ error: passwordCheck.error }, { status: 400 });
+  }
 
   const ipLimit = await rateLimit(`auth:signup:ip:${ip}`, MAX_IP_ATTEMPTS, WINDOW_MS);
   if (!ipLimit.ok) {
@@ -77,16 +87,34 @@ export async function POST(request: Request) {
 
   if (error) {
     console.warn(`Signup failed for ${normalizedEmail}: ${error.message}`);
-    return NextResponse.json({ error: 'No se pudo crear la cuenta' }, { status: 400 });
-  }
 
-  const alreadyRegistered = data?.user?.identities?.length === 0;
-  if (alreadyRegistered) {
+    // "Ya existe" se responde como un alta mas. GoTrue ofusca el alta repetida
+    // cuando la confirmacion de email esta activa (devuelve el usuario con
+    // `identities` vacio y sin error), pero con la confirmacion desactivada
+    // devuelve un error explicito. Depender de una configuracion del panel para
+    // no filtrar que emails existen es frágil: la ofuscacion tiene que estar
+    // en la ruta, porque es la ruta la que decide que se responde.
+    if (error.code === 'user_already_exists' || /already (been )?registered|already exists/i.test(error.message)) {
+      return NextResponse.json({ success: true, requiresConfirmation: true });
+    }
+
+    const classified = classifyAuthFailure(error, 'No se pudo crear la cuenta');
     return NextResponse.json(
-      { error: 'Este email ya está registrado. Usá "Olvidé mi contraseña" para acceder.' },
-      { status: 409 }
+      { error: classified.message },
+      {
+        status: classified.status,
+        headers: classified.retryAfterSeconds
+          ? { 'Retry-After': String(classified.retryAfterSeconds) }
+          : undefined,
+      }
     );
   }
 
+  // Cuando el email ya existe con la confirmacion activa, Supabase no abre sesion
+  // y devuelve el usuario con `identities` vacio. Antes eso se traducía en un 409
+  // "Este email ya esta registrado", que confirma las cuentas dadas de alta: con
+  // solo eso, cualquiera puede scopar si una direccion esta en el sistema. Se
+  // responde lo mismo que en el caso exitoso, asi que no se puede distinguir, y el
+  // frontend muestra el cartel de "revisá tu email" para los dos casos.
   return NextResponse.json({ success: true, requiresConfirmation: !data?.session });
 }

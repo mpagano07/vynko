@@ -6,6 +6,10 @@ import type { User } from '@supabase/supabase-js';
 import toast from 'react-hot-toast';
 import { clearAuthLinkErrorFromUrl, getAuthLinkErrorParams } from '@/lib/auth-link-error';
 import { NEW_ACCOUNT_PLAN } from '@/lib/plans';
+import {
+  INACTIVITY_TIMEOUT_MS as SESSION_INACTIVITY_TIMEOUT_MS,
+  LAST_SEEN_COOKIE,
+} from '@/lib/session-policy';
 
 // An expired or already-used email link leaves a Supabase auth error in the
 // URL (e.g. `?error=access_denied&error_code=otp_expired...`). It doesn't
@@ -21,6 +25,7 @@ export interface UserProfile {
   email: string;
   full_name: string;
   avatar_url?: string;
+  is_admin?: boolean;
 }
 
 export interface TenantInfo {
@@ -49,7 +54,11 @@ export interface TenantInfo {
 
 const ACTIVE_TENANT_KEY = 'vynko_active_tenant_id';
 const LAST_ACTIVITY_KEY = 'vynko_last_activity';
-const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+// El plazo real lo aplica el proxy (ver `lib/session-policy`): esta constante
+// viene de ahi para que las dos puntas no se separen. El timer del navegador es
+// la experience; el corte de verdad ocurre en el servidor, que es el unico que
+// una cookie robada no puede esquivar.
+const INACTIVITY_TIMEOUT_MS = SESSION_INACTIVITY_TIMEOUT_MS;
 // Cada cuanto se le pregunta al servidor si la sesion sigue viva. El token de
 // acceso caduca en ~1h y lo refresca el cliente de servidor al reescribir la
 // cookie, asi que este intervalo no compite con ese refresco: solo detecta que
@@ -232,22 +241,41 @@ interface AuthContextValue {
   logout: () => Promise<void>;
   isAuthenticated: boolean;
   allTenants: boolean;
+  /**
+   * Sesion valida, onboarding ya completado y cero empresas. O sea: al usuario
+   * lo sacaron de todos los tenants.
+   *
+   * Se decide aca, en el cliente, y no en el proxy a proposito. `tenant_users` es
+   * el unico origen de membresia del schema, asi que desde el proxy una lectura
+   * vacia es indistinguible de "lo sacaron": con un fallo transitorio (lag de
+   * replica, RLS, la ventana entre completar el onboarding e insertar la fila)
+   * expulsar desde el servidor le muestra a un cliente con empresa un cartel de
+   * "pedile a un owner que te vuelva a invitar". Aca la lectura ya es una
+   * segunda opinion, con la pagina cargada.
+   */
+  noTenantAccess: boolean;
   loadProfileAndTenant: () => Promise<void>;
   refreshSession: () => Promise<boolean>;
   switchTenant: (tenantId: string) => Promise<void>;
+  setActiveTenant: (tenantId: string) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-// Wipe every Supabase auth cookie from the browser. `signOut()` normally
-// clears them, but on flaky/slow networks it can leave stale
-// `sb-*-auth-token` chunks behind, which would let a follow-up request
-// authenticate as the previous account (data leak between tenants). This is a
-// belt-and-suspenders hard clear.
+// Limpia los rastros de Supabase auth que quedan en el navegador.
+//
+// Ojo con el alcance: la cookie de sesion es HttpOnly, asi que esta funcion NO
+// puede borrarla (el navegador no la expone). Lo que si limpia son las claves
+// viejas de `localStorage` de instalaciones anteriores y, en el improbable caso
+// de que quedaran cookies no-HttpOnly, esas tambien. El borrado de verdad lo
+// hace `POST /api/auth/logout` en el servidor, que ademas revoca el refresh
+// token. Queda como red de seguridad para no arrastrar estado de una cuenta
+// anterior, no como el mecanismo principal.
 export function clearSupabaseAuthCookies() {
   if (typeof document === 'undefined') return;
+  const names = [...storedAuthKeys(), LAST_SEEN_COOKIE];
   try {
-    for (const name of storedAuthKeys()) {
+    for (const name of names) {
       document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0; SameSite=Lax`;
       document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0`;
     }
@@ -275,6 +303,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [tenants, setTenants] = useState<TenantInfo[]>([]);
   const [role, setRole] = useState<string | null>(null);
   const [allTenants, setAllTenants] = useState(false);
+  const [noTenantAccess, setNoTenantAccess] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const activeFetchRef = useRef<Promise<void> | null>(null);
@@ -335,11 +364,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setTenant(null);
           setTenants([]);
           setRole(null);
+          setNoTenantAccess(false);
           lastFetchedUserIdRef.current = null;
           return;
         }
 
         const tenantsList: TenantInfo[] = data.tenants || [];
+
+        // Onboarding terminado + cero empresas = lo sacaron de todos los tenants.
+        // Un usuario nuevo tiene el flag en `true`, asi que no entra en este
+        // caso y sigue su camino normal hacia /onboarding.
+        setNoTenantAccess(data.onboarding_pending === false && tenantsList.length === 0);
 
         let bestStatus = 'free';
         let bestPlan: string = NEW_ACCOUNT_PLAN;
@@ -442,6 +477,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await loadProfileAndTenant();
   }, [loadProfileAndTenant]);
 
+  /**
+   * Persiste la empresa activa sin tocar la red, y sin esperar.
+   *
+   * Es lo que corresponde cuando despues hay una navegacion dura: el unload
+   * tira abajo cualquier peticion en vuelo y el AuthProvider que monta al otro
+   * lado resuelve perfil y rol desde cero. Esperar al `loadProfileAndTenant()`
+   * en ese escenario no aporta nada y se paga entero: `/api/session` puede tardar
+   * varios segundos, y en desarrollo se le suma la compilacion en frio de la
+   * ruta. El usuario quedaba mirando el cartel de "redirigiendo al dashboard" ese
+   * tiempo entero, con un trabajo cuyo resultado se descartaba al instante.
+   *
+   * La escritura en `localStorage` es sincronica, asi que la eleccion ya queda
+   * garantizada antes de que la navegacion arranque.
+   */
+  const setActiveTenant = useCallback((tenantId: string) => {
+    setStoredActiveTenantId(tenantId);
+  }, []);
+
   const logout = useCallback(async () => {
     setUser(null);
     setProfile(null);
@@ -449,6 +502,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTenants([]);
     setRole(null);
     setAllTenants(false);
+    setNoTenantAccess(false);
     activeFetchRef.current = null;
     lastFetchedUserIdRef.current = null;
     lastLoadedRef.current = null;
@@ -490,9 +544,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setTenants([]);
       setRole(null);
       setAllTenants(false);
+      setNoTenantAccess(false);
       lastFetchedUserIdRef.current = null;
       lastLoadedRef.current = null;
       activeFetchRef.current = null;
+      // Hay que tirar el cache de SWR tambien aca, no solo en `logout`.
+      //
+      // Este callback corre cuando la sesion se cae sola: el refresh token fue
+      // revocado, el usuario fue borrado, o el proxy la cerro por inactividad.
+      // Sin esto, la pestana queda mostrando el dashboard con los datos que ya
+      // habiatraido, y cualquier lectura sale del cache sin volver a pegarle al
+      // servidor. Con otra cuenta logueada en la misma pestana eso es mostrar
+      // filas de un tenant ajeno.
+      void globalMutate(() => true, undefined, { revalidate: false });
     };
 
     const init = async () => {
@@ -629,9 +693,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
     isAuthenticated: !!user,
     allTenants,
+    noTenantAccess,
     loadProfileAndTenant,
     refreshSession,
     switchTenant,
+    setActiveTenant,
   };
 
   // Key the subtree by user id so all child components fully remount when the

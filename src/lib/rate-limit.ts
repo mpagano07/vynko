@@ -139,8 +139,6 @@ async function rateLimitPeekInPostgres(key: string, limit: number): Promise<Rate
   return { ok: row.ok, retryAfterSeconds: Number(row.retry_after_seconds) || 0 };
 }
 
-let peekUnavailableLogged = false;
-
 /**
  * Dice si `key` ya esta sobre el limite, sin contar nada.
  *
@@ -173,14 +171,11 @@ export async function rateLimitPeek(key: string, limit: number): Promise<RateLim
   try {
     return await rateLimitPeekInPostgres(key, limit);
   } catch (error) {
-    if (!peekUnavailableLogged) {
-      peekUnavailableLogged = true;
-      console.error(
-        '[rate-limit] rate_limit_peek no respondio; se permite el request sin limite.',
-        'Sintoma tipico: falta aplicar migrations/037_rate_limit_peek.sql.',
-        error
-      );
-    }
+    logStoreUnavailable(
+      '[rate-limit] rate_limit_peek no respondio; se permite el request sin limite.',
+      'Sintoma tipico: falta aplicar migrations/037_rate_limit_peek.sql.',
+      error
+    );
     return { ok: true, retryAfterSeconds: 0 };
   }
 }
@@ -212,7 +207,29 @@ async function rateLimitInPostgres(
   return { ok: row.ok, retryAfterSeconds: Number(row.retry_after_seconds) || 0 };
 }
 
-let postgresUnavailableLogged = false;
+let postgresUnavailableLoggedAt = 0;
+/** Cada cuanto se repite el aviso de fail-open, en ms. */
+const UNAVAILABLE_LOG_INTERVAL_MS = 5 * 60 * 1000;
+
+/**
+ * Que el store distribuido no responda deja al limite sin efecto, y eso es
+ * invisible para el usuario pero critico para la seguridad. Antes se logueaba una
+ * sola vez por proceso: en un serverless con contenedores efimeros eso es casi
+ * tan silencioso como no loguear nada, y con suerte un grep en los logs del
+ * deploy anterior lo encontraba.
+ *
+ * Ahora el primer fallo avisa y despues se reavisa cada 5 minutos mientras
+ * dure, que es el ritmo con el que se lee un panel de deploys. Sigue sin
+ * loguear en cada request.
+ */
+function logStoreUnavailable(message: string, hint: string, error: unknown): void {
+  const now = Date.now();
+  if (postgresUnavailableLoggedAt !== 0 && now - postgresUnavailableLoggedAt < UNAVAILABLE_LOG_INTERVAL_MS) {
+    return;
+  }
+  postgresUnavailableLoggedAt = now;
+  console.error(message, hint, error);
+}
 
 /**
  * Registra un intento contra `key` y decide si pasa.
@@ -223,9 +240,9 @@ let postgresUnavailableLogged = false;
  *
  * Que falle el store no significa bloquear el request. Si Postgres no responde,
  * la app entera no funciona: el login, el alta de empresa y las consultas de
- * datos pasan por el mismo Supabase. Un fail-closed converts eso en un corte
+ * datos pasan por el mismo Supabase. Un fail-closed convierte eso en un corte
  * total de servicio por un problema que igual afecta a todo, asi que se prefiere
- * un fail-open con log una sola vez, que deja el incidente visible sin amplificar el
+ * un fail-open con log periodico, que deja el incidente visible sin amplificar el
  * impacto. El trade-off es que durante el incidente el limite no protege: es una
  * capa de defensa en profundidad, no la unica.
  */
@@ -249,14 +266,11 @@ export async function rateLimit(
   try {
     return await rateLimitInPostgres(key, limit, windowMs);
   } catch (error) {
-    if (!postgresUnavailableLogged) {
-      postgresUnavailableLogged = true;
-      console.error(
-        '[rate-limit] El store distribuido no respondio; se permite el request sin limite.',
-        'Sintoma tipico: falta aplicar migrations/036_rate_limit_buckets.sql.',
-        error
-      );
-    }
+    logStoreUnavailable(
+      '[rate-limit] El store distribuido no respondio; se permite el request sin limite.',
+      'Sintoma tipico: falta aplicar migrations/036_rate_limit_buckets.sql.',
+      error
+    );
     return { ok: true, retryAfterSeconds: 0 };
   }
 }
@@ -265,8 +279,7 @@ export async function rateLimit(
 export function __resetRateLimitStateForTests(): void {
   buckets.clear();
   callsSinceCleanup = 0;
-  postgresUnavailableLogged = false;
-  peekUnavailableLogged = false;
+  postgresUnavailableLoggedAt = 0;
 }
 
 /** Headers que el edge de la plataforma sobrescribe, y que el cliente no puede forjar. */

@@ -17,6 +17,7 @@ import { Select } from '@/components/ui/select';
 import { FormLabel } from '@/components/ui/form-label';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { PageHeader } from '@/components/ui/page-header';
+import { validatePassword, PASSWORD_MIN_LENGTH } from '@/lib/password-policy';
 import toast from 'react-hot-toast';
 import {
   PAYMENT_METHODS,
@@ -59,7 +60,7 @@ function formatPhone(value: string): string {
 }
 
 export default function SettingsPage() {
-  const { user, profile, tenant, tenants, role, loading: authLoading } = useAuth();
+  const { user, profile, tenant, tenants, role, loading: authLoading, logout } = useAuth();
   const router = useRouter();
 
   const [activeTab, setActiveTab] = useState('perfil');
@@ -413,46 +414,43 @@ export default function SettingsPage() {
       return;
     }
 
-    if (passwordForm.newPassword.length < 6) {
-      toast.error('La contraseña debe tener al menos 6 caracteres');
+    const check = validatePassword(passwordForm.newPassword, { email: user?.email });
+    if (!check.ok) {
+      toast.error(check.error);
       return;
     }
 
     setSavingPassword(true);
     try {
-      // Verificar la contrasena actual y aplicarla lo hace el servidor: con la
-      // cookie de sesion HttpOnly el cliente ya no puede llamar a
-      // `signInWithPassword` ni a `updateUser`.
+      // Un solo pedido con las dos contrasenas. Antes eran dos: un `verify` con
+      // la actual y un `change` aparte, y como eran independientes el `verify`
+      // no ataba a nada (alcanzaba con no mandarlo). El servidor ahora exige la
+      // actual en la misma operacion que aplica la nueva.
       const res = await fetch('/api/auth/password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'verify',
           currentPassword: passwordForm.currentPassword,
+          newPassword: passwordForm.newPassword,
         }),
       });
-      const verifyData = await res.json();
-      if (!res.ok) {
-        toast.error(verifyData?.error || 'La contraseña actual es incorrecta');
-        return;
-      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Error al actualizar contraseña');
 
-      const changeRes = await fetch('/api/auth/password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'change', newPassword: passwordForm.newPassword }),
-      });
-      const changeData = await changeRes.json();
-      if (!changeRes.ok) throw new Error(changeData?.error || 'Error al actualizar contraseña');
-
-      toast.success('Contraseña actualizada');
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+
+      // El cambio revoca todas las sesiones, incluida esta. Hay que sacar al
+      // usuario al login en vez de dejarlo en una pantalla que ya no tiene
+      // sesion y que va a fallar en cada pedido.
+      toast.success('Contraseña actualizada. Volvé a iniciar sesión.');
+      await logout();
+      router.push('/login');
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al actualizar contraseña');
     } finally {
       setSavingPassword(false);
     }
-  }, [passwordForm]);
+  }, [passwordForm, user?.email, logout, router]);
 
   const handleUpdateCollab = useCallback(async (collab: Collaborator, payload: { role: string; tenant_ids: string[] }) => {
     try {
@@ -584,8 +582,8 @@ export default function SettingsPage() {
                     <Input
                       type="password"
                       required
-                      minLength={6}
-                      placeholder="Mínimo 6 caracteres"
+                      minLength={PASSWORD_MIN_LENGTH}
+                      placeholder={`Mínimo ${PASSWORD_MIN_LENGTH} caracteres`}
                       value={passwordForm.newPassword}
                       onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
                     />
@@ -598,7 +596,7 @@ export default function SettingsPage() {
                     <Input
                       type="password"
                       required
-                      minLength={6}
+                      minLength={PASSWORD_MIN_LENGTH}
                       placeholder="Repite la contraseña"
                       value={passwordForm.confirmPassword}
                       onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
@@ -612,6 +610,17 @@ export default function SettingsPage() {
                       <><KeyRound className="h-4 w-4 mr-1" />Actualizar contraseña</>
                     )}
                   </Button>
+
+                  {/* El aviso va antes del boton y no solo en el toast: el cambio
+                      revoca TODAS las sesiones, incluida la de este navegador. Si
+                      el usuario tiene otra sesion abierta (el celular, la
+                      tablet), se cae ahi tambien y sin aviso. Es lo correcto
+                      para un cambio de contraseña pensado para recuperar una
+                      cuenta, pero surprising si no se dice antes. */}
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Al cambiarla se cierran todas las sesiones abiertas, en este
+                    dispositivo y en cualquier otro donde tengas Vynko abierto.
+                  </p>
                 </form>
               </Card>
             </div>

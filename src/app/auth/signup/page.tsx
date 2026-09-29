@@ -11,6 +11,7 @@ import { Eye, EyeOff } from 'lucide-react';
 import { EmailVerificationModal } from '@/components/ui/email-verification-modal';
 import { FormLabel } from '@/components/ui/form-label';
 import { authErrorMessage } from '@/lib/auth-errors';
+import { PASSWORD_MIN_LENGTH, validatePassword } from '@/lib/password-policy';
 
 function SignupContent() {
   const router = useRouter();
@@ -53,9 +54,15 @@ function SignupContent() {
     if (!password) {
       setPasswordError('Ingresá una contraseña');
       valid = false;
-    } else if (password.length < 6) {
-      setPasswordError('Mínimo 6 caracteres');
-      valid = false;
+    } else {
+      // La misma politica que aplica la ruta del servidor. Si divergen, el
+      // cliente deja pasar algo que el servidor va a rechazar: el usuario escribe
+      // la contraseña dos veces y se come un error seco al final.
+      const policy = validatePassword(password, { email: email.trim() });
+      if (!policy.ok) {
+        setPasswordError(policy.error);
+        valid = false;
+      }
     }
 
     if (!confirmPassword) {
@@ -246,7 +253,7 @@ function SignupContent() {
                 <Input
                   type={showPassword ? 'text' : 'password'}
                   name="password"
-                  placeholder="Mínimo 6 caracteres"
+                  placeholder={`Mínimo ${PASSWORD_MIN_LENGTH} caracteres`}
                   value={password}
                   onChange={(e) => { setPassword(e.target.value); setPasswordError(''); }}
                   className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-400 pr-10"

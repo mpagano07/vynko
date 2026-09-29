@@ -15,7 +15,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 
-import { isAdminEmail } from '@/lib/admin';
+import { isAdminProfile } from '@/lib/admin';
 
 interface AnalyticsData {
   totalSignups: number;
@@ -39,14 +39,14 @@ interface AnalyticsData {
 
 export default function AdminAnalyticsPage() {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const isDark = useTheme();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
-    if (!user || !isAdminEmail(user.email)) {
+    if (!user || !isAdminProfile(profile)) {
       router.replace('/dashboard');
       return;
     }
@@ -63,7 +63,7 @@ export default function AdminAnalyticsPage() {
     }
 
     fetchData();
-  }, [user, authLoading, router]);
+  }, [user, profile, authLoading, router]);
 
   if (authLoading || (!data && !error)) {
     return (
@@ -81,7 +81,7 @@ export default function AdminAnalyticsPage() {
     );
   }
 
-  if (error || !data || !user || !isAdminEmail(user.email)) {
+  if (error || !data || !user || !isAdminProfile(profile)) {
     return (
       <div className="p-6 max-w-6xl mx-auto">
         <Card className="p-8 text-center">

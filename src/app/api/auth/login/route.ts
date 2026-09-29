@@ -6,7 +6,7 @@ import { isSameOriginRequest } from '@/lib/security/csrf';
 const MAX_FAILED_ATTEMPTS = 5;
 /**
  * Techo por IP para frenar el barrido de muchas cuentas desde una misma maquina.
- * Mas alto que el de cuenta a proposito: el limite de cuenta es el queProtege a
+ * Mas alto que el de cuenta a proposito: el limite de cuenta es el que protege a
  * una victima concreta, y este solo evita que un atacante pruebe 5 contrasenas
  * por cuenta contra cientos de correos.
  */
@@ -38,7 +38,12 @@ export async function POST(request: Request) {
   const normalizedEmail = email.trim().toLowerCase();
   const ip = getClientIp(request);
   const ipKey = `auth:login:ip:${ip}`;
-  const accountKey = `auth:login:account:${normalizedEmail}:${ip}`;
+  // La clave de cuenta NO lleva la IP. Con la IP adentro, el limite por cuenta
+  // era en realidad "5 intentos contra esta cuenta desde esta maquina", y un
+  // atacante con una botnet la esquivaba rotando origen: la proteccion que
+  // importa es justamente la que frena a quien va contra una victima concreta.
+  // El techo por IP sigue existiendo como filtro separado.
+  const accountKey = `auth:login:account:${normalizedEmail}`;
 
   // Se consulta el limite SIN incrementarlo: el contador sube mas abajo, solo si
   // la autenticacion falla. Incrementarlo aca hacia que un login exitoso gastara
@@ -71,6 +76,18 @@ export async function POST(request: Request) {
       rateLimit(accountKey, MAX_FAILED_ATTEMPTS, WINDOW_MS),
     ]);
     console.warn(`Login failed for ${normalizedEmail}: ${error.message}`);
+
+    // Un unico caso se distingue del resto: cuando el email existe pero todavia
+    // no esta verificado. Decirlo no revela si la cuenta esta registrada (el
+    // visitante ya escribio esa direccion y es la suya) y evita el callejon sin
+    // salida de un 401 generico que el usuario no sabe interpretar.
+    if (error.code === 'email_not_confirmed' || /not confirmed/i.test(error.message)) {
+      return NextResponse.json(
+        { error: 'Confirmá tu email para poder iniciar sesión. Revisá la casilla de entrada.' },
+        { status: 403 }
+      );
+    }
+
     return NextResponse.json({ error: 'Credenciales inválidas' }, { status: 401 });
   }
 
