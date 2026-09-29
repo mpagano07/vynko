@@ -3,6 +3,7 @@ import { getAuth } from '@/lib/api-auth';
 import { getForecast } from '@/lib/forecast';
 import { rateLimit } from '@/lib/rate-limit';
 import { fixResponse } from '@/lib/utils/encoding';
+import { trackEvent } from '@/lib/track-event';
 
 export async function GET(request: Request) {
   const auth = await getAuth(request);
@@ -18,6 +19,17 @@ export async function GET(request: Request) {
 
   try {
     const payload = await getForecast(auth.tenantId);
+
+    // Se graba despues de que el pronostico salio bien: opened mide que
+    // la pantalla sirvio para algo, no que alguien la abrio. Si el
+    // pronostico tira, entrar al paso del embudo por un error del modelo
+    // seria medir un producto roto como producto usado.
+    await trackEvent({
+      type: 'forecast_opened',
+      userId: auth.userId,
+      tenantId: auth.tenantId,
+    });
+
     return NextResponse.json(fixResponse(payload));
   } catch (err) {
     console.error('Forecast error:', err);

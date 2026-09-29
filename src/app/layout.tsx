@@ -7,6 +7,7 @@ import { AuthProvider } from '@/lib/contexts/auth-context';
 import { NoTenantAccessGuard } from '@/components/auth/no-tenant-access-guard';
 import { TenantHeaderProvider } from '@/components/TenantHeaderProvider';
 import { AppProviders } from '@/components/AppProviders';
+import { AppReturnTracker } from '@/components/analytics/app-return-tracker';
 import type { Metadata, Viewport } from 'next';
 
 const inter = Inter({
@@ -85,6 +86,7 @@ export default function RootLayout({
         <AppProviders>
           <AuthProvider>
             <NoTenantAccessGuard />
+            <AppReturnTracker />
             <TenantHeaderProvider>
               <ClientLayoutWrapper>
                 {children}

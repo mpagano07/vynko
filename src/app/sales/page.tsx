@@ -60,6 +60,7 @@ import {
 } from '@/lib/payment-methods';
 import { getPaymentMethodLabel } from '@/lib/payment-methods';
 import { usePagination } from '@/lib/hooks/usePagination';
+import { trackClientEvent } from '@/lib/analytics-client';
 
 interface CartItem {
   product_id: string;
@@ -225,6 +226,7 @@ export default function SalesPage() {
       '_blank',
       'noopener,noreferrer'
     );
+    trackClientEvent('whatsapp_ticket', { saleId: sale.id, resend: true });
     setWaTargetId(null);
     setWaPhone('');
   };
@@ -517,6 +519,7 @@ export default function SalesPage() {
             '_blank',
             'noopener,noreferrer'
           );
+          trackClientEvent('whatsapp_ticket', { saleId: sale.id, resend: false });
         }
         if (printReceipt) {
           window.setTimeout(() => window.print(), 250);

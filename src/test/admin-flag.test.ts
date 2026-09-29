@@ -17,8 +17,16 @@ vi.mock('@/lib/supabase', () => ({
   hardenSessionCookieOptions: (options: Record<string, unknown>) => options,
 }));
 
-const analyticsMock = { getAdminAnalytics: vi.fn(async () => ({ data: { totalSignups: 0 } })) };
-
+// El tipo se declara a mano porque el service devuelve una union discriminada
+// por `ok` y el mock tiene que poder representar las dos ramas.
+const analyticsMock = {
+  getAdminAnalytics: vi.fn<
+    () => Promise<
+      | { ok: true; data: { totalSignups: number } }
+      | { ok: false; error: string; missingView: string }
+    >
+  >(async () => ({ ok: true, data: { totalSignups: 0 } })),
+};
 vi.mock('@/lib/analytics-service', () => ({
   getAdminAnalytics: (...args: unknown[]) => analyticsMock.getAdminAnalytics(...(args as [])),
 }));
@@ -31,7 +39,7 @@ beforeEach(() => {
     data: { user: { id: 'u1', email: 'user@example.com' } },
     error: null,
   });
-  analyticsMock.getAdminAnalytics.mockResolvedValue({ data: { totalSignups: 7 } });
+  analyticsMock.getAdminAnalytics.mockResolvedValue({ ok: true, data: { totalSignups: 7 } });
 });
 
 describe('isAdminProfile', () => {
@@ -102,6 +110,26 @@ describe('GET /api/admin/analytics', () => {
     // su RLS se pueden manipular desde el navegador.
     const profileCall = supabaseMock.__calls.find((c) => c.table === 'profiles');
     expect(profileCall?.args[0]).toBe('is_admin');
+  });
+
+  it('responde 503 si el embudo no se puede leer', async () => {
+    // El service devuelve ok: false cuando las vistas de la migracion 040 no
+    // existen todavia. Tiene que ser 503 y no un 200 con el embudo en ceros:
+    // "no hay datos" y "no puedo leer la tabla" son cosas distintas, y
+    // confundirlas manda a mirar el producto cuando el problema es la base.
+    supabaseMock.__queue('profiles', { data: { is_admin: true }, error: null });
+    analyticsMock.getAdminAnalytics.mockResolvedValue({
+      ok: false,
+      error: 'Falta aplicar la migracion 040 (analytics_funnel no existe)',
+      missingView: 'analytics_funnel',
+    });
+
+    const response = await getAdminAnalyticsRoute();
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Falta aplicar la migracion 040 (analytics_funnel no existe)',
+    });
   });
 
   it('no decide por el email', async () => {

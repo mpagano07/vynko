@@ -3,6 +3,7 @@ import { createActivityLog } from '@/lib/activity-log';
 import { reduceStockForSale, buildStockMovement } from '@/lib/stock';
 import { isPaymentMethodId, normalizeCheckoutSettings } from '@/lib/payment-methods';
 import type { AuthInfo } from '@/lib/api-auth';
+import { trackEvent } from '@/lib/track-event';
 
 type SalesQueryResult = { data?: unknown; total?: number; page?: number; limit?: number };
 type SalesQueryFailure = { ok: false; error: string };
@@ -615,6 +616,13 @@ export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<
           ])
         )
       : {};
+
+    await trackEvent({
+      type: 'first_sale',
+      userId: auth.userId,
+      tenantId: auth.tenantId,
+      metadata: { saleId: sale.id, totalCents: finalTotalCents, itemCount: saleItems.length },
+    });
 
     return {
       ok: true,

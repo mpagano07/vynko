@@ -36,5 +36,13 @@ export async function GET() {
   }
 
   const result = await getAdminAnalytics();
+
+  // El service devuelve `ok: false` cuando las vistas de la migracion 040
+  // todavia no existen. 503 y no 200 con datos vacios: el panel tiene que
+  // poder distinguir "no hay eventos todavia" de "no puedo leer la tabla".
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: 503 });
+  }
+
   return NextResponse.json(result.data);
 }

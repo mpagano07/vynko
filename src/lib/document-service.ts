@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import type { CreateDocumentRequest, DocumentStatus, DocumentType } from '@/lib/types/document';
 import type { AuthInfo } from '@/lib/api-auth';
 import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
+import { trackEvent } from '@/lib/track-event';
 
 export type DocumentResult<T = unknown> =
   | { ok: true; data: T; status: number }
@@ -184,6 +185,17 @@ export async function createDocument(
       .select('*, items:commercial_document_items(*)')
       .eq('id', document.id)
       .single();
+
+    await trackEvent({
+      type: 'document_created',
+      userId: auth.userId,
+      tenantId: auth.tenantId,
+      metadata: {
+        documentId: document.id,
+        documentType: document_type,
+        itemCount: documentItems.length,
+      },
+    });
 
     return { ok: true, data: fullDocument, status: 201 };
   } catch (err) {

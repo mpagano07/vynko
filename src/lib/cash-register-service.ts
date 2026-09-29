@@ -3,6 +3,7 @@ import { computeExpectedCash } from '@/lib/cash-register';
 import { createActivityLog } from '@/lib/activity-log';
 import { PAYMENT_METHODS, type PaymentMethodId } from '@/lib/payment-methods';
 import type { AuthInfo } from '@/lib/api-auth';
+import { trackEvent } from '@/lib/track-event';
 
 export type CashRegisterResult<T> =
   | { ok: true; data: T; status: number }
@@ -136,6 +137,13 @@ export async function openCashRegister(auth: AuthInfo, body: { initial_fund?: nu
     entityType: 'cash_register_session',
     entityId: session.id,
     details: { initial_fund_cents: session.initial_fund_cents },
+  });
+
+  await trackEvent({
+    type: 'first_cash_open',
+    userId: auth.userId,
+    tenantId: auth.tenantId,
+    metadata: { sessionId: session.id, initialFundCents: session.initial_fund_cents },
   });
 
   return { ok: true, data: { session }, status: 201 };
