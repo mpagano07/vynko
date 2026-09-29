@@ -126,5 +126,33 @@ export function classifyAuthFailure(
     };
   }
 
+  // Fallo del proveedor de correo al enviar el mensaje. GoTrue inserta el
+  // usuario y despues intenta mandarle el mail: si el envio falla, devuelve 500
+  // con un texto generico ("Error sending confirmation email", "Error sending
+  // magic link", ...) y tira el error real del SMTP, que solo aparece en los
+  // logs de Auth.
+  //
+  // Es configuracion del servidor, no del request: un dominio sin verificar en
+  // el proveedor, credenciales, o un remitente que no pertenece a un dominio
+  // verificado. Nadie lo arregla cambiando la contrasena ni el email, y sin
+  // 503 el unico sintoma en la app es un 400 que acusa al usuario de algo que
+  // no hizo. Se tradujo durante horas como "Datos invalidos" antes de que
+  // quedara claro que el alta era correcta y lo que estaba roto era el SMTP.
+  //
+  // El match es por prefijo y no por mencion de "email" porque no todos los
+  // envíos de GoTrue lo nombran: el magic link no lo hace, y dejaria al mismo
+  // fallo de SMTP devuelto como 400. Que el prefijo sea generico juega a favor:
+  // si alguna vez aparece otro "Error sending" que no sea de correo, tambien
+  // va a ser un fallo del servidor, y para eso 503 sigue siendo mas cierto que
+  // 400. El unico texto de cuota que queda cerca es "Email rate limit
+  // exceeded", que no comparte el prefijo y ya quedo traducido mas arriba.
+  if (/error sending /i.test(message)) {
+    return {
+      status: 503,
+      message: 'No pudimos enviar el email de confirmación. Probá en unos minutos.',
+      retryAfterSeconds: 60,
+    };
+  }
+
   return { status: 400, message: fallbackMessage };
 }

@@ -361,6 +361,87 @@ describe('POST /api/auth/signup', () => {
     });
   });
 
+  it('devuelve 503 cuando el proveedor de correo no puede enviar la confirmacion', async () => {
+    // El alta es valida y el usuario se crea igual: lo que falla es el envio.
+    // GoTrue responde 500 con un texto generico y esconde el motivo real en los
+    // logs de Auth. Sin tratarlo aparte caia en el 400 de "Datos invalidos",
+    // que le decia al usuario que su request estaba mal cuando el problema era
+    // un dominio sin verificar en el proveedor: nada que el usuario pudiera
+    // arreglar, y el error correcto se tradujo horas como si fuera suyo.
+    serverAuthMock.auth.signUp.mockResolvedValueOnce({
+      data: { user: null, session: null },
+      error: {
+        code: 'unexpected_failure',
+        status: 500,
+        message: 'Error sending confirmation email',
+      },
+    });
+
+    const response = await signup(
+      post(
+        'https://app.test/api/auth/signup',
+        { email: uniqueEmail(), password: VALID_PASSWORD, companyName: 'Acme', fullName: 'Ana' },
+        sameOrigin()
+      )
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get('Retry-After')).toBe('60');
+    const json = await response.json();
+    expect(json.error).toMatch(/email de confirmaci/i);
+    // Un 400 con texto generico hace pensar que el problema son los datos.
+    expect(json.error).not.toMatch(/Datos inv/i);
+    expect(json.error).not.toMatch(/No se pudo crear la cuenta/);
+  });
+
+  it('devuelve 503 tambien cuando el fallo de correo es otro envio, no la confirmacion', async () => {
+    // GoTrue usa el mismo texto para magic link y para cambio de email.
+    serverAuthMock.auth.signUp.mockResolvedValueOnce({
+      data: { user: null, session: null },
+      error: {
+        code: 'unexpected_failure',
+        status: 500,
+        message: 'Error sending magic link',
+      },
+    });
+
+    const response = await signup(
+      post(
+        'https://app.test/api/auth/signup',
+        { email: uniqueEmail(), password: VALID_PASSWORD, companyName: 'Acme', fullName: 'Ana' },
+        sameOrigin()
+      )
+    );
+
+    expect(response.status).toBe(503);
+  });
+
+  it('no confunde el fallo de envio con la cuota de emails, que tambien es 429', async () => {
+    // "Email rate limit exceeded" no contiene "error sending": si el match fuera
+    // laxo, la cuota caeria en el 503 de SMTP y perderia su Retry-After propio.
+    serverAuthMock.auth.signUp.mockResolvedValueOnce({
+      data: { user: null, session: null },
+      error: {
+        code: 'over_email_send_rate_limit',
+        status: 429,
+        message: 'Email rate limit exceeded',
+      },
+    });
+
+    const response = await signup(
+      post(
+        'https://app.test/api/auth/signup',
+        { email: uniqueEmail(), password: VALID_PASSWORD, companyName: 'Acme', fullName: 'Ana' },
+        sameOrigin()
+      )
+    );
+
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringMatching(/demasiados emails/i),
+    });
+  });
+
   it('no revela que el email existe cuando la confirmacion de email esta desactivada', async () => {
     // Con la confirmacion activa, GoTrue ya devuelve el alta repetida como un
     // usuario con `identities` vacio y sin error. Con la confirmacion OFF devuelve
