@@ -4,6 +4,7 @@ import { proxy } from '@/proxy';
 import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
+import { LAST_SEEN_COOKIE } from '@/lib/session-policy';
 
 vi.mock('@supabase/ssr', () => ({ createServerClient: vi.fn() }));
 vi.mock('@supabase/supabase-js', () => ({ createClient: vi.fn() }));
@@ -18,10 +19,12 @@ const subscriptionMock = vi.mocked(checkSubscriptionBlocked);
 
 let adminQueue: Array<Record<string, unknown> | null>;
 
+const signOutMock = vi.fn().mockResolvedValue({ error: null });
+
 function makeServerClient(user: { id: string } | null) {
   const getUser = vi.fn().mockResolvedValue({ data: { user }, error: null });
   serverClientMock.mockImplementation(() => {
-    return { auth: { getUser } } as never;
+    return { auth: { getUser, signOut: signOutMock } } as never;
   });
 }
 
@@ -43,8 +46,12 @@ function makeAdminClient() {
   } as never);
 }
 
-function request(pathname = '/dashboard') {
-  return new NextRequest(`http://localhost${pathname}`);
+function request(pathname = '/dashboard', cookies: Record<string, string> = {}) {
+  const req = new NextRequest(`http://localhost${pathname}`);
+  for (const [name, value] of Object.entries(cookies)) {
+    req.cookies.set(name, value);
+  }
+  return req;
 }
 
 describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe caer en onboarding)', () => {
@@ -132,10 +139,23 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
   it('permite el acceso a rutas públicas sin autenticación', async () => {
     makeServerClient(null);
 
-    for (const p of ['/login', '/auth', '/auth/callback', '/accept-invite']) {
+    for (const p of ['/login', '/auth', '/auth/callback', '/accept-invite', '/sin-acceso']) {
       const res = await proxy(request(p));
       expect(res.status).toBe(200);
     }
+  });
+
+  it('NO expulsa a /sin-acceso aunque las membresías lleguen vacías y el flag diga completado', async () => {
+    // El caso se resuelve en el guard de cliente, no aca: desde el proxy una
+    // lectura vacia de `tenant_users` es indistinguible de un fallo
+    // transitorio, y expulsar de este lado le mostraria a un cliente que si
+    // tiene empresa un cartel de "pedile a un owner que te vuelva a invitar".
+    // Ademas `/sin-acceso` tiene que quedar accesible para que ese guard del
+    // cliente no se realimente en un bucle.
+    makeServerClient({ id: 'user-1' });
+    const res = await proxy(request('/sin-acceso'));
+
+    expect(res.status).toBe(200);
   });
 
   it('envía a /login a un visitante anónimo de /onboarding', async () => {
@@ -145,6 +165,51 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
 
     expect(res.status).toBe(307);
     expect(res.headers.get('location')).toContain('/login');
+  });
+
+  it('corta la sesión vencida por inactividad y revoca el refresh token', async () => {
+    // El corte tiene que ser del lado del servidor. El timer del navegador no
+    // es un control de seguridad: una cookie robada no ejecuta ese codigo, y
+    // mientras el atacante navegue el refresh token se renueva desde aca.
+    adminQueue.push({ data: [{ tenant_id: 't1' }], error: null });
+    adminQueue.push({ data: { onboarding_pending: false }, error: null });
+
+    const stale = String(Date.now() - 31 * 60 * 1000);
+    const res = await proxy(request('/dashboard', { [LAST_SEEN_COOKIE]: stale }));
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toContain('/login');
+    expect(res.headers.get('location')).toContain('reason=inactive');
+    // No basta con borrar la cookie: la sesion se revoca en Supabase.
+    expect(signOutMock).toHaveBeenCalledWith({ scope: 'local' });
+  });
+
+  it('deja pasar y renueva la marca de actividad si la sesión está dentro del plazo', async () => {
+    adminQueue.push({ data: [{ tenant_id: 't1' }], error: null });
+    adminQueue.push({ data: { onboarding_pending: false }, error: null });
+    adminQueue.push({ data: [{ subscription_status: 'active' }], error: null });
+
+    const recent = String(Date.now() - 60 * 1000);
+    const res = await proxy(request('/dashboard', { [LAST_SEEN_COOKIE]: recent }));
+
+    expect(res.status).toBe(200);
+    expect(signOutMock).not.toHaveBeenCalled();
+    const refreshed = res.cookies.get(LAST_SEEN_COOKIE);
+    expect(refreshed?.value).toBeTruthy();
+    expect(refreshed?.httpOnly).toBe(true);
+  });
+
+  it('no corta la sesión en la primera request aunque no exista la marca de actividad', async () => {
+    // La cookie aparece recien en la primera request con sesion: si se exigiera
+    // desde el primer request, cada login recien hecho expulsaria al usuario.
+    adminQueue.push({ data: [{ tenant_id: 't1' }], error: null });
+    adminQueue.push({ data: { onboarding_pending: false }, error: null });
+    adminQueue.push({ data: [{ subscription_status: 'active' }], error: null });
+
+    const res = await proxy(request('/dashboard'));
+
+    expect(res.status).toBe(200);
+    expect(signOutMock).not.toHaveBeenCalled();
   });
 
   it('BLOQUEA /onboarding y redirige a /dashboard si el flag dice onboarding completado', async () => {

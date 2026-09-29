@@ -37,6 +37,18 @@ function LoginContent() {
     } catch {}
   }, []);
 
+  // El proxy manda `?reason=inactive` cuando cerro la sesion por inactividad
+  // desde el servidor. Se muestra el motivo en vez de una pantalla muda: si no,
+  // el usuario solo ve el login y no entiende que lo echaron.
+  useEffect(() => {
+    const reason = new URLSearchParams(window.location.search).get('reason');
+    if (reason !== 'inactive') return;
+    toast('Tu sesión se cerró por inactividad. Volvé a iniciar sesión.', { duration: 6000 });
+    const url = new URL(window.location.href);
+    url.searchParams.delete('reason');
+    window.history.replaceState({}, '', url.toString());
+  }, []);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);

@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils/cn';
 import { X, Clock, AlertTriangle, ChevronDown, Settings, Lock, Sparkles, ArrowRight } from 'lucide-react';
 import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
 import { getTrialDays, getTrialPlan } from '@/lib/plans';
-import { isAdminEmail } from '@/lib/admin';
+import { isAdminProfile } from '@/lib/admin';
 import { toast } from 'react-hot-toast';
 
 interface NavItem {
@@ -180,7 +180,7 @@ function LockedNavItem({ item, compact = false, onNavClick }: { item: NavItem; c
   );
 }
 
-function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, userEmail }: { onNavClick?: () => void; tenantPlan?: string; userRole?: string | null; isBlocked?: boolean; multiBranch?: boolean; userEmail?: string | null }) {
+function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, isAdmin }: { onNavClick?: () => void; tenantPlan?: string; userRole?: string | null; isBlocked?: boolean; multiBranch?: boolean; isAdmin?: boolean }) {
   const pathname = usePathname();
   const [operacionesOpen, setOperacionesOpen] = useState(false);
 
@@ -250,7 +250,7 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
         );
       })}
 
-      {isAdminEmail(userEmail) && (
+      {isAdmin && (
         <div className="mb-1">
           <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
             Admin
@@ -344,6 +344,7 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
 export function Sidebar() {
   const pathname = usePathname();
   const { profile, tenant, tenants, role, user, loading } = useAuth();
+  const isAdmin = isAdminProfile(profile);
   const { isOpen, close } = useSidebar();
 
   if (pathname?.includes('/login') || pathname?.includes('/auth') || pathname?.includes('/onboarding')) {
@@ -403,7 +404,7 @@ export function Sidebar() {
           <IconAction icon={X} label="Cerrar menú" size="md" onClick={close} />
         </div>
         <nav className="flex-1 space-y-2 overflow-y-auto">
-          <SidebarNav onNavClick={close} tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} userEmail={user?.email || profile?.email || null} />
+          <SidebarNav onNavClick={close} tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} isAdmin={isAdmin} />
         </nav>
         <TrialCounter tenant={tenant} />
         {userSection}
@@ -417,7 +418,7 @@ export function Sidebar() {
           </div>
         </div>
         <nav className="flex-1 overflow-y-auto">
-          <SidebarNav tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} userEmail={user?.email || profile?.email || null} />
+          <SidebarNav tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} isAdmin={isAdmin} />
         </nav>
         <TrialCounter tenant={tenant} />
         {userSection}

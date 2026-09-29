@@ -5,8 +5,21 @@ import { createClient } from '@supabase/supabase-js';
 import { checkSubscriptionBlocked, consolidateOwnerSubscription, type TenantSubscription } from '@/lib/checkSubscription';
 import { buildCsp } from '@/lib/security/csp';
 import { hardenSessionCookieOptions } from '@/lib/security/session-cookie';
+import {
+  INACTIVITY_TIMEOUT_MS,
+  LAST_SEEN_COOKIE,
+  LAST_SEEN_COOKIE_OPTIONS,
+} from '@/lib/session-policy';
 
-const publicPaths = ['/login', '/auth', '/accept-invite', '/privacidad', '/terminos', '/cookies'];
+const publicPaths = [
+  '/login',
+  '/auth',
+  '/accept-invite',
+  '/sin-acceso',
+  '/privacidad',
+  '/terminos',
+  '/cookies',
+];
 const onboardingPath = '/onboarding';
 const billingPath = '/billing';
 
@@ -41,8 +54,6 @@ export async function proxy(request: NextRequest) {
     return withCsp(res, nonce);
   };
 
-  const redirect = (url: URL) => withCsp(NextResponse.redirect(url), nonce);
-
   if (pathname === '/') return next();
 
   const isOnboarding = pathname === onboardingPath || pathname.startsWith(`${onboardingPath}/`);
@@ -52,6 +63,19 @@ export async function proxy(request: NextRequest) {
   }
 
   const response = next();
+
+  // `next()` y `redirect()` son respuestas distintas, y las cookies que escribe
+  // el cliente de Supabase (refresh de token, borrado al cerrar sesion) se
+  // acumulan en `response`. Sin volcarlas, una redireccion perderia el refresh
+  // que se acaba de hacer, y en el camino de cerrar sesion no se borraria la
+  // cookie: el usuario "deslogueado" seguiria entrando.
+  const carryingCookies = (res: NextResponse): NextResponse => {
+    for (const cookie of response.cookies.getAll()) res.cookies.set(cookie);
+    return res;
+  };
+
+  const redirectWithCookies = (url: URL) =>
+    withCsp(carryingCookies(NextResponse.redirect(url)), nonce);
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -87,8 +111,29 @@ export async function proxy(request: NextRequest) {
   if (!user) {
     const redirectUrl = new URL('/login', request.url);
     redirectUrl.searchParams.set('redirect_to', pathname);
-    return redirect(redirectUrl);
+    return redirectWithCookies(redirectUrl);
   }
+
+  // Cierre por inactividad, aplicado aca y no solo en el navegador.
+  //
+  // El timeout del cliente (localStorage + un timer de JS) es una ayuda para la
+  // experience, pero no es un control de seguridad: una cookie robada no ejecuta
+  // ese codigo, y el refresh token se renueva desde el servidor mientras el
+  // atacante navegue. El plazo se comprueba aca, con un timestamp en una cookie
+  // HttpOnly que el usuario no puede editar, y al vencer se revoca la sesion en
+  // Supabase en vez de solo_clean la cookie local.
+  const lastSeenRaw = request.cookies.get(LAST_SEEN_COOKIE)?.value;
+  const lastSeen = lastSeenRaw ? Number.parseInt(lastSeenRaw, 10) : Number.NaN;
+
+  if (Number.isFinite(lastSeen) && Date.now() - lastSeen > INACTIVITY_TIMEOUT_MS) {
+    await supabase.auth.signOut({ scope: 'local' });
+    response.cookies.set(LAST_SEEN_COOKIE, '', { ...LAST_SEEN_COOKIE_OPTIONS, maxAge: 0 });
+    const inactiveUrl = new URL('/login', request.url);
+    inactiveUrl.searchParams.set('reason', 'inactive');
+    return redirectWithCookies(inactiveUrl);
+  }
+
+  response.cookies.set(LAST_SEEN_COOKIE, String(Date.now()), LAST_SEEN_COOKIE_OPTIONS);
 
   // Admin client (service role) for DB checks: bypasses RLS so a policy or a
   // transient failure can never drop a user who really has a company.
@@ -132,15 +177,25 @@ export async function proxy(request: NextRequest) {
       return response;
     }
     if (!onboardingPending || tenantIds.length > 0) {
-      return redirect(new URL('/dashboard', request.url));
+      return redirectWithCookies(new URL('/dashboard', request.url));
     }
     return response;
   }
 
+  // OJO: aca NO se redirige a `/sin-acceso` cuando `tenant_users` viene vacio y el
+  // onboarding ya esta completado. `tenant_users` es el unico origen de
+  // membresia del schema, asi que una lectura vacia es indistinguible de "lo
+  // sacaron de todos los tenants": con una lectura transitoria (lag de replica,
+  // un RLS que falla un instante, la ventana entre completar el onboarding e
+  // insertar la fila) expulsar desde aca le muestra a un cliente que tiene
+  // empresa un cartel de "pedile a un owner que te vuelva a invitar".
+  //
+  // El caso se resuelve en el guard de cliente, que decide sobre `/api/session`:
+  // una segunda lectura, con la pagina ya cargada. Ahi expulsar es seguro.
   if (membershipError) {
     console.warn('proxy: tenant_users check failed, failing open:', membershipError.message);
   } else if (onboardingPending && (!tenantIds || tenantIds.length === 0)) {
-    return redirect(new URL('/onboarding', request.url));
+    return redirectWithCookies(new URL('/onboarding', request.url));
   }
 
   // Self-healing: el flag quedó en TRUE pero el usuario ya tiene empresa
@@ -172,7 +227,7 @@ export async function proxy(request: NextRequest) {
     if (result?.blocked) {
       const url = new URL(billingPath, request.url);
       url.searchParams.set('blocked', result.reason);
-      return redirect(url);
+      return redirectWithCookies(url);
     }
   }
 

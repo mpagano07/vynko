@@ -19,7 +19,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { switchTenant } = useAuth();
+  const { setActiveTenant } = useAuth();
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
   const [step, setStep] = useState<'company' | 'success'>('company');
@@ -70,7 +70,7 @@ export default function OnboardingPage() {
         // redirigen acá solo si la membresía está definitivamente vacía.
         if (!response.ok) {
           if (!cancelled) {
-            // Navegación dura única: evita el loop de router.push + reload
+            // Navegación dura: evita el loop de router.push + reload
             // sobre la misma ruta /onboarding. El proxy re-verifica el estado.
             window.location.replace('/dashboard');
           }
@@ -115,8 +115,20 @@ export default function OnboardingPage() {
               const { tenantId } = await createCompany(metaCompany, metaOwner);
               if (cancelled) return;
               setStep('success');
-              await switchTenant(tenantId);
-              router.push('/dashboard');
+              // Navegación dura, igual que las otras tres salidas de esta pagina
+              // (lineas 75, 102 y 135). `router.push` desde /onboarding es la
+              // unica navegacion de cliente del archivo: si el router resuelve la
+              // transicion sin desmontar (por ejemplo, si el destino se redirige
+              // de vuelta a la ruta actual), el componente queda montado con
+              // `step === 'success'` y el usuario se queda mirando un cartel que
+              // promete un redireccion que no ocurre. Sin errores en consola, que
+              // es lo que hace el fallo silencioso.
+              //
+              // Con `location.replace` el proxy reevalua el estado real: la
+              // membresia recien creada y `onboarding_pending` en false, asi que
+              // /dashboard esta permitido y entra.
+              setActiveTenant(tenantId);
+              window.location.replace('/dashboard');
             } catch (error) {
               console.error('Onboarding auto-create error:', error);
               if (!cancelled) {
@@ -153,8 +165,13 @@ export default function OnboardingPage() {
       toast.success('Empresa creada exitosamente');
       setStep('success');
 
-      await switchTenant(tenantId);
-      router.push('/dashboard');
+      // Mismo criterio que en el auto-alta de arriba: la eleccion de empresa
+      // activa se persiste al instante y se navega. Esperar al refetch de
+      // `/api/session` solo hacia que el usuario mire el cartel de "redirigiendo"
+      // durante los segundos que tarda el request, para que la recarga tires
+      // todo ese trabajo a la basura.
+      setActiveTenant(tenantId);
+      window.location.replace('/dashboard');
     } catch (error: unknown) {
       console.error('Onboarding error:', error, JSON.stringify(error, null, 2));
       const message = error instanceof Error ? error.message : 'Error al crear empresa';

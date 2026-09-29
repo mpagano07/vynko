@@ -25,7 +25,17 @@ describe('GET /api/session', () => {
     const res = await GET(makeRequest());
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json).toEqual({ user: null, profile: null, tenant: null, tenants: [], onboarding_pending: true });
+    // `role` esta incluido tambien en el payload vacio: el shape tiene que ser el
+    // mismo que el de una sesion autenticada, para que el cliente no reciba
+    // `undefined` en un caso y `null` en el otro al leer `data.role`.
+    expect(json).toEqual({
+      user: null,
+      profile: null,
+      tenant: null,
+      tenants: [],
+      role: null,
+      onboarding_pending: true,
+    });
   });
 
   it('devuelve sesión vacía con token inválido', async () => {
@@ -125,5 +135,17 @@ describe('GET /api/session', () => {
     expect(res.status).toBe(500);
     const json = await res.json();
     expect(json).toMatchObject({ user: null, tenants: [] });
+    // El shape de error tiene que coincidir con el de "sesion vacia", incluido
+    // `role`: el cliente lee `data.role` y si este path lo omite obtiene
+    // `undefined` en vez de `null`.
+    expect(json).toEqual({
+      user: null,
+      profile: null,
+      tenant: null,
+      tenants: [],
+      role: null,
+      onboarding_pending: true,
+      error: 'Internal server error',
+    });
   });
 });

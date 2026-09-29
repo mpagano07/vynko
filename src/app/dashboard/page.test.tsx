@@ -45,8 +45,10 @@ function mockAuth(overrides: Partial<ReturnType<typeof useAuth>> = {}) {
     logout: vi.fn(),
     isAuthenticated: true,
     allTenants: false,
+    noTenantAccess: false,
     loadProfileAndTenant: vi.fn(),
     switchTenant: vi.fn(),
+    setActiveTenant: vi.fn(),
     refreshSession: vi.fn(async () => true),
     ...overrides,
   });
@@ -242,6 +244,7 @@ describe('DashboardPage: desglose multi-sucursal', () => {
     mockSuccessfulEndpoints();
     mockAuth({
       allTenants: true,
+      noTenantAccess: false,
       tenant: null,
       tenants: [
         { id: 't1', name: 'Central', slug: 'central' },
