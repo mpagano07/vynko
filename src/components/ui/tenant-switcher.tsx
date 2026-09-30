@@ -95,30 +95,46 @@ export function TenantSwitcher() {
         <div className="w-6 h-6 rounded-md bg-blue-500/20 flex items-center justify-center flex-shrink-0">
           <span className="text-xs font-bold text-blue-700 dark:text-blue-400">{tenants.length > 1 && !tenant ? 'T' : (tenant?.name || 'T')[0].toUpperCase()}</span>
         </div>
-        <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate flex-1 text-left">{!tenant && tenants.length > 0 ? 'Todas las sucursales' : (tenant?.name || 'Seleccionar')}</p>
+        <p data-testid="tenant-switcher-name" className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate flex-1 text-left">{!tenant && tenants.length > 0 ? 'Todas las sucursales' : (tenant?.name || 'Seleccionar')}</p>
         {switcherOpen ? <ChevronUp className="h-4 w-4 text-gray-500 dark:text-gray-400 flex-shrink-0" /> : <ChevronDown className="h-4 w-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />}
       </div>
       {switcherOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => { setSwitcherOpen(false); setCreatingTenant(false); }} />
-          <div className="absolute left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-20 py-1 max-h-56 overflow-y-auto">
-            <button
-              onClick={() => {
-                if (!tenant || tenants.length > 1) {
+          {/*
+            El desplegable no puede medir lo mismo que el boton: el boton
+            vive en el header y se angosta, y con el mismo ancho los nombres
+            largos salian cortados con puntos suspensivos. Ahora mide lo que
+            necesita (w-max), con un tope para no desbordar la pantalla.
+
+            En movil el max-w solo no alcanza: el switcher no arranca en x=0
+            (x=64 con el boton de menu al lado), asi que un panel de 352px se
+            iba de la pantalla. Ahi se ancla al viewport con inset-x-2; desde
+            sm: vuelve a colgar del boton, donde si hay lugar.
+          */}
+          <div data-testid="tenant-switcher-dropdown" className="fixed inset-x-2 z-20 mt-1 w-max max-w-[22rem] rounded-lg border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-800 max-h-56 overflow-y-auto sm:absolute sm:inset-x-auto sm:left-0 sm:min-w-full sm:max-w-[min(22rem,calc(100vw-1.5rem))]">
+            {/* Con una sola sucursal "Todas las sucursales" no se puede usar:
+                el onClick solo cambia de tenant si hay mas de una, asi que
+                antes era un control muerto que cerraba el desplegable sin
+                hacer nada. */}
+            {tenants.length > 1 && (
+              <button
+                data-testid="tenant-switcher-all"
+                onClick={() => {
                   switchTenant('__all__');
-                }
-                setSwitcherOpen(false);
-              }}
-              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-700 mb-1"
-            >
-              <div className="w-5 h-5 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                <span className="text-[10px] font-bold text-blue-700 dark:text-blue-400">T</span>
-              </div>
-              <span className="truncate flex-1 text-gray-800 dark:text-gray-200 font-medium">Todas las sucursales</span>
-              {!tenant && (
-                <Check className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-              )}
-            </button>
+                  setSwitcherOpen(false);
+                }}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-700 mb-1"
+              >
+                <div className="w-5 h-5 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                  <span className="text-[10px] font-bold text-blue-700 dark:text-blue-400">T</span>
+                </div>
+                <span className="min-w-0 flex-1 break-words font-medium text-gray-800 dark:text-gray-200">Todas las sucursales</span>
+                {!tenant && (
+                  <Check className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                )}
+              </button>
+            )}
             {tenants.map((t) => (
               <div key={t.id} data-testid="tenant-switcher-option" className="group flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
                 {renamingTenantId === t.id ? (
@@ -154,7 +170,9 @@ export function TenantSwitcher() {
                       <div className="w-5 h-5 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
                         <span className="text-[10px] font-bold text-gray-600 dark:text-gray-300">{(t.name || 'T')[0].toUpperCase()}</span>
                       </div>
-                      <span className="truncate flex-1 text-gray-800 dark:text-gray-200 text-left">{t.name}</span>
+                      {/* Sin truncate: si el nombre no entra, baja de linea.
+                          Los puntos suspensivos ocultaban el nombre real. */}
+                      <span className="min-w-0 flex-1 break-words text-left text-gray-800 dark:text-gray-200" title={t.name}>{t.name}</span>
                     </button>
                     {t.id === tenant?.id && (
                       <Check className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />

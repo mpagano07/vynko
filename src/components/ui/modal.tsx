@@ -33,12 +33,22 @@ export function Modal({
   'aria-label': ariaLabel,
   children,
 }: ModalProps) {
+  // El nombre accesible sale del título cuando existe; `aria-label` queda como
+  // respaldo para los modales que no lo pasan.
+  //
+  // El hook va ANTES del early return de `open`: si se declarara después,
+  // cambiar `open` entre renders cambiaría la cantidad de hooks.
+  const titleId = React.useId();
+
   if (!open) return null;
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs"
       aria-label={ariaLabel}
+      aria-labelledby={!ariaLabel && title ? titleId : undefined}
       onMouseDown={backdropClose ? (e) => { if (e.target === e.currentTarget) onClose(); } : undefined}
     >
       {panel ? (
@@ -53,7 +63,7 @@ export function Modal({
         <Card className={cn('relative w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl p-6', className)}>
           <IconAction icon={X} label="Cerrar" tone="muted" size="md" className="absolute right-4 top-4" onClick={onClose} />
           {(icon || title) && (
-            <h2 className={cn('flex items-center gap-2 text-xl font-bold text-gray-900 dark:text-white', titleClassName ?? 'mb-4')}>
+            <h2 id={titleId} className={cn('flex items-center gap-2 text-xl font-bold text-gray-900 dark:text-white', titleClassName ?? 'mb-4')}>
               {icon}
               {title}
             </h2>

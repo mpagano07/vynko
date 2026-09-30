@@ -82,7 +82,7 @@ export function StatCard({
 }) {
   if (horizontal) {
     return (
-      <Card className={cn('p-5', className)} {...props}>
+      <Card data-testid="stat-card" className={cn('p-5', className)} {...props}>
         <div className="flex items-center gap-3">
           {Icon && (
             <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0', TONE_CLASSES[tone].square, TONE_TEXT[tone])}>
@@ -91,7 +91,7 @@ export function StatCard({
           )}
           <div className="min-w-0">
             <p className={cn('text-sm text-gray-500 dark:text-gray-400', titleClassName)}>{title}</p>
-            <p className={cn('text-2xl font-bold text-gray-900 dark:text-white', valueClassName)}>{value}</p>
+            <p data-testid="stat-value" className={cn('text-2xl font-bold text-gray-900 dark:text-white', valueClassName)}>{value}</p>
           </div>
         </div>
       </Card>
@@ -105,7 +105,7 @@ export function StatCard({
   };
 
   return (
-    <Card className={cn('p-5', className)} {...props}>
+    <Card data-testid="stat-card" className={cn('p-5', className)} {...props}>
       <div className={cn('flex flex-col', stretch && 'h-full justify-between')}>
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -143,7 +143,7 @@ export function StatCard({
           <div className="mt-2 h-6 w-24 bg-gray-200 dark:bg-gray-800 animate-pulse rounded" />
         ) : (
           <div>
-            <div className={cn('mt-1 text-2xl font-bold text-gray-900 dark:text-white', valueClassName)}>{value}</div>
+            <div data-testid="stat-value" className={cn('mt-1 text-2xl font-bold text-gray-900 dark:text-white', valueClassName)}>{value}</div>
             {subtitle && <p className={cn('mt-1 text-xs text-gray-500 dark:text-gray-400', subtitleClassName)}>{subtitle}</p>}
           </div>
         )}

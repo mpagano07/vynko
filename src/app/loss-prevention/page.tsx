@@ -403,7 +403,7 @@ export default function LossPreventionPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <FormLabel>Producto *</FormLabel>
-                <Select searchable value={form.productId} onChange={(e) => setForm({ ...form, productId: e.target.value })}>
+                <Select searchable aria-label="Producto" value={form.productId} onChange={(e) => setForm({ ...form, productId: e.target.value })}>
                   <option value="">Seleccionar producto...</option>
                   {(products || []).map((p) => (
                     <option key={p.id} value={p.id}>{p.name} (stock: {p.stock})</option>
@@ -412,7 +412,7 @@ export default function LossPreventionPage() {
               </div>
               <div>
                 <FormLabel>Tipo de ajuste *</FormLabel>
-                <Select value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })}>
+                <Select aria-label="Tipo de ajuste" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })}>
                   {reasonOptions.map(r => (
                     <option key={r.value} value={r.value}>{r.label}</option>
                   ))}

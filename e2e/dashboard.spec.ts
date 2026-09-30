@@ -9,6 +9,8 @@ import {
   getDashboardTenantName,
   addProductToCart,
   getCartItem,
+  completeCheckout,
+  getKpiCardValue,
   cleanupBranchProducts,
 } from './fixtures';
 
@@ -116,25 +118,17 @@ test.describe('Dashboard E2E', () => {
     // Esperar a que desaparezcan los skeletons de carga
     await page.locator('.animate-pulse').first().waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
 
-    // Las 4 cards KPI tienen height fijo h-[104px]
-    const kpiCards = page.locator('[class*="h-[104px]"]');
-    await expect(kpiCards).toHaveCount(4, { timeout: 10_000 });
+    // Las 4 tarjetas KPI del grid principal
+    await expect(page.getByTestId('stat-card')).toHaveCount(4, { timeout: 10_000 });
 
-    // Card 1 "Ventas hoy": muestra un monto o "Sin ventas"
-    const ventasValue = kpiCards.nth(0).locator('p').filter({ hasText: /\$|Sin ventas/ }).first();
-    await expect(ventasValue).toBeVisible({ timeout: 10_000 });
-
-    // Card 2 "Ingresos del mes": muestra un monto
-    const ingresosValue = kpiCards.nth(1).locator('p').filter({ hasText: /\$/ }).first();
-    await expect(ingresosValue).toBeVisible();
-
-    // Card 3 "Stock crítico": muestra un número
-    const stockValue = kpiCards.nth(2).locator('p').first();
-    await expect(stockValue).toBeVisible();
-
-    // Card 4 "Estado": muestra uno de los estados posibles
-    const estadoTexto = kpiCards.nth(3).locator('p').filter({ hasText: /Sin ventas hoy|Stock bajo|Todo OK/ }).first();
-    await expect(estadoTexto).toBeVisible();
+    // Se localizan por su titulo, no por posicion: el valor de una StatCard
+    // es un <div>, no un <p>, asi que buscarlo por etiqueta/tag no funcionaba.
+    expect(await getKpiCardValue(page, 'Ventas hoy')).toMatch(/\$|Sin ventas/);
+    expect(await getKpiCardValue(page, 'Ingresos del mes')).toMatch(/\$/);
+    expect(await getKpiCardValue(page, 'Stock crítico')).toMatch(/\d/);
+    expect(await getKpiCardValue(page, 'Estado')).toMatch(
+      /Sin ventas hoy|Stock bajo|Todo OK/
+    );
   });
 
   // ─── 4. Después de una venta, los indicadores se actualizan ─
@@ -147,9 +141,7 @@ test.describe('Dashboard E2E', () => {
     await page.waitForLoadState('networkidle');
     await page.locator('.animate-pulse').first().waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
 
-    const kpiCards = page.locator('[class*="h-[104px]"]');
-    const ventasPBefore = kpiCards.nth(0).locator('p').filter({ hasText: /venta|Sin ventas/ }).first();
-    const textBefore = await ventasPBefore.textContent();
+    const textBefore = await getKpiCardValue(page, 'Ventas hoy');
 
     // Ir a la caja y realizar una venta
     await page.goto('/sales');
@@ -160,6 +152,9 @@ test.describe('Dashboard E2E', () => {
     await expect(cartItem).toBeVisible({ timeout: 10_000 });
 
     await page.getByRole('button', { name: 'Finalizar venta' }).click();
+    // "Finalizar venta" solo ABRE el modal de cobro; hay que confirmar el pago
+    // para que la venta quede registrada.
+    await completeCheckout(page);
     await expect(page.locator('[role="status"]').filter({ hasText: 'Venta registrada exitosamente' }).first()).toBeVisible({ timeout: 15_000 });
 
     // Volver al dashboard y verificar que los indicadores cambiaron
@@ -168,8 +163,7 @@ test.describe('Dashboard E2E', () => {
     await page.locator('.animate-pulse').first().waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
 
     // Card "Ventas hoy" ya no debería decir "Sin ventas"
-    const ventasPAfter = kpiCards.nth(0).locator('p').filter({ hasText: /venta|Sin ventas/ }).first();
-    const textAfter = await ventasPAfter.textContent();
+    const textAfter = await getKpiCardValue(page, 'Ventas hoy');
     expect(textAfter).not.toBe(textBefore);
   });
 
@@ -182,8 +176,7 @@ test.describe('Dashboard E2E', () => {
     await page.waitForLoadState('networkidle');
     await page.locator('.animate-pulse').first().waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
 
-    const kpiCardsA = page.locator('[class*="h-[104px]"]');
-    const ventasTextA = await kpiCardsA.nth(0).locator('p').filter({ hasText: /venta|\$/ }).first().textContent();
+    const ventasTextA = await getKpiCardValue(page, 'Ventas hoy');
 
     // Cambiar a Branch B
     await switchTenantByName(page, branchB);
@@ -206,8 +199,7 @@ test.describe('Dashboard E2E', () => {
     await page.waitForLoadState('networkidle');
     await page.locator('.animate-pulse').first().waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
 
-    const kpiCardsAReturn = page.locator('[class*="h-[104px]"]');
-    const ventasTextAReturn = await kpiCardsAReturn.nth(0).locator('p').filter({ hasText: /venta|\$/ }).first().textContent();
+    const ventasTextAReturn = await getKpiCardValue(page, 'Ventas hoy');
     expect(ventasTextAReturn).toBe(ventasTextA);
   });
 

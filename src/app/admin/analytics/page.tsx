@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useTheme } from '@/lib/hooks/useTheme';
 import { authFetch } from '@/lib/fetchWithTenant';
-import { formatDate } from '@/lib/utils/format';
+import { formatDate, formatTime } from '@/lib/utils/format';
 import { Card } from '@/components/ui/card';
-import { StatusBadge } from '@/components/ui/status-badge';
+import { StatusBadge, type StatusTone } from '@/components/ui/status-badge';
 import { ArrowLeft, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -15,6 +15,7 @@ import {
 } from 'recharts';
 
 import { isAdminProfile } from '@/lib/admin';
+import { formatEventDetails } from '@/lib/analytics-event-details';
 import type { AdminAnalytics, EventBreakdown, FunnelStep } from '@/lib/analytics-service';
 
 interface AnalyticsData extends AdminAnalytics {
@@ -160,36 +161,19 @@ export default function AdminAnalyticsPage() {
         {data.recentEvents.length === 0 ? (
           <p className="text-gray-500 text-sm text-center py-8">Sin eventos registrados</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto -mx-1">
+            <table className="w-full min-w-[640px] text-left border-collapse text-sm">
               <thead>
-                <tr className="border-b border-gray-200 dark:border-gray-700">
-                  <th className="text-left py-2 px-3 text-gray-500 dark:text-gray-400 font-medium">Fecha</th>
-                  <th className="text-left py-2 px-3 text-gray-500 dark:text-gray-400 font-medium">Tipo</th>
-                  <th className="text-left py-2 px-3 text-gray-500 dark:text-gray-400 font-medium">Email</th>
-                  <th className="text-left py-2 px-3 text-gray-500 dark:text-gray-400 font-medium">Nombre</th>
-                  <th className="text-left py-2 px-3 text-gray-500 dark:text-gray-400 font-medium">Detalles</th>
+                <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="py-2.5 px-3 w-[9.5rem]">Cuándo</th>
+                  <th className="py-2.5 px-3 w-[10rem]">Evento</th>
+                  <th className="py-2.5 px-3">Persona</th>
+                  <th className="py-2.5 px-3 w-[16rem]">Detalles</th>
                 </tr>
               </thead>
               <tbody>
                 {data.recentEvents.map((event) => (
-                  <tr key={event.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                    <td className="py-2.5 px-3 text-gray-600 dark:text-gray-300">
-                      {formatDate(event.created_at, { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <StatusBadge tone={event.event_type === 'subscription_cancelled' ? 'red' : 'blue'}>
-                        {EVENT_LABELS[event.event_type] ?? event.event_type}
-                      </StatusBadge>
-                    </td>
-                    <td className="py-2.5 px-3 text-gray-600 dark:text-gray-300">{event.user_email || '-'}</td>
-                    <td className="py-2.5 px-3 text-gray-600 dark:text-gray-300">{event.user_name || '-'}</td>
-                    <td className="py-2.5 px-3 text-gray-500 dark:text-gray-400 text-xs">
-                      {event.metadata && Object.keys(event.metadata).length > 0
-                        ? JSON.stringify(event.metadata)
-                        : '-'}
-                    </td>
-                  </tr>
+                  <RecentEventRow key={event.id} event={event} />
                 ))}
               </tbody>
             </table>
@@ -197,6 +181,95 @@ export default function AdminAnalyticsPage() {
         )}
       </Card>
     </div>
+  );
+}
+
+// Tono por tipo de evento, para que la columna se lea de un vistazo en vez de
+// ser toda azul. Los pasos del embudo van en azul; lo que se pierde (cancelo)
+// en rojo; lo demas, neutro.
+const EVENT_TONES: Record<string, StatusTone> = {
+  signup: 'indigo',
+  company_created: 'indigo',
+  trial_started: 'indigo',
+  product_created: 'blue',
+  excel_import: 'blue',
+  first_sale: 'emerald',
+  first_cash_open: 'emerald',
+  first_purchase: 'emerald',
+  app_return: 'emerald',
+  subscription_started: 'green',
+  subscription_cancelled: 'red',
+  document_created: 'gray',
+  forecast_opened: 'gray',
+  whatsapp_ticket: 'gray',
+};
+
+function RecentEventRow({ event }: { event: AdminAnalytics['recentEvents'][number] }) {
+  const { details, reconstructed, clamped } = formatEventDetails(event.metadata);
+
+  return (
+    <tr className="border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 align-top">
+      <td className="py-2.5 px-3 text-gray-500 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">
+        {/* Numerico y no "29 de sept de 26": con el año, month:'short' salta
+            al formato con "de" y la celda se ensancha. */}
+        <span className="block">
+          {formatDate(event.created_at, { day: '2-digit', month: '2-digit', year: '2-digit' })}
+        </span>
+        <span className="block text-gray-400 dark:text-gray-500">
+          {formatTime(event.created_at)}
+        </span>
+      </td>
+
+      <td className="py-2.5 px-3">
+        <StatusBadge tone={EVENT_TONES[event.event_type] ?? 'gray'} size="xs">
+          {EVENT_LABELS[event.event_type] ?? event.event_type}
+        </StatusBadge>
+        {reconstructed && (
+          <span className="mt-1 block">
+            <StatusBadge tone="amberSoft" size="xs" title="Reconstruido por el backfill a partir de actividad real, no registrado en vivo.">
+              reconstruido
+            </StatusBadge>
+          </span>
+        )}
+        {clamped && (
+          <span className="mt-1 block">
+            <StatusBadge tone="amberSoft" size="xs" title="La fecha fue adelantada a la primera actividad real porque tenants.created_at no era confiable.">
+              fecha ajustada
+            </StatusBadge>
+          </span>
+        )}
+      </td>
+
+      <td className="py-2.5 px-3">
+        {event.user_email ? (
+          <>
+            <span className="block text-gray-700 dark:text-gray-200 truncate">{event.user_email}</span>
+            {event.user_name && (
+              <span className="block text-xs text-gray-400 dark:text-gray-500 truncate">{event.user_name}</span>
+            )}
+          </>
+        ) : (
+          <span className="text-gray-400 dark:text-gray-600">sin identificar</span>
+        )}
+      </td>
+
+      <td className="py-2.5 px-3">
+        {details.length === 0 ? (
+          <span className="text-gray-400 dark:text-gray-600 text-xs">—</span>
+        ) : (
+          <ul className="space-y-0.5">
+            {details.map((d, i) => (
+              <li key={`${d.label ?? 'v'}-${i}`} className="text-xs leading-relaxed">
+                {d.label && (
+                  <span className="text-gray-400 dark:text-gray-500">{d.label}: </span>
+                )}
+                <span className="text-gray-700 dark:text-gray-200">{d.value}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </td>
+    </tr>
   );
 }
 

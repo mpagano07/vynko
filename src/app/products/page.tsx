@@ -725,6 +725,7 @@ function ProductsPageContent() {
 
           <div>
             <Select
+              aria-label="Nivel de stock"
               value={stockFilter}
               onChange={(e) => { setStockFilter(e.target.value as 'all' | 'critical' | 'low' | 'normal'); setCurrentPage(1); }}
             >
