@@ -11,6 +11,7 @@ import {
   Loader2,
   TriangleAlert,
   CheckCircle2,
+  Info,
   Plus,
   Trash2,
   Printer,
@@ -163,7 +164,8 @@ export function CheckoutModal({
         const idx = prev.findIndex((l) => l.id === id);
         if (idx < 0) return prev;
         const isFlexLine = idx === prev.length - 1;
-        const pct = adjustments[method] ?? 0;
+        // Con mas de un medio de pago el reparto se cobra a precio cheio.
+        const pct = prev.length === 1 ? adjustments[method] ?? 0 : 0;
         return prev.map((l, i) => {
           if (i !== idx || method === l.method) return l;
           if (isFlexLine) {
@@ -206,7 +208,9 @@ export function CheckoutModal({
     setLines((prev) => {
       const frozen = prev.map((l, i) => {
         if (i !== previousFlexIdx) return l;
-        const net = adjustCents(previousFlexAllocationCents, adjustments[l.method] ?? 0);
+        // Al pasar a pago dividido el efectivo ya no lleva descuento: se congela
+        // al monto real repartido, o el vuelto se calcularia contra un total viejo.
+        const net = adjustCents(previousFlexAllocationCents, 0);
         return {
           ...l,
           allocation: centsToInput(previousFlexAllocationCents),
@@ -241,6 +245,11 @@ export function CheckoutModal({
   const resolved = useMemo(() => {
     const count = lines.length;
     const flexIndex = count - 1;
+    // El ajuste por medio de pago es una promoción sobre la venta completa
+    // ("10% off si pagás todo en efectivo"), no un recargo sobre una porción.
+    // Solo se aplica cuando la venta se cobra con UN medio: al dividir el pago
+    // se pierde y se cobra el total completo.
+    const adjustmentsApply = count === 1;
 
     const fixedAllocations = lines.map((line, idx) => {
       if (idx === flexIndex) return 0;
@@ -254,8 +263,8 @@ export function CheckoutModal({
 
     const rows = lines.map((line, idx) => {
       const allocationCents = idx === flexIndex ? flexAllocationCents : fixedAllocations[idx];
-      const adjustmentPct = adjustments[line.method] ?? 0;
-      const netCents = Math.round((allocationCents * (100 + adjustmentPct)) / 100);
+      const adjustmentPct = adjustmentsApply ? adjustments[line.method] ?? 0 : 0;
+      const netCents = adjustCents(allocationCents, adjustmentPct);
       const isCashFlex = line.method === 'cash' && idx === flexIndex;
       const receivedCents = isCashFlex ? Math.round(parseAmount(line.received) * 100) : netCents;
       const changeCents = isCashFlex ? Math.max(0, receivedCents - netCents) : 0;
@@ -276,7 +285,7 @@ export function CheckoutModal({
     const covered = allocationSum >= totalCents - 1 && allocationSum <= totalCents + 1;
     const collectedCents = rows.reduce((sum, r) => sum + r.netCents, 0);
     const totalChangeCents = rows.reduce((sum, r) => sum + r.changeCents, 0);
-    return { rows, allocationSum, covered, collectedCents, totalChangeCents, flexIndex };
+    return { rows, allocationSum, covered, collectedCents, totalChangeCents, flexIndex, adjustmentsApply };
   }, [lines, adjustments, totalCents]);
 
   const hasAdjustments = useMemo(
@@ -344,6 +353,7 @@ export function CheckoutModal({
   }, [lines, selectedLine, canConfirm, onClose, confirmPayment, changeMethod]);
 
   const showBreakdown = subtotal !== undefined && (discount > 0 || surcharge > 0);
+  const split = lines.length > 1;
 
 return (
     <Modal
@@ -419,9 +429,10 @@ return (
             </div>
 
             {resolved.rows.map(({ line, isFlex, allocationCents, netCents, changeCents, shortReceived }) => {
-              const pct = adjustments[line.method] ?? 0;
+              // Al dividir no hay ajuste: se muestra 0 para que el cajero no lea
+              // un "-10%" que el cobro no va a aplicar.
+              const pct = resolved.adjustmentsApply ? adjustments[line.method] ?? 0 : 0;
               const isCash = line.method === 'cash';
-              const split = lines.length > 1;
               return (
                 <div
                   key={line.id}
@@ -448,7 +459,7 @@ return (
                         >
                           <Icon className="h-3.5 w-3.5" />
                           {method.label}
-                          {methodPct !== 0 && (
+                          {resolved.adjustmentsApply && methodPct !== 0 && (
                             <span
                               className={cn(
                                 'px-1 rounded font-mono text-[10px]',
@@ -615,6 +626,16 @@ return (
                 {resolved.allocationSum > totalCents + 1
                   ? `El reparto supera el total en ${formatARS((resolved.allocationSum - totalCents) / 100)}`
                   : `Falta repartir ${formatARS(Math.max(0, total - resolved.allocationSum / 100))}`}
+              </p>
+            )}
+
+            {split && hasAdjustments && (
+              <p className="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400">
+                <Info className="h-3.5 w-3.5 mt-px shrink-0" />
+                <span>
+                  Al dividir el pago no se aplica el descuento ni el recargo por medio de
+                  pago: esos ajustes son sobre la venta completa. Se cobra {formatARS(total)}.
+                </span>
               </p>
             )}
           </div>

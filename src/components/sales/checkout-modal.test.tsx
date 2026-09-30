@@ -86,11 +86,24 @@ describe('CheckoutModal · ajustes automáticos por medio de pago', () => {
     expect(screen.getByText(/^Recargo \+10% =/)).toBeInTheDocument();
   });
 
-  it('no pierde el descuento en efectivo al dividir el pago', () => {
+  it('quita el descuento de efectivo al dividir el pago', () => {
+    // El ajuste es sobre la venta completa: al repartir, cada porcion se cobra
+    // a precio cheio y el total sigue siendo 100.
     render(<CheckoutModal {...baseProps} adjustments={adjustments({ cash: -10 })} />);
     fireEvent.click(screen.getByText('Dividir pago'));
     const cashInput = screen.getByLabelText('Monto del medio Efectivo');
     expect(cashInput).toHaveValue('100,00');
+    expect(screen.queryByText(money(90))).not.toBeInTheDocument();
+  });
+
+  it('avisa que dividir el pago hace perder el descuento por medio de pago', () => {
+    render(<CheckoutModal {...baseProps} adjustments={adjustments({ cash: -10 })} />);
+    fireEvent.click(screen.getByText('Dividir pago'));
+    expect(screen.getByText(/Al dividir el pago no se aplica el descuento/)).toBeInTheDocument();
+  });
+
+  it('mantiene el descuento de efectivo cuando no se divide el pago', () => {
+    render(<CheckoutModal {...baseProps} adjustments={adjustments({ cash: -10 })} />);
     expect(screen.getAllByText(money(90)).length).toBeGreaterThan(0);
   });
 
