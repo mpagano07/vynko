@@ -317,7 +317,7 @@ describe('POST /api/sales', () => {
     expect(createActivityLog).not.toHaveBeenCalled();
   });
 
-  it('aplica pagos divididos con ajustes automáticos por medio y vuelto', async () => {
+  it('cobra el total completo al dividir el pago, sin descuento de efectivo', async () => {
     supabaseMock.__queue('tenants', {
       data: {
         settings: {
@@ -354,10 +354,12 @@ describe('POST /api/sales', () => {
       (c) => c.table === 'sales' && c.method === 'insert'
     );
     expect(saleInsert?.args[0]).toMatchObject({
-      total_cents: 380,
+      total_cents: 400,
+      discount_cents: 0,
+      surcharge_cents: 0,
       payment_method: 'cash',
       amount_paid_cents: 450,
-      change_cents: 70,
+      change_cents: 50,
       session_id: 'session-1',
     });
 
@@ -369,9 +371,9 @@ describe('POST /api/sales', () => {
         sale_id: 'sale-split',
         tenant_id: 'tenant-1',
         method: 'cash',
-        amount_cents: 180,
+        amount_cents: 200,
         received_cents: 250,
-        change_cents: 70,
+        change_cents: 50,
       },
       {
         sale_id: 'sale-split',
@@ -382,6 +384,46 @@ describe('POST /api/sales', () => {
         change_cents: 0,
       },
     ]);
+  });
+
+  it('mantiene el descuento de efectivo cuando la venta se cobra en un solo medio', async () => {
+    supabaseMock.__queue('tenants', {
+      data: {
+        settings: {
+          checkout: {
+            payment_adjustments: { cash: -10, transfer: 0, debit: 0, credit: 5, mercadopago: 0 },
+          },
+        },
+      },
+    });
+    supabaseMock.__queue('cash_register_sessions', { data: { id: 'session-1' } });
+    supabaseMock.__queue('products', {
+      data: [{ id: 'p1', name: 'Coca', price: 2, price_cents: 200 }],
+    });
+    supabaseMock.__queue('product_stock', { data: [{ product_id: 'p1', stock: 10 }] });
+    supabaseMock.__queue('product_stock', { data: { id: 'ps1', stock: 10 } });
+    supabaseMock.__queue('product_stock', { data: [{ id: 'ps1' }] });
+    supabaseMock.__queue('product_stock', { data: { id: 'ps1', stock: 10 } });
+    supabaseMock.__queue('product_stock', { data: [{ id: 'ps1' }] });
+    supabaseMock.__queue('sales', { data: { id: 'sale-una-vez' } });
+    supabaseMock.__queue('sale_items', { data: null, error: null });
+    supabaseMock.__queue('stock_history', { data: null, error: null });
+
+    // Un solo pago que cubre el total completo si lleva el -10% de efectivo.
+    const res = await POST(
+      makeRequest({
+        items: [{ product_id: 'p1', quantity: 2 }],
+        payments: [{ method: 'cash', amount: 4 }],
+      })
+    );
+    expect(res.status).toBe(201);
+    const saleInsert = supabaseMock.__calls.find(
+      (c) => c.table === 'sales' && c.method === 'insert'
+    );
+    expect(saleInsert?.args[0]).toMatchObject({
+      total_cents: 360,
+      discount_cents: 40,
+    });
   });
 
   it('aplica el ajuste automático a un solo medio de pago', async () => {

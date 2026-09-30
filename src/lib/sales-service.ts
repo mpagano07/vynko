@@ -397,6 +397,12 @@ export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<
   const total_cents = Math.max(0, subtotal_cents - discount_cents + surcharge_cents);
 
   const isSplit = Array.isArray(payments) && payments.length > 0;
+  // El ajuste por medio de pago es una promoción sobre la venta completa
+  // ("10% off si pagás todo en efectivo"), no un recargo sobre una porción.
+  // Solo se aplica cuando la venta se cobra con UN medio: al repartir el pago se
+  // pierde, porque si no alcanza con partir el pago en dos para conservar parte
+  // del descuento y el total cobrado deja de ser predecible.
+  const adjustmentsApply = !isSplit || payments.length === 1;
   const resolvedPayments: ResolvedPayment[] = [];
 
   if (isSplit) {
@@ -422,7 +428,7 @@ export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<
     for (const p of payments) {
       const method = p.method as keyof typeof checkoutSettings.payment_adjustments;
       const allocationCents = Math.max(0, Math.round(Number(p.amount) * 100));
-      const adjustmentPct = checkoutSettings.payment_adjustments[method];
+      const adjustmentPct = adjustmentsApply ? checkoutSettings.payment_adjustments[method] ?? 0 : 0;
       const amountCents = Math.round((allocationCents * (100 + adjustmentPct)) / 100);
       let receivedCents = amountCents;
       let changeCents = 0;
@@ -623,10 +629,15 @@ export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<
       },
     });
 
+    // Solo se asientan los ajustes que efectivamente se aplicaron: con el pago
+    // dividido no se aplico ninguno, asi que el ticket no debe anunciar un
+    // descuento que no existe.
     const adjustments_applied = Object.fromEntries(
       resolvedPayments.map((p) => [
         p.method,
-        checkoutSettings.payment_adjustments[p.method as keyof typeof checkoutSettings.payment_adjustments] ?? 0,
+        adjustmentsApply
+          ? checkoutSettings.payment_adjustments[p.method as keyof typeof checkoutSettings.payment_adjustments] ?? 0
+          : 0,
       ])
     );
 
