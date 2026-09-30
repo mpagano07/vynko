@@ -430,6 +430,106 @@ describe('POST /api/sales', () => {
     });
   });
 
+  it('registra el descuento del medio de pago en discount_cents', async () => {
+    supabaseMock.__queue('tenants', {
+      data: {
+        settings: {
+          checkout: {
+            payment_adjustments: { cash: -10, transfer: 0, debit: 0, credit: 0, mercadopago: 0 },
+          },
+        },
+      },
+    });
+    supabaseMock.__queue('cash_register_sessions', { data: null });
+    supabaseMock.__queue('products', {
+      data: [{ id: 'p1', name: 'Producto', price: 250, price_cents: 25000 }],
+    });
+    supabaseMock.__queue('product_stock', { data: [{ product_id: 'p1', stock: 10 }] });
+    supabaseMock.__queue('product_stock', { data: { id: 'ps1', stock: 10 } });
+    supabaseMock.__queue('product_stock', { data: [{ id: 'ps1' }] });
+    supabaseMock.__queue('sales', { data: { id: 'sale-ajuste' } });
+    supabaseMock.__queue('sale_items', { data: null, error: null });
+    supabaseMock.__queue('stock_history', { data: null, error: null });
+
+    // Es lo que manda el modal con cash -10: el cliente entrega 225 por 250.
+    const res = await POST(
+      makeRequest({
+        items: [{ product_id: 'p1', quantity: 1 }],
+        payments: [{ method: 'cash', amount: 250, received: 225 }],
+      })
+    );
+    expect(res.status).toBe(201);
+
+    const saleInsert = supabaseMock.__calls.find(
+      (c) => c.table === 'sales' && c.method === 'insert'
+    );
+    const sale = saleInsert?.args[0] as Record<string, number>;
+
+    // El descuento del medio de pago queda asentado: sin esto, al recargar
+    // la venta se veian items por 250 con total 225 y ningun descuento.
+    expect(sale.discount_cents).toBe(2500);
+    expect(sale.surcharge_cents).toBe(0);
+    expect(sale.total_cents).toBe(22500);
+    expect(sale.amount_paid_cents).toBe(22500);
+    expect(sale.change_cents).toBe(0);
+
+    // Identidad del registro: los items menos lo descontado dan el total.
+    const itemsInsert = supabaseMock.__calls.find(
+      (c) => c.table === 'sale_items' && c.method === 'insert'
+    );
+    const itemRows = (itemsInsert?.args[0] ?? []) as Array<Record<string, unknown>>;
+    const itemsTotal = itemRows.reduce(
+      (sum, i) => sum + Number(i.subtotal_cents ?? 0),
+      0
+    );
+    expect(itemsTotal - sale.discount_cents + sale.surcharge_cents).toBe(
+      sale.total_cents
+    );
+  });
+
+  it('aplica el ajuste del medio tambien cuando la venta no manda payments', async () => {
+    supabaseMock.__queue('tenants', {
+      data: {
+        settings: {
+          checkout: {
+            payment_adjustments: { cash: -10, transfer: 0, debit: 0, credit: 0, mercadopago: 0 },
+          },
+        },
+      },
+    });
+    supabaseMock.__queue('cash_register_sessions', { data: null });
+    supabaseMock.__queue('products', {
+      data: [{ id: 'p1', name: 'Producto', price: 250, price_cents: 25000 }],
+    });
+    supabaseMock.__queue('product_stock', { data: [{ product_id: 'p1', stock: 10 }] });
+    supabaseMock.__queue('product_stock', { data: { id: 'ps1', stock: 10 } });
+    supabaseMock.__queue('product_stock', { data: [{ id: 'ps1' }] });
+    supabaseMock.__queue('sales', { data: { id: 'sale-sin-payments' } });
+    supabaseMock.__queue('sale_items', { data: null, error: null });
+    supabaseMock.__queue('stock_history', { data: null, error: null });
+
+    const res = await POST(
+      makeRequest({
+        items: [{ product_id: 'p1', quantity: 1 }],
+        payment_method: 'cash',
+        amount_paid: 225,
+      })
+    );
+    expect(res.status).toBe(201);
+
+    const saleInsert = supabaseMock.__calls.find(
+      (c) => c.table === 'sales' && c.method === 'insert'
+    );
+    // Antes esta venta se guardaba como 25000 y el ajuste solo existia en el
+    // camino con `payments`, dejando el API y el modal con reglas distintas.
+    expect(saleInsert?.args[0]).toMatchObject({
+      total_cents: 22500,
+      discount_cents: 2500,
+      amount_paid_cents: 22500,
+      change_cents: 0,
+    });
+  });
+
   it('rechaza un reparto que no cubre el total de la venta', async () => {
     supabaseMock.__queue('tenants', { data: { settings: { checkout: {} } } });
     supabaseMock.__queue('cash_register_sessions', { data: null });

@@ -440,26 +440,41 @@ export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<
       resolvedPayments.push({ method, allocation_cents: allocationCents, amount_cents: amountCents, received_cents: receivedCents, change_cents: changeCents });
     }
   } else {
-    const amountPaidRaw = Number(amount_paid ?? total_cents / 100);
+    // Un cliente que cobra por API sin mandar `payments` obtiene el mismo
+    // tratamiento que el modal: el ajuste del medio tambien se le aplica.
+    const method = payment_method as keyof typeof checkoutSettings.payment_adjustments;
+    const adjustmentPct = checkoutSettings.payment_adjustments[method] ?? 0;
+    const amountCents = Math.round((total_cents * (100 + adjustmentPct)) / 100);
+    const amountPaidRaw = Number(amount_paid ?? amountCents / 100);
     const amountPaidCents = Math.max(0, Math.round(amountPaidRaw * 100));
-    const changeCents = Math.max(0, amountPaidCents - total_cents);
+    const changeCents = Math.max(0, amountPaidCents - amountCents);
 
-    if (payment_method !== 'cash' && amountPaidCents < total_cents) {
+    if (payment_method !== 'cash' && amountPaidCents < amountCents) {
       return { ok: false, error: 'El monto cobrado no puede ser menor al total de la venta', status: 400 };
     }
 
     resolvedPayments.push({
       method: payment_method,
       allocation_cents: total_cents,
-      amount_cents: total_cents,
+      amount_cents: amountCents,
       received_cents: amountPaidCents,
       change_cents: changeCents,
     });
   }
 
-  const finalTotalCents = isSplit
-    ? resolvedPayments.reduce((sum, p) => sum + p.amount_cents, 0)
-    : total_cents;
+  // El total de la venta es lo que se cobra NETO de los ajustes por medio de
+  // pago: con `cash: -10` una venta de $250 se registra y se suma al cajon
+  // como $225.
+  const finalTotalCents = resolvedPayments.reduce((sum, p) => sum + p.amount_cents, 0);
+  // El ajuste por medio de pago no se persistia en ningun lado, asi que al
+  // recargar la venta se veian items por $250, sin descuento, con total $225.
+  // Se lo absorbe en discount/surcharge para que el registro sea explicable y
+  // se mantenga la identidad: subtotal - descuento + recargo === total.
+  const paymentAdjustmentCents = finalTotalCents - total_cents;
+  const recorded_discount_cents =
+    discount_cents + Math.max(0, -paymentAdjustmentCents);
+  const recorded_surcharge_cents =
+    surcharge_cents + Math.max(0, paymentAdjustmentCents);
   const amountPaidCents = resolvedPayments.reduce((sum, p) => sum + p.received_cents, 0);
   const changeCents = resolvedPayments.reduce((sum, p) => sum + p.change_cents, 0);
   const primaryMethod = resolvedPayments[0].method;
@@ -536,8 +551,8 @@ export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<
         payment_method: primaryMethod,
         amount_paid_cents: amountPaidCents,
         change_cents: changeCents,
-        discount_cents,
-        surcharge_cents,
+        discount_cents: recorded_discount_cents,
+        surcharge_cents: recorded_surcharge_cents,
         session_id: sessionId,
       })
       .select()
@@ -608,14 +623,12 @@ export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<
       },
     });
 
-    const adjustments_applied = isSplit
-      ? Object.fromEntries(
-          resolvedPayments.map((p) => [
-            p.method,
-            checkoutSettings.payment_adjustments[p.method as keyof typeof checkoutSettings.payment_adjustments],
-          ])
-        )
-      : {};
+    const adjustments_applied = Object.fromEntries(
+      resolvedPayments.map((p) => [
+        p.method,
+        checkoutSettings.payment_adjustments[p.method as keyof typeof checkoutSettings.payment_adjustments] ?? 0,
+      ])
+    );
 
     await trackEvent({
       type: 'first_sale',

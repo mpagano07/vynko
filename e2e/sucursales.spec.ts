@@ -10,7 +10,8 @@ import {
   hasAllTenantsOption,
   selectAllTenants,
   getDashboardTenantName,
-  addProductToCart,
+    addProductToCart,
+    expectedSaleTotalCents,
   getCartItem,
   completeCheckout,
   getNewestSaleRowText,
@@ -163,12 +164,19 @@ test.describe('Sucursales E2E', () => {
     await completeCheckout(page);
     await expect(page.locator('[role="status"]').filter({ hasText: 'Venta registrada exitosamente' }).first()).toBeVisible({ timeout: 15_000 });
 
+    // El tenant puede tener un ajuste por medio de pago configurado (ej.
+    // `cash: -10`), y ese ajuste se descuenta del total que queda registrado.
+    // Por eso el importe esperado se calcula desde la configuracion real y no
+    // desde el precio del carrito.
+    const totalCents = await expectedSaleTotalCents(page, VENTA_PRICE * 100);
+    const totalText = formatARSTest(totalCents / 100);
+
     await page.goto('/sales');
     await expect(page.getByRole('heading', { name: 'Registrar Venta' })).toBeVisible({ timeout: 15_000 });
 
     // Verificar que la venta aparece en historial de Branch A
     await openSalesHistory(page);
-    await expect(page.locator('table tbody tr').first()).toContainText(formatARSTest(VENTA_PRICE), { timeout: 15_000 });
+    await expect(page.locator('table tbody tr').first()).toContainText(totalText, { timeout: 15_000 });
 
     // Cambiar a Branch B
     await switchTenantByName(page, branchB);
@@ -182,7 +190,7 @@ test.describe('Sucursales E2E', () => {
       const rowCount = await rows.count();
       if (rowCount > 0) {
         const allRowTexts = await rows.allTextContents();
-        const hasLeaked = allRowTexts.some((t) => t.includes(formatARSTest(VENTA_PRICE)));
+        const hasLeaked = allRowTexts.some((t) => t.includes(totalText));
         expect(hasLeaked).toBe(false);
       }
     }
@@ -191,7 +199,7 @@ test.describe('Sucursales E2E', () => {
     await switchTenantByName(page, branchA);
     await page.goto('/sales');
     const rowTextAAfter = await getNewestSaleRowText(page);
-    expect(rowTextAAfter).toContain(formatARSTest(VENTA_PRICE));
+    expect(rowTextAAfter).toContain(totalText);
   });
 
   // ─── 6. Aislamiento completo ──────────────────────────────

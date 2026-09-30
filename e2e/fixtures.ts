@@ -753,6 +753,29 @@ export async function completeCheckout(
 }
 
 /**
+ * Devuelve el total que se cobra, en centavos, aplicando el ajuste que el
+ * tenant tenga configurado para ese medio de pago.
+ *
+ * El tenant puede tener un descuento o recargo por medio (ej. `cash: -10`),
+ * asi que el importe que queda registrado NO es el del carrito. Leer la
+ * configuracion evita que el test hardcodee un total que depende de un
+ * ajuste configurado a mano en Settings.
+ */
+export async function expectedSaleTotalCents(
+  page: Page,
+  cartTotalCents: number,
+  method: 'cash' | 'transfer' | 'debit' | 'credit' | 'mercadopago' = 'cash'
+): Promise<number> {
+  const response = await page.request.get('/api/settings/checkout');
+  expect(response.ok()).toBe(true);
+  const body = (await response.json()) as {
+    checkout?: { payment_adjustments?: Record<string, number> };
+  };
+  const pct = body.checkout?.payment_adjustments?.[method] ?? 0;
+  return Math.round((cartTotalCents * (100 + pct)) / 100);
+}
+
+/**
  * Abre la sección colapsable "Últimas Ventas" de /sales y espera a que cargue
  * la primera fila del historial.
  */
