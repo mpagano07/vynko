@@ -6,6 +6,7 @@ import {
   isProductVisibleInTable,
   getStockInfo,
   adjustStockViaLossPrevention,
+  chooseCustomSelectOption,
   searchProduct,
   countProductsInTable,
   getTenantNames,
@@ -113,20 +114,36 @@ test.describe('Stock E2E', () => {
 
   // Test 7: Stock crítico / bajo reflejado en filtros y badges
   test('stock crítico y bajo se reflejan en badges y filtros', async ({ authenticatedPage: page }) => {
+    // Recorre varios filtros y además registra un ajuste de stock (con su
+    // navegación a /loss-prevention), así que no entra en el timeout global.
+    test.slow();
     await page.goto('/products');
     await page.locator('table').first().waitFor({ state: 'visible', timeout: 15_000 });
     const loader = page.locator('[data-testid="loader"], .animate-spin').first();
     await loader.waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
     await searchProduct(page, PRODUCT_NAME);
-    const stockFilter = page.locator('select:has(option[value="critical"])');
+    // El filtro de nivel de stock es el <Select> custom de la app, no un
+    // <select> nativo, así que se elige por su etiqueta visible.
+    const filtrarPorNivelStock = async (nivel: 'critical' | 'low' | 'normal' | 'all') => {
+      const etiquetas = {
+        all: 'Cualquier nivel de stock',
+        critical: 'Stock Crítico',
+        low: 'Stock Bajo',
+        normal: 'Stock Saludable',
+      } as const;
+      await chooseCustomSelectOption(
+        page,
+        page.getByRole('button', { name: 'Nivel de stock' }),
+        etiquetas[nivel]
+      );
+      await page.waitForTimeout(500);
+    };
 
     // stock 0 con mínimo 2 → crítico (0 <= 2)
-    await stockFilter.selectOption('critical');
-    await page.waitForTimeout(500);
+    await filtrarPorNivelStock('critical');
     expect(await countProductsInTable(page)).toBe(1);
 
-    await stockFilter.selectOption('normal');
-    await page.waitForTimeout(500);
+    await filtrarPorNivelStock('normal');
     expect(await countProductsInTable(page)).toBe(0);
 
     // Subir a 3 → bajo (2 < 3 <= 3)
@@ -137,12 +154,10 @@ test.describe('Stock E2E', () => {
     expect(info.stock).toBe(3);
     expect(info.badgeClass).toContain('bg-amber-100');
 
-    await stockFilter.selectOption('low');
-    await page.waitForTimeout(500);
+    await filtrarPorNivelStock('low');
     expect(await countProductsInTable(page)).toBe(1);
 
-    await stockFilter.selectOption('critical');
-    await page.waitForTimeout(500);
+    await filtrarPorNivelStock('critical');
     expect(await countProductsInTable(page)).toBe(0);
   });
 

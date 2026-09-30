@@ -83,7 +83,6 @@ export const Select = React.forwardRef<HTMLDivElement, SelectProps>(
     const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
     const [query, setQuery] = useState('');
     const triggerRef = useRef<HTMLButtonElement>(null);
-    const panelRef = useRef<HTMLDivElement>(null);
     const searchRef = useRef<HTMLInputElement>(null);
     const { layout, visual } = splitLayout(className);
 
@@ -117,15 +116,28 @@ export const Select = React.forwardRef<HTMLDivElement, SelectProps>(
 
     useEffect(() => {
       if (!open) return;
-      const close = (e: Event) => {
-        if (e.target instanceof Node && panelRef.current?.contains(e.target)) return;
-        setOpen(false);
+      const dismiss = (e: Event) => {
+        if (e.type === 'resize') {
+          setOpen(false);
+          return;
+        }
+        // Solo el scroll de la página puede descolocar el panel (es `fixed`).
+        // Se escuchan los scrolls en fase de captura, así que también llegan los
+        // de otros elementos (p.ej. el input de búsqueda al enfocarse, que al
+        // abrir el panel tras una búsqueda disparaba su scroll y lo cerraba).
+        const target = e.target;
+        const esScrollDePagina =
+          target === document ||
+          target === document.documentElement ||
+          target === document.body ||
+          target === window;
+        if (esScrollDePagina) setOpen(false);
       };
-      window.addEventListener('scroll', close, true);
-      window.addEventListener('resize', close);
+      window.addEventListener('scroll', dismiss, true);
+      window.addEventListener('resize', dismiss);
       return () => {
-        window.removeEventListener('scroll', close, true);
-        window.removeEventListener('resize', close);
+        window.removeEventListener('scroll', dismiss, true);
+        window.removeEventListener('resize', dismiss);
       };
     }, [open]);
 
@@ -205,7 +217,6 @@ export const Select = React.forwardRef<HTMLDivElement, SelectProps>(
           <>
             <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
             <div
-              ref={panelRef}
               role="listbox"
               style={{ top: pos.top, left: pos.left, width: pos.width }}
               className={cn(

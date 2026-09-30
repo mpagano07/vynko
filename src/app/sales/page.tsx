@@ -877,6 +877,7 @@ export default function SalesPage() {
                 {cart.map((item) => (
                   <div
                     key={item.product_id}
+                    data-testid="cart-item"
                     className="flex items-center justify-between p-2 rounded-lg bg-gray-100 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700"
                   >
                     <div className="flex-1 min-w-0">

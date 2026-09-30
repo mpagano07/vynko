@@ -8,6 +8,10 @@ import {
   formatARSTest,
   addProductToCart,
   getCartItem,
+  cartItemPlus,
+  cartItemMinus,
+  cartItemRemove,
+  expectedSaleTotalText,
   completeCheckout,
   getNewestSaleRowText,
   openSalesHistory,
@@ -103,12 +107,11 @@ test.describe('Ventas E2E', () => {
     await addProductToCart(page, PRODUCT_UNICO);
     const cartItem = getCartItem(page, PRODUCT_UNICO);
     await expect(cartItem).toBeVisible({ timeout: 10_000 });
-    await expect(cartItem.locator('span.w-6')).toHaveText('1');
+    await expect(cartItem).toContainText('x 1');
 
     // Modificar cantidad: 1 -> 2
-    await cartItem.locator('svg.lucide-plus').click();
-    await expect(cartItem.locator('span.w-6')).toHaveText('2');
-    await expect(cartItem).toContainText(`x 2`);
+    await cartItemPlus(page, PRODUCT_UNICO).click();
+    await expect(cartItem).toContainText('x 2');
 
     // Total = 2 x $100
     await expect(page.locator('span.text-2xl.text-indigo-600')).toHaveText(formatARSTest(2 * PRICE_UNICO));
@@ -127,16 +130,19 @@ test.describe('Ventas E2E', () => {
     expect(info.stock).toBe(STOCK_UNICO - 2);
 
     // La venta aparece en el historial con su detalle
+    // El importe registrado lleva el ajuste del medio de pago, asi que se
+    // calcula desde la config del tenant y no desde el total del carrito.
+    const totalRegistrado = await expectedSaleTotalText(page, 2 * PRICE_UNICO);
     await page.goto('/sales');
     const rowText = await getNewestSaleRowText(page);
-    expect(rowText).toContain(formatARSTest(2 * PRICE_UNICO));
+    expect(rowText).toContain(totalRegistrado);
     expect(rowText).toContain('1 item(s)');
 
     await page.locator('table tbody tr').first().click();
     const panel = page.locator('div.border-l-4').first();
     await expect(panel).toContainText('Completada');
     await expect(panel).toContainText(PRODUCT_UNICO);
-    await expect(panel).toContainText(formatARSTest(2 * PRICE_UNICO));
+    await expect(panel).toContainText(totalRegistrado);
   });
 
   // Venta de varios productos y cálculo del total
@@ -159,10 +165,12 @@ test.describe('Ventas E2E', () => {
     expect((await getStockInfo(page, PRODUCT_UNICO)).stock).toBe(STOCK_UNICO - 2 - 1);
     expect((await getStockInfo(page, PRODUCT_MULTI)).stock).toBe(STOCK_MULTI - 1);
 
-    // Historial: 2 items, total 150, expandido muestra ambos productos
+    // Historial: 2 items, total 150 (registrado con el ajuste del medio),
+    // expandido muestra ambos productos
+    const totalMulti = await expectedSaleTotalText(page, PRICE_UNICO + PRICE_MULTI);
     await page.goto('/sales');
     const rowText = await getNewestSaleRowText(page);
-    expect(rowText).toContain(formatARSTest(PRICE_UNICO + PRICE_MULTI));
+    expect(rowText).toContain(totalMulti);
     expect(rowText).toContain('2 item(s)');
 
     await page.locator('table tbody tr').first().click();
@@ -182,18 +190,18 @@ test.describe('Ventas E2E', () => {
     await addProductToCart(page, PRODUCT_MULTI);
     const cartItem = getCartItem(page, PRODUCT_MULTI);
     await expect(cartItem).toBeVisible({ timeout: 10_000 });
-    await cartItem.locator('svg.lucide-plus').click();
-    await cartItem.locator('svg.lucide-plus').click();
-    await expect(cartItem.locator('span.w-6')).toHaveText('3');
+    await cartItemPlus(page, PRODUCT_MULTI).click();
+    await cartItemPlus(page, PRODUCT_MULTI).click();
+    await expect(cartItem).toContainText('x 3');
     await expect(page.locator('span.text-2xl.text-indigo-600')).toHaveText(formatARSTest(3 * PRICE_MULTI));
 
     // Bajarlo a 2 (50 x 2 = 100)
-    await cartItem.locator('svg.lucide-minus').click();
-    await expect(cartItem.locator('span.w-6')).toHaveText('2');
+    await cartItemMinus(page, PRODUCT_MULTI).click();
+    await expect(cartItem).toContainText('x 2');
     await expect(page.locator('span.text-2xl.text-indigo-600')).toHaveText(formatARSTest(2 * PRICE_MULTI));
 
     // Eliminar el producto del carrito
-    await cartItem.locator('svg.lucide-trash-2').click();
+    await cartItemRemove(page, PRODUCT_MULTI).click();
     await expect(page.getByText('Buscá un producto').first()).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('button', { name: 'Finalizar venta' })).toHaveCount(0);
 
@@ -213,11 +221,11 @@ test.describe('Ventas E2E', () => {
     await addProductToCart(page, PRODUCT_ESCASO);
     const cartItem = getCartItem(page, PRODUCT_ESCASO);
     await expect(cartItem).toBeVisible({ timeout: 10_000 });
-    await expect(cartItem.locator('span.w-6')).toHaveText('1');
+    await expect(cartItem).toContainText('x 1');
 
-    await cartItem.locator('svg.lucide-plus').click();
+    await cartItemPlus(page, PRODUCT_ESCASO).click();
     await expect(page.locator('[role="status"]').filter({ hasText: `Stock insuficiente para "${PRODUCT_ESCASO}"` }).first()).toBeVisible({ timeout: 10_000 });
-    await expect(cartItem.locator('span.w-6')).toHaveText('1');
+    await expect(cartItem).toContainText('x 1');
     await expect(page.locator('span.text-2xl.text-indigo-600')).toHaveText(formatARSTest(PRICE_ESCASO));
 
     // Producto con stock 0: la tarjeta está deshabilitada (no se puede vender)
@@ -229,7 +237,7 @@ test.describe('Ventas E2E', () => {
 
     // Limpiar el carrito sin vender
     await page.getByPlaceholder('Buscar producto por nombre, SKU o código de barras...').fill(PRODUCT_ESCASO);
-    await getCartItem(page, PRODUCT_ESCASO).locator('svg.lucide-trash-2').click();
+    await cartItemRemove(page, PRODUCT_ESCASO).click();
     await expect(page.getByText('Buscá un producto').first()).toBeVisible({ timeout: 10_000 });
   });
 
@@ -268,7 +276,9 @@ test.describe('Ventas E2E', () => {
 
     // La fila más reciente es la venta que agotó el stock (Escaso, $200)
     const rows = page.locator('table tbody tr');
-    await expect(rows.first()).toContainText(formatARSTest(PRICE_ESCASO));
+    await expect(rows.first()).toContainText(
+      await expectedSaleTotalText(page, PRICE_ESCASO)
+    );
     await expect(rows.first()).toContainText('1 item(s)');
 
     await rows.first().click();
@@ -277,7 +287,9 @@ test.describe('Ventas E2E', () => {
     await expect(firstPanel).toContainText('Cantidad de productos: 1');
 
     // La venta de varios productos también está en el listado
-    const multiRow = rows.filter({ hasText: formatARSTest(PRICE_UNICO + PRICE_MULTI) }).first();
+    const multiRow = rows.filter({
+      hasText: await expectedSaleTotalText(page, PRICE_UNICO + PRICE_MULTI),
+    }).first();
     await expect(multiRow).toContainText('2 item(s)');
     await multiRow.click();
     const multiPanel = page.locator('div.border-l-4').nth(1);
