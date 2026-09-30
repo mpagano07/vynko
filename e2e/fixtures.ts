@@ -363,51 +363,108 @@ export async function adjustStockViaLossPrevention(
 
 // ===== Helpers de Sucursales (multi-tenant) =====
 
-const DESKTOP_SIDEBAR = 'aside.hidden.md\\:flex';
-
-// El selector de sucursales se localiza por `data-testid`: antes el harness
+// El selector de sucursales se localiza por `data-testid`: el harness antes
 // dependía de clases de Tailwind (`aside ... p.truncate.flex-1`) que quedaron
 // obsoletas cuando el switcher se movió del sidebar al header, y los tests
 // agotaban el timeout sin poder interactuar.
 const TENANT_SWITCHER = '[data-testid="tenant-switcher"]';
+const TENANT_SWITCHER_NAME = '[data-testid="tenant-switcher-name"]';
+const TENANT_SWITCHER_DROPDOWN = '[data-testid="tenant-switcher-dropdown"]';
 const TENANT_SWITCHER_OPTION = '[data-testid="tenant-switcher-option"]';
+const TENANT_SWITCHER_ALL = '[data-testid="tenant-switcher-all"]';
 
 async function toggleTenantSwitcher(page: Page) {
   await page.locator(TENANT_SWITCHER).first().click();
 }
 
 /**
+ * Abre el desplegable del selector de sucursales y espera a que las opciones
+ * estén montadas.
+ */
+export async function openTenantSwitcher(page: Page) {
+  if (!(await page.locator(TENANT_SWITCHER_DROPDOWN).isVisible().catch(() => false))) {
+    await toggleTenantSwitcher(page);
+  }
+  await page.locator(TENANT_SWITCHER_DROPDOWN).waitFor({ state: 'visible', timeout: 10_000 });
+}
+
+/**
+ * Cierra el desplegable pulsando su overlay, si está abierto.
+ *
+ * El overlay es `fixed inset-0` y queda por encima del trigger, así que sin
+ * esto el clic siguiente sobre el switcher lo intercepta y el test expira.
+ */
+export async function closeTenantSwitcher(page: Page) {
+  const overlay = page.locator('.fixed.inset-0.z-10');
+  if (await overlay.first().isVisible().catch(() => false)) {
+    await overlay.first().click({ position: { x: 4, y: 4 }, force: true });
+    await page.locator(TENANT_SWITCHER_DROPDOWN).waitFor({ state: 'hidden', timeout: 10_000 });
+  }
+}
+
+/**
  * Nombre de la sucursal activa (label del selector de sucursales del header).
  */
 export async function getCurrentTenantName(page: Page): Promise<string> {
-  return ((await page.locator(TENANT_SWITCHER).first().textContent()) ?? '').trim();
+  return ((await page.locator(TENANT_SWITCHER_NAME).first().textContent()) ?? '').trim();
 }
 
 /**
  * Lista los nombres de todas las sucursales del usuario.
+ *
+ * Se lee el `span[title]` de cada opción y no el texto de la fila: la fila
+ * incluye el avatar con la inicial y el check de la activa, y el nombre
+ * quedaba pegado a la letra ("KKioscucho Ramos").
  */
 export async function getTenantNames(page: Page): Promise<string[]> {
-  await toggleTenantSwitcher(page);
-  const names = await page.locator(TENANT_SWITCHER_OPTION).allTextContents();
-  await page.locator('.fixed.inset-0').first().click({ position: { x: 30, y: 30 } }).catch(() => {});
+  await openTenantSwitcher(page);
+  const names = await page.locator(`${TENANT_SWITCHER_OPTION} span[title]`).allTextContents();
+  await closeTenantSwitcher(page);
   return names.map((n) => n.trim()).filter(Boolean);
 }
 
 /**
- * Cambia de sucursal desde el selector del sidebar y espera a que se aplique.
+ * Cambia de sucursal desde el selector del header y espera a que se aplique.
  */
 export async function switchTenantByName(page: Page, tenantName: string) {
   const current = await getCurrentTenantName(page);
   if (current === tenantName) return;
 
-  await toggleTenantSwitcher(page);
-  const btn = page.locator(DESKTOP_SIDEBAR).getByRole('button', { name: tenantName });
-  await btn.waitFor({ state: 'visible', timeout: 5_000 });
-  await btn.click();
+  await openTenantSwitcher(page);
 
-  await expect(
-    page.locator(`${DESKTOP_SIDEBAR} p.truncate.flex-1`).first()
-  ).toHaveText(tenantName, { timeout: 15_000 });
+  // El nombre vive en el <span title> de la opción, no en el texto de la fila:
+  // la fila incluye el avatar con la inicial y el check de la activa.
+  const option = page
+    .locator(TENANT_SWITCHER_OPTION)
+    .filter({ has: page.locator(`span[title="${tenantName}"]`) })
+    .first();
+  await option.waitFor({ state: 'visible', timeout: 10_000 });
+  await option.click();
+
+  // Tras cambiar de sucursal el desplegable se cierra solo.
+  await expect(page.locator(TENANT_SWITCHER_NAME).first()).toHaveText(tenantName, { timeout: 15_000 });
+}
+
+/**
+ * Si el desplegable ofrece la opción "Todas las sucursales".
+ *
+ * El componente la oculta cuando el usuario tiene una sola sucursal, porque no
+ * se puede seleccionar (no hay nada que agregar).
+ */
+export async function hasAllTenantsOption(page: Page): Promise<boolean> {
+  await openTenantSwitcher(page);
+  const visible = await page.locator(TENANT_SWITCHER_ALL).isVisible().catch(() => false);
+  await closeTenantSwitcher(page);
+  return visible;
+}
+
+/**
+ * Selecciona la vista agregada "Todas las sucursales".
+ */
+export async function selectAllTenants(page: Page) {
+  await openTenantSwitcher(page);
+  await page.locator(TENANT_SWITCHER_ALL).click();
+  await expect(page.locator(TENANT_SWITCHER_NAME).first()).toHaveText('Todas las sucursales', { timeout: 15_000 });
 }
 
 // ===== Helpers de Dashboard =====

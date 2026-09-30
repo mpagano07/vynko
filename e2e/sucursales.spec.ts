@@ -7,9 +7,12 @@ import {
   getCurrentTenantName,
   getTenantNames,
   switchTenantByName,
+  hasAllTenantsOption,
+  selectAllTenants,
   getDashboardTenantName,
   addProductToCart,
   getCartItem,
+  completeCheckout,
   getNewestSaleRowText,
   openSalesHistory,
   cleanupBranchProducts,
@@ -155,6 +158,9 @@ test.describe('Sucursales E2E', () => {
     await expect(cartItem).toBeVisible({ timeout: 10_000 });
 
     await page.getByRole('button', { name: 'Finalizar venta' }).click();
+    // "Finalizar venta" solo abre el checkout: la venta se registra recien al
+    // confirmar el cobro, asi que sin este paso no llega el toast.
+    await completeCheckout(page);
     await expect(page.locator('[role="status"]').filter({ hasText: 'Venta registrada exitosamente' }).first()).toBeVisible({ timeout: 15_000 });
 
     await page.goto('/sales');
@@ -237,19 +243,12 @@ test.describe('Sucursales E2E', () => {
   // ─── 7. "Todas las sucursales" ────────────────────────────
 
   test('todas las sucursales - muestra desglose por branch', async ({ authenticatedPage: page }) => {
-    // Seleccionar "Todas las sucursales" desde el sidebar
-    const DESKTOP_SIDEBAR = 'aside.hidden.md\\:flex';
-    await page.locator(`${DESKTOP_SIDEBAR} p.truncate.flex-1`).first().click();
-
-    const allBtn = page.locator(DESKTOP_SIDEBAR).getByRole('button', { name: 'Todas las sucursales' });
-    if (!(await allBtn.isVisible().catch(() => false))) {
+    // El switcher vive en el header, no en el sidebar.
+    if (!(await hasAllTenantsOption(page))) {
       test.skip(true, 'Opcion "Todas las sucursales" no disponible');
       return;
     }
-    await allBtn.click();
-
-    // Esperar a que el sidebar muestre "Todas las sucursales"
-    await expect(page.locator(`${DESKTOP_SIDEBAR} p.truncate.flex-1`).first()).toHaveText('Todas las sucursales', { timeout: 15_000 });
+    await selectAllTenants(page);
 
     // Dashboard: debe mostrar la tabla "Desglose por sucursal"
     await page.goto('/dashboard');
@@ -280,20 +279,25 @@ test.describe('Sucursales E2E', () => {
 
     await loginAsUser(page, E2E_NEW_USER_EMAIL, E2E_NEW_USER_PASSWORD);
 
-    const DESKTOP_SIDEBAR = 'aside.hidden.md\\:flex';
-    const sidebarVisible = await page.locator(`${DESKTOP_SIDEBAR} p.truncate.flex-1`).first().isVisible({ timeout: 10_000 }).catch(() => false);
-    if (!sidebarVisible) {
+    // El sidebar del usuario Starter puede no cargar (redirect a onboarding).
+    // Lo que importa es que el switcher exista y refleje una sola sucursal.
+    const switcherVisible = await page
+      .locator('[data-testid="tenant-switcher"]')
+      .first()
+      .isVisible({ timeout: 15_000 })
+      .catch(() => false);
+    if (!switcherVisible) {
       await context.close();
-      test.skip(true, 'El sidebar del usuario Starter no cargo (posible redirect a onboarding)');
+      test.skip(true, 'El switcher del usuario Starter no cargo (posible redirect a onboarding)');
       return;
     }
 
     const tenantNames = await getTenantNames(page);
     expect(tenantNames.length).toBe(1);
 
-    await page.locator(`${DESKTOP_SIDEBAR} p.truncate.flex-1`).first().click();
-    const allBtn = page.locator(DESKTOP_SIDEBAR).getByRole('button', { name: 'Todas las sucursales' });
-    await expect(allBtn).toHaveCount(0);
+    // Con una sola sucursal la vista agregada no se ofrece: no hay nada que
+    // agregar y el componente la oculta.
+    expect(await hasAllTenantsOption(page)).toBe(false);
 
     await context.close();
   });
