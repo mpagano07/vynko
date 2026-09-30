@@ -8,6 +8,7 @@ import { authFetch } from '@/lib/fetchWithTenant';
 import { IconAction } from '@/components/ui/icon-action';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
+import { cn } from '@/lib/utils/cn';
 import toast from 'react-hot-toast';
 
 export function TenantSwitcher() {
@@ -136,7 +137,20 @@ export function TenantSwitcher() {
               </button>
             )}
             {tenants.map((t) => (
-              <div key={t.id} data-testid="tenant-switcher-option" className="group flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+              <div
+                key={t.id}
+                data-testid="tenant-switcher-option"
+                className={cn(
+                  'group relative flex items-center gap-2 w-full pl-3 pr-8 py-1.5 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors',
+                  /* Todas las filas reservan el mismo `pr-8` para el lapiz
+                     absoluto, que siempre vive en `right-1.5`. Antes la fila
+                     activa corria el lapiz a `right-8` para no tapar el tilde,
+                     y el boton salia pegado al check en esa fila y al borde en
+                     las demas. Con el tilde eliminado el padding es uniforme y
+                     las dos cosas quedan siempre en el mismo lugar. */
+                  t.id === tenant?.id && 'bg-blue-50 dark:bg-blue-950/30'
+                )}
+              >
                 {renamingTenantId === t.id ? (
                   <form
                     onSubmit={(e) => { e.preventDefault(); handleRename(t.id); }}
@@ -172,17 +186,36 @@ export function TenantSwitcher() {
                       </div>
                       {/* Sin truncate: si el nombre no entra, baja de linea.
                           Los puntos suspensivos ocultaban el nombre real. */}
-                      <span className="min-w-0 flex-1 break-words text-left text-gray-800 dark:text-gray-200" title={t.name}>{t.name}</span>
+                      <span
+                        className={cn(
+                          'min-w-0 flex-1 break-words text-left',
+                          /* La sucursal activa se marca con negrita en vez de
+                             con un tilde: el tilde ocupaba ancho en el flujo y
+                             terminaba bajo el lapiz. */
+                          t.id === tenant?.id
+                            ? 'font-semibold text-blue-700 dark:text-blue-300'
+                            : 'text-gray-800 dark:text-gray-200'
+                        )}
+                        title={t.name}
+                      >
+                        {t.name}
+                      </span>
                     </button>
-                    {t.id === tenant?.id && (
-                      <Check className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                    )}
                     <IconAction
                       icon={Pencil}
                       label="Renombrar"
                       title="Renombrar"
                       size="xs"
-                      className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-transparent dark:hover:bg-transparent"
+                      /*
+                        El boton de renombrar solo existe en hover, asi que no
+                        puede reservar layout: con `flex-shrink-0` en el flujo
+                        dejaba 30px (boton + gap) vacios a la derecha de cada
+                        fila y el nombre de la sucursal se cortaba o bajaba de
+                        linea antes de tiempo. Va absoluto sobre un fondo del
+                        mismo color de la fila para tapar el nombre mientras
+                        esta el puntero encima.
+                      */
+                      className="absolute right-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-gray-400 hover:text-gray-600 dark:text-gray-300 hover:bg-transparent dark:hover:bg-transparent"
                       onClick={(e) => { e.stopPropagation(); setRenamingTenantId(t.id); setRenameValue(t.name); }}
                     />
                   </>
@@ -228,9 +261,23 @@ export function TenantSwitcher() {
                   <span>Nueva sucursal</span>
                 </button>
               ) : (
-                <div className="px-3 py-2 text-xs text-gray-500">
-                  Límite de {maxBranches} sucursal{maxBranches !== 1 ? 'es' : ''} alcanzado para tu plan ({currentPlan}).
-                  <Link href="/billing" className="text-blue-600 dark:text-blue-400 hover:underline ml-1">Mejorar plan</Link>
+                /*
+                  El panel mide con `w-max`, asi que el hijo mas ancho define su
+                  ancho. Este aviso aparece solo al llegar al limite del plan, y
+                  antes estiraba el desplegable de 205px a 352px de golpe (a
+                  partir de la 5a sucursal en business, que es su limite).
+
+                  Se acota el ancho para que el texto baje de linea en vez de
+                  ensanchar el panel, y se saca el nombre del plan de la frase:
+                  con el par "(business)" adelante todavia occupies tres renglones
+                  y el panel se volvia a abrir. El plan ya se ve en el boton del
+                  header, asi que acá es redundante.
+                */
+                <div className="w-[12.5rem] px-3 py-2 text-xs text-gray-500">
+                  Límite de {maxBranches} sucursal{maxBranches !== 1 ? 'es' : ''} alcanzado.{' '}
+                  <Link href="/billing" className="text-blue-600 dark:text-blue-400 hover:underline">
+                    Mejorar plan
+                  </Link>
                 </div>
               )}
             </div>
