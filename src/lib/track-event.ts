@@ -114,16 +114,23 @@ export async function trackAppReturn(params: {
       .limit(1)
       .maybeSingle();
 
-    if (last?.created_at) {
-      const hoursSince = (Date.now() - new Date(last.created_at).getTime()) / 3_600_000;
-      if (hoursSince < (params.hoursSinceLast ?? 24)) return;
-    }
+    // hoursSinceLast guarda HORAS, que es lo que dice la clave. Antes se
+    // guardaba last.created_at, o sea un timestamp, y el panel lo renderizaba
+    // como si fueran horas. El timestamp va aparte y con nombre propio.
+    const hoursSince = last?.created_at
+      ? (Date.now() - new Date(last.created_at).getTime()) / 3_600_000
+      : null;
+
+    if (hoursSince !== null && hoursSince < (params.hoursSinceLast ?? 24)) return;
 
     await trackEvent({
       type: 'app_return',
       userId: params.userId,
       tenantId: params.tenantId,
-      metadata: { hoursSinceLast: last?.created_at ?? null },
+      metadata: {
+        hoursSinceLast: hoursSince === null ? null : Math.round(hoursSince),
+        previousVisitAt: last?.created_at ?? null,
+      },
     });
   } catch (error) {
     console.error('[analytics] fallo inesperado en app_return:', error);

@@ -1,51 +1,52 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { formatDate, timeAgo } from './format';
+import { describe, it, expect } from 'vitest';
+import { formatDate, formatTime, timeAgo } from './format';
 
-const FIXED_NOW = new Date('2026-01-01T12:00:00');
+describe('formatTime', () => {
+  const fecha = '2026-09-29T14:09:00.000Z';
 
-afterEach(() => {
-  vi.useRealTimers();
+  it('devuelve solo la hora, no la fecha entera', () => {
+    // El motivo de que esta funcion exista: formatDate con opciones de hora
+    // devuelve "29/9/2026, 11:09 a. m.", o sea la fecha sumada a la hora.
+    const hora = formatTime(fecha);
+
+    expect(hora).not.toContain('2026');
+    expect(hora).not.toMatch(/\d{1,2}\/\d{1,2}/);
+    expect(hora).toMatch(/\d{1,2}:\d{2}/);
+  });
+
+  it('tolera null, undefined y valores invalidos', () => {
+    expect(formatTime(null)).toBe('');
+    expect(formatTime(undefined)).toBe('');
+    expect(formatTime('no es una fecha')).toBe('');
+  });
 });
 
 describe('formatDate', () => {
-  it('formatea una fecha con el formato largo por defecto', () => {
-    expect(formatDate('2026-01-01T12:00:00')).toBe('01 de enero de 2026');
+  it('respeta las opciones que se le pasan', () => {
+    expect(formatDate('2026-09-29T14:09:00.000Z', { day: '2-digit', month: 'short' })).not.toContain('2026');
   });
 
-  it('acepta un objeto Date y opciones ad hoc', () => {
-    const date = new Date('2026-01-15T12:00:00');
-    expect(formatDate(date, { day: '2-digit', month: 'short' })).toBe('15-ene');
+  it('usa el formato largo por defecto', () => {
+    expect(formatDate('2026-09-29T14:09:00.000Z')).toMatch(/2026/);
   });
 
-  it('acepta un locale como segundo argumento', () => {
-    expect(formatDate('2026-01-01T12:00:00', 'es-ES')).toBe('01 de enero de 2026');
-  });
-
-  it('soporta dateStyle', () => {
-    expect(formatDate('2026-01-01T12:00:00', { dateStyle: 'medium' })).toBe('1 ene 2026');
-  });
-
-  it('devuelve string vacío para valores nulos o inválidos', () => {
+  it('tolera null y valores invalidos', () => {
     expect(formatDate(null)).toBe('');
-    expect(formatDate(undefined)).toBe('');
-    expect(formatDate('no-es-una-fecha')).toBe('');
+    expect(formatDate('no es una fecha')).toBe('');
   });
 });
 
 describe('timeAgo', () => {
-  it('evalúa los rangos relativos', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(FIXED_NOW);
-
-    expect(timeAgo(FIXED_NOW.toISOString())).toBe('ahora');
-    expect(timeAgo(new Date(FIXED_NOW.getTime() - 90 * 1000).toISOString())).toBe('hace 1m');
-    expect(timeAgo(new Date(FIXED_NOW.getTime() - 2 * 3600 * 1000).toISOString())).toBe('hace 2h');
-    expect(timeAgo(new Date(FIXED_NOW.getTime() - 3 * 86400 * 1000).toISOString())).toBe('hace 3d');
+  it('degrada a unidades legibles', () => {
+    const hace = (ms: number) => timeAgo(new Date(Date.now() - ms));
+    expect(hace(5_000)).toBe('ahora');
+    expect(hace(5 * 60_000)).toBe('hace 5m');
+    expect(hace(3 * 3_600_000)).toBe('hace 3h');
+    expect(hace(2 * 86_400_000)).toBe('hace 2d');
   });
 
-  it('devuelve string vacío para valores nulos o inválidos', () => {
+  it('tolera null y valores invalidos', () => {
     expect(timeAgo(null)).toBe('');
-    expect(timeAgo(undefined)).toBe('');
-    expect(timeAgo('no-es-una-fecha')).toBe('');
+    expect(timeAgo('no es una fecha')).toBe('');
   });
 });

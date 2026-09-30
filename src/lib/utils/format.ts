@@ -18,6 +18,25 @@ export function formatDate(
   return date.toLocaleDateString(locale, options ?? LONG_DATE_OPTIONS);
 }
 
+/**
+ * Hora en formato corto, con la misma tolerancia a null que formatDate.
+ *
+ * No se puede hacer con formatDate: `toLocaleDateString` pedido con opciones
+ * de hora devuelve la fecha ENTERA sumada a la hora
+ * ("29/9/2026, 11:09 a. m."), no solo la hora. Por eso hace falta
+ * toLocaleTimeString explicitamente.
+ */
+export function formatTime(
+  value: string | Date | null | undefined,
+  options: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit' },
+  locale = 'es-AR'
+): string {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString(locale, options);
+}
+
 export function timeAgo(value: string | Date | null | undefined): string {
   if (!value) return '';
   const date = value instanceof Date ? value : new Date(value);
