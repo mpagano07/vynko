@@ -3,6 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Check, ChevronRight, X, Package, ShoppingCart, Bell, Users, EyeOff, ArrowRight } from 'lucide-react';
 import { IconAction } from '@/components/ui/icon-action';
+import { authFetch } from '@/lib/fetchWithTenant';
 import Link from 'next/link';
 
 interface OnboardingChecklistProps {
@@ -11,6 +12,7 @@ interface OnboardingChecklistProps {
   hasAlerts: boolean;
   hasPendingOrders: boolean;
   userId?: string;
+  dismissedAt?: string | null;
   loading?: boolean;
   fallback?: React.ReactNode;
 }
@@ -33,13 +35,33 @@ function readDismissed(key: string): boolean {
   } catch { return false; }
 }
 
-export default function OnboardingChecklist({ hasProducts, hasSales, hasAlerts, hasPendingOrders, userId, loading, fallback }: OnboardingChecklistProps) {
+/**
+ * La preferencia se guarda en la cuenta, no en este navegador. Antes vivía
+ * solo en localStorage, así que la misma persona veía el checklist en el
+ * celular y no en la PC según dónde había hecho clic en la X. Si el PATCH falla
+ * (por ejemplo offline) el estado local de la sesión sigue respetando lo que
+ * el usuario acaba de elegir.
+ */
+async function persistDismissed(dismissed: boolean): Promise<void> {
+  try {
+    await authFetch('/api/onboarding/checklist', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dismissed }),
+    });
+  } catch { /* la preferencia queda solo en este dispositivo */ }
+}
+
+export default function OnboardingChecklist({ hasProducts, hasSales, hasAlerts, hasPendingOrders, userId, dismissedAt, loading, fallback }: OnboardingChecklistProps) {
   const dismissKey = userId ? `${DISMISS_KEY}_${userId}` : null;
   const forceShowKey = userId ? `${FORCE_SHOW_KEY}_${userId}` : null;
 
   const [prevDismissKey, setPrevDismissKey] = useState<string | null>(dismissKey);
   const [prevForceShowKey, setPrevForceShowKey] = useState<string | null>(forceShowKey);
-  const [dismissed, setDismissed] = useState<boolean>(() => dismissKey ? readDismissed(dismissKey) : false);
+  const [prevDismissedAt, setPrevDismissedAt] = useState<string | null | undefined>(dismissedAt);
+  const [dismissed, setDismissed] = useState<boolean>(() =>
+    Boolean(dismissedAt) || (dismissKey ? readDismissed(dismissKey) : false)
+  );
   const [forceShow, setForceShow] = useState<boolean>(() => forceShowKey ? readDismissed(forceShowKey) : false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -51,6 +73,16 @@ export default function OnboardingChecklist({ hasProducts, hasSales, hasAlerts, 
   if (prevForceShowKey !== forceShowKey) {
     setPrevForceShowKey(forceShowKey);
     setForceShow(forceShowKey ? readDismissed(forceShowKey) : false);
+  }
+  // El flag del servidor es la fuente de verdad: si algún dispositivo lo dejó
+  // puesto, se oculta en todos. Solo se fuerza el "oculto"; un flag vacío en la
+  // base no deshace un clic local que todavía no llegó a la base.
+  if (prevDismissedAt !== dismissedAt) {
+    setPrevDismissedAt(dismissedAt);
+    if (dismissedAt) {
+      setDismissed(true);
+      setForceShow(false);
+    }
   }
 
   useEffect(() => {
@@ -117,6 +149,7 @@ export default function OnboardingChecklist({ hasProducts, hasSales, hasAlerts, 
     setConfirmOpen(false);
     setDismissed(true);
     setForceShow(false);
+    void persistDismissed(true);
     try {
       if (dismissKey) localStorage.setItem(dismissKey, 'true');
       if (forceShowKey) localStorage.removeItem(forceShowKey);

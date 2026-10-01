@@ -26,6 +26,7 @@ export interface UserProfile {
   full_name: string;
   avatar_url?: string;
   is_admin?: boolean;
+  onboarding_checklist_dismissed_at?: string | null;
 }
 
 export interface TenantInfo {

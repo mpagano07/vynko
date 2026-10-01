@@ -1137,6 +1137,17 @@ export default function SettingsPage() {
                     try {
                       localStorage.setItem(`vynko_onboarding_force_show_${user!.id}`, 'true');
                     } catch { /* noop */ }
+                    // Se limpia tambien en la cuenta: si solo se tocara el
+                    // localStorage, la guia reapareceria en el otro dispositivo.
+                    void (async () => {
+                      try {
+                        await authFetch('/api/onboarding/checklist', {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ dismissed: false }),
+                        });
+                      } catch { /* la preferencia queda solo en este dispositivo */ }
+                    })();
                     toast.success('Guía reactivada. Volvé al dashboard.');
                   }}
                 >
