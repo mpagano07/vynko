@@ -4,10 +4,13 @@ import { createActivityLog } from '@/lib/activity-log';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import { validatePrice, validateProduct, validateStock } from '@/lib/product-validation';
+import { normalizeForSearch } from '@/lib/utils/text';
 import { adjustStock, buildStockMovement } from '@/lib/stock';
 import { isAllowedImagePath, signProductImageUrls } from '@/lib/upload-service';
 import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
 import { trackEvent } from '@/lib/track-event';
+import { rateLimit } from '@/lib/rate-limit';
+import { MAX_IMPORT_ROWS } from '@/lib/excel-import-parse';
 
 export type ListProductsResult =
   | { ok: true; products: Array<Record<string, unknown>> }
@@ -41,7 +44,7 @@ export interface ImportSummary {
 
 export type ImportProductsResult =
   | { ok: true; body: { results: ImportRowResult[]; summary: ImportSummary } }
-  | { ok: false; error: string; status: 400 | 403 };
+  | { ok: false; error: string; status: 400 | 403 | 413 | 429 | 500 };
 
 export type AdjustProductStockResult =
   | {
@@ -437,27 +440,59 @@ const CATEGORY_COLOR_PALETTE = [
   '#f43f5e', '#0ea5e9', '#84cc16', '#d946ef', '#10b981',
 ];
 
-async function resolveCategory(tenantId: string, name: string): Promise<string | null> {
-  if (!name?.trim()) return null;
+/**
+ * Estado de las categorías de un import, cargado una sola vez.
+ *
+ * Antes cada fila hacía hasta dos queries de `categories` (una `ilike` para
+ * buscar y otra para los colores), así que 2000 filas con categoría eran 4000
+ * consultas. Peor: `ilike` en Postgres NO ignora acentos, así que "Almacen" y
+ * "Almacén" creaban dos categorías distintas, y como `UNIQUE(tenant_id, name)`
+ * también es case-sensitive, dos filas del mismo archivo con "Bebidas" y
+ * "bebidas" convivían sin que el `maybeSingle()` fallara pero tampoco sin
+ * fusionarse. Comparar en memoria con `normalizeForSearch` cierra los dos
+ * problemas de una: sin acentos, sin case, y sin query por fila.
+ */
+interface CategoryResolver {
+  byKey: Map<string, string>;
+  usedColors: Set<string>;
+}
 
-  const { data: existing } = await supabaseAdmin
+/** Clave de comparación: sin acentos, sin mayúsculas, espacios colapsados. */
+function categoryKey(name: string): string {
+  return normalizeForSearch(name.trim()).replace(/\s+/g, ' ');
+}
+
+async function loadCategoryResolver(tenantId: string): Promise<CategoryResolver> {
+  const { data } = await supabaseAdmin
     .from('categories')
-    .select('id')
-    .eq('tenant_id', tenantId)
-    .ilike('name', name.trim())
-    .maybeSingle();
+    .select('id, name, color')
+    .eq('tenant_id', tenantId);
 
-  if (existing) return existing.id;
+  const byKey = new Map<string, string>();
+  const usedColors = new Set<string>();
+  for (const row of (Array.isArray(data) ? data : [])) {
+    const key = categoryKey(String(row.name ?? ''));
+    if (key && !byKey.has(key)) byKey.set(key, String(row.id));
+    const color = (row as Record<string, unknown>).color;
+    if (color) usedColors.add(String(color));
+  }
+  return { byKey, usedColors };
+}
 
-  const { data: existingColors } = await supabaseAdmin
-    .from('categories')
-    .select('color')
-    .eq('tenant_id', tenantId)
-    .not('color', 'is', null);
+async function resolveCategory(
+  tenantId: string,
+  name: string,
+  state: CategoryResolver
+): Promise<string | null> {
+  const key = categoryKey(name);
+  if (!key) return null;
 
-  const usedColors = new Set((existingColors ?? []).map((c) => c.color as string));
-  const color = CATEGORY_COLOR_PALETTE.find((c) => !usedColors.has(c))
-    ?? CATEGORY_COLOR_PALETTE[usedColors.size % CATEGORY_COLOR_PALETTE.length];
+  const found = state.byKey.get(key);
+  if (found) return found;
+
+  const color =
+    CATEGORY_COLOR_PALETTE.find((c) => !state.usedColors.has(c)) ??
+    CATEGORY_COLOR_PALETTE[state.usedColors.size % CATEGORY_COLOR_PALETTE.length];
 
   const { data: created, error } = await supabaseAdmin
     .from('categories')
@@ -465,24 +500,268 @@ async function resolveCategory(tenantId: string, name: string): Promise<string |
     .select('id')
     .single();
 
-  if (error || !created) return null;
-  return created.id;
+  // Se exige el id y no solo "no hubo error": una respuesta sin id (o con un
+  // id no string) terminaba guardando el texto "undefined" en la FK del
+  // producto, que es un error de datos silencioso y no una categoria creada.
+  const createdId = created?.id;
+  if (error || !createdId) {
+    console.error('importProducts: no se pudo crear la categoría', name.trim(), JSON.stringify(error));
+    return null;
+  }
+  // Se guarda en el indice para que las filas siguientes del mismo archivo
+  // reutilicen la categoria en vez de crear una copia por fila.
+  state.byKey.set(key, String(createdId));
+  if (color) state.usedColors.add(color);
+  return String(createdId);
 }
 
 const IMPORT_ALLOWED_FIELDS = ['sku', 'barcode', 'name', 'description', 'cost', 'image_url', 'metadata'];
 
-export async function importProducts(
+/** Tamaño de los lotes de `.in()`: la lista viaja en el query string del request. */
+export const LOOKUP_CHUNK = 200;
+
+/** Filas por lote de escritura: una fila con 3 inserts son 6000 round trips a 2000 filas. */
+export const WRITE_CHUNK = 100;
+/** Fila que ya paso las validaciones y esta lista para escribirse. */
+interface ValidatedRow {
+  index: number;
+  row: number;
+  name: string;
+  productData: Record<string, unknown>;
+  stock: number;
+  minStock: number;
+  maxStock: number;
+  deposito: string | null;
+  pasillo: string | null;
+  estanteria: string | null;
+  hasStock: boolean;
+  hasMinStock: boolean;
+  hasMaxStock: boolean;
+  hasLocation: boolean;
+  categoryName: string;
+}
+
+/**
+ * Busca en bloque los productos de este tenant que ya tienen alguno de los
+ * valores dados y devuelve un mapa `valor -> id`.
+ *
+ * Antes esto era una query por fila y por campo (hasta dos por fila, o sea
+ * 4000 consultas para un archivo de 2000 filas). El filtro por
+ * `product_stock.tenant_id` es lo que mantiene el scope: `products` es global y
+ * un SKU de otro tenant no tiene que resolver aca.
+ */
+async function findProductIdsByField(
+  tenantId: string,
+  field: 'sku' | 'barcode',
+  values: string[]
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const unique = Array.from(new Set(values.filter((v) => v !== '')));
+  for (let i = 0; i < unique.length; i += LOOKUP_CHUNK) {
+    const chunk = unique.slice(i, i + LOOKUP_CHUNK);
+    const { data } = await supabaseAdmin
+      .from('products')
+      .select(`id, ${field}, product_stock!inner(tenant_id)`)
+      .in(field, chunk)
+      .eq('product_stock.tenant_id', tenantId);
+    for (const row of Array.isArray(data) ? data : []) {
+      const record = row as Record<string, unknown>;
+      const key = String(record[field] ?? '');
+      if (key && !map.has(key)) map.set(key, String(record.id));
+    }
+  }
+  return map;
+}
+
+export interface ImportProgress {
+  processed: number;
+  total: number;
+  created: number;
+  updated: number;
+  skipped: number;
+}
+
+export type ImportProgressCallback = (progress: ImportProgress) => void;
+
+type ImportGuardFailure = { ok: false; error: string; status: 400 | 403 | 413 | 429 | 500 };
+
+/**
+ * Import validado y resuelto contra la base, listo para escribir.
+ *
+ * `prepareImport` hace todo lo que NO escribe: valida las filas, resuelve los
+ * SKU/códigos existentes (en bloque) y carga el catálogo de categorías. Separar
+ * esto de `execute` es lo que permite que la ruta HTTP decida el status antes de
+ * empezar a streamear: si una guarda falla, todavía se puede responder un JSON
+ * con 4xx/5xx en vez de un stream cortado a medias.
+ */
+export type PreparedImport =
+  | ImportGuardFailure
+  | {
+      ok: true;
+      total: number;
+      execute: (
+        onProgress?: ImportProgressCallback
+      ) => Promise<{ results: ImportRowResult[]; summary: ImportSummary }>;
+    };
+
+export async function prepareImport(
   auth: AuthInfo,
   products: Record<string, unknown>[] | undefined
-): Promise<ImportProductsResult> {
+): Promise<PreparedImport> {
   if (!Array.isArray(products) || products.length === 0) {
     return { ok: false, error: 'No products provided', status: 400 };
+  }
+
+  // El tope vive en el servidor y no en el archivo: el cliente valida el
+  // mismo numero para no gastar la maquina del usuario, pero el request llega
+  // armado a mano y el limite que protege la base es este.
+  if (products.length > MAX_IMPORT_ROWS) {
+    return {
+      ok: false,
+      error: `La importación acepta hasta ${MAX_IMPORT_ROWS} filas por vez (enviaste ${products.length}).`,
+      status: 413,
+    };
+  }
+
+  // Cada import son miles de escrituras sobre el catalogo global. Sin este
+  // limite, un bucle con el token de un owner llena la base y se lleva puesto
+  // el rate limit por costo de base de datos. Se cuentan tenant y usuario como
+  // en la subida de imagenes: el tenant frena el consumo agregado y el usuario
+  // el reintento desde varias sesiones.
+  const tenantLimit = await rateLimit(`import:tenant:${auth.tenantId}`, 30, 60 * 60 * 1000);
+  if (!tenantLimit.ok) {
+    return { ok: false, error: 'Límite de importaciones alcanzado. Probá de nuevo más tarde.', status: 429 };
+  }
+  const userLimit = await rateLimit(`import:user:${auth.userId}`, 10, 60 * 60 * 1000);
+  if (!userLimit.ok) {
+    return { ok: false, error: 'Límite de importaciones alcanzado. Probá de nuevo más tarde.', status: 429 };
   }
 
   // La importación crea filas en `products` (global) y actualiza las que ya
   // existen para este tenant: es una escritura sobre el catálogo compartido.
   const managerCheck = await requireCatalogManager(auth);
   if (!managerCheck.ok) return { ok: false, error: managerCheck.error, status: 403 };
+
+  // Un resultado por fila, indexado por posición. Se llena a medida que cada
+  // fila se resuelve (validación, límite de plan o escritura) para que
+  // `results.length === products.length` siempre y el número de fila del
+  // reporte siga coincidiendo con el del archivo.
+  const slots: (ImportRowResult | null)[] = new Array(products.length).fill(null);
+
+  // ── Fase 1: validar TODAS las filas sin tocar la base ────────────────────
+  //
+  // El import no es transaccional: no hay `db.transaction()` ni una función de
+  // Postgres detrás. Lo único que se puede garantizar sin eso es que un archivo
+  // con errores de datos no escriba nada: se valida todo primero y recién
+  // después se escribe. Antes, un precio inválido en la fila 437 se descubría
+  // con las 436 anteriores ya escritas.
+  const candidates: ValidatedRow[] = [];
+  for (let i = 0; i < products.length; i++) {
+    const row = products[i] ?? {};
+    const rowNumber = i + 1;
+    const name = String(row.name ?? '');
+
+    if (!name.trim()) {
+      slots[i] = { row: rowNumber, status: 'skipped', error: 'Nombre requerido' };
+      continue;
+    }
+
+    const hasPrice = row.price !== undefined && row.price !== null && row.price !== '';
+    const priceError = hasPrice ? validatePrice(row.price) : null;
+    if (priceError) {
+      slots[i] = { row: rowNumber, status: 'skipped', name, error: priceError };
+      continue;
+    }
+
+    if (row.cost !== undefined && row.cost !== null && row.cost !== '') {
+      const cost = Number(row.cost);
+      if (Number.isNaN(cost) || cost < 0) {
+        slots[i] = { row: rowNumber, status: 'skipped', name, error: 'El costo debe ser un número no negativo' };
+        continue;
+      }
+    }
+
+    let stockValidationError: string | null = null;
+    for (const field of ['stock', 'min_stock', 'max_stock'] as const) {
+      const stockFieldError = validateStock(row[field]);
+      if (stockFieldError) {
+        stockValidationError = stockFieldError;
+        break;
+      }
+    }
+    if (stockValidationError) {
+      slots[i] = { row: rowNumber, status: 'skipped', name, error: stockValidationError };
+      continue;
+    }
+
+    const productData: Record<string, unknown> = {};
+    // La API es publica y `price` puede llegar como '' o null desde cualquier
+    // cliente. Sin este chequeo un precio en blanco se guardaba como
+    // price_cents = 0: poner el precio del producto en cero sin que nadie lo
+    // haya pedido en la planilla.
+    if (hasPrice) {
+      const priceValue = Number(row.price);
+      if (Number.isFinite(priceValue)) productData.price_cents = Math.round(priceValue * 100);
+    }
+    for (const key of IMPORT_ALLOWED_FIELDS) {
+      if (row[key] !== undefined && row[key] !== null && row[key] !== '') productData[key] = row[key];
+    }
+
+    // Una celda de stock vacía significa "no informar", no "dejar en cero". En
+    // una actualización se conserva el valor que ya tiene el producto; en un
+    // alta nueva arranca en 0.
+    const hasStock = row.stock !== undefined && row.stock !== null && row.stock !== '';
+    const hasMinStock = row.min_stock !== undefined && row.min_stock !== null && row.min_stock !== '';
+    const hasMaxStock = row.max_stock !== undefined && row.max_stock !== null && row.max_stock !== '';
+    const hasLocation =
+      row.deposito !== undefined || row.pasillo !== undefined || row.estanteria !== undefined;
+
+    candidates.push({
+      index: i,
+      row: rowNumber,
+      name,
+      productData,
+      stock: Number(row.stock) || 0,
+      minStock: Number(row.min_stock) || 0,
+      maxStock: Number(row.max_stock) || 0,
+      deposito: String(row.deposito ?? '').trim() || null,
+      pasillo: String(row.pasillo ?? '').trim() || null,
+      estanteria: String(row.estanteria ?? '').trim() || null,
+      hasStock,
+      hasMinStock,
+      hasMaxStock,
+      hasLocation,
+      categoryName: String(row.category_name ?? ''),
+    });
+  }
+
+  // ── Fase 2: resolver contra la base, todo lectura ────────────────────────
+  const existingBySku = new Map<string, string>();
+  const existingByBarcode = new Map<string, string>();
+  let categories: CategoryResolver;
+  try {
+    const bySku = await findProductIdsByField(
+      auth.tenantId,
+      'sku',
+      candidates.map((c) => String(c.productData.sku ?? ''))
+    );
+    const byBarcode = await findProductIdsByField(
+      auth.tenantId,
+      'barcode',
+      candidates.map((c) => String(c.productData.barcode ?? ''))
+    );
+    for (const [key, id] of bySku) existingBySku.set(key, id);
+    for (const [key, id] of byBarcode) existingByBarcode.set(key, id);
+    // Una sola lectura del catálogo de categorías para todo el archivo. Las
+    // filas con categoría nueva van creando las suyas sobre este estado, así
+    // que el total de queries de `categories` queda en 1 + nuevas.
+    categories = await loadCategoryResolver(auth.tenantId);
+  } catch (error) {
+    // Si una lectura falla, todavía no se escribió nada: es el mejor momento
+    // para abortar el import entero en vez de seguir a medias.
+    console.error('importProducts: fallo una lectura previa', error);
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
+  }
 
   const { data: tenantRow } = await supabaseAdmin
     .from('tenants')
@@ -502,201 +781,306 @@ export async function importProducts(
     productCount = count ?? 0;
   }
 
-  const results: ImportRowResult[] = [];
+  const total = products.length;
 
-  for (let i = 0; i < products.length; i++) {
-    const row = products[i];
-    try {
-      const name = String(row.name ?? '');
-      if (!name.trim()) {
-        results.push({ row: i + 1, status: 'skipped', error: 'Nombre requerido' });
-        continue;
+  // ── Fase 3: escribir ─────────────────────────────────────────────────────
+  //
+  // Los mapas de existentes se siguen actualizando acá: cuando una fila crea un
+  // producto, su SKU/código queda registrado para que la próxima fila del MISMO
+  // archivo con ese SKU lo actualice en vez de duplicarlo.
+  //
+  // `onProgress` se llama después de resolver cada fila con los contadores
+  // acumulados. La ruta lo usa para streamear "X de N" al cliente. La primera
+  // llamada ya incluye las filas que la Fase 1 descartó por datos inválidos,
+  // que no aparecen en `candidates`.
+const execute = async (onProgress?: ImportProgressCallback) => {
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+    for (const slot of slots) {
+      if (!slot) continue;
+      if (slot.status === 'created') created++;
+      else if (slot.status === 'updated') updated++;
+      else skipped++;
+    }
+    let processed = skipped;
+    const emit = () => onProgress?.({ processed, total, created, updated, skipped });
+
+    // ── Plan: decidir qué filas son alta y cuáles actualización ─────────────
+    // El id lo genera el servidor con `randomUUID()` y se anota en los mapas
+    // ANTES de escribir. Así un SKU repetido dentro del mismo archivo resuelve
+    // contra la fila anterior sin esperar a que la anterior esté escrita, y el
+    // `products` se puede mandar en un lote sin depender del id que devuelve la
+    // base (que es lo que permitía atribuir un error a una fila concreta).
+    const toCreate: { candidate: ValidatedRow; id: string }[] = [];
+    const toUpdate: { candidate: ValidatedRow; id: string }[] = [];
+
+    for (const candidate of candidates) {
+      if (candidate.categoryName.trim()) {
+        const categoryId = await resolveCategory(auth.tenantId, candidate.categoryName, categories);
+        if (categoryId) candidate.productData.category_id = categoryId;
       }
 
-      const priceError = (row.price !== undefined && row.price !== null && row.price !== '') ? validatePrice(row.price) : null;
-      if (priceError) {
-        results.push({ row: i + 1, status: 'skipped', name, error: priceError });
-        continue;
+      let existingId: string | undefined;
+      if (candidate.productData.sku) {
+        existingId = existingBySku.get(String(candidate.productData.sku));
       }
-      if (row.cost !== undefined && row.cost !== null && row.cost !== '') {
-        const cost = Number(row.cost);
-        if (Number.isNaN(cost) || cost < 0) {
-          results.push({ row: i + 1, status: 'skipped', name, error: 'El costo debe ser un número no negativo' });
-          continue;
-        }
-      }
-      let stockValidationError: string | null = null;
-      for (const field of ['stock', 'min_stock', 'max_stock'] as const) {
-        const stockFieldError = validateStock(row[field]);
-        if (stockFieldError) {
-          stockValidationError = stockFieldError;
-          break;
-        }
-      }
-      if (stockValidationError) {
-        results.push({ row: i + 1, status: 'skipped', name, error: stockValidationError });
-        continue;
-      }
-
-      const upsertData: Record<string, unknown> = {};
-      if (row.price !== undefined) upsertData.price_cents = Math.round(Number(row.price) * 100);
-      for (const key of IMPORT_ALLOWED_FIELDS) {
-        if (row[key] !== undefined && row[key] !== null && row[key] !== '') upsertData[key] = row[key];
-      }
-
-      const stock = Number(row.stock) || 0;
-      const min_stock = Number(row.min_stock) || 0;
-      const max_stock = Number(row.max_stock) || 0;
-      const hasLocation = row.deposito !== undefined || row.pasillo !== undefined || row.estanteria !== undefined;
-      const deposito = String(row.deposito ?? '').trim() || null;
-      const pasillo = String(row.pasillo ?? '').trim() || null;
-      const estanteria = String(row.estanteria ?? '').trim() || null;
-
-      const categoryName = String(row.category_name ?? '');
-      if (categoryName.trim()) {
-        const categoryId = await resolveCategory(auth.tenantId, categoryName);
-        if (categoryId) upsertData.category_id = categoryId;
-      }
-
-      let existingId: string | null = null;
-
-      if (row.sku) {
-        const { data: existing } = await supabaseAdmin
-          .from('products')
-          .select('id, product_stock!inner(tenant_id)')
-          .eq('sku', row.sku)
-          .eq('product_stock.tenant_id', auth.tenantId)
-          .maybeSingle();
-        if (existing) existingId = existing.id;
-      }
-
-      if (!existingId && row.barcode) {
-        const { data: existing } = await supabaseAdmin
-          .from('products')
-          .select('id, product_stock!inner(tenant_id)')
-          .eq('barcode', row.barcode)
-          .eq('product_stock.tenant_id', auth.tenantId)
-          .maybeSingle();
-        if (existing) existingId = existing.id;
+      if (!existingId && candidate.productData.barcode) {
+        existingId = existingByBarcode.get(String(candidate.productData.barcode));
       }
 
       if (existingId) {
-        upsertData.updated_at = new Date().toISOString();
-        const { error } = await supabaseAdmin
-          .from('products')
-          .update(upsertData)
-          .eq('id', existingId);
-
-        if (error) {
-          results.push({ row: i + 1, status: 'skipped', name, error: 'Error al importar la fila' });
-        } else {
-          const stockUpdate: Record<string, unknown> = { product_id: existingId, tenant_id: auth.tenantId, stock, min_stock, max_stock, active: true, updated_at: new Date().toISOString() };
-          if (hasLocation) stockUpdate.deposito = deposito;
-          if (hasLocation) stockUpdate.pasillo = pasillo;
-          if (hasLocation) stockUpdate.estanteria = estanteria;
-
-          const { data: prevStockRow } = await supabaseAdmin
-            .from('product_stock')
-            .select('stock')
-            .eq('product_id', existingId)
-            .eq('tenant_id', auth.tenantId)
-            .maybeSingle();
-          const previousStock = Number((prevStockRow as Record<string, unknown> | null)?.stock) || 0;
-
-          await supabaseAdmin
-            .from('product_stock')
-            .upsert(stockUpdate, { onConflict: 'product_id,tenant_id' });
-
-          const delta = stock - previousStock;
-          if (delta !== 0) {
-            const movement = buildStockMovement({
-              tenantId: auth.tenantId,
-              productId: existingId,
-              quantity: delta,
-              type: 'adjustment',
-              reason: 'Importación de productos',
-              createdBy: auth.userId,
-            });
-            const { error: histError } = await supabaseAdmin
-              .from('stock_history')
-              .insert(movement);
-            if (histError) {
-              console.error('stock_history insert error:', JSON.stringify(histError));
-            }
-          }
-          results.push({ row: i + 1, status: 'updated', name });
-        }
+        toUpdate.push({ candidate, id: existingId });
+      } else if (productCount !== null && productCount >= maxProducts) {
+        slots[candidate.index] = {
+          row: candidate.row,
+          status: 'skipped',
+          name: candidate.name,
+          error: 'Límite de productos alcanzado para tu plan',
+        };
+        skipped++;
+        processed++;
       } else {
-        if (productCount !== null) {
-          if (productCount >= maxProducts) {
-            results.push({ row: i + 1, status: 'skipped', name, error: 'Límite de productos alcanzado para tu plan' });
-            continue;
-          }
-          productCount++;
-        }
-
-        const { data: created, error } = await supabaseAdmin
-          .from('products')
-          .insert(upsertData)
-          .select('id')
-          .single();
-
-        if (error) {
-          results.push({ row: i + 1, status: 'skipped', name, error: 'Error al importar la fila' });
-        } else if (created) {
-          await supabaseAdmin
-            .from('product_stock')
-            .insert({ product_id: created.id, tenant_id: auth.tenantId, stock, min_stock, max_stock, deposito, pasillo, estanteria });
-
-          if (stock !== 0) {
-            const movement = buildStockMovement({
-              tenantId: auth.tenantId,
-              productId: created.id,
-              quantity: stock,
-              type: 'in',
-              reason: 'Importación de productos',
-              createdBy: auth.userId,
-            });
-            const { error: histError } = await supabaseAdmin
-              .from('stock_history')
-              .insert(movement);
-            if (histError) {
-              console.error('stock_history insert error:', JSON.stringify(histError));
-            }
-          }
-          results.push({ row: i + 1, status: 'created', name });
+        if (productCount !== null) productCount++;
+        const id = globalThis.crypto.randomUUID();
+        toCreate.push({ candidate, id });
+        if (candidate.productData.sku) existingBySku.set(String(candidate.productData.sku), id);
+        if (candidate.productData.barcode) {
+          existingByBarcode.set(String(candidate.productData.barcode), id);
         }
       }
-    } catch {
-      results.push({ row: i + 1, status: 'skipped', error: 'Error al importar la fila' });
     }
+
+    emit();
+    const now = new Date().toISOString();
+
+    // ── Altas: productos, stock e historial en lotes ────────────────────────
+    // Tres escrituras por fila son 6000 round trips para un archivo de 2000
+    // filas, que es justo lo que hace caer el timeout de la función. Con el id
+    // generado acá, las tres van en lote. Si un lote se cae se reintenta fila
+    // por fila, para no perder el detalle de error de cada una.
+    for (let start = 0; start < toCreate.length; start += WRITE_CHUNK) {
+      const chunk = toCreate.slice(start, start + WRITE_CHUNK);
+      const rows = chunk.map((item) => ({ id: item.id, ...item.candidate.productData }));
+
+      let saved = chunk;
+      const { error } = await supabaseAdmin.from('products').insert(rows);
+      if (error) {
+        saved = [];
+        for (const item of chunk) {
+          const { error: rowError } = await supabaseAdmin
+            .from('products')
+            .insert({ id: item.id, ...item.candidate.productData });
+          if (rowError) {
+            console.error('importProducts fila', item.candidate.row, 'error de base:', JSON.stringify(rowError));
+            slots[item.candidate.index] = {
+              row: item.candidate.row,
+              status: 'skipped',
+              name: item.candidate.name,
+              error: 'Error al importar la fila',
+            };
+            skipped++;
+            processed++;
+            emit();
+          } else {
+            saved.push(item);
+          }
+        }
+      }
+
+      if (saved.length > 0) {
+        const { error: stockError } = await supabaseAdmin.from('product_stock').insert(
+          saved.map((item) => ({
+            product_id: item.id,
+            tenant_id: auth.tenantId,
+            stock: item.candidate.stock,
+            min_stock: item.candidate.minStock,
+            max_stock: item.candidate.maxStock,
+            deposito: item.candidate.deposito,
+            pasillo: item.candidate.pasillo,
+            estanteria: item.candidate.estanteria,
+          })),
+        );
+        if (stockError) {
+          console.error('importProducts: fallo el stock de un lote', JSON.stringify(stockError));
+        }
+
+        // Un `buildStockMovement` que tira (un bug de código, no un dato) deja
+        // su fila como omitida sin frenar el resto del lote.
+        const movements: ReturnType<typeof buildStockMovement>[] = [];
+        const createdItems: typeof saved = [];
+        for (const item of saved) {
+          if (item.candidate.stock !== 0) {
+            try {
+              movements.push(
+                buildStockMovement({
+                  tenantId: auth.tenantId,
+                  productId: item.id,
+                  quantity: item.candidate.stock,
+                  type: 'in',
+                  reason: 'Importación de productos',
+                  createdBy: auth.userId,
+                }),
+              );
+            } catch (err) {
+              console.error('importProducts fila', item.candidate.row, 'error:', err);
+              slots[item.candidate.index] = {
+                row: item.candidate.row,
+                status: 'skipped',
+                name: item.candidate.name,
+                error: 'Error al importar la fila',
+              };
+              skipped++;
+              processed++;
+              emit();
+              continue;
+            }
+          }
+          createdItems.push(item);
+        }
+        if (movements.length > 0) {
+          const { error: historyError } = await supabaseAdmin.from('stock_history').insert(movements);
+          if (historyError) {
+            console.error('importProducts: fallo el historial de un lote', JSON.stringify(historyError));
+          }
+        }
+        saved = createdItems;
+      }
+
+      for (const item of saved) {
+        slots[item.candidate.index] = {
+          row: item.candidate.row,
+          status: 'created',
+          name: item.candidate.name,
+        };
+        created++;
+        processed++;
+        emit();
+      }
+    }
+
+    // ── Actualizaciones: fila por fila ──────────────────────────────────────
+    // Una actualización necesita el stock anterior de esa misma fila para
+    // calcular el delta, así que este camino no se lotea: solo aparece en un
+    // reimport, donde el volumen es mucho menor que el del alta inicial.
+    for (const item of toUpdate) {
+      const candidate = item.candidate;
+      candidate.productData.updated_at = now;
+      const { error } = await supabaseAdmin
+        .from('products')
+        .update(candidate.productData)
+        .eq('id', item.id);
+
+      if (error) {
+        console.error('importProducts fila', candidate.row, 'error de base:', JSON.stringify(error));
+        slots[candidate.index] = {
+          row: candidate.row,
+          status: 'skipped',
+          name: candidate.name,
+          error: 'Error al importar la fila',
+        };
+        skipped++;
+      } else {
+        const { data: prevStockRow } = await supabaseAdmin
+          .from('product_stock')
+          .select('stock, min_stock, max_stock')
+          .eq('product_id', item.id)
+          .eq('tenant_id', auth.tenantId)
+          .maybeSingle();
+        const prev = (prevStockRow ?? {}) as Record<string, unknown>;
+        const previousStock = Number(prev.stock) || 0;
+
+        const nextStock = candidate.hasStock ? candidate.stock : previousStock;
+        const stockUpdate: Record<string, unknown> = {
+          product_id: item.id,
+          tenant_id: auth.tenantId,
+          stock: nextStock,
+          min_stock: numberOr(prev.min_stock, candidate.hasMinStock, candidate.minStock),
+          max_stock: numberOr(prev.max_stock, candidate.hasMaxStock, candidate.maxStock),
+          active: true,
+          updated_at: now,
+        };
+        if (candidate.hasLocation) {
+          stockUpdate.deposito = candidate.deposito;
+          stockUpdate.pasillo = candidate.pasillo;
+          stockUpdate.estanteria = candidate.estanteria;
+        }
+
+        await supabaseAdmin
+          .from('product_stock')
+          .upsert(stockUpdate, { onConflict: 'product_id,tenant_id' });
+
+        const delta = nextStock - previousStock;
+        if (delta !== 0) {
+          await insertStockMovement(auth, item.id, delta, 'adjustment');
+        }
+        slots[candidate.index] = { row: candidate.row, status: 'updated', name: candidate.name };
+        updated++;
+      }
+      processed++;
+      emit();
+    }
+
+    const results = slots.filter((r): r is ImportRowResult => r !== null);
+
+    await createActivityLog({
+      tenantId: auth.tenantId,
+      userId: auth.userId,
+      action: 'imported',
+      entityType: 'import',
+      details: { created, updated, skipped, total },
+    });
+
+    // Se graba aunque el import no haya creado nada (created = 0): la intención
+    // de cargar catálogo en volumen es la señal que se quiere medir, y un import
+    // que falla entero por formato es justamente el caso donde hace falta saber
+    // que lo intentaron. Los contadores viajan en el metadata para poder separar
+    // el import útil del fallido.
+    await trackEvent({
+      type: 'excel_import',
+      userId: auth.userId,
+      tenantId: auth.tenantId,
+      metadata: { created, updated, skipped, total },
+    });
+
+    return { results, summary: { created, updated, skipped, total } };
+  };
+  return { ok: true, total, execute };
+}
+
+export async function importProducts(
+  auth: AuthInfo,
+  products: Record<string, unknown>[] | undefined
+): Promise<ImportProductsResult> {
+  const prepared = await prepareImport(auth, products);
+  if (!prepared.ok) return prepared;
+  const body = await prepared.execute();
+  return { ok: true, body };
+}
+
+/** Devuelve el valor nuevo si la fila lo traía, o el que ya tenía el producto. */
+function numberOr(previous: unknown, hasNew: boolean, next: number): number {
+  return hasNew ? next : Number(previous) || 0;
+}
+
+async function insertStockMovement(
+  auth: AuthInfo,
+  productId: string,
+  quantity: number,
+  type: 'in' | 'adjustment'
+): Promise<void> {
+  const movement = buildStockMovement({
+    tenantId: auth.tenantId,
+    productId,
+    quantity,
+    type,
+    reason: 'Importación de productos',
+    createdBy: auth.userId,
+  });
+  const { error } = await supabaseAdmin.from('stock_history').insert(movement);
+  if (error) {
+    console.error('stock_history insert error:', JSON.stringify(error));
   }
-
-  const created = results.filter((r) => r.status === 'created').length;
-  const updated = results.filter((r) => r.status === 'updated').length;
-  const skipped = results.filter((r) => r.status === 'skipped').length;
-
-  await createActivityLog({
-    tenantId: auth.tenantId,
-    userId: auth.userId,
-    action: 'imported',
-    entityType: 'import',
-    details: { created, updated, skipped, total: products.length },
-  });
-
-  // Se graba aunque el import no haya creado nada (created = 0): la
-  // intención de cargar catálogo en volumen es la señal que se quiere
-  // medir, y un import que falla entero por formato es justamente el
-  // caso donde hace falta saber que lo intentaron. Los contadores
-  // viajan en el metadata para poder separar el import útil del fallido.
-  await trackEvent({
-    type: 'excel_import',
-    userId: auth.userId,
-    tenantId: auth.tenantId,
-    metadata: { created, updated, skipped, total: products.length },
-  });
-
-  return { ok: true, body: { results, summary: { created, updated, skipped, total: products.length } } };
 }
 
 export async function adjustProductStock(auth: AuthInfo, id: string, body: {

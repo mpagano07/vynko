@@ -22,6 +22,7 @@ import { Thead, Th } from '@/components/ui/table-header';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { PageHeader } from '@/components/ui/page-header';
 import { IconAction } from '@/components/ui/icon-action';
+import { Tooltip } from '@/components/ui/tooltip';
 import type { Product } from '@/lib/types/product';
 import type { Category } from '@/lib/types/category';
 import toast from 'react-hot-toast';
@@ -39,7 +40,6 @@ import {
   FileSpreadsheet,
   Download,
   Percent,
-  HelpCircle,
   ArrowRightLeft,
   ChevronDown,
   Settings2,
@@ -48,10 +48,68 @@ import {
 import { formatARS } from '@/lib/utils/currency';
 import { getTenantHeaders, authFetch } from '@/lib/fetchWithTenant';
 import { filterProducts } from '@/lib/product-search';
+import { IMPORT_FILE_ERROR, parseWorkbookFile, validateSpreadsheetFile } from '@/lib/excel-import-parse';
 import { matchesQuery } from '@/lib/utils/text';
 import { TransferInbox } from '@/components/transfers/TransferInbox';
 import { SortableTh, SortDir } from '@/components/ui/sortable-th';
 import { FormLabel } from '@/components/ui/form-label';
+
+type ImportProgressState = { processed: number; total: number };
+
+type ImportStreamResult = {
+  results: { row: number; status: string; name?: string; error?: string }[];
+  summary: { created: number; updated: number; skipped: number; total: number };
+};
+
+/**
+ * Lee el NDJSON que streamea /api/products/import.
+ *
+ * El servidor manda una linea por evento: `progress` mientras escribe cada
+ * fila y un `done` final con el reporte. Se corta por '\n' a medida que llegan
+ * los chunks (y no al final) justamente para que el contador avance durante el
+ * import; un chunk de red puede traer varias lineas o media linea, por eso el
+ * sobrante queda en `buffer` hasta el proximo chunk.
+ */
+async function readImportStream(
+  body: ReadableStream<Uint8Array>,
+  onProgress: (progress: ImportProgressState) => void,
+): Promise<ImportStreamResult> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  const collected: { result: ImportStreamResult | null } = { result: null };
+  let buffer = '';
+
+  const handleLine = (line: string) => {
+    if (!line.trim()) return;
+    const event = JSON.parse(line) as Record<string, unknown>;
+    if (event.type === 'progress') {
+      onProgress({ processed: Number(event.processed), total: Number(event.total) });
+    } else if (event.type === 'done') {
+      collected.result = {
+        results: (event.results ?? []) as ImportStreamResult['results'],
+        summary: event.summary as ImportStreamResult['summary'],
+      };
+    } else if (event.type === 'error') {
+      throw new Error(String(event.error || 'Error al importar'));
+    }
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let newline = buffer.indexOf('\n');
+    while (newline !== -1) {
+      handleLine(buffer.slice(0, newline));
+      buffer = buffer.slice(newline + 1);
+      newline = buffer.indexOf('\n');
+    }
+  }
+  if (buffer.trim()) handleLine(buffer);
+
+  if (!collected.result) throw new Error('La importacion no devolvio resultados');
+  return collected.result;
+}
 
 function marginPercent(price: number, cost: number): number {
   return ((price - cost) / cost) * 100;
@@ -149,6 +207,7 @@ function ProductsPageContent() {
   const [importing, setImporting] = useState(false);
   const [importResults, setImportResults] = useState<{ row: number; status: string; name?: string; error?: string }[] | null>(null);
   const [showColumnInfo, setShowColumnInfo] = useState(false);
+  const [importProgress, setImportProgress] = useState<ImportProgressState | null>(null);
 
   // Export State
   const { exporting, busy, run } = useExport();
@@ -181,53 +240,29 @@ function ProductsPageContent() {
     if (!file) return;
     setImportResults(null);
 
+    // Nombre, peso y tipo se miran antes de `arrayBuffer()`: leer el buffer
+    // de un archivo enorme es lo que cuelga la pestaña, y el atributo
+    // `accept` del input es solo una sugerencia que se esquiva con "mostrar
+    // todos los archivos".
+    const check = validateSpreadsheetFile(file);
+    if (!check.ok) {
+      toast.error(check.error);
+      return;
+    }
+
     try {
       const buf = await file.arrayBuffer();
-      const XLSX = await import('xlsx');
-      const wb = XLSX.read(buf, { type: 'array' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const data: Record<string, unknown>[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
-
-      if (data.length === 0) {
-        toast.error('El archivo está vacío');
+      const parsed = await parseWorkbookFile(buf);
+      if (!parsed.ok) {
+        toast.error(parsed.error);
         return;
       }
 
-      const colMap: Record<string, string> = {
-        nombre: 'name', producto: 'name', name: 'name',
-        sku: 'sku', codigo: 'sku', código: 'sku',
-        barcode: 'barcode', 'código de barras': 'barcode', 'codigo de barras': 'barcode', gtin: 'barcode',
-        precio: 'price', price: 'price', 'precio venta': 'price',
-        costo: 'cost', cost: 'cost',
-        stock: 'stock', cantidad: 'stock',
-        minimo: 'min_stock', 'stock mínimo': 'min_stock', 'min stock': 'min_stock', min_stock: 'min_stock',
-        maximo: 'max_stock', 'stock máximo': 'max_stock', 'max stock': 'max_stock', max_stock: 'max_stock',
-        descripcion: 'description', description: 'description',
-        categoria: 'category_name', 'categoría': 'category_name', category: 'category_name',
-        deposito: 'deposito', 'depósito': 'deposito', ubicacion: 'deposito', 'ubicación': 'deposito',
-        pasillo: 'pasillo', 'estanteria': 'estanteria', 'estantería': 'estanteria', estante: 'estanteria',
-      };
-
-      const cols = Object.keys(data[0]);
-      const mapped = data.map(row => {
-        const mappedRow: Record<string, unknown> = {};
-        for (const [col, val] of Object.entries(row)) {
-          const key = colMap[col.toLowerCase().trim()] || col;
-          mappedRow[key] = val;
-        }
-        if (mappedRow.price !== undefined) mappedRow.price = Number(String(mappedRow.price).replace(/[^0-9.,]/g, '').replace(',', '.'));
-        if (mappedRow.cost !== undefined) mappedRow.cost = Number(String(mappedRow.cost).replace(/[^0-9.,]/g, '').replace(',', '.'));
-        if (mappedRow.stock !== undefined) mappedRow.stock = Number(mappedRow.stock);
-        if (mappedRow.min_stock !== undefined) mappedRow.min_stock = Number(mappedRow.min_stock);
-        if (mappedRow.max_stock !== undefined) mappedRow.max_stock = Number(mappedRow.max_stock);
-        return mappedRow;
-      });
-
-      setImportColumns(cols);
-      setImportRows(mapped);
-      toast.success(`${mapped.length} producto(s) leídos del archivo`);
+      setImportColumns(parsed.columns);
+      setImportRows(parsed.rows);
+      toast.success(`${parsed.rows.length} producto(s) leídos del archivo`);
     } catch {
-      toast.error('Error al leer el archivo. Asegurate de que sea un Excel válido (.xlsx o .xls)');
+      toast.error(IMPORT_FILE_ERROR);
     }
   };
 
@@ -235,6 +270,7 @@ function ProductsPageContent() {
     if (importRows.length === 0) return;
     setImporting(true);
     setImportResults(null);
+    setImportProgress(null);
 
     try {
       const res = await authFetch('/api/products/import', {
@@ -242,16 +278,36 @@ function ProductsPageContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ products: importRows }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error al importar');
+
+      // Las guardas (401/403/413/429) siguen llegando como JSON con su status;
+      // el stream recién arranca cuando el servidor ya aceptó el archivo. Por
+      // eso el chequeo de `res.ok` va antes de tocar `res.body`.
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Error al importar');
+      }
+
+      const data = await readImportStream(res.body, (progress) => setImportProgress(progress));
 
       setImportResults(data.results);
-      toast.success(`Importación completada: ${data.summary.created} creados, ${data.summary.updated} actualizados`);
+      const { created, updated, skipped } = data.summary;
+      // Un import con filas omitidas no es un import limpio: el toast lo
+      // dice, porque el detalle fila por fila queda escondido en la tabla de
+      // resultados y un verde sin mas parece que las 2000 filas entraron.
+      if (skipped > 0) {
+        toast.error(
+          `Importación terminada con ${skipped} fila(s) omitidas: ${created} creados, ${updated} actualizados. Revisá la tabla de resultados.`,
+          { duration: 8000 },
+        );
+      } else {
+        toast.success(`Importación completada: ${created} creados, ${updated} actualizados`);
+      }
       mutateProducts();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
     } finally {
       setImporting(false);
+      setImportProgress(null);
     }
   };
 
@@ -1146,20 +1202,32 @@ function ProductsPageContent() {
         >
           <div className="flex items-center gap-3 mb-4">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white">Importar productos desde Excel</h2>
-              <IconAction
-                icon={HelpCircle}
-                label="Ver columnas aceptadas"
-                title="Ver columnas aceptadas"
-                tone="indigo"
-                size="md"
-                className="rounded-full text-gray-400 dark:text-gray-500"
-                onClick={() => setShowColumnInfo(!showColumnInfo)}
-              />
+              <Tooltip content="Solo 'Nombre' es obligatorio. Las demás columnas son opcionales y podés usar nombres en español o inglés.">
+                <button
+                  type="button"
+                  onClick={() => setShowColumnInfo(!showColumnInfo)}
+                  aria-expanded={showColumnInfo}
+                  aria-controls="import-column-info"
+                  className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-sm font-semibold text-indigo-700 transition-colors hover:bg-indigo-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20"
+                >
+                  {showColumnInfo ? 'Ocultar columnas' : '¿Qué columnas usar?'}
+                </button>
+              </Tooltip>
             </div>
-            <p className="text-sm text-gray-500 mb-4">Subí un archivo .xlsx o .xls con los productos a importar.</p>
+            <p className="text-sm text-gray-500 mb-4">
+              Subí un archivo <span className="font-medium text-gray-700 dark:text-gray-300">.xlsx o .xls</span> con los productos a importar. Revisá{' '}
+              <button
+                type="button"
+                onClick={() => setShowColumnInfo(true)}
+                className="font-medium text-indigo-600 underline underline-offset-2 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300"
+              >
+                qué columnas usar
+              </button>{' '}
+              antes de subirlo.
+            </p>
 
             {showColumnInfo && (
-              <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-6 text-xs text-gray-600 dark:text-gray-400 space-y-1.5">
+              <div id="import-column-info" className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-6 text-xs text-gray-600 dark:text-gray-400 space-y-1.5">
                 <p className="font-semibold text-gray-700 dark:text-gray-300 mb-2">Columnas del archivo:</p>
                 <div><span className="font-medium text-gray-900 dark:text-gray-100">Nombre *</span> — obligatorio. Ej: <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">Coca Cola 1.5L</code></div>
                 <div><span className="font-medium text-gray-900 dark:text-gray-100">Precio</span> — precio de venta. Ej: <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">1500</code></div>
@@ -1270,13 +1338,47 @@ function ProductsPageContent() {
                     </p>
                   )}
                 </div>
+                {importing && importProgress && (
+                  <div>
+                    <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
+                      <span>Procesando {importProgress.processed} de {importProgress.total}</span>
+                      <span>{Math.round((importProgress.processed / Math.max(1, importProgress.total)) * 100)}%</span>
+                    </div>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                      <div
+                        className="h-full rounded-full bg-cyan-500 transition-all duration-200"
+                        style={{ width: `${Math.round((importProgress.processed / Math.max(1, importProgress.total)) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">
                   <Button variant="outline" onClick={() => { setIsImportModalOpen(false); setImportRows([]); setImportColumns([]); setImportResults(null); setShowColumnInfo(false); }}>
                     Cancelar
                   </Button>
                   <Button onClick={handleImport} disabled={importing}>
                     {importing ? (
-                      <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Importando...</>
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Importando
+                        {/* El detalle "437 de 2000" ya esta en la barra de
+                            arriba: en el boton alcanza con la senal de "esto
+                            esta trabajando". Los tres puntos laten de a uno, en
+                            loop, para que se note que la pantalla no se
+                            congelo y no parece que el import se trabo. */}
+                        <span className="inline-flex items-center" aria-hidden="true">
+                          {[0, 1, 2].map((i) => (
+                            <span
+                              key={i}
+                              className="animate-pulse text-lg leading-none"
+                              style={{ animationDelay: `${i * 200}ms` }}
+                            >
+                              .
+                            </span>
+                          ))}
+                        </span>
+                        <span className="sr-only">en curso</span>
+                      </>
                     ) : (
                       <>Importar {importRows.length} producto(s)</>
                     )}
