@@ -418,6 +418,7 @@ export default function DashboardPage() {
             hasSales: !!monthlyData && monthlyData.saleCount > 0,
             hasAlerts: alertsConfigured,
             userId: profile?.id,
+            dismissedAt: profile?.onboarding_checklist_dismissed_at,
           }}
         />
       </LazyMount>

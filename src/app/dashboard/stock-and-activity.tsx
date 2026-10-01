@@ -54,6 +54,7 @@ export default function StockAndActivity({
     hasSales: boolean;
     hasAlerts: boolean;
     userId?: string;
+    dismissedAt?: string | null;
   };
   loading?: boolean;
 }) {
@@ -246,6 +247,7 @@ export default function StockAndActivity({
             hasAlerts={onboarding.hasAlerts}
             hasPendingOrders={pendingOrders.length > 0}
             userId={onboarding.userId}
+            dismissedAt={onboarding.dismissedAt}
             loading={loading}
             fallback={activityPanel}
           />
