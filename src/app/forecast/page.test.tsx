@@ -284,4 +284,126 @@ describe('ForecastPage', () => {
     expect(within(panel).getByText('1 días').className).toContain('text-rose-600');
     expect(within(panel).getByText('10 días').className).toContain('text-amber-600');
   });
+
+  describe('productos que se venden bajo su costo', () => {
+    // Ojo: la pagina cae en "Sin datos suficientes" si ningun producto vendio
+    // (forecast/page.tsx:144), asi que los mocks necesitan totalSoldLast30 > 0.
+    function mockWithPredictions(predictions: Record<string, unknown>[]) {
+      fetchHandler.mockResolvedValue({
+        ok: true,
+        json: async () => ({ ...payload, predictions }),
+      });
+    }
+
+    function lossTable(): HTMLElement {
+      const el = screen.getByText('Pierde por unidad').closest('table');
+      if (!el) throw new Error('Tabla de pérdidas no encontrada');
+      return el as HTMLElement;
+    }
+
+    function lossRows(): string[] {
+      return within(lossTable())
+        .getAllByRole('row')
+        .slice(1) // el primero es el header
+        .map((r) => within(r).getAllByRole('cell')[0].textContent ?? '');
+    }
+
+    it('con el catálogo sano no renderiza la sección de pérdidas', async () => {
+      render(<ForecastPage />);
+      await screen.findByText('Efectividad del stock');
+
+      // En el payload base todos venden con precio 100 y costo 50.
+      // Que nadie venda bajo el costo es lo normal: no merece ocupar espacio.
+      expect(screen.queryByText('Se venden bajo su costo')).not.toBeInTheDocument();
+      expect(screen.queryByText('Pierde por unidad')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('loss-summary')).not.toBeInTheDocument();
+    });
+
+    it('lista los que venden bajo costo con la pérdida por unidad y el margen', async () => {
+      mockWithPredictions([
+        prediction({
+          productId: 'p-perdida',
+          productName: 'TV 100',
+          price: 150,
+          cost: 204626,
+          totalSoldLast30: 6,
+        }),
+      ]);
+      render(<ForecastPage />);
+      await screen.findByText('Efectividad del stock');
+
+      const row = within(lossTable()).getByText('TV 100').closest('tr')!;
+      expect(within(row).getByText('$ 204.626,00')).toBeInTheDocument(); // costo
+      expect(within(row).getByText('$ 150,00')).toBeInTheDocument(); // precio
+      expect(within(row).getByText('−$ 204.476,00')).toBeInTheDocument(); // pierde por unidad
+      expect(within(row).getByText('-100%')).toBeInTheDocument(); // margen
+    });
+
+    it('el link "Corregir" abre el producto con ?edit=<id>', async () => {
+      mockWithPredictions([
+        prediction({
+          productId: 'p-perdida',
+          productName: 'TV 100',
+          price: 150,
+          cost: 204626,
+          totalSoldLast30: 6,
+        }),
+      ]);
+      render(<ForecastPage />);
+      await screen.findByText('Efectividad del stock');
+
+      expect(within(lossTable()).getByRole('link', { name: /Corregir/ })).toHaveAttribute(
+        'href',
+        '/products?edit=p-perdida'
+      );
+    });
+
+    it('ordena de mayor a menor pérdida por unidad', async () => {
+      mockWithPredictions([
+        prediction({ productId: 'p1', productName: 'Leve', price: 90, cost: 100, totalSoldLast30: 1 }),
+        prediction({ productId: 'p2', productName: 'Grave', price: 10, cost: 1000, totalSoldLast30: 1 }),
+        prediction({ productId: 'p3', productName: 'Medio', price: 50, cost: 200, totalSoldLast30: 1 }),
+      ]);
+      render(<ForecastPage />);
+      await screen.findByText('Efectividad del stock');
+
+      expect(lossRows()).toEqual(['Grave', 'Medio', 'Leve']);
+    });
+
+    it('trata "sin costo cargado" como dato faltante y no como pérdida', async () => {
+      // El forecast service mapea cost con `Number(product.cost) || 0`, asi que 0
+      // significa "no cargado". Con costo 0 el producto queda fuera igual porque
+      // price < 0 es imposible; la guarda `cost > 0` es defensiva.
+      mockWithPredictions([
+        prediction({ productId: 'p1', productName: 'Sin costo', price: 100, cost: 0, totalSoldLast30: 1 }),
+        prediction({ productId: 'p2', productName: 'Precio 0', price: 0, cost: 500, totalSoldLast30: 1 }),
+      ]);
+      render(<ForecastPage />);
+      await screen.findByText('Efectividad del stock');
+
+      // Solo "Precio 0": costo 500 contra precio 0 es una perdida real.
+      expect(lossRows()).toEqual(['Precio 0']);
+      expect(within(lossTable()).queryByText('Sin costo')).not.toBeInTheDocument();
+    });
+
+    it('estima la pérdida de los últimos 30 días multiplicando por unidades vendidas', async () => {
+      mockWithPredictions([
+        prediction({
+          productId: 'p1',
+          productName: 'TV 100',
+          price: 150,
+          cost: 200,
+          totalSoldLast30: 6,
+        }),
+      ]);
+      render(<ForecastPage />);
+      await screen.findByText('Efectividad del stock');
+
+      // (200 - 150) * 6 = $ 300
+      const desc = screen.getByTestId('loss-summary');
+      // formatARS separa los miles con espacio duro, asi que \s y no un espacio fijo.
+      expect(desc.textContent).toMatch(/\$\s300,00/);
+      expect(desc.textContent).toContain('pérdida');
+    });
+  });
 });

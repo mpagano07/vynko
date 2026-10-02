@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { StatCard } from '@/components/ui/stat-card';
 import { PageHeader } from '@/components/ui/page-header';
-import { TrendingUp, AlertTriangle, ShoppingCart, Banknote, Activity, BarChart3, Flame, Filter, ExternalLink } from 'lucide-react';
+import { TrendingUp, AlertTriangle, ShoppingCart, Banknote, Activity, BarChart3, Flame, Filter, ExternalLink, TrendingDown } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
@@ -184,6 +184,28 @@ export default function ForecastPage() {
     return true;
   });
 
+  // Productos que hoy se venden por debajo de su costo. Sale del catalogo
+  // (price_cents vs cost), NO de las ventas historicas: `sale_items` no guarda
+  // el costo del momento de la venta, y en este catalogo su `subtotal_cents`
+  // historico no es confiable, asi que multiplicar ventas por costo daria
+  // numeros inventados. Con el catalogo el hecho es verificable y accionable:
+  // "lo estas vendiendo mas barato de lo que te costo".
+  // La guarda cost > 0 es defensiva: el forecast service mapea el costo con
+  // `Number(product.cost) || 0`, asi que un 0 puede ser "sin cargar" y no un
+  // producto gratis. Con precios validos el filtro ya lo excluye igual.
+  const lossMaking = data.predictions
+    .filter((p) => p.cost > 0 && p.price < p.cost)
+    .map((p) => ({
+      ...p,
+      lossPerUnit: p.cost - p.price,
+      marginPct: ((p.price - p.cost) / p.cost) * 100,
+      // Estimado: multiplica por unidades vendidas. La cantidad si es confiable,
+      // a diferencia de los importes de `sale_items`.
+      lossLast30: (p.cost - p.price) * p.totalSoldLast30,
+    }))
+    .sort((x, y) => y.lossPerUnit - x.lossPerUnit);
+  const totalLossLast30 = lossMaking.reduce((acc, p) => acc + p.lossLast30, 0);
+
   const isPaginated = filteredPredictions.length > PAGE_SIZE;
   const totalPages = isPaginated ? Math.ceil(filteredPredictions.length / PAGE_SIZE) : 1;
   const displayedPredictions = isPaginated
@@ -312,6 +334,73 @@ export default function ForecastPage() {
           </div>
         </Card>
       </div>
+
+      {/* Productos que hoy se venden por debajo de su costo. Si no hay ninguno la
+          sección no se muestra: que todos vender por encima del costo es lo normal y
+          un cartel de "todo bien" solo suma ruido. */}
+      {lossMaking.length > 0 && (
+        <Card className="p-5">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
+            <TrendingDown className="h-5 w-5 text-rose-500" />
+            Se venden bajo su costo
+          </h2>
+          <p data-testid="loss-summary" className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+            Revisá el precio o el costo de cada uno.
+            {totalLossLast30 > 0 && (
+              <> En los últimos 30 días eso fueron unos{' '}
+                <span className="font-semibold text-rose-600 dark:text-rose-400">
+                  {formatARS(totalLossLast30)}
+                </span>{' '}
+                de pérdida.
+              </>
+            )}
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="py-3 px-4">Producto</th>
+                  <th className="py-3 px-4 text-right">Costo</th>
+                  <th className="py-3 px-4 text-right">Precio</th>
+                  <th className="py-3 px-4 text-right">Pierde por unidad</th>
+                  <th className="py-3 px-4 text-right">Margen</th>
+                  <th className="py-3 px-4 text-center">Acción</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
+                {lossMaking.map((p) => (
+                  <tr key={p.productId} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
+                    <td className="py-3 px-4 font-medium text-gray-900 dark:text-gray-100">
+                      {p.productName}
+                    </td>
+                    <td className="py-3 px-4 text-right text-gray-600 dark:text-gray-400">
+                      {formatARS(p.cost)}
+                    </td>
+                    <td className="py-3 px-4 text-right text-gray-600 dark:text-gray-400">
+                      {formatARS(p.price)}
+                    </td>
+                    <td className="py-3 px-4 text-right font-semibold text-rose-600 dark:text-rose-400">
+                      −{formatARS(p.lossPerUnit)}
+                    </td>
+                    <td className="py-3 px-4 text-right font-semibold text-rose-600 dark:text-rose-400">
+                      {p.marginPct.toFixed(0)}%
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <a
+                        href={`/products?edit=${p.productId}`}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors whitespace-nowrap"
+                      >
+                        Corregir
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {/* Filtered predictions */}
       <Card className="overflow-hidden border border-gray-100 dark:border-gray-800 p-0">
