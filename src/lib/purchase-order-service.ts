@@ -125,15 +125,23 @@ export async function createPurchaseOrder(
         .eq('tenant_id', auth.tenantId);
 
       const sup = (supplier as Record<string, unknown>[] | null)?.[0];
+      // `supplier_id` viene del body. Antes, si no habia proveedor en este
+      // tenant se sembraba uno con el id que dictate el cliente: eso clavaba
+      // el pedido de A al proveedor de B y, con el join sin filtro del
+      // listado, llegaba el nombre de otra empresa a la pantalla de compras.
+      // Si el proveedor no es de este tenant, el pedido no se crea.
+      if (!sup) {
+        return { ok: false, error: 'El proveedor no pertenece a esta sucursal', status: 400 };
+      }
       await supabaseAdmin
         .from('providers')
         .insert({
           id: supplier_id,
           tenant_id: auth.tenantId,
-          name: (sup?.name as string) || 'Proveedor',
-          email: (sup?.email as string) || null,
-          phone: (sup?.phone as string) || null,
-          address: (sup?.address as string) || null,
+          name: (sup.name as string) || 'Proveedor',
+          email: (sup.email as string) || null,
+          phone: (sup.phone as string) || null,
+          address: (sup.address as string) || null,
         });
     }
 

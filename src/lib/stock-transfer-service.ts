@@ -98,6 +98,24 @@ export async function createTransfer(
     return { ok: false, error: 'Debe incluir al menos un producto', status: 400 };
   }
 
+  // `products` es global y `product_id` viene del body: sin exigir la fila de
+  // `product_stock` del tenant ORIGEN, A puede mover un producto que solo
+  // existe para B y el alta de stock en destino lo deja expuesto en el
+  // catalogo y en el forecast de una empresa que nunca lo compro.
+  const productIds = [...new Set(items.map((item) => item.product_id).filter(Boolean))];
+  if (productIds.length === 0) {
+    return { ok: false, error: 'Debe incluir al menos un producto', status: 400 };
+  }
+  const { data: ownedStock } = await supabaseAdmin
+    .from('product_stock')
+    .select('product_id')
+    .in('product_id', productIds)
+    .eq('tenant_id', from_tenant_id);
+  const ownedIds = new Set((ownedStock ?? []).map((row) => row.product_id as string));
+  if (productIds.some((id) => !ownedIds.has(id as string))) {
+    return { ok: false, error: 'Uno o mas productos no pertenecen a la sucursal origen', status: 400 };
+  }
+
   const { data: transfer, error: transferError } = await supabaseAdmin
     .from('stock_transfers')
     .insert({

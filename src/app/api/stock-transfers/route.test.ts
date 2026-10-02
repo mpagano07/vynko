@@ -88,6 +88,10 @@ describe('Stock Transfers API', () => {
     it('creates transfer with valid data (201) and records activity log', async () => {
       vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 't1', 't2'] });
       supabaseMock.__queue('tenant_users', { data: { role: 'owner' } }, { data: { role: 'owner' } });
+      supabaseMock.__queue('product_stock', {
+        data: [{ product_id: 'p1', tenant_id: 't1', stock: 10 }],
+        error: null,
+      });
       supabaseMock.__queue('stock_transfers', {
         data: { id: 'tr1', from_tenant_id: 't1', to_tenant_id: 't2', status: 'pending' },
       });
@@ -129,6 +133,10 @@ describe('Stock Transfers API', () => {
     it('cleans up transfer if items insert fails', async () => {
       vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 't1', 't2'] });
       supabaseMock.__queue('tenant_users', { data: { role: 'owner' } }, { data: { role: 'owner' } });
+      supabaseMock.__queue('product_stock', {
+        data: [{ product_id: 'p1', tenant_id: 't1', stock: 10 }],
+        error: null,
+      });
       supabaseMock.__queue('stock_transfers', {
         data: { id: 'tr1', from_tenant_id: 't1', to_tenant_id: 't2', status: 'pending' },
       });
@@ -159,6 +167,10 @@ describe('Stock Transfers API', () => {
     it('returns 400 when the transfer could not be created without an error message', async () => {
       vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 't1', 't2'] });
       supabaseMock.__queue('tenant_users', { data: { role: 'owner' } }, { data: { role: 'owner' } });
+      supabaseMock.__queue('product_stock', {
+        data: [{ product_id: 'p1', tenant_id: 't1', stock: 10 }],
+        error: null,
+      });
       supabaseMock.__queue('stock_transfers', { data: null, error: null });
 
       const res = await POST(makeRequest('POST', {
