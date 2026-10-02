@@ -134,6 +134,10 @@ export async function getMonthlySales(auth: AuthInfo): Promise<MonthlySalesResul
 
 const SHORT_DAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 const SHORT_MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const LONG_MONTHS = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+];
 
 export type SalesSummaryResult =
   | { ok: true; data: Record<string, unknown>[] }
@@ -197,6 +201,76 @@ export async function getSalesSummary(auth: AuthInfo, daysParam: number): Promis
     return { ok: true, data: formatted };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Error in sales summary';
+    return { ok: false, error: msg };
+  }
+}
+
+export type SalesMonthlySummaryResult =
+  | { ok: true; data: Record<string, unknown>[] }
+  | { ok: false; error: string };
+
+// Agregación mensual para la ventana de 12 meses del gráfico del dashboard. Con
+// 365 barras diarias el eje queda ilegible y no se puede comparar mes contra mes,
+// así que esa ventana devuelve una barra por mes con la suma completa del mes
+// (incluido el mes en curso, que la UI marca como parcial).
+// El agrupado por mes lo hace la vista `sales_monthly_totals`; aca solo se arman
+// los buckets (incluyendo meses sin ventas) y se formatean las etiquetas.
+export async function getSalesMonthlySummary(auth: AuthInfo): Promise<SalesMonthlySummaryResult> {
+  try {
+    const scopeTenantIds = auth.allTenants ? auth.tenantIds : [auth.tenantId];
+
+    // La ventana es siempre de 12 meses: es la unica que pide la UI y la vista
+    // mensual no conviene para rangos arbitrarios, asi que el parametro se
+    // acepta (para distinguir el modo) pero cualquier valor cae en 12.
+    const months = 12;
+
+    // La vista usa date_trunc('month', created_at), es decir UTC; los cortes de
+    // mes se arman en UTC para que el bucket coincida con el de la base.
+    const now = new Date();
+    const buckets: Array<{ month: string; total: number; saleCount: number }> = [];
+    for (let i = months - 1; i >= 0; i--) {
+      const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+      buckets.push({ month: start.toISOString().slice(0, 10), total: 0, saleCount: 0 });
+    }
+    const sinceMonth = buckets[0].month;
+
+    const query = supabaseAdmin
+      .from('sales_monthly_totals')
+      .select('month, total, sale_count')
+      .gte('month', sinceMonth)
+      .in('tenant_id', scopeTenantIds);
+    const res = (await query) as unknown as {
+      data: Array<{ month: string; total: number; sale_count: number }> | null;
+      error: { message: string } | null;
+    };
+    const { data: grouped, error } = res;
+
+    if (error) { console.error('DB error:', error); return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' }; }
+
+    const byMonth = new Map(buckets.map((b) => [b.month, b]));
+    for (const row of (grouped ?? [])) {
+      const bucket = byMonth.get(String(row.month as string).slice(0, 10));
+      if (!bucket) continue;
+      bucket.total += (row.total as number) || 0;
+      bucket.saleCount += (row.sale_count as number) || 0;
+    }
+
+    const lastIndex = buckets.length - 1;
+    const data = buckets.map((b, i) => {
+      const d = new Date(b.month + 'T12:00:00Z');
+      return {
+        date: b.month,
+        day: SHORT_MONTHS[d.getUTCMonth()],
+        label: `${LONG_MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`,
+        partial: i === lastIndex,
+        saleCount: b.saleCount,
+        total: b.total / 100,
+      };
+    });
+
+    return { ok: true, data };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error in sales monthly summary';
     return { ok: false, error: msg };
   }
 }

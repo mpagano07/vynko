@@ -22,10 +22,22 @@ function makeRequest(days = 7): Request {
   return new Request(`http://localhost/api/sales/summary?days=${days}`, { method: 'GET' });
 }
 
+function makeMonthsRequest(months: number): Request {
+  return new Request(`http://localhost/api/sales/summary?months=${months}`, { method: 'GET' });
+}
+
 function isoDay(offsetDays: number): string {
   const d = new Date();
   d.setDate(d.getDate() - offsetDays);
   return d.toISOString().slice(0, 10);
+}
+
+/** Clave `YYYY-MM-01` del mes situado `offset` meses antes que el actual (0 = mes en curso). */
+function isoMonth(offset: number): string {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - offset, 1))
+    .toISOString()
+    .slice(0, 10);
 }
 
 describe('GET /api/sales/summary', () => {
@@ -143,5 +155,100 @@ describe('GET /api/sales/summary', () => {
     expect(res.status).toBe(500);
     const json = await res.json();
     expect(json.error).toBe('boom');
+  });
+});
+
+describe('GET /api/sales/summary?months=', () => {
+  beforeEach(() => {
+    supabaseMock.__reset();
+    vi.mocked(getAuth).mockResolvedValue(mockAuth);
+  });
+
+  it('devuelve una barra por mes con la suma completa del mes', async () => {
+    supabaseMock.__queue('sales_monthly_totals', {
+      data: [
+        { month: isoMonth(11), total: 40000, sale_count: 4 },
+        { month: isoMonth(1), total: 50000, sale_count: 5 },
+        { month: isoMonth(0), total: 60000, sale_count: 6 },
+      ],
+    });
+
+    const res = await GET(makeMonthsRequest(12));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toHaveLength(12);
+
+    expect(json[0]).toMatchObject({ date: isoMonth(11), total: 400, saleCount: 4, partial: false });
+    expect(json[10]).toMatchObject({ date: isoMonth(1), total: 500, saleCount: 5, partial: false });
+    // El ultimo bucket es el mes en curso: esta incompleto.
+    expect(json[11]).toMatchObject({ date: isoMonth(0), total: 600, saleCount: 6, partial: true });
+
+    const select = supabaseMock.__calls.find(
+      (c) => c.table === 'sales_monthly_totals' && c.method === 'select'
+    );
+    expect(select?.args[0]).toBe('month, total, sale_count');
+    const gte = supabaseMock.__calls.find(
+      (c) => c.table === 'sales_monthly_totals' && c.method === 'gte'
+    );
+    expect(gte?.args).toEqual(['month', isoMonth(11)]);
+  });
+
+  it('cae en 12 meses cuando el parametro no es valido', async () => {
+    for (const months of [0, 3, 365, Number.NaN]) {
+      supabaseMock.__queue('sales_monthly_totals', { data: [] });
+      const json = await (await GET(makeMonthsRequest(months))).json();
+      expect(json).toHaveLength(12);
+      expect(json[0].date).toBe(isoMonth(11));
+    }
+  });
+
+  it('omite meses sin ventas para que el eje quede parejo', async () => {
+    supabaseMock.__queue('sales_monthly_totals', {
+      data: [{ month: isoMonth(0), total: 25000, sale_count: 2 }],
+    });
+    const json = await (await GET(makeMonthsRequest(12))).json();
+    expect(json.slice(0, 11).every((r: { total: number }) => r.total === 0)).toBe(true);
+    expect(json[11].total).toBe(250);
+  });
+
+  it('ignora meses fuera de la ventana consultada', async () => {
+    supabaseMock.__queue('sales_monthly_totals', {
+      data: [{ month: isoMonth(12), total: 999000, sale_count: 9 }],
+    });
+    const json = await (await GET(makeMonthsRequest(12))).json();
+    expect(json.every((r: { total: number }) => r.total === 0)).toBe(true);
+  });
+
+  it('etiqueta cada mes con nombre corto y nombre largo con año', async () => {
+    supabaseMock.__queue('sales_monthly_totals', { data: [] });
+    const json = await (await GET(makeMonthsRequest(12))).json();
+    for (const row of json) {
+      expect(/^(Ene|Feb|Mar|Abr|May|Jun|Jul|Ago|Sep|Oct|Nov|Dic)$/.test(row.day)).toBe(true);
+      expect(/^[a-zá-ú]+ \d{4}$/.test(row.label)).toBe(true);
+      expect(row.label.endsWith(String(new Date(row.date).getUTCFullYear()))).toBe(true);
+    }
+  });
+
+  it('filtra por sucursal con in() también en la vista mensual', async () => {
+    vi.mocked(getAuth).mockResolvedValueOnce({
+      ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 'tenant-2'],
+    });
+    supabaseMock.__queue('sales_monthly_totals', { data: [] });
+    const res = await GET(makeMonthsRequest(12));
+    expect(res.status).toBe(200);
+
+    const tenantIns = supabaseMock.__calls.filter(
+      (c) => c.table === 'sales_monthly_totals' && c.method === 'in' && c.args[0] === 'tenant_id'
+    );
+    expect(tenantIns).toHaveLength(1);
+    expect(tenantIns[0].args[1]).toEqual(['tenant-1', 'tenant-2']);
+  });
+
+  it('devuelve 500 cuando la consulta mensual falla', async () => {
+    supabaseMock.__queue('sales_monthly_totals', { data: null, error: { message: 'boom' } });
+    const res = await GET(makeMonthsRequest(12));
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe('Ocurrio un error inesperado. Intenta de nuevo.');
   });
 });

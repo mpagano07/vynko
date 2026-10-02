@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
-import { getSalesSummary } from '@/lib/sales-service';
+import { getSalesMonthlySummary, getSalesSummary } from '@/lib/sales-service';
 
 export async function GET(request: Request) {
   try {
@@ -8,6 +8,15 @@ export async function GET(request: Request) {
     if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
     const { searchParams } = new URL(request.url);
+
+    // `months` -> una barra por mes (siempre la ventana de 12 meses).
+    // `days`   -> una barra por dia (7d, 30d).
+    if (searchParams.get('months') !== null) {
+      const result = await getSalesMonthlySummary(auth);
+      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 500 });
+      return NextResponse.json(result.data);
+    }
+
     const daysParam = Number(searchParams.get('days')) || 7;
 
     const result = await getSalesSummary(auth, daysParam);
