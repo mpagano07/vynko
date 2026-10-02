@@ -444,6 +444,21 @@ export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<
     .eq('tenant_id', auth.tenantId);
 
   const stockMap = new Map((stockRows ?? []).map((s) => [s.product_id, s.stock ?? 0]));
+
+  // `products` es global: la consulta de arriba trae tambien los productos que
+  // solo existen para otra empresa. El filtro que decide es `product_stock`, y
+  // tiene que ocurrir ANTES de usar el nombre del producto en ningun mensaje:
+  // despues, el error de stock insuficiente decia "Stock insuficiente para
+  // <nombre de B>", delatando el catalogo ajeno.
+  const knownIds = new Set((products ?? []).map((p) => p.id as string));
+  const unknownId = productIds.find((id) => !knownIds.has(id));
+  if (unknownId) {
+    return { ok: false, error: `Producto no encontrado: ${unknownId}`, status: 400 };
+  }
+  if (productIds.some((id) => !stockMap.has(id))) {
+    return { ok: false, error: 'Uno o mas productos no pertenecen a esta sucursal', status: 400 };
+  }
+
   const productMap = new Map((products ?? []).map((p) => [p.id, p as unknown as ProductRow]));
 
   try {

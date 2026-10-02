@@ -157,11 +157,29 @@ export async function addCollaborator(
       .maybeSingle();
 
     if (existingProfile) {
+      // `profiles` es global: esa fila pertenece a la persona, no a la
+      // empresa. Renombrarla desde el panel de A significa escribir identidad de
+      // un usuario que solo trabaja en B, asi que el nombre solo se acepta si
+      // la persona ya es miembro de alguno de los tenants de este owner.
       if (assignName) {
-        await supabaseAdmin
-          .from('profiles')
-          .update({ full_name: assignName })
-          .eq('id', existingProfile.id);
+        const { data: memberships } = await supabaseAdmin
+          .from('tenant_users')
+          .select('tenant_id')
+          .eq('user_id', existingProfile.id);
+        const foreignMemberships = (memberships ?? []).filter(
+          (m) => !ownerTenantIds.includes(m.tenant_id as string)
+        );
+
+        // Si la persona solo trabaja en otra empresa, su nombre no se toca:
+        // `profiles` es global y ese nombre es identidad de la persona.
+        // Si es nueva en la plataforma o ya es colaborador nuestro, el owner
+        // sigue pudiendo cargarlo al invitarla.
+        if (foreignMemberships.length === 0) {
+          await supabaseAdmin
+            .from('profiles')
+            .update({ full_name: assignName })
+            .eq('id', existingProfile.id);
+        }
       }
 
       for (const tid of targetTenantIds) {

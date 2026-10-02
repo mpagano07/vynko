@@ -6,7 +6,7 @@ import type { PlanId } from '@/lib/plans';
 import { validatePrice, validateProduct, validateStock } from '@/lib/product-validation';
 import { normalizeForSearch } from '@/lib/utils/text';
 import { adjustStock, buildStockMovement } from '@/lib/stock';
-import { isAllowedImagePath, signProductImageUrls } from '@/lib/upload-service';
+import { isAllowedImagePath, pathFromLegacyPublicUrl, signProductImageUrls } from '@/lib/upload-service';
 import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
 import { trackEvent } from '@/lib/track-event';
 import { rateLimit } from '@/lib/rate-limit';
@@ -84,6 +84,23 @@ function sanitizeImageStoragePath(value: unknown, tenantId: string): string | nu
 }
 
 /**
+ * Filtra una `image_url` que apunta al bucket propio.
+ *
+ * `products` es global, asi que guardar una URL del bucket de otra empresa la
+ * publica para todos y `signProductImageUrls` la devuelve como signed URL
+ * resuelta con la service role. Las URLs externas (CDN propio, http arbitrary)
+ * no son un problema de aislamiento: solo se descartan las que viven dentro de
+ * nuestro bucket bajo un folder que no es del tenant activo.
+ */
+function sanitizeImageUrl(value: unknown, tenantId: string): string | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value !== 'string') return null;
+  const path = pathFromLegacyPublicUrl(value);
+  if (path === null) return value;
+  return isAllowedImagePath(path, tenantId) ? value : null;
+}
+
+/**
  * `products` es una tabla GLOBAL (no tiene tenant_id): el scope por tenant vive
  * en `product_stock`. Eso significa que cualquier escritura sobre `products`
  * (precio, costo, SKU, nombre) es un write cross-tenant, y que el stock es lo
@@ -141,7 +158,7 @@ export async function listProducts(auth: AuthInfo): Promise<ListProductsResult> 
     stock_data: undefined,
     price: p.price_cents != null ? p.price_cents / 100 : 0,
   })) || [];
-  return { ok: true, products: await signProductImageUrls(products) };
+  return { ok: true, products: await signProductImageUrls(products, auth.tenantId) };
 }
 
 export async function createProduct(auth: AuthInfo, body: Record<string, unknown>): Promise<CreateProductResult> {
@@ -174,12 +191,14 @@ export async function createProduct(auth: AuthInfo, body: Record<string, unknown
     }
   }
 
-  const allowedFields = ['category_id', 'sku', 'barcode', 'name', 'description', 'cost', 'image_url', 'metadata'];
+  const allowedFields = ['category_id', 'sku', 'barcode', 'name', 'description', 'cost', 'metadata'];
   const insertData: Record<string, unknown> = {};
   if (body.price !== undefined) insertData.price_cents = Math.round(Number(body.price) * 100);
   for (const key of allowedFields) {
     if (body[key] !== undefined) insertData[key] = body[key];
   }
+  const imageUrl = sanitizeImageUrl(body.image_url, auth.tenantId);
+  if (imageUrl) insertData.image_url = imageUrl;
   const imageStoragePath = sanitizeImageStoragePath(body.image_storage_path, auth.tenantId);
   if (imageStoragePath) insertData.image_storage_path = imageStoragePath;
 
@@ -283,13 +302,17 @@ export async function updateProduct(auth: AuthInfo, id: string, body: Record<str
 
     const allowedFields = [
       'category_id', 'sku', 'barcode', 'name', 'description',
-      'cost', 'image_url', 'metadata',
+      'cost', 'metadata',
     ];
     const updateData: Record<string, unknown> = {};
     const hasPrice = body.price !== undefined && body.price !== null && body.price !== '';
     if (hasPrice) updateData.price_cents = Math.round(Number(body.price) * 100);
     for (const key of allowedFields) {
       if (body[key] !== undefined) updateData[key] = body[key];
+    }
+    if (body.image_url !== undefined) {
+      const imageUrl = sanitizeImageUrl(body.image_url, auth.tenantId);
+      updateData.image_url = imageUrl;
     }
     if (body.image_storage_path !== undefined) {
       const imageStoragePath = sanitizeImageStoragePath(body.image_storage_path, auth.tenantId);
@@ -704,7 +727,10 @@ export async function prepareImport(
       if (Number.isFinite(priceValue)) productData.price_cents = Math.round(priceValue * 100);
     }
     for (const key of IMPORT_ALLOWED_FIELDS) {
-      if (row[key] !== undefined && row[key] !== null && row[key] !== '') productData[key] = row[key];
+      if (row[key] !== undefined && row[key] !== null && row[key] !== '') {
+        productData[key] =
+          key === 'image_url' ? sanitizeImageUrl(row[key], auth.tenantId) : row[key];
+      }
     }
 
     // Una celda de stock vacía significa "no informar", no "dejar en cero". En
@@ -1493,7 +1519,11 @@ export async function lookupProductByCode(auth: AuthInfo, code: string): Promise
     .eq('tenant_id', auth.tenantId)
     .maybeSingle();
 
-  if (stockData && stockData.active === false) {
+  // `products` es un catalogo global: la fila existe para toda la aplicacion
+  // apenas hay stock en *alguna* empresa. Lo que decide si A puede verla es la
+  // fila de `product_stock` de A. Sin ella, este producto no fue adoptado por
+  // A y devolverlo filtraria nombre, precio y costo de otra empresa.
+  if (!stockData || stockData.active === false) {
     return { ok: true, product: null };
   }
 
@@ -1502,9 +1532,9 @@ export async function lookupProductByCode(auth: AuthInfo, code: string): Promise
     product: {
       ...data,
       price: data.price_cents != null ? data.price_cents / 100 : 0,
-      stock: stockData?.stock ?? 0,
-      min_stock: stockData?.min_stock ?? 0,
-      max_stock: stockData?.max_stock ?? 0,
+      stock: stockData.stock ?? 0,
+      min_stock: stockData.min_stock ?? 0,
+      max_stock: stockData.max_stock ?? 0,
     },
   };
 }

@@ -167,16 +167,24 @@ export async function uploadImage(auth: AuthInfo, request: Request): Promise<Upl
 }
 
 export async function signProductImageUrls(
-  products: Array<Record<string, unknown>>
+  products: Array<Record<string, unknown>>,
+  tenantId: string
 ): Promise<Array<Record<string, unknown>>> {
-  const paths = products
-    .map((product) => {
-      const storagePath = typeof product.image_storage_path === 'string' ? product.image_storage_path : null;
-      if (storagePath) return storagePath;
-      const legacy = typeof product.image_url === 'string' ? pathFromLegacyPublicUrl(product.image_url) : null;
-      return legacy;
-    })
-    .filter((path): path is string => !!path);
+  const ownPath = (product: Record<string, unknown>): string | null => {
+    const storagePath =
+      typeof product.image_storage_path === 'string' && product.image_storage_path
+        ? product.image_storage_path
+        : typeof product.image_url === 'string'
+          ? pathFromLegacyPublicUrl(product.image_url)
+          : null;
+    if (!storagePath) return null;
+    // El bucket se firma con la service role, asi que un path sin scope
+    // devolveria una URL valida de otra empresa. Solo se firma lo que vive
+    // bajo el folder del tenant activo.
+    return isAllowedImagePath(storagePath, tenantId) ? storagePath : null;
+  };
+
+  const paths = products.map(ownPath).filter((path): path is string => !!path);
 
   if (paths.length === 0) return products;
 
@@ -191,9 +199,7 @@ export async function signProductImageUrls(
   }
 
   return products.map((product) => {
-    const storagePath = typeof product.image_storage_path === 'string' && product.image_storage_path
-      ? product.image_storage_path
-      : (typeof product.image_url === 'string' ? pathFromLegacyPublicUrl(product.image_url) : null);
+    const storagePath = ownPath(product);
     const signedUrl = storagePath ? urlByPath.get(storagePath) : undefined;
     if (!signedUrl) return product;
     return { ...product, image_url: signedUrl };

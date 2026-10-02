@@ -172,20 +172,24 @@ describe('uploadImage', () => {
 });
 
 describe('signProductImageUrls', () => {
+  // `isAllowedImagePath` exige `<tenantId>/<uuid>.<ext>`: los paths de los
+  // fixtures usan el mismo formato que genera `uploadImage`.
+  const pathA = `${auth.tenantId}/11111111-2222-4333-8444-555555555555.png`;
+  const pathB = `${auth.tenantId}/66666666-7777-4888-8999-aaaaaaaaaaaa.jpg`;
+
   it('replaces image_url with a signed url per storage path', async () => {
     supabaseMock.__storageResults.createSignedUrls = {
       data: [
-        { path: `${auth.tenantId}/a.png`, signedUrl: 'https://signed.test/a.png?token=1' },
-        { path: `${auth.tenantId}/b.png`, signedUrl: 'https://signed.test/b.png?token=2' },
+        { path: pathA, signedUrl: 'https://signed.test/a.png?token=1' },
+        { path: pathB, signedUrl: 'https://signed.test/b.png?token=2' },
       ],
       error: null,
     } as never;
 
-    const result = await signProductImageUrls([
-      { id: 1, image_storage_path: `${auth.tenantId}/a.png` },
-      { id: 2, image_storage_path: `${auth.tenantId}/b.png` },
-      { id: 3 },
-    ]);
+    const result = await signProductImageUrls(
+      [{ id: 1, image_storage_path: pathA }, { id: 2, image_storage_path: pathB }, { id: 3 }],
+      auth.tenantId
+    );
 
     expect(result[0].image_url).toBe('https://signed.test/a.png?token=1');
     expect(result[1].image_url).toBe('https://signed.test/b.png?token=2');
@@ -194,22 +198,41 @@ describe('signProductImageUrls', () => {
 
   it('signs legacy public urls using the migrated path', async () => {
     supabaseMock.__storageResults.createSignedUrls = {
-      data: [{ path: `${auth.tenantId}/legacy.png`, signedUrl: 'https://signed.test/legacy.png' }],
+      data: [{ path: pathA, signedUrl: 'https://signed.test/legacy.png' }],
       error: null,
     } as never;
 
-    const result = await signProductImageUrls([
-      {
-        id: 1,
-        image_url: `https://abc.supabase.co/storage/v1/object/public/${PRODUCT_IMAGE_BUCKET}/${auth.tenantId}/legacy.png`,
-      },
-    ]);
+    const result = await signProductImageUrls(
+      [
+        {
+          id: 1,
+          image_url: `https://abc.supabase.co/storage/v1/object/public/${PRODUCT_IMAGE_BUCKET}/${pathA}`,
+        },
+      ],
+      auth.tenantId
+    );
 
     expect(result[0].image_url).toBe('https://signed.test/legacy.png');
   });
 
+  it('does not sign a path that lives under another tenant folder', async () => {
+    const foreignPath = 'bbbbbbbb-2222-4333-8444-555555555555/11111111-2222-4333-8444-555555555555.png';
+    supabaseMock.__storageResults.createSignedUrls = {
+      data: [{ path: foreignPath, signedUrl: 'https://signed.test/de-b.png' }],
+      error: null,
+    } as never;
+
+    const result = await signProductImageUrls([{ id: 1, image_storage_path: foreignPath }], auth.tenantId);
+
+    expect(supabaseMock.__storageCalls).toHaveLength(0);
+    expect(result[0].image_url).toBeUndefined();
+  });
+
   it('does not call storage when there is nothing to sign', async () => {
-    const result = await signProductImageUrls([{ id: 1 }, { id: 2, image_url: 'https://cdn.test/x.png' }]);
+    const result = await signProductImageUrls(
+      [{ id: 1 }, { id: 2, image_url: 'https://cdn.test/x.png' }],
+      auth.tenantId
+    );
     expect(supabaseMock.__storageCalls).toHaveLength(0);
     expect(result).toHaveLength(2);
   });

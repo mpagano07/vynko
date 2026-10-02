@@ -120,6 +120,57 @@ Los tests no requieren base de datos ni variables de entorno: las rutas API se p
 - `src/app/api/settings/tenant/route.test.ts` — Guard owner-only de PATCH /api/settings/tenant (6 tests)
 - `src/app/api/activity-logs/route.test.ts` — Guard owner/manager de GET /api/activity-logs (6 tests)
 
+### Aislamiento multi-tenant (cross-tenant)
+
+`supabaseAdmin` usa la **service role**, que por diseño pasa por alto RLS. El
+aislamiento entre empresas no lo garantiza ninguna policy: lo garantizan los
+`.eq('tenant_id', auth.tenantId)` de cada service. Por eso los bugs que
+importan son los filtros que faltan, y estos tests los cazan.
+
+El mock de Supabase tiene un modo tenant-aware que aplica `eq` / `in` / `is`
+sobre las filas encoladas, como haría Postgres. Se encola una fila de la
+**Empresa B** y se llama a la API como **Empresa A**: si el filtro falta, el
+servicio la recibe y el test se pone rojo.
+
+```bash
+npm run test:run -- src/test/tenant-isolation.products.test.ts
+npm run test:run -- src/test/tenant-isolation.sales.test.ts
+npm run test:run -- src/test/tenant-isolation.records.test.ts
+npm run test:run -- src/test/tenant-isolation.ops.test.ts
+npm run test:run -- src/test/tenant-isolation.users.test.ts
+```
+
+Helpers compartidos en `src/test/tenant-isolation.ts`: `TENANT_A`, `TENANT_B`,
+`authAsTenantA()`, `apiRequest()`, `routeParams()`, `callsTo()`, `writesTo()`.
+
+Cuando agregues un endpoint nuevo, el checklist es: encolar una fila de B,
+llamar la ruta como A, y afirmar que la respuesta no la contiene y que no hubo
+escrituras. Un filtro ausente se convierte en un test rojo, no en un bug en
+producción.
+
+#### Verificación de RLS contra la base real
+
+Las suites de arriba corren sin base de datos. Para probar el otro lado —que
+`anon` + un JWT de usuario real no puede saltarse RLS ni el bucket privado— está
+`scripts/verify-rls.mjs`, que crea fixtures en un tenant "víctima" al que el
+usuario no pertenece, verifica el aislamiento y limpia todo:
+
+```bash
+npm run verify:rls
+```
+
+Necesita, en `.env.local`: `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `E2E_USER_EMAIL`
+y `E2E_USER_PASSWORD`. **Solo contra el proyecto de test**: el script escribe
+datos reales.
+
+### Lint y tipos
+
+```bash
+npm run lint
+npm run typecheck
+```
+
 ### Tests E2E (Playwright)
 
 Los E2E corren con [Playwright](https://playwright.dev) contra la app real levantada en el puerto 3000 (la levanta sola). Viven en `e2e/`.
