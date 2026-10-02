@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useProducts } from '@/lib/hooks/useProducts';
 import { useCategories } from '@/lib/hooks/useCategories';
@@ -45,7 +45,7 @@ import {
   Settings2,
   Scan,
 } from 'lucide-react';
-import { formatARS } from '@/lib/utils/currency';
+import { formatARS, groupThousands, parseAmountInput, amountToInput } from '@/lib/utils/currency';
 import { getTenantHeaders, authFetch } from '@/lib/fetchWithTenant';
 import { filterProducts } from '@/lib/product-search';
 import { IMPORT_FILE_ERROR, parseWorkbookFile, validateSpreadsheetFile } from '@/lib/excel-import-parse';
@@ -183,6 +183,18 @@ function ProductsPageContent() {
     image_storage_path: '',
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
+
+  // Los inputs de precio y costo muestran los miles separados ("80.000"), asi que
+  // necesitan un draft de texto: type="number" no acepta separadores.
+  const [amountDraft, setAmountDraft] = useState<{ price?: string; cost?: string }>({});
+  const priceDisplay = amountDraft.price ?? amountToInput(productForm.price);
+  const costDisplay = amountDraft.cost ?? amountToInput(productForm.cost);
+
+  const handleAmountChange = (field: 'price' | 'cost') => (raw: string) => {
+    const formatted = groupThousands(raw);
+    setAmountDraft((prev) => ({ ...prev, [field]: formatted }));
+    setProductForm((prev) => ({ ...prev, [field]: parseAmountInput(formatted) }));
+  };
 
   // Category Modal State
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -457,7 +469,8 @@ function ProductsPageContent() {
   const { currentPage, setCurrentPage, totalPages, pageItems: paginatedProducts } = usePagination(sortedProducts, 8);
 
   // Handlers
-  const handleOpenProductModal = (product: Product | null = null) => {
+  const handleOpenProductModal = useCallback((product: Product | null = null) => {
+    setAmountDraft({});
     if (product) {
       setEditingProduct(product);
       setProductForm({
@@ -499,7 +512,22 @@ function ProductsPageContent() {
     }
     setImageFile(null);
     setIsProductModalOpen(true);
-  };
+  }, [categories]);
+
+  // Deep-link: /products?edit=<id> abre directo el modal de ese producto. Lo usa la
+  // lista de "se venden bajo su costo" del forecast. Mismo patron que el ?create=1
+  // de mas arriba, pero espera a que el catalogo cargue. El ref evita que el modal
+  // se reabra si el usuario lo cierra.
+  const deepLinkHandled = useRef(false);
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('edit');
+    if (!id || deepLinkHandled.current || productsLoading) return;
+    const target = (products ?? []).find((p) => p.id === id);
+    if (!target) return;
+    deepLinkHandled.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    handleOpenProductModal(target);
+  }, [products, productsLoading, handleOpenProductModal]);
 
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1031,11 +1059,13 @@ function ProductsPageContent() {
                     <Input
                       id="product-cost"
                       name="cost"
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={productForm.cost || ''}
-                      onChange={(e) => setProductForm({ ...productForm, cost: Number(e.target.value) })}
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      placeholder="0,00"
+                      className="tabular-nums"
+                      value={costDisplay}
+                      onChange={(e) => handleAmountChange('cost')(e.target.value)}
                     />
                   </div>
                   <div>
@@ -1045,12 +1075,14 @@ function ProductsPageContent() {
                     <Input
                       id="product-price"
                       name="price"
-                      type="number"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
                       required
-                      placeholder="0.00"
-                      value={productForm.price || ''}
-                      onChange={(e) => setProductForm({ ...productForm, price: Number(e.target.value) })}
+                      placeholder="0,00"
+                      className="tabular-nums"
+                      value={priceDisplay}
+                      onChange={(e) => handleAmountChange('price')(e.target.value)}
                     />
                   </div>
                   <div>

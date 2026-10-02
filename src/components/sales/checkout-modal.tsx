@@ -23,7 +23,7 @@ import {
   type PaymentAdjustments,
   type PaymentMethodId,
 } from '@/lib/payment-methods';
-import { formatARS } from '@/lib/utils/currency';
+import { formatARS, groupThousands } from '@/lib/utils/currency';
 import { cn } from '@/lib/utils/cn';
 
 export interface CheckoutSplitPayment {
@@ -68,14 +68,6 @@ function parseAmount(raw: string): number {
   if (!normalized) return 0;
   const value = parseFloat(normalized);
   return Number.isFinite(value) && value >= 0 ? value : 0;
-}
-
-function groupThousands(raw: string): string {
-  if (!raw) return raw;
-  const hasDecimal = raw.includes(',');
-  const [intRaw = '', decRaw = ''] = hasDecimal ? raw.split(',') : [raw, ''];
-  const grouped = intRaw.replace(/\D/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  return hasDecimal ? `${grouped},${decRaw.replace(/\D/g, '')}` : grouped;
 }
 
 /** Aplica el ajuste porcentual del medio de pago sobre un monto en centavos. */
