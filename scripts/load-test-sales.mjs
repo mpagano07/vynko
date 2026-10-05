@@ -23,7 +23,7 @@ const __dirname = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 dotenv.config({ path: path.join(__dirname, '.env.local'), quiet: true });
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const ANON_KEY = process.env.SUPABASE_ANON_KEY;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const EMAIL = process.env.E2E_USER_EMAIL;
 const PASSWORD = process.env.E2E_USER_PASSWORD;
@@ -405,7 +405,7 @@ async function diagnoseErrors({ cookie, payload, connections }) {
 async function run() {
   const required = {
     NEXT_PUBLIC_SUPABASE_URL: SUPABASE_URL,
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: ANON_KEY,
+    SUPABASE_ANON_KEY: ANON_KEY,
     E2E_USER_EMAIL: EMAIL,
     E2E_USER_PASSWORD: PASSWORD,
   };

@@ -8,7 +8,7 @@
  *   node scripts/verify-rls.mjs
  *
  * Variables (de .env.local):
- *   NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
+ *   NEXT_PUBLIC_SUPABASE_URL, SUPABASE_ANON_KEY,
  *   SUPABASE_SERVICE_ROLE_KEY, E2E_USER_EMAIL, E2E_USER_PASSWORD
  *
  * El script crea fixturesown en un tenant "victima" que el usuario NO
@@ -55,7 +55,7 @@ function loadEnv() {
 
 const env = loadEnv();
 const URL_BASE = env.NEXT_PUBLIC_SUPABASE_URL;
-const ANON = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const ANON = env.SUPABASE_ANON_KEY;
 const SERVICE = env.SUPABASE_SERVICE_ROLE_KEY;
 const USER_EMAIL = env.E2E_USER_EMAIL;
 const USER_PASSWORD = env.E2E_USER_PASSWORD;
@@ -721,7 +721,7 @@ await section('rate_limit_buckets es inaccesible desde el cliente', async () => 
 
   // Estas dos son el ataque real, asi que se cubren para anon y para
   // authenticated. La anon key va en el bundle del navegador: con la sola
-  // `NEXT_PUBLIC_SUPABASE_ANON_KEY` un atacante puede llamar la funcion por
+  // `SUPABASE_ANON_KEY` un atacante puede llamar la funcion por
   // PostgREST, agotarle el limite a una victima y dejarla sin poder entrar, o
   // inflar la tabla con claves inventadas de ventana larga.
   for (const [who, client] of [
