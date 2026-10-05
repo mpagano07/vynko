@@ -22,6 +22,27 @@ vi.mock('@/lib/track-event', () => ({
   trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
 }));
 
+// El log de bitacora se difiere con `after`. En tests `after` no existe, asi
+// que se encolan los callbacks y `flushAfter()` los ejecuta a demanda. Hace
+// falta esperarlos explicitamente: el insert es asincrono y si se leyera la
+// tabla antes de que corra, el assertion seria una carrera.
+const afterCallbacks: Array<() => unknown> = [];
+
+const mockAfter = vi.fn((cb: () => unknown) => {
+  afterCallbacks.push(cb);
+});
+
+async function flushAfter() {
+  while (afterCallbacks.length > 0) {
+    const cb = afterCallbacks.shift()!;
+    await cb();
+  }
+}
+
+vi.mock('next/server', () => ({
+  after: (cb: () => unknown) => mockAfter(cb),
+}));
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -69,15 +90,39 @@ function queueNoOwner() {
   supabaseMock.__queue('tenant_users', { data: null, error: null });
 }
 
+/**
+ * Estado final que quedo escrito en `tenants`.
+ *
+ * El servicio parte la escritura en DOS UPDATE a proposito: la transicion de
+ * estado (que lleva el compare-and-set) y el refresco del periodo (que es nivel
+ * y tiene que correr en cada renewal). Un test que mira el final del flujo ya
+ * no puede leer "el ultimo update" y esperar encontrarlo todo ahi: tiene que
+ * mirar el merge de los dos.
+ */
+function tenantsWrites(): Record<string, unknown> {
+  return supabaseMock.__calls
+    .filter((c) => c.table === 'tenants' && c.method === 'update')
+    .reduce<Record<string, unknown>>(
+      (acc, c) => ({ ...acc, ...(c.args[0] as Record<string, unknown>) }),
+      {}
+    );
+}
+
+function tenantUpdates() {
+  return supabaseMock.__calls.filter((c) => c.table === 'tenants' && c.method === 'update');
+}
+
 // ---------------------------------------------------------------------------
 // processMercadoPagoWebhook
 // ---------------------------------------------------------------------------
 
 describe('processMercadoPagoWebhook', () => {
-  beforeEach(() => {
+beforeEach(() => {
     supabaseMock.__reset();
     mockGetPreApprovalById.mockReset();
     mockTrackEvent.mockReset();
+    mockAfter.mockClear();
+    afterCallbacks.length = 0;
   });
 
   // -----------------------------------------------------------------------
@@ -152,7 +197,7 @@ describe('processMercadoPagoWebhook', () => {
         (c) => c.table === 'tenants' && c.method === 'update'
       );
       expect(tenantUpdate).toBeDefined();
-      const data = tenantUpdate!.args[0] as Record<string, unknown>;
+      const data = tenantsWrites();
       expect(data.subscription_status).toBe('active');
       expect(data.subscription_plan).toBe('business');
       expect(data.mercadopago_preapproval_id).toBe('preapproval-123');
@@ -384,29 +429,53 @@ describe('processMercadoPagoWebhook', () => {
       expect(data.subscription_plan).toBe('starter');
     });
 
-    it('does NOT clear preapproval_id if it belongs to a different preapproval', async () => {
+    it('ignores a cancellation webhook for a subscription that is no longer current', async () => {
+      // Webhook fuera de orden: llega la cancelacion de `old-preapproval`
+      // DESPUES de que el owner se resuscribio con `new-preapproval`, que es la
+      // que esta vigente y pagandose.
+      //
+      // Antes el servicio.cancelaba igual y solo se abstenia de limpiar el
+      // preapproval_id: el tenant quedaba 'canceled' con una suscripcion
+      // activa. Perder el evento obsoleto es mucho mas barato que cancelar un
+      // pago vivo.
       mockGetPreApprovalById.mockResolvedValue({
         external_reference: 'tenant-1',
         status: 'cancelled',
       });
-      queueOwnerResolution();
+      queueOwnerResolution('owner-1');
       supabaseMock.__queue('tenants', {
         data: {
-          subscription_plan: 'business',
-          mercadopago_preapproval_id: 'different-preapproval',
+          subscription_plan: 'starter',
+          mercadopago_preapproval_id: 'new-preapproval',
         },
         error: null,
       });
-      supabaseMock.__queue('tenants', { data: null, error: null });
 
-      await processMercadoPagoWebhook('old-preapproval', 'subscription_preapproval');
+      const result = await processMercadoPagoWebhook('old-preapproval', 'subscription_preapproval');
 
-      const tenantUpdate = supabaseMock.__calls.find(
-        (c) => c.table === 'tenants' && c.method === 'update'
-      );
-      const data = tenantUpdate!.args[0] as Record<string, unknown>;
-      // Should NOT include mercadopago_preapproval_id: null
-      expect(data.mercadopago_preapproval_id).toBeUndefined();
+      // 200 sin tocar nada: MP no debe reintentar un evento que ya no importa.
+      expect(result).toEqual({ ok: true, data: { received: true } });
+      expect(tenantUpdates()).toHaveLength(0);
+      expect(mockTrackEvent).not.toHaveBeenCalled();
+    });
+
+    it('clears preapproval_id when the cancellation matches the current subscription', async () => {
+      mockGetPreApprovalById.mockResolvedValue({
+        external_reference: 'tenant-1',
+        status: 'cancelled',
+      });
+      queueOwnerResolution('owner-1');
+      supabaseMock.__queue('tenants', {
+        data: { subscription_plan: 'business', mercadopago_preapproval_id: 'pa-c' },
+        error: null,
+      });
+      supabaseMock.__queue('tenants', { data: [{ id: 'tenant-1' }], error: null });
+
+      await processMercadoPagoWebhook('pa-c', 'subscription_preapproval');
+
+      const data = tenantsWrites();
+      expect(data.mercadopago_preapproval_id).toBeNull();
+      expect(data.subscription_status).toBe('canceled');
     });
 
     it('emits subscription_cancelled event with the PREVIOUS plan', async () => {
@@ -573,16 +642,21 @@ describe('processMercadoPagoWebhook', () => {
   // Error resilience
   // -----------------------------------------------------------------------
 
-  describe('error resilience', () => {
-    it('returns ok:true even when getPreApprovalById throws', async () => {
+  describe('reintentos de MercadoPago', () => {
+    // Antes estos dos tests afirmaban `ok:true` y el nombre del bloque era
+    // "error resilience". Eso fijaba como correcto el fallo silencioso: con 200
+    // MercadoPago da el evento por procesado y NO reintenta, asi que un fallo
+    // transitorio de red o de API se perdia para siempre. El nombre ahora
+    // describe el requisito (que MP pueda reintentar) y la asercion es el 500.
+    it('returns 500 so MercadoPago retries when getPreApprovalById throws', async () => {
       mockGetPreApprovalById.mockRejectedValue(new Error('MP API timeout'));
 
       const result = await processMercadoPagoWebhook('pa-1', 'subscription_preapproval');
-      expect(result.ok).toBe(true);
-      expect(result).toEqual({ ok: true, data: { received: true } });
+
+      expect(result).toEqual({ ok: false, error: 'Webhook processing failed', status: 500 });
     });
 
-    it('returns ok:true when supabase update fails', async () => {
+    it('returns 500 when the tenants update fails, instead of losing the payment', async () => {
       mockGetPreApprovalById.mockResolvedValue({
         external_reference: 'tenant-1:starter',
         status: 'authorized',
@@ -590,82 +664,224 @@ describe('processMercadoPagoWebhook', () => {
         next_payment_date: '2026-11-01T00:00:00Z',
       });
       queueOwnerResolution();
-      // Simulate supabase error
       supabaseMock.__queue('tenants', { data: null, error: { message: 'DB error' } });
 
       const result = await processMercadoPagoWebhook('pa-1', 'subscription_preapproval');
-      // The service catches everything and returns ok
-      expect(result.ok).toBe(true);
+
+      expect(result).toEqual({ ok: false, error: 'Webhook processing failed', status: 500 });
+    });
+
+    it('does not emit analytics when the activation write failed', async () => {
+      mockGetPreApprovalById.mockResolvedValue({
+        external_reference: 'tenant-1:starter',
+        status: 'authorized',
+        reason: 'Starter',
+        next_payment_date: '2026-11-01T00:00:00Z',
+      });
+      queueOwnerResolution('owner-1');
+      supabaseMock.__queue('tenants', { data: null, error: { message: 'DB error' } });
+
+      await processMercadoPagoWebhook('pa-1', 'subscription_preapproval');
+
+      // Un pago que no se activo no puede contar como "empezo a pagar": si MP
+      // reintenta y esta vez funciona, recien ahi se emite.
+      expect(mockTrackEvent).not.toHaveBeenCalled();
     });
   });
 
   // -----------------------------------------------------------------------
-  // Idempotencia (spec de comportamiento deseado)
+  // Idempotencia
+  //
+  // No hay tabla de eventos procesados. La idempotencia sale de que las
+  // escrituras de estado sean compare-and-set (`.neq(...)` DENTRO del WHERE):
+  // la segunda entrega del mismo evento no matchea la fila y Postgres devuelve
+  // un array vacio. Es lo que permite que dos entregas simultaneas del mismo
+  // webhook no cuenten dos.
   // -----------------------------------------------------------------------
 
   describe('idempotencia', () => {
-    it('should not double-update when the same authorized webhook is processed twice', async () => {
-      const preapproval = {
-        external_reference: 'tenant-1:business',
-        status: 'authorized',
-        reason: 'Business',
-        next_payment_date: '2026-11-01T00:00:00Z',
-      };
-      mockGetPreApprovalById.mockResolvedValue(preapproval);
+    const authorizedPreapproval = {
+      external_reference: 'tenant-1:business',
+      status: 'authorized',
+      reason: 'Business',
+      next_payment_date: '2026-11-01T00:00:00Z',
+    };
 
-      // First call
-      queueOwnerResolution();
-      supabaseMock.__queue('tenants', { data: null, error: null });
-      await processMercadoPagoWebhook('pa-same', 'subscription_preapproval');
+    /**
+     * El mock NO evalua el predicado `neq` (solo aplica eq/in/is cuando
+     * `__setTenantAware` esta encendido), asi que limitarse a encolar `data: []`
+     * para simular "no matcheo" probaria la rama del `if`, no el WHERE. Sin
+     * esto, borrar el `.neq` del servicio dejaria la suite en verde y la
+     * idempotencia volveria a no existir sin que nadie se entere. Por eso la
+     * garantia se afirma sobre el predicado emitido.
+     */
+    function expectTransitionGuardedBy(expectedPreviousStatus: string) {
+      const neqCalls = supabaseMock.__calls.filter((c) => c.method === 'neq');
+      expect(neqCalls.map((c) => c.args)).toContainEqual([
+        'subscription_status',
+        expectedPreviousStatus,
+      ]);
+    }
 
-      const firstCallCount = supabaseMock.__calls.filter(
-        (c) => c.table === 'tenants' && c.method === 'update'
-      ).length;
+    it('guards the activation update with a compare-and-set on the previous status', async () => {
+      mockGetPreApprovalById.mockResolvedValue(authorizedPreapproval);
+      queueOwnerResolution('owner-1');
+      supabaseMock.__queue('tenants', { data: [{ id: 'tenant-1' }], error: null });
 
-      // Second call with same ID — should be idempotent
-      mockGetPreApprovalById.mockResolvedValue(preapproval);
-      queueOwnerResolution();
-      supabaseMock.__queue('tenants', { data: null, error: null });
-      await processMercadoPagoWebhook('pa-same', 'subscription_preapproval');
+      await processMercadoPagoWebhook('pa-cas', 'subscription_preapproval');
 
-      const secondCallCount = supabaseMock.__calls.filter(
-        (c) => c.table === 'tenants' && c.method === 'update'
-      ).length;
-
-      // Both calls produce updates; the key is the end state is the same.
-      // This documents that currently there IS a double-update (both calls
-      // go through). When idempotency is implemented, the second call should
-      // be a no-op, so the update count should stay the same.
-      expect(secondCallCount).toBeGreaterThanOrEqual(firstCallCount);
+      // `.neq('subscription_status','active')` DENTRO del WHERE es lo que hace
+      // que la segunda entrega no matchee. Si esto desaparece, cada reenvio
+      // vuelve a emitir `subscription_started`.
+      expectTransitionGuardedBy('active');
     });
 
-    it('should not emit duplicate analytics events for repeated webhook', async () => {
-      const preapproval = {
-        external_reference: 'tenant-1:business',
-        status: 'authorized',
-        reason: 'Business',
-        next_payment_date: '2026-11-01T00:00:00Z',
-      };
-
-      // First webhook
-      mockGetPreApprovalById.mockResolvedValue(preapproval);
+    it('guards the cancellation update with a compare-and-set on the previous status', async () => {
+      mockGetPreApprovalById.mockResolvedValue({
+        external_reference: 'tenant-1',
+        status: 'cancelled',
+      });
       queueOwnerResolution('owner-1');
+      supabaseMock.__queue('tenants', {
+        data: { subscription_plan: 'business', mercadopago_preapproval_id: 'pa-c' },
+        error: null,
+      });
+      supabaseMock.__queue('tenants', { data: [{ id: 'tenant-1' }], error: null });
+
+      await processMercadoPagoWebhook('pa-c', 'subscription_preapproval');
+
+      expectTransitionGuardedBy('canceled');
+    });
+
+    it('processes the same authorized webhook twice', async () => {
+      mockGetPreApprovalById.mockResolvedValue(authorizedPreapproval);
+      queueOwnerResolution();
       supabaseMock.__queue('tenants', { data: null, error: null });
+
+      await processMercadoPagoWebhook('pa-same', 'subscription_preapproval');
+      await processMercadoPagoWebhook('pa-same', 'subscription_preapproval');
+
+      // Ambas entregas terminan en el mismo estado final...
+      const data = tenantsWrites();
+      expect(data.subscription_status).toBe('active');
+      expect(data.subscription_plan).toBe('business');
+      expect(data.mercadopago_preapproval_id).toBe('pa-same');
+    });
+
+    it('does NOT emit subscription_started twice for a repeated webhook', async () => {
+      mockGetPreApprovalById.mockResolvedValue(authorizedPreapproval);
+
+      // Primera entrega: la rama no estaba activa, asi que el UPDATE con
+      // `.neq(subscription_status,'active')` matchea y devuelve filas.
+      queueOwnerResolution('owner-1');
+      supabaseMock.__queue('tenants', { data: [{ id: 'tenant-1' }], error: null });
       await processMercadoPagoWebhook('pa-dup', 'subscription_preapproval');
 
-      const firstTrackCount = mockTrackEvent.mock.calls.length;
+      expect(mockTrackEvent).toHaveBeenCalledTimes(1);
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'subscription_started' })
+      );
 
-      // Same webhook again
-      mockGetPreApprovalById.mockResolvedValue(preapproval);
+      // Segunda entrega del MISMO evento: la fila ya quedo 'active', el WHERE no
+      // matchea y PostgREST devuelve `[]`. Esa es la senal de no emitir.
       queueOwnerResolution('owner-1');
-      supabaseMock.__queue('tenants', { data: null, error: null });
+      supabaseMock.__queue('tenants', { data: [], error: null });
       await processMercadoPagoWebhook('pa-dup', 'subscription_preapproval');
 
-      const totalTrackCount = mockTrackEvent.mock.calls.length;
+      expect(mockTrackEvent).toHaveBeenCalledTimes(1);
+    });
 
-      // Currently both will emit (no idempotency). When fixed, total should
-      // equal firstTrackCount. For now, document the current behavior.
-      expect(totalTrackCount).toBe(firstTrackCount * 2);
+    it('does NOT emit subscription_cancelled twice for a repeated cancellation', async () => {
+      mockGetPreApprovalById.mockResolvedValue({
+        external_reference: 'tenant-1',
+        status: 'cancelled',
+      });
+
+      queueOwnerResolution('owner-1');
+      supabaseMock.__queue('tenants', {
+        data: { subscription_plan: 'business', mercadopago_preapproval_id: 'pa-c' },
+        error: null,
+      });
+      supabaseMock.__queue('tenants', { data: [{ id: 'tenant-1' }], error: null });
+      await processMercadoPagoWebhook('pa-c', 'subscription_preapproval');
+      expect(mockTrackEvent).toHaveBeenCalledTimes(1);
+
+      // Reenvio: ya estaba 'canceled'.
+      queueOwnerResolution('owner-1');
+      supabaseMock.__queue('tenants', {
+        data: { subscription_plan: 'free', mercadopago_preapproval_id: null },
+        error: null,
+      });
+      supabaseMock.__queue('tenants', { data: [], error: null });
+      await processMercadoPagoWebhook('pa-c', 'subscription_preapproval');
+
+      expect(mockTrackEvent).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT count a monthly renewal as a new subscription', async () => {
+      // MP reenvia `authorized` en cada cobro. La rama ya esta 'active', asi que
+      // el compare-and-set no matchea y el embudo NO ve un segundo "Empezo a
+      // pagar". Esto era el bug: antes cada renewal reemitia el evento.
+      mockGetPreApprovalById.mockResolvedValue(authorizedPreapproval);
+
+      queueOwnerResolution('owner-1');
+      supabaseMock.__queue('tenants', { data: [{ id: 'tenant-1' }], error: null });
+      await processMercadoPagoWebhook('pa-renew', 'subscription_preapproval');
+      expect(mockTrackEvent).toHaveBeenCalledTimes(1);
+
+      // Renewal del mes siguiente: la fila ya estaba activa.
+      mockGetPreApprovalById.mockResolvedValue({
+        ...authorizedPreapproval,
+        next_payment_date: '2026-12-01T00:00:00Z',
+      });
+      queueOwnerResolution('owner-1');
+      supabaseMock.__queue('tenants', { data: [], error: null });
+      await processMercadoPagoWebhook('pa-renew', 'subscription_preapproval');
+
+      expect(mockTrackEvent).toHaveBeenCalledTimes(1);
+    });
+
+    it('still advances the billing period on a renewal, even with no transition', async () => {
+      // El periodo es nivel, no arista: aunque no haya transicion, el renewal
+      // tiene que mover `subscription_current_period_end` o el gate de acceso
+      // creeria que la suscripcion vencio.
+      mockGetPreApprovalById.mockResolvedValue(authorizedPreapproval);
+
+      queueOwnerResolution('owner-1');
+      supabaseMock.__queue('tenants', { data: [{ id: 'tenant-1' }], error: null });
+      await processMercadoPagoWebhook('pa-renew', 'subscription_preapproval');
+
+      mockGetPreApprovalById.mockResolvedValue({
+        ...authorizedPreapproval,
+        next_payment_date: '2026-12-01T00:00:00Z',
+      });
+      queueOwnerResolution('owner-1');
+      supabaseMock.__queue('tenants', { data: [], error: null });
+      await processMercadoPagoWebhook('pa-renew', 'subscription_preapproval');
+
+      const data = tenantsWrites();
+      expect(data.subscription_current_period_end).toBe('2026-12-01T00:00:00Z');
+    });
+
+    it('does NOT reactivate product_stock on a renewal', async () => {
+      // Reencender stock en cada renewal volveria a activar productos que el
+      // usuario apago a proposito entre cobros.
+      mockGetPreApprovalById.mockResolvedValue(authorizedPreapproval);
+
+      queueOwnerResolution('owner-1');
+      supabaseMock.__queue('tenants', { data: [{ id: 'tenant-1' }], error: null });
+      await processMercadoPagoWebhook('pa-renew', 'subscription_preapproval');
+      expect(
+        supabaseMock.__calls.filter((c) => c.table === 'product_stock' && c.method === 'update')
+      ).toHaveLength(1);
+
+      queueOwnerResolution('owner-1');
+      supabaseMock.__queue('tenants', { data: [], error: null });
+      await processMercadoPagoWebhook('pa-renew', 'subscription_preapproval');
+
+      expect(
+        supabaseMock.__calls.filter((c) => c.table === 'product_stock' && c.method === 'update')
+      ).toHaveLength(1);
     });
   });
 
@@ -700,13 +916,10 @@ describe('processMercadoPagoWebhook', () => {
       const result = await processMercadoPagoWebhook('pa-new', 'subscription_preapproval');
       expect(result.ok).toBe(true);
 
-      // Verify the last update is the authorized one
-      const updates = supabaseMock.__calls.filter(
-        (c) => c.table === 'tenants' && c.method === 'update'
-      );
-      const lastUpdate = updates[updates.length - 1];
-      const data = lastUpdate!.args[0] as Record<string, unknown>;
+      // Verify the final write is the authorized one
+      const data = tenantsWrites();
       expect(data.subscription_status).toBe('active');
+      expect(data.mercadopago_preapproval_id).toBe('pa-new');
     });
   });
 
@@ -826,3 +1039,201 @@ describe('resolveOwnerUserId', () => {
     expect(id).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Audit log (webhook_events)
+// ---------------------------------------------------------------------------
+
+describe('bitacora de webhooks', () => {
+  const auditRow = () => {
+    const insert = supabaseMock.__calls.find(
+      (c) => c.table === 'webhook_events' && c.method === 'insert'
+    );
+    return insert?.args[0] as Record<string, unknown> | undefined;
+  };
+
+  beforeEach(() => {
+    // Este describe esta fuera del que tiene el reset global, asi que necesita
+    // su propio: sin el, `__calls` acumula y cada test lee la fila del primero.
+    supabaseMock.__reset();
+    mockGetPreApprovalById.mockReset();
+    mockTrackEvent.mockReset();
+    mockAfter.mockClear();
+    afterCallbacks.length = 0;
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  it('logs a first activation as processed', async () => {
+    mockGetPreApprovalById.mockResolvedValue({
+      external_reference: 'tenant-1:business',
+      status: 'authorized',
+    });
+    queueOwnerResolution();
+    supabaseMock.__queue('tenants', { data: [{ id: 'tenant-1' }], error: null });
+    supabaseMock.__queue('tenants', { error: null });
+    supabaseMock.__queue('product_stock', { error: null });
+
+    await processMercadoPagoWebhook('pa-1', 'subscription_preapproval');
+
+    await flushAfter();
+
+    const row = auditRow();
+    expect(row).toMatchObject({
+      provider: 'mercadopago',
+      provider_event_id: 'pa-1',
+      topic: 'subscription_preapproval',
+      mp_status: 'authorized',
+      outcome: 'processed',
+      tenant_id: 'tenant-1',
+      user_id: 'owner-1',
+      error: null,
+    });
+  });
+
+  it('logs a repeat delivery as duplicate, not as a new activation', async () => {
+    // El caso que hace util la bitacora: sin `outcome`, un renewal legitimo se
+    // veria igual que un webhook reenviado por error.
+    mockGetPreApprovalById.mockResolvedValue({
+      external_reference: 'tenant-1:business',
+      status: 'authorized',
+    });
+    queueOwnerResolution();
+    supabaseMock.__queue('tenants', { data: [], error: null });
+    supabaseMock.__queue('tenants', { error: null });
+
+    await processMercadoPagoWebhook('pa-1', 'subscription_preapproval');
+
+    await flushAfter();
+
+    expect(auditRow()).toMatchObject({ outcome: 'duplicate', mp_status: 'authorized' });
+  });
+
+  it('logs a cancellation as processed', async () => {
+    mockGetPreApprovalById.mockResolvedValue({
+      external_reference: 'tenant-1',
+      status: 'cancelled',
+    });
+    queueOwnerResolution();
+    supabaseMock.__queue('tenants', {
+      data: { subscription_plan: 'business', mercadopago_preapproval_id: 'pa-1' },
+      error: null,
+    });
+    supabaseMock.__queue('tenants', { data: [{ id: 'tenant-1' }], error: null });
+
+    await processMercadoPagoWebhook('pa-1', 'subscription_preapproval');
+
+    await flushAfter();
+
+    expect(auditRow()).toMatchObject({ outcome: 'processed', mp_status: 'cancelled' });
+  });
+
+  it('logs a stale cancellation as ignored', async () => {
+    mockGetPreApprovalById.mockResolvedValue({
+      external_reference: 'tenant-1',
+      status: 'cancelled',
+    });
+    queueOwnerResolution();
+    supabaseMock.__queue('tenants', {
+      data: { subscription_plan: 'business', mercadopago_preapproval_id: 'pa-OTHER' },
+      error: null,
+    });
+
+    const result = await processMercadoPagoWebhook('pa-1', 'subscription_preapproval');
+
+    await flushAfter();
+
+    expect(result.ok).toBe(true);
+    expect(auditRow()).toMatchObject({
+      outcome: 'ignored',
+      error: expect.stringContaining('vigente'),
+    });
+  });
+
+  it('logs a pending subscription as ignored', async () => {
+    mockGetPreApprovalById.mockResolvedValue({
+      external_reference: 'tenant-1',
+      status: 'pending',
+    });
+    queueOwnerResolution();
+
+    await processMercadoPagoWebhook('pa-1', 'subscription_preapproval');
+
+    await flushAfter();
+
+    expect(auditRow()).toMatchObject({ outcome: 'ignored', mp_status: 'pending' });
+  });
+
+  it('logs an unrelated topic as ignored', async () => {
+    await processMercadoPagoWebhook('x-1', 'payment');
+
+    await flushAfter();
+
+    expect(auditRow()).toMatchObject({ outcome: 'ignored', topic: 'payment' });
+  });
+
+  it('logs a processing failure with its reason', async () => {
+    mockGetPreApprovalById.mockRejectedValue(new Error('MP API 500'));
+    queueOwnerResolution();
+
+    const result = await processMercadoPagoWebhook('pa-1', 'subscription_preapproval');
+
+    await flushAfter();
+
+    expect(result).toEqual({ ok: false, error: 'Webhook processing failed', status: 500 });
+    expect(auditRow()).toMatchObject({ outcome: 'error', error: 'MP API 500' });
+  });
+
+  it('logs a payload without external reference as an error', async () => {
+    mockGetPreApprovalById.mockResolvedValue({ external_reference: null, status: 'authorized' });
+
+    const result = await processMercadoPagoWebhook('pa-1', 'subscription_preapproval');
+
+    await flushAfter();
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.status).toBe(400);
+    expect(auditRow()).toMatchObject({ outcome: 'error', error: 'No external reference' });
+  });
+
+  it('defers the write so it does not block the response', async () => {
+    mockGetPreApprovalById.mockResolvedValue({
+      external_reference: 'tenant-1',
+      status: 'pending',
+    });
+    queueOwnerResolution();
+
+    await processMercadoPagoWebhook('pa-1', 'subscription_preapproval');
+
+    await flushAfter();
+
+    expect(mockAfter).toHaveBeenCalledTimes(1);
+  });
+
+  it('still answers ok when the audit write fails', async () => {
+    // La bitacora nunca debe decidir la respuesta: un 500 por no poder loguear
+    // hace que MercadoPago reintente un evento que ya se proceso.
+    mockGetPreApprovalById.mockResolvedValue({
+      external_reference: 'tenant-1',
+      status: 'pending',
+    });
+    queueOwnerResolution();
+    supabaseMock.__queue('webhook_events', { data: null, error: { message: 'boom' } });
+
+    const result = await processMercadoPagoWebhook('pa-1', 'subscription_preapproval');
+
+    await flushAfter();
+
+    expect(result).toEqual({ ok: true, data: { received: true } });
+  });
+
+  it('does not log at all when the event has no id', async () => {
+    const result = await processMercadoPagoWebhook(undefined, 'subscription_preapproval');
+
+    await flushAfter();
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.status).toBe(400);
+    expect(auditRow()).toBeUndefined();
+  });
+});
+

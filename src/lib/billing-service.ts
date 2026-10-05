@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { PLANS, getEffectivePrice, getTrialDays, getTrialPlan, PLAN_ORDER, PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import { createPreApproval, cancelPreApproval } from '@/lib/mercadopago';
+import { resolveOwnerBranchIds } from '@/lib/mercadopago-webhook-service';
 import { consolidateOwnerSubscription, type TenantSubscription } from '@/lib/checkSubscription';
 import { canManageTenant } from '@/lib/membership-role';
 import { safeInternalRedirect } from '@/lib/security/redirects';
@@ -121,6 +122,13 @@ export async function downgradePlan(
   const mainTenant = tenants.find((t) => t.id === mainTenantId) || tenants[0];
   const extraTenantIds = tenants.filter((t) => t.id !== mainTenant.id).map((t) => t.id);
 
+  // Se resuelve ANTES de borrar membresias: `extraTenantIds` solo contiene las
+  // ramas donde ESTE usuario es miembro, asi que las ramas del owner donde no es
+  // miembro (otra sucursal con su propia sesion) no aparecen en `userTenants` y
+  // se perderian. Sin esto, un downgrade dejaba al owner con el plan viejo en
+  // esas ramas mientras la principal bajaba de plan.
+  const ownerBranchIds = await resolveOwnerBranchIds(mainTenant.id, [mainTenant.id]);
+
   if (planRank(mainTenant.subscription_plan) <= planRank(plan)) {
     return {
       ok: false,
@@ -199,7 +207,7 @@ export async function downgradePlan(
       subscription_current_period_end: null,
       mercadopago_preapproval_id: null,
     })
-    .eq('id', mainTenant.id);
+    .in('id', ownerBranchIds);
   if (planError) {
     console.error('DB error:', planError);
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
@@ -213,7 +221,7 @@ export async function downgradePlan(
       payer_email: mainTenant.billing_email || user.email!,
       reason: `Suscripción ${targetPlanConfig.name} - Vynko`,
       back_url: backUrl,
-      external_reference: mainTenant.id,
+      external_reference: `${mainTenant.id}:${plan}`,
       auto_recurring: {
         frequency: 1,
         frequency_type: 'months',
@@ -226,7 +234,7 @@ export async function downgradePlan(
     await supabaseAdmin
       .from('tenants')
       .update({ mercadopago_preapproval_id: preapproval.id })
-      .eq('id', mainTenant.id);
+      .in('id', ownerBranchIds);
 
     url = preapproval.init_point || null;
   } catch (err) {
@@ -262,6 +270,13 @@ export async function cancelSubscription(userId: string): Promise<BillingResult>
 
   await cancelPreApproval(tenant.mercadopago_preapproval_id);
 
+  // La suscripcion es del OWNER, no de la rama: cancelar desde el portal tiene
+  // que tocar todas las ramas igual que hace el webhook. Antes solo se
+  // actualizaba `ownerTenant.tenant_id`, y como el webhook si propaga a todas,
+  // el resultado dependedia de si la cancelacion venia del portal o de la
+  // notificacion: misma accion de negocio, dos finales distintos.
+  const ownerBranchIds = await resolveOwnerBranchIds(ownerTenant.tenant_id, [ownerTenant.tenant_id]);
+
   await supabaseAdmin
     .from('tenants')
     .update({
@@ -270,7 +285,7 @@ export async function cancelSubscription(userId: string): Promise<BillingResult>
       mercadopago_preapproval_id: null,
       subscription_current_period_end: tenant.subscription_current_period_end ?? null,
     })
-    .eq('id', ownerTenant.tenant_id);
+    .in('id', ownerBranchIds);
 
   // El webhook tambien emite subscription_cancelled cuando llega la
   // notificacion de MercadoPago. Este es el camino del portal, y son

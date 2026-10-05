@@ -347,6 +347,62 @@ describe('cancelSubscription', () => {
     expect(data.mercadopago_preapproval_id).toBeNull();
   });
 
+  it('propagates the cancellation to every branch of the owner', async () => {
+    // La suscripcion es del owner, no de la rama. El webhook ya actualizaba
+    // todas las branches; el camino del portal actualizaba solo la de partida,
+    // asi que cancelar desde el portal dejaba branches sisters con un plan que
+    // ya estaba cancelado. Misma accion de negocio, dos finales distintos.
+    supabaseMock.__queue('tenant_users', {
+      data: [{ tenant_id: 'tenant-1', role: 'owner' }],
+      error: null,
+    });
+    supabaseMock.__queue('tenants', {
+      data: {
+        mercadopago_preapproval_id: 'pa-active',
+        subscription_current_period_end: '2026-11-01T00:00:00Z',
+        subscription_plan: 'business',
+      },
+      error: null,
+    });
+    // resolveOwnerBranchIds: owner -> 1 query, branches -> 1 query.
+    supabaseMock.__queue('tenant_users', { data: { user_id: 'user-1' }, error: null });
+    supabaseMock.__queue('tenant_users', {
+      data: [{ tenant_id: 'tenant-1' }, { tenant_id: 'tenant-2' }, { tenant_id: 'tenant-3' }],
+      error: null,
+    });
+    supabaseMock.__queue('tenants', { data: null, error: null }); // update
+
+    mockCancelPreApproval.mockResolvedValue({});
+
+    const result = await cancelSubscription('user-1');
+    expect(result.ok).toBe(true);
+
+    const update = supabaseMock.__calls.find(
+      (c) => c.table === 'tenants' && c.method === 'update'
+    );
+    expect(update).toBeDefined();
+    const data = update!.args[0] as Record<string, unknown>;
+    expect(data.subscription_status).toBe('canceled');
+
+    // El update tiene que filtrar por TODAS las branches con `.in('id', [...])`,
+    // no por la rama de partida con `.eq('id', ...)`.
+    const inCall = supabaseMock.__calls.find(
+      (c) => c.table === 'tenants' && c.method === 'in'
+    );
+    expect(inCall).toBeDefined();
+    expect(inCall!.args[0]).toBe('id');
+    expect(inCall!.args[1]).toEqual(['tenant-1', 'tenant-2', 'tenant-3']);
+
+    // Y la cadena del update no debe filtrar despues por una unica rama. El
+    // `.eq('id', ...)` del `select` de lectura si es correcto, asi que lo que
+    // se comprueba es que no aparezca DESPUES del update.
+    const updateIndex = supabaseMock.__calls.indexOf(update!);
+    const eqAfterUpdate = supabaseMock.__calls
+      .slice(updateIndex)
+      .filter((c) => c.table === 'tenants' && c.method === 'eq' && c.args[0] === 'id');
+    expect(eqAfterUpdate).toHaveLength(0);
+  });
+
   it('returns 401 when user has no tenant', async () => {
     supabaseMock.__queue('tenant_users', { data: [], error: null });
 
@@ -460,6 +516,102 @@ describe('downgradePlan', () => {
     mockCreatePreApproval.mockReset();
     mockCancelPreApproval.mockReset();
     mockTrackEvent.mockReset();
+  });
+
+  it('propagates the downgraded plan to every branch of the owner', async () => {
+    supabaseMock.__queue('tenant_users', {
+      data: [{ tenant_id: 'tenant-1', role: 'owner' }],
+      error: null,
+    });
+    supabaseMock.__queue('tenants', {
+      data: [{
+        id: 'tenant-1',
+        name: 'Mi Tienda',
+        billing_email: 'test@test.com',
+        subscription_plan: 'business',
+        subscription_status: 'active',
+        mercadopago_preapproval_id: 'pa-old',
+        created_at: '2026-01-01T00:00:00Z',
+      }],
+      error: null,
+    });
+
+    // resolveOwnerBranchIds: una rama del owner donde este usuario NO es
+    // miembro. `extraTenantIds` no la ve, asi que sin esta resolucion la
+    // sucursal se queda con el plan business mientras la principal baja.
+    supabaseMock.__queue('tenant_users', { data: { user_id: 'user-1' }, error: null });
+    supabaseMock.__queue('tenant_users', {
+      data: [{ tenant_id: 'tenant-1' }, { tenant_id: 'tenant-9' }],
+      error: null,
+    });
+
+    mockCancelPreApproval.mockResolvedValue({});
+    supabaseMock.__queue('product_stock', { data: [], error: null });
+    supabaseMock.__queue('tenant_users', { data: null, error: null }); // collaborators
+    supabaseMock.__queue('invitations', { data: null, error: null });
+    supabaseMock.__queue('tenants', { data: null, error: null }); // plan update
+    mockCreatePreApproval.mockResolvedValue({ id: 'pa-new', init_point: 'https://mp.test' });
+    supabaseMock.__queue('tenants', { data: null, error: null }); // preapproval_id
+
+    await downgradePlan(
+      { id: 'user-1', email: 'test@test.com' },
+      'starter',
+      new Request('http://localhost/api/billing/downgrade', { method: 'POST' })
+    );
+
+    const planUpdate = supabaseMock.__calls.find(
+      (c) => c.table === 'tenants' && c.method === 'update' && (c.args[0] as Record<string, unknown>).subscription_plan === 'starter'
+    );
+    expect(planUpdate).toBeDefined();
+
+    const inCall = supabaseMock.__calls
+      .slice(supabaseMock.__calls.indexOf(planUpdate!))
+      .find((c) => c.table === 'tenants' && c.method === 'in');
+    expect(inCall).toBeDefined();
+    expect(inCall!.args[0]).toBe('id');
+    expect(inCall!.args[1]).toEqual(['tenant-1', 'tenant-9']);
+  });
+
+  it('includes the target plan in external_reference so the webhook does not guess', async () => {
+    supabaseMock.__queue('tenant_users', {
+      data: [{ tenant_id: 'tenant-1', role: 'owner' }],
+      error: null,
+    });
+    supabaseMock.__queue('tenants', {
+      data: [{
+        id: 'tenant-1',
+        name: 'Mi Tienda',
+        billing_email: 'test@test.com',
+        subscription_plan: 'business',
+        subscription_status: 'active',
+        mercadopago_preapproval_id: 'pa-old',
+        created_at: '2026-01-01T00:00:00Z',
+      }],
+      error: null,
+    });
+    supabaseMock.__queue('tenant_users', { data: { user_id: 'user-1' }, error: null });
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }], error: null });
+
+    mockCancelPreApproval.mockResolvedValue({});
+    supabaseMock.__queue('product_stock', { data: [], error: null });
+    supabaseMock.__queue('tenant_users', { data: null, error: null });
+    supabaseMock.__queue('invitations', { data: null, error: null });
+    supabaseMock.__queue('tenants', { data: null, error: null });
+    mockCreatePreApproval.mockResolvedValue({ id: 'pa-new', init_point: 'https://mp.test' });
+    supabaseMock.__queue('tenants', { data: null, error: null });
+
+    await downgradePlan(
+      { id: 'user-1', email: 'test@test.com' },
+      'starter',
+      new Request('http://localhost/api/billing/downgrade', { method: 'POST' })
+    );
+
+    // El webhook parsea `tenantId:plan` y, si no hay plan, lo adivina con
+    // `reason.includes('Starter')`. Depender de ese substring es fragile:
+    // cualquier cambio en el texto del motivo rompe el downgrade en silencio.
+    expect(mockCreatePreApproval).toHaveBeenCalledWith(
+      expect.objectContaining({ external_reference: 'tenant-1:starter' })
+    );
   });
 
   it('downgrades from business to starter', async () => {

@@ -1,14 +1,46 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getPreApprovalById } from '@/lib/mercadopago';
 import { trackEvent } from '@/lib/track-event';
+import {
+  recordWebhookEvent,
+  type WebhookOutcome,
+} from '@/lib/mercadopago-webhook-log';
+import { scheduleAfterBackground } from '@/lib/after-background';
 
 export type MercadoPagoWebhookResult =
   | { ok: true; data: { received: true } }
   | { ok: false; error: string; status: number };
 
 export async function processMercadoPagoWebhook(id: string | undefined, topic: unknown): Promise<MercadoPagoWebhookResult> {
+  const startedAt = Date.now();
+
+  // Como termino este evento. Se actualiza a medida que se avanza y se escribe
+  // en `webhook_events` una sola vez al final, con `after` para que el round
+  // trip no-shape parte de la respuesta que espera MercadoPago.
+  let outcome: WebhookOutcome = 'ignored';
+  let mpStatus: string | null = null;
+  let resolvedTenantId: string | null = null;
+  let resolvedUserId: string | null = null;
+
+  const logOutcome = (finalOutcome: WebhookOutcome, error?: string) => {
+    if (!id) return;
+    scheduleAfterBackground(() =>
+      recordWebhookEvent({
+        providerEventId: id,
+        topic: typeof topic === 'string' ? topic : String(topic ?? 'unknown'),
+        mpStatus,
+        outcome: finalOutcome,
+        tenantId: resolvedTenantId,
+        userId: resolvedUserId,
+        error: error ?? null,
+        durationMs: Date.now() - startedAt,
+      })
+    );
+  };
+
   try {
     if (!id) {
+      logOutcome('error', 'Missing id');
       return { ok: false, error: 'Missing id', status: 400 };
     }
 
@@ -17,8 +49,10 @@ export async function processMercadoPagoWebhook(id: string | undefined, topic: u
 
       const externalRef = preapproval.external_reference;
       const status = preapproval.status;
+      mpStatus = typeof status === 'string' ? status : null;
 
       if (!externalRef) {
+        logOutcome('error', 'No external reference');
         return { ok: false, error: 'No external reference', status: 400 };
       }
 
@@ -28,7 +62,10 @@ export async function processMercadoPagoWebhook(id: string | undefined, topic: u
       const validRefPlan =
         refPlan === 'starter' || refPlan === 'business' ? (refPlan as 'starter' | 'business') : null;
 
+      resolvedTenantId = tenantId || null;
+
       if (!tenantId) {
+        logOutcome('error', 'No external reference');
         return { ok: false, error: 'No external reference', status: 400 };
       }
 
@@ -41,7 +78,8 @@ export async function processMercadoPagoWebhook(id: string | undefined, topic: u
       // esta usando para el update. Sin esto el evento queda sin atribuir
       // y la persona no cuenta en ningun paso del embudo, que es
       // exactamente el paso ("pagan") que mas importa no perder.
-      const ownerUserId = await resolveOwnerUserId(tenantId);
+const ownerUserId = await resolveOwnerUserId(tenantId);
+      resolvedUserId = ownerUserId;
 
       if (status === 'authorized') {
         const reason = preapproval.reason || '';
@@ -51,25 +89,58 @@ export async function processMercadoPagoWebhook(id: string | undefined, topic: u
           else if (reason.includes('Starter')) planToSet = 'starter';
         }
 
-        const updateData: Record<string, unknown> = {
-          subscription_status: 'active',
-          mercadopago_preapproval_id: id,
-        };
-        if (planToSet) updateData.subscription_plan = planToSet;
+        // Dos escrituras con disparadores distintos a proposito.
+        //
+        // La TRANSICION solo debe aplicarse cuando la rama no estaba ya activa.
+        // MercadoPago reenvia `authorized` en cada cobro mensual y duplica
+        // entregas, asi que sin este filtro cada renewal reescribia el estado y
+        // volvia a emitir `subscription_started`: el embudo contaba un "Empezo
+        // a pagar" por cada mes pagado. El `.neq(...)` va DENTRO del WHERE, que
+        // es lo que lo convierte en compare-and-set: si dos entregas del mismo
+        // evento llegan simultaneas, la segunda espera el lock de fila,
+        // reevalua el WHERE contra la fila ya actualizada y no matchea.
+        const transitionData: Record<string, unknown> = { subscription_status: 'active' };
+        if (planToSet) transitionData.subscription_plan = planToSet;
+
+        const { data: transitionedRows, error: transitionError } = await supabaseAdmin
+          .from('tenants')
+          .update(transitionData)
+          .in('id', ownerBranchIds)
+          .neq('subscription_status', 'active')
+          .select('id');
+
+        // Un update que falla no es un no-op: es una suscripcion pagada que no
+        // llego a activarse. Se propaga para devolver 500 y que MercadoPago
+        // reintente, en vez de responder 200 y dar el evento por perdido.
+        if (transitionError) throw transitionError;
+
+        const transitioned = !Array.isArray(transitionedRows) || transitionedRows.length > 0;
+
+        // El periodo se refresca en cada entrega, incluido cada renewal: esto
+        // es nivel, no arista. Si se gateara con la transicion, el renewal no
+        // moveria `subscription_current_period_end` y el gate de acceso
+        // entenderia que la suscripcion vencio.
+        const periodData: Record<string, unknown> = { mercadopago_preapproval_id: id };
         if (preapproval.next_payment_date) {
-          updateData.subscription_current_period_end = preapproval.next_payment_date;
+          periodData.subscription_current_period_end = preapproval.next_payment_date;
         }
 
-        await supabaseAdmin
+        const { error: periodError } = await supabaseAdmin
           .from('tenants')
-          .update(updateData)
+          .update(periodData)
           .in('id', ownerBranchIds);
 
-        if (planToSet === 'business') {
-          await supabaseAdmin
+        if (periodError) throw periodError;
+
+        // Solo en la arista: reactivar stock en cada renewal volveria a encender
+        // productos que el usuario apago a proposito.
+        if (planToSet === 'business' && transitioned) {
+          const { error: stockError } = await supabaseAdmin
             .from('product_stock')
             .update({ active: true })
             .in('tenant_id', ownerBranchIds);
+
+          if (stockError) throw stockError;
         }
 
         // Antes era event_type 'payment'. Se renombra a subscription_started
@@ -78,7 +149,7 @@ export async function processMercadoPagoWebhook(id: string | undefined, topic: u
         // Las filas viejas con 'payment' siguen en la tabla; el service de
         // analytics las cuenta como subscription_started para que no se
         // pierda el historico.
-        if (ownerUserId) {
+        if (transitioned && ownerUserId) {
           await trackEvent({
             type: 'subscription_started',
             userId: ownerUserId,
@@ -86,6 +157,13 @@ export async function processMercadoPagoWebhook(id: string | undefined, topic: u
             metadata: { plan: planToSet ?? 'business', preapproval_id: id },
           });
         }
+
+        // `processed` = hubo arista (la rama no estaba activa). `duplicate` =
+        // llego de nuevo o es un renewal: el periodo se refresco igual, pero no
+        // hubo cambio de estado ni evento que contar. Distinguir los dos es lo
+        // que hace util la bitacora: un renewal legitimate no debe verse igual
+        // que un evento repetido por error.
+        outcome = transitioned ? 'processed' : 'duplicate';
       } else if (status === 'cancelled') {
         const { data: tenantRow } = await supabaseAdmin
           .from('tenants')
@@ -96,23 +174,40 @@ export async function processMercadoPagoWebhook(id: string | undefined, topic: u
         const currentPlan = tenantRow?.subscription_plan;
         const planToSet = currentPlan === 'business' || currentPlan === 'enterprise' ? 'free' : currentPlan;
 
+        // Webhook obsoleto: esta cancelacion pertenece a una suscripcion que ya
+        // no es la vigente (el owner se resuscribio y el tenant ya tiene otro
+        // preapproval_id). Aplicarla dejaria cancelada una suscripcion que si se
+        // esta pagando, que es peor que ignorarla. Se responde 200 sin tocar
+        // nada para que MercadoPago deje de reintentar.
+        const currentPreapprovalId = tenantRow?.mercadopago_preapproval_id ?? null;
+        if (currentPreapprovalId !== null && currentPreapprovalId !== id) {
+          logOutcome('ignored', 'Cancelacion de una suscripcion que ya no es la vigente');
+          return { ok: true, data: { received: true } };
+        }
+
+        // A partir de aqui el preapproval_id guardado es este mismo o null, asi
+        // que limpiarlo siempre es correcto.
         const updateData: Record<string, unknown> = {
           subscription_status: 'canceled',
           subscription_plan: planToSet,
+          mercadopago_preapproval_id: null,
         };
-        if ((tenantRow?.mercadopago_preapproval_id ?? null) === id) {
-          updateData.mercadopago_preapproval_id = null;
-        }
 
-        await supabaseAdmin
+        const { data: cancelledRows, error: cancelError } = await supabaseAdmin
           .from('tenants')
           .update(updateData)
-          .in('id', ownerBranchIds);
+          .in('id', ownerBranchIds)
+          .neq('subscription_status', 'canceled')
+          .select('id');
+
+        if (cancelError) throw cancelError;
+
+        const transitioned = !Array.isArray(cancelledRows) || cancelledRows.length > 0;
 
         // Se emite con el plan ANTERIOR, no con planToSet: planToSet es 'free'
         // para business/enterprise, y guardar 'free' como plan cancelado
         // pierde el dato de que cancelaba un plan pago.
-        if (ownerUserId) {
+        if (transitioned && ownerUserId) {
           await trackEvent({
             type: 'subscription_cancelled',
             userId: ownerUserId,
@@ -120,19 +215,38 @@ export async function processMercadoPagoWebhook(id: string | undefined, topic: u
             metadata: { plan: currentPlan ?? 'unknown', preapproval_id: id, source: 'webhook' },
           });
         }
+
+        outcome = transitioned ? 'processed' : 'duplicate';
       } else if (status === 'paused') {
         // Subscription paused by MercadoPago (e.g. failed payment attempts)
         // Mark as past_due so the subscription gate blocks access. Applies to
         // all of the owner's branches (shared subscription).
-        await supabaseAdmin
+        const { error: pausedError } = await supabaseAdmin
           .from('tenants')
           .update({ subscription_status: 'past_due' })
-          .in('id', ownerBranchIds);
+          .in('id', ownerBranchIds)
+          .neq('subscription_status', 'past_due');
+
+        if (pausedError) throw pausedError;
+
+        outcome = 'processed';
+      } else {
+        // `pending` y cualquier estado que no sea de transicion: se responde 200
+        // para que MercadoPago no lo reintente, pero se registra como ignorado
+        // para que se pueda ver que llego y no se hizo nada.
+        outcome = 'ignored';
       }
-      // status === 'pending' -> no action needed (waiting for first payment)
     }
+
+    logOutcome(outcome);
   } catch (err) {
     console.error('MercadoPago webhook error:', err);
+    logOutcome('error', err instanceof Error ? err.message : String(err));
+    // 500 y no 200: con 200 MercadoPago da el evento por procesado y no
+    // reintenta, asi que un fallo transitorio (red, API de MP caida) se pierde
+    // para siempre y el tenant queda sin activar sin que nadie lo note. Un 5xx
+    // hace que MercadoPago reintente con su propia politica de backoff.
+    return { ok: false, error: 'Webhook processing failed', status: 500 };
   }
 
   return { ok: true, data: { received: true } };

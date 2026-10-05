@@ -5,7 +5,6 @@ import {
   TENANT_A,
   TENANT_B,
   apiRequest,
-  callsTo,
   routeParams,
   writesTo,
 } from '@/test/tenant-isolation';
@@ -101,13 +100,10 @@ describe('ventas: Empresa A no opera sobre datos de la Empresa B', () => {
     // filas, `decrementStockAtomic` reintenta. Hay que devolver la fila para
     // que el flujo termine.
     supabaseMock.__queue('product_stock', { data: [{ id: 'stock-a' }], error: null });
-    supabaseMock.__queue('sales', {
-      data: { id: 'sale-a', tenant_id: TENANT_A, total_cents: 1500 },
-      error: null,
-    });
-    supabaseMock.__queue('sale_payments', { data: null, error: null });
-    supabaseMock.__queue('sale_items', { data: null, error: null });
-    supabaseMock.__queue('stock_history', { data: null, error: null });
+    // No se encolan `sales`/`sale_payments`/`sale_items`/`stock_history`: desde
+    // `create_sale_atomic` esas cuatro escrituras ocurren adentro de la RPC, asi
+    // que encolar resultados para ellas solo moveria la cola sin que ningun
+    // codigo los consuma.
 
     const res = await createSaleRoute(
       apiRequest('http://localhost/api/sales', 'POST', {
@@ -117,9 +113,20 @@ describe('ventas: Empresa A no opera sobre datos de la Empresa B', () => {
       })
     );
 
-    const saleInsert = callsTo(supabaseMock.__calls, 'sales', 'insert')[0];
     expect(res.status, 'la venta de A tiene que completarse').toBe(201);
-    expect(saleInsert?.args[0]).toMatchObject({ tenant_id: TENANT_A });
+
+    // La venta ya no se inserta con un `insert` en `sales`: la crea
+    // `create_sale_atomic`, asi que el aislamiento se afirma sobre los
+    // argumentos de la RPC. La propiedad probada es la misma: el tenant sale de
+    // la sesion, nunca del body.
+    const rpcCall = supabaseMock.rpc.mock.calls.find(([fn]) => fn === 'create_sale_atomic');
+    const saleArgs = rpcCall?.[1] as Record<string, unknown> | undefined;
+
+    expect(saleArgs).toMatchObject({ p_tenant_id: TENANT_A });
+    // El id del body no debe aparecer en ningun argumento de la RPC.
+    expect(JSON.stringify(saleArgs)).not.toContain(TENANT_B);
+
+    // Y ningun write a `sales` puede traer el tenant forjado.
     for (const call of writesTo(supabaseMock.__calls, 'sales')) {
       expect(JSON.stringify(call.args)).not.toContain(TENANT_B);
     }
