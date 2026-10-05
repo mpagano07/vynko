@@ -205,7 +205,7 @@ describe('mapeo categoria -> tooltip', () => {
     };
   });
 
-  async function tooltipAt(dataKey: 'date' | 'day', index: number): Promise<string> {
+  function tooltipAt(dataKey: 'date' | 'day', index: number): string {
     const captured: unknown[] = [];
     const { unmount } = render(
       <ResponsiveContainer width={600} height={96}>
@@ -223,26 +223,37 @@ describe('mapeo categoria -> tooltip', () => {
         </BarChart>
       </ResponsiveContainer>
     );
-    // Hay que esperar a que recharts llame al formatter. Antes se hacia
-    // unmount() en el mismo tick y se leia captured[0]: si el tooltip todavia no
-    // se habia pintado, captured venia vacio y la funcion devolvia 'sin tooltip'.
-    // En aislamiento nunca pasaba; con los 89 archivos corriendo en paralelo
-    // recharts no llegaba a renderizar a tiempo y el test fallaba.
-    await waitFor(() => expect(captured.length).toBeGreaterThan(0));
     const primero = captured[0];
     unmount();
-    return String(primero ?? 'sin tooltip');
+    // Si el formatter no llego a correr, este test se vuelve vacuo: el caso
+    // del bug usa `not.toBe`, asi que "sin tooltip" pasaria siempre. Que sea un
+    // error explicito y no un string de reemplazo.
+    if (captured.length === 0) {
+      throw new Error('recharts no llamo al formatter: la asercion seria vacua');
+    }
+    return String(primero);
   }
 
-  it('con la etiqueta repetida como categoria el tooltip se equivoca', async () => {
+  it('con la etiqueta repetida como categoria el tooltip se equivoca', () => {
     // Documenta el bug: el indice 7 vale $912.711,49 pero el tooltip responde $0.
-    expect(await tooltipAt('day', 7)).not.toBe(String(TOTALS[7]));
-    expect(await tooltipAt('day', 18)).not.toBe(String(TOTALS[18]));
+    //
+    // Se fija el valor buggy exacto con `toBe`, no con `not.toBe`: este ultimo
+    // decia "cualquier cosa que no sea el valor correcto", asi que pasaba
+    // igual con un tooltip totalmente roto --se verifico con una mutacion que
+    // devolvia '0' por otra razon-- y solo fallaba si el mapeo se arreglaba.
+    // Asi el test delata las dos direcciones: si el mapeo se corrige hay que
+    // reescribirlo a proposito.
+    expect(tooltipAt('day', 7)).toBe('0');
+    expect(tooltipAt('day', 18)).toBe('0');
   });
 
-  it('con la clave unica cada indice devuelve su propio valor', async () => {
+  // 19 renders completos de recharts (~2.4s en aislamiento). El default de 5s
+  // es justo para un test que renderiza un grafico por indice, asi que se sube
+  // el techo explicitamente. Ponerlo aca y no subirlo globalmente evita que un
+  // test roto tarde 20s en delatarlo.
+  it('con la clave unica cada indice devuelve su propio valor', () => {
     for (const [index, total] of TOTALS.entries()) {
-      expect(await tooltipAt('date', index)).toBe(String(total));
+      expect(tooltipAt('date', index)).toBe(String(total));
     }
-  });
+  }, 20_000);
 });
