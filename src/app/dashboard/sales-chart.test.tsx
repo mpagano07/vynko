@@ -205,7 +205,7 @@ describe('mapeo categoria -> tooltip', () => {
     };
   });
 
-  function tooltipAt(dataKey: 'date' | 'day', index: number): string {
+  async function tooltipAt(dataKey: 'date' | 'day', index: number): Promise<string> {
     const captured: unknown[] = [];
     const { unmount } = render(
       <ResponsiveContainer width={600} height={96}>
@@ -223,19 +223,26 @@ describe('mapeo categoria -> tooltip', () => {
         </BarChart>
       </ResponsiveContainer>
     );
+    // Hay que esperar a que recharts llame al formatter. Antes se hacia
+    // unmount() en el mismo tick y se leia captured[0]: si el tooltip todavia no
+    // se habia pintado, captured venia vacio y la funcion devolvia 'sin tooltip'.
+    // En aislamiento nunca pasaba; con los 89 archivos corriendo en paralelo
+    // recharts no llegaba a renderizar a tiempo y el test fallaba.
+    await waitFor(() => expect(captured.length).toBeGreaterThan(0));
+    const primero = captured[0];
     unmount();
-    return String(captured[0] ?? 'sin tooltip');
+    return String(primero ?? 'sin tooltip');
   }
 
-  it('con la etiqueta repetida como categoria el tooltip se equivoca', () => {
+  it('con la etiqueta repetida como categoria el tooltip se equivoca', async () => {
     // Documenta el bug: el indice 7 vale $912.711,49 pero el tooltip responde $0.
-    expect(tooltipAt('day', 7)).not.toBe(String(TOTALS[7]));
-    expect(tooltipAt('day', 18)).not.toBe(String(TOTALS[18]));
+    expect(await tooltipAt('day', 7)).not.toBe(String(TOTALS[7]));
+    expect(await tooltipAt('day', 18)).not.toBe(String(TOTALS[18]));
   });
 
-  it('con la clave unica cada indice devuelve su propio valor', () => {
-    TOTALS.forEach((total, index) => {
-      expect(tooltipAt('date', index)).toBe(String(total));
-    });
+  it('con la clave unica cada indice devuelve su propio valor', async () => {
+    for (const [index, total] of TOTALS.entries()) {
+      expect(await tooltipAt('date', index)).toBe(String(total));
+    }
   });
 });
