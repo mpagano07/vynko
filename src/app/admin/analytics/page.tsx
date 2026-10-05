@@ -4,9 +4,11 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useTheme } from '@/lib/hooks/useTheme';
+import { usePagination } from '@/lib/hooks/usePagination';
 import { authFetch } from '@/lib/fetchWithTenant';
 import { formatDate, formatTime } from '@/lib/utils/format';
 import { Card } from '@/components/ui/card';
+import { Pagination } from '@/components/ui/pagination';
 import { StatusBadge, type StatusTone } from '@/components/ui/status-badge';
 import { ArrowLeft, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
@@ -38,6 +40,11 @@ const EVENT_LABELS: Record<string, string> = {
   subscription_started: 'Suscripción',
   subscription_cancelled: 'Cancelación',
 };
+
+// La tabla de eventos recientes trae hasta 50 filas y cada una tiene una
+// columna de detalles con varias lineas, asi que sin cortes la pagina queda en
+// un scroll largo. 10 deja ver de un vistazo de que trata el evento.
+const EVENTS_PER_PAGE = 10;
 
 export default function AdminAnalyticsPage() {
   const router = useRouter();
@@ -72,6 +79,16 @@ export default function AdminAnalyticsPage() {
 
     fetchData();
   }, [user, profile, authLoading, router]);
+
+  // El hook va antes de los returns de carga y error para que su estado no se
+  // descuadre cuando los datos llegan despues. Acepta undefined y devuelve
+  // lista vacia mientras tanto.
+  const {
+    currentPage: eventsPage,
+    setCurrentPage: setEventsPage,
+    totalPages: eventsTotalPages,
+    pageItems: paginatedEvents,
+  } = usePagination<AdminAnalytics['recentEvents'][number]>(data?.recentEvents, EVENTS_PER_PAGE);
 
   if (authLoading || (!data && !error)) {
     return (
@@ -172,13 +189,19 @@ export default function AdminAnalyticsPage() {
                 </tr>
               </thead>
               <tbody>
-                {data.recentEvents.map((event) => (
+                {paginatedEvents.map((event) => (
                   <RecentEventRow key={event.id} event={event} />
                 ))}
               </tbody>
             </table>
           </div>
         )}
+        <Pagination
+          currentPage={eventsPage}
+          totalPages={eventsTotalPages}
+          onPageChange={setEventsPage}
+          resultInfo={`Mostrando ${(eventsPage - 1) * EVENTS_PER_PAGE + 1}-${Math.min(eventsPage * EVENTS_PER_PAGE, data.recentEvents.length)} de ${data.recentEvents.length}`}
+        />
       </Card>
     </div>
   );
