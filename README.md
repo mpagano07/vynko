@@ -160,7 +160,7 @@ npm run verify:rls
 ```
 
 Necesita, en `.env.local`: `NEXT_PUBLIC_SUPABASE_URL`,
-`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `E2E_USER_EMAIL`
+`SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `E2E_USER_EMAIL`
 y `E2E_USER_PASSWORD`. **Solo contra el proyecto de test**: el script escribe
 datos reales.
 
