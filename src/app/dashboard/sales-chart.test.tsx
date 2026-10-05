@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { authFetch } from '@/lib/fetchWithTenant';
@@ -50,10 +50,37 @@ function lastQuery(): string {
   return String(calls[calls.length - 1][0]);
 }
 
+// `ChartFrame` (sales-chart.tsx) solo monta sus hijos cuando el contenedor mide
+// mas de 0, y para enterarse se sirve del ResizeObserver. jsdom no lo implementa,
+// y su `getBoundingClientRect()` siempre devuelve 0, asi que sin este stub el
+// grafico no se monta nunca. Antes solo lo stubbeaba el test del dataKey, y el
+// test del tooltip se arreglaba leyendo los Tooltip que ese test habia dejado
+// en el array: por eso pasaba (o fallaba) segun el orden de los renders.
+class FakeResizeObserver {
+  constructor(cb: ResizeObserverCallback) {
+    cb([{ contentRect: { width: 600, height: 96 } } as unknown as ResizeObserverEntry],
+      this as unknown as ResizeObserver);
+  }
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
 describe('SalesChart', () => {
   beforeEach(() => {
+    // `xAxisProps` y `tooltipProps` son append-only a proposito: el mock los
+    // empuja en cada render para poder afirmar sobre el props real de recharts.
+    // Sin limpiarlos, un test hereda los renders del anterior y leer el "ultimo"
+    // deja de significar "el de mi render".
+    xAxisProps.length = 0;
+    tooltipProps.length = 0;
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
     vi.mocked(authFetch).mockReset();
     vi.mocked(authFetch).mockResolvedValue(okWith([{ date: '2026-10-01', day: 'Oct', total: 100 }]));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('expone solo 7d, 30d y 12m', () => {
@@ -91,34 +118,27 @@ describe('SalesChart', () => {
   });
 
   it('usa la clave unica como categoria del eje X en 7d, 30d y 12m', async () => {
-    class FakeResizeObserver {
-      constructor(cb: ResizeObserverCallback) {
-        cb([{ contentRect: { width: 600, height: 96 } } as unknown as ResizeObserverEntry],
-          this as unknown as ResizeObserver);
-      }
-      observe() {}
-      unobserve() {}
-      disconnect() {}
+    const { unmount } = render(<SalesChart />);
+    for (const label of ['7d', '30d', '12m']) {
+      fireEvent.click(screen.getByRole('button', { name: label }));
+      await waitFor(() => expect(xAxisProps.length).toBeGreaterThan(0));
+      const last = xAxisProps[xAxisProps.length - 1];
+      expect(last.dataKey).toBe('date');
+      expect(typeof last.tickFormatter).toBe('function');
     }
-    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
-    try {
-      const { unmount } = render(<SalesChart />);
-      for (const label of ['7d', '30d', '12m']) {
-        fireEvent.click(screen.getByRole('button', { name: label }));
-        await waitFor(() => expect(xAxisProps.length).toBeGreaterThan(0));
-        const last = xAxisProps[xAxisProps.length - 1];
-        expect(last.dataKey).toBe('date');
-        expect(typeof last.tickFormatter).toBe('function');
-      }
-      unmount();
-    } finally {
-      vi.unstubAllGlobals();
-    }
+    unmount();
   });
 
   it('aclara en el tooltip que el total es venta y no utilidad', async () => {
     render(<SalesChart />);
-    await screen.findByRole('button', { name: '7d' });
+    // Hay que esperar al Tooltip, no al boton de periodo: los botones se renderizan
+    // siempre, tambien mientras `loading` es true y el grafico es un skeleton sin
+    // Tooltip. Esperando el boton, el filtro de abajo corria antes del primer
+    // render del grafico y solo encontraba los props que habia dejado el test
+    // anterior.
+    await waitFor(() =>
+      expect(tooltipProps.some((p) => typeof p.labelFormatter === 'function')).toBe(true)
+    );
     // El unico Tooltip con labelFormatter propio es el del componente: el
     // harness de la regresion de abajo usa uno propio.
     const withLabel = tooltipProps.filter((p) => typeof p.labelFormatter === 'function');

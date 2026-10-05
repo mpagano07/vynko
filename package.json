@@ -14,7 +14,8 @@
     "test:run": "vitest run",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "update-prices": "node scripts/update-prices.mjs"
+    "update-prices": "node scripts/update-prices.mjs",
+    "load-test:sales": "node scripts/load-test-sales.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -48,6 +49,7 @@
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^4.7.0",
     "@vitest/coverage-v8": "^5.0.2",
+    "autocannon": "^8.0.0",
     "autoprefixer": "^10.5.0",
     "dotenv": "^17.4.2",
     "eslint": "^9",

@@ -1,9 +1,10 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
-import { reduceStockForSale, buildStockMovement } from '@/lib/stock';
+import { reduceStockForSale } from '@/lib/stock';
 import { isPaymentMethodId, normalizeCheckoutSettings } from '@/lib/payment-methods';
 import type { AuthInfo } from '@/lib/api-auth';
 import { trackEvent } from '@/lib/track-event';
+import { scheduleAfterBackground } from '@/lib/after-background';
 
 type SalesQueryResult = { data?: unknown; total?: number; page?: number; limit?: number };
 type SalesQueryFailure = { ok: false; error: string };
@@ -358,8 +359,9 @@ interface SaleItemData {
 interface ProductRow {
   id: string;
   name: string;
-  price: number;
-  price_cents?: number;
+  // `price_cents` es la unica fuente de precio. `price` (pesos) no se pide: es
+  // legacy, quedo en 0 para la mayoria del catalogo y usarla seria vender a $0.
+  price_cents?: number | null;
 }
 
 interface CreateSaleBody {
@@ -384,20 +386,6 @@ export type CreateSaleResult =
   | { ok: false; error: string; status?: number };
 
 export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<CreateSaleResult> {
-  const [{ data: tenantRow }, { data: openSession }] = await Promise.all([
-    supabaseAdmin.from('tenants').select('settings').eq('id', auth.tenantId).maybeSingle(),
-    supabaseAdmin
-      .from('cash_register_sessions')
-      .select('id')
-      .eq('tenant_id', auth.tenantId)
-      .eq('status', 'open')
-      .maybeSingle(),
-  ]);
-  const checkoutSettings = normalizeCheckoutSettings(
-    (tenantRow?.settings as Record<string, unknown> | undefined)?.checkout
-  );
-  const sessionId = openSession?.id ?? null;
-
   const { customer_id, notes, items, payment_method = 'cash', amount_paid, discount_percent = 0, surcharge_percent = 0, payments } = body;
 
   if (!isPaymentMethodId(payment_method)) {
@@ -414,34 +402,54 @@ export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<
     return { ok: false, error: 'El descuento o recargo no puede superar el 100%', status: 400 };
   }
 
-  if (customer_id) {
-    const { data: customer } = await supabaseAdmin
-      .from('customers')
+  const productIds = items.map((i) => i.product_id);
+
+  const [
+    { data: tenantRow },
+    { data: openSession },
+    customerRes,
+    { data: products, error: prodError },
+    { data: stockRows, error: stockError }
+  ] = await Promise.all([
+    supabaseAdmin.from('tenants').select('settings').eq('id', auth.tenantId).maybeSingle(),
+    supabaseAdmin
+      .from('cash_register_sessions')
       .select('id')
-      .eq('id', customer_id)
       .eq('tenant_id', auth.tenantId)
-      .maybeSingle();
-    if (!customer) {
-      return { ok: false, error: 'El cliente no pertenece a esta sucursal', status: 400 };
-    }
+      .eq('status', 'open')
+      .maybeSingle(),
+    customer_id
+      ? supabaseAdmin
+          .from('customers')
+          .select('id')
+          .eq('id', customer_id)
+          .eq('tenant_id', auth.tenantId)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    supabaseAdmin
+      .from('products')
+      .select('id, name, price_cents')
+      .in('id', productIds),
+    supabaseAdmin
+      .from('product_stock')
+      .select('product_id, stock')
+      .in('product_id', productIds)
+      .eq('tenant_id', auth.tenantId)
+  ]);
+
+  const checkoutSettings = normalizeCheckoutSettings(
+    (tenantRow?.settings as Record<string, unknown> | undefined)?.checkout
+  );
+  const sessionId = openSession?.id ?? null;
+
+  if (customer_id && !customerRes.data) {
+    return { ok: false, error: 'El cliente no pertenece a esta sucursal', status: 400 };
   }
 
-  const productIds = items.map((i) => i.product_id);
-  const { data: products, error: prodError } = await supabaseAdmin
-    .from('products')
-    .select('id, name, price, price_cents')
-    .in('id', productIds);
-
-  if (prodError) {
-    console.error('DB error:', prodError);
+  if (prodError || stockError) {
+    console.error('DB error fetching products/stock:', prodError || stockError);
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
-
-  const { data: stockRows } = await supabaseAdmin
-    .from('product_stock')
-    .select('product_id, stock')
-    .in('product_id', productIds)
-    .eq('tenant_id', auth.tenantId);
 
   const stockMap = new Map((stockRows ?? []).map((s) => [s.product_id, s.stock ?? 0]));
 
@@ -470,7 +478,23 @@ export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<
     if (!Number.isInteger(quantity) || quantity <= 0) {
       throw new Error(`La cantidad de "${product.name}" debe ser un número entero mayor a 0`);
     }
-    const unit_price_cents = product.price_cents ?? Math.round(Number(product.price) * 100);
+    // El precio sale de `price_cents`, que es la unica columna que el producto
+    // escribe hoy: `product-service` guarda `price_cents = round(price * 100)` y
+    // la columna `price` en pesos quedo en su default 0 para 163 de los productos
+    // de la base. La API de productos tampoco lee `price`: lo deriva de
+    // `price_cents` (product-service.ts:159), asi que el carrito muestra el
+    // precio correcto aunque la columna siga en 0.
+    //
+    // Por eso el fallback a `price` es una trampa: si `price_cents` alguna vez
+    // llega en NULL, `price` tambien es 0 y la venta se registra a $0.00 con un
+    // 201 adelante. No es un precio barato, es una venta sin facturar. Se
+    // rechaza en vez de vender gratis, que es el unico resultado defendible.
+    if (product.price_cents == null) {
+      throw new Error(
+        `El producto "${product.name}" no tiene precio de venta cargado. Cargale un precio antes de venderlo.`
+      );
+    }
+    const unit_price_cents = product.price_cents;
     const subtotal_cents = quantity * unit_price_cents;
 
     const availableStock = stockMap.get(item.product_id) ?? 0;
@@ -580,96 +604,124 @@ export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<
     change_cents: p.change_cents,
   }));
 
+  // El `stockMap` de arriba alcanza para RECHAZAR la venta antes de escribir
+  // nada (fail fast), pero no para descontar: cuando 20 ventas compiten por el
+  // mismo producto ese valor ya quedo viejo. El descuento lo hace
+  // `decrement_stock` (migracion 043), que hace el check y el write en una
+  // sola sentencia bajo el lock de fila.
+  //
+  // Antes esto era un compare-and-swap desde JS con 5 reintentos. Con N ventas
+  // sobre la misma fila, Postgres serializa los UPDATE: todos los SELECT devuelven
+  // el mismo stock y solo uno gana la primera ronda, asi que los unlucky tienen
+  // que reintentar y las rondas necesarias crecen con la concurrencia. Medido
+  // con scripts/load-test-sales.mjs, 7 de 20 ventas concurrentes fallaban con
+  // "Demasiada concurrencia" teniendo stock de sobra. Ese 400 no era una
+  // validacion de stock ni un problema de lentitud: era el retry rindiendose.
   const decrementStockAtomic = async (productId: string, productName: string, quantity: number): Promise<void> => {
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const { data: row } = await supabaseAdmin
-        .from('product_stock')
-        .select('id, stock')
-        .eq('product_id', productId)
-        .eq('tenant_id', auth.tenantId)
-        .maybeSingle();
+    const { data, error } = await supabaseAdmin.rpc('decrement_stock', {
+      p_product_id: productId,
+      p_tenant_id: auth.tenantId,
+      p_quantity: quantity,
+    });
 
-      const available = row?.stock ?? 0;
-      if (!row || available < quantity) {
-        throw new Error(`Stock insuficiente para "${productName}" (disponible: ${available})`);
-      }
-
-      const { data: updated } = await supabaseAdmin
-        .from('product_stock')
-        .update({ stock: available - quantity, updated_at: new Date().toISOString() })
-        .eq('id', row.id)
-        .eq('stock', available)
-        .select('id');
-
-      if ((updated?.length ?? 0) > 0) return;
+    if (error) {
+      // Un error de la RPC es infraestructura (permisos, conexion), no un
+      // conflicto de stock: no se debe reportar como "vende otra vez".
+      console.error('decrement_stock fallo:', error);
+      throw new Error('Ocurrio un error inesperado. Intenta de nuevo.');
     }
-    throw new Error(`Demasiada concurrencia sobre "${productName}". Intentá de nuevo.`);
+
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row?.ok) return;
+
+    if (row?.stock === null || row?.stock === undefined) {
+      throw new Error(`Stock insuficiente para "${productName}"`);
+    }
+    throw new Error(`Stock insuficiente para "${productName}" (disponible: ${row.stock})`);
   };
 
+  // El rollback no puede arrancar desde el stock que se leyo al inicio de la
+  // venta: mientras tanto otras ventas pudieron moverlo. `increment_stock`
+  // (migracion 043) suma en una sola sentencia, asi que no hay compare-and-swap
+  // que reintentar ni una ventana en la que el stock se pierda en silencio.
   const incrementStockAtomic = async (productId: string, quantity: number): Promise<void> => {
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const { data: row } = await supabaseAdmin
-        .from('product_stock')
-        .select('id, stock')
-        .eq('product_id', productId)
-        .eq('tenant_id', auth.tenantId)
-        .maybeSingle();
-      if (!row) return;
-
-      const { data: updated } = await supabaseAdmin
-        .from('product_stock')
-        .update({ stock: row.stock + quantity, updated_at: new Date().toISOString() })
-        .eq('id', row.id)
-        .eq('stock', row.stock)
-        .select('id');
-
-      if ((updated?.length ?? 0) > 0) return;
-    }
+    const { error } = await supabaseAdmin.rpc('increment_stock', {
+      p_product_id: productId,
+      p_tenant_id: auth.tenantId,
+      p_quantity: quantity,
+    });
+    // Un fallo aca deja el stock descontado sin venta: hay que dejarlo logged.
+    if (error) console.error(`No se pudo restituir el stock de ${productId}:`, error);
   };
 
   const decremented: SaleItemData[] = [];
   try {
+    // Secuencial a proposito. Con 50 ventas concurrentes el cuello de botella es
+    // el lock de fila sobre `product_stock`, no el round trip: paralelizar los
+    // items de UNA venta no acorta la espera por ese lock y agrega contension.
+    // En este orden, si un item falla los anteriores ya quedaron en
+    // `decremented` y el catch los devuelve: el rollback es exacto.
     for (const item of saleItems) {
       await decrementStockAtomic(item.product_id, item.product_name, item.quantity);
       decremented.push(item);
     }
 
-    const { data: sale, error: saleError } = await supabaseAdmin
-      .from('sales')
-      .insert({
-        tenant_id: auth.tenantId,
-        customer_id: customer_id || null,
-        total_cents: finalTotalCents,
-        status: 'completed',
-        notes: notes || null,
-        sold_by: auth.userId,
-        payment_method: primaryMethod,
-        amount_paid_cents: amountPaidCents,
-        change_cents: changeCents,
-        discount_cents: recorded_discount_cents,
-        surcharge_cents: recorded_surcharge_cents,
-        session_id: sessionId,
-      })
-      .select()
-      .single();
+    // Las 4 escrituras de la venta (venta, pagos, items y movimientos de stock)
+    // van en UNA sola llamada a `create_sale_atomic` (migracion 045).
+    //
+    // Antes eran 3 + N viajes secuenciales: insert de venta, select para traer
+    // el id, insert de pagos, insert de items y un insert de stock_history por
+    // item. Con 20 items, 23 viajes en el camino que el cajero esta mirando.
+    //
+    // Ademas el rollback era a mano: un `delete` compensatorio sobre `sales` si
+    // fallaba `sale_payments` o `sale_items`. Eso deja una ventana en la que la
+    // venta existe y despues no, y ademas el `delete` podia fallar y dejar una
+    // venta huerfana sin explicacion. Adentro de la funcion la transaccion la
+    // garantiza Postgres.
+    const { data: createdSale, error: createSaleError } = await supabaseAdmin.rpc('create_sale_atomic', {
+      p_tenant_id: auth.tenantId,
+      p_sold_by: auth.userId,
+      p_total_cents: finalTotalCents,
+      p_customer_id: customer_id || null,
+      p_status: 'completed',
+      p_notes: notes || null,
+      p_payment_method: primaryMethod,
+      p_amount_paid_cents: amountPaidCents,
+      p_change_cents: changeCents,
+      p_discount_cents: recorded_discount_cents,
+      p_surcharge_cents: recorded_surcharge_cents,
+      p_session_id: sessionId,
+      p_payments: paymentRows,
+      p_items: saleItems.map((item) => ({
+        product_id: item.product_id,
+        quantity: item.quantity,
+        unit_price_cents: item.unit_price_cents,
+        subtotal_cents: item.subtotal_cents,
+      })),
+      // El motivo del movimiento se arma dentro de la funcion, que es el unico
+      // lugar donde ya existe el id de venta para el folio.
+      p_stock_movements: saleItems.map((item) => ({
+        product_id: item.product_id,
+        quantity: -item.quantity,
+        type: 'out',
+        created_by: auth.userId,
+      })),
+    });
 
-    if (saleError) throw new Error('No se pudo registrar la venta');
+    const sale = createdSale as { id: string } | null;
+    if (!sale?.id) {
+      console.error('create_sale_atomic no devolvio la venta:', createSaleError);
+      throw new Error(createSaleError?.message ?? 'No se pudo registrar la venta');
+    }
 
+    // Lo que devuelve la respuesta se arma desde los datos de entrada: la
+    // funcion devuelve la fila de `sales`, pero el contrato de `createSale` (y
+    // lo que el front ya consume) espera items y payments con `sale_id`.
     const paymentsWithSaleId = paymentRows.map((p) => ({
       sale_id: sale.id,
       tenant_id: auth.tenantId,
       ...p,
     }));
-
-    const { error: paymentsError } = await supabaseAdmin
-      .from('sale_payments')
-      .insert(paymentsWithSaleId);
-
-    if (paymentsError) {
-      await supabaseAdmin.from('sales').delete().eq('id', sale.id);
-      throw new Error('No se pudieron guardar los pagos de la venta');
-    }
-
     const itemsWithSaleId = saleItems.map((item) => ({
       sale_id: sale.id,
       product_id: item.product_id,
@@ -678,44 +730,33 @@ export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<
       subtotal_cents: item.subtotal_cents,
     }));
 
-    const { error: itemsError } = await supabaseAdmin
-      .from('sale_items')
-      .insert(itemsWithSaleId);
-
-    if (itemsError) {
-      await supabaseAdmin.from('sales').delete().eq('id', sale.id);
-      throw new Error('No se pudieron guardar los ítems de la venta');
-    }
-
-    for (const item of saleItems) {
-      await supabaseAdmin.from('stock_history').insert(
-        buildStockMovement({
-          tenantId: auth.tenantId,
-          productId: item.product_id,
-          quantity: -item.quantity,
-          type: 'out',
-          reason: `Venta #${sale.id.slice(0, 8)}`,
-          createdBy: auth.userId,
-        })
-      );
-    }
-
     const itemNames = saleItems.map((i) => i.product_name).slice(0, 3);
     const detail = itemNames.join(', ') + (saleItems.length > 3 ? ` y ${saleItems.length - 3} más` : '');
 
-    await createActivityLog({
-      tenantId: auth.tenantId,
-      userId: auth.userId,
-      action: 'created',
-      entityType: 'sale',
-      entityId: sale.id,
-      details: {
-        total_cents: finalTotalCents,
-        items_count: saleItems.length,
-        products: detail,
-        folio: sale.id.slice(0, 8),
-        payment_method: primaryMethod,
-      },
+    // Auditoria y analytics salen del path critico con `after()`.
+    //
+    // Antes se awaited cada uno, asi que la venta no respondia hasta que el
+    // log y el evento estaban escritos. Peor: si cualquiera de los dos fallaba,
+    // la excepcion caia en el catch de abajo, que devuelve el stock de TODOS los
+    // items. O sea, un problema de auditoria reventaba una venta que si se habia
+    // registrado en `sales`: el cashier veia un error y el stock volvia, pero la
+    // venta existia. Ademas son 2 round trips extra en el camino que el usuario
+    // esta mirando.
+    scheduleAfterBackground(async () => {
+      await createActivityLog({
+        tenantId: auth.tenantId,
+        userId: auth.userId,
+        action: 'created',
+        entityType: 'sale',
+        entityId: sale.id,
+        details: {
+          total_cents: finalTotalCents,
+          items_count: saleItems.length,
+          products: detail,
+          folio: sale.id.slice(0, 8),
+          payment_method: primaryMethod,
+        },
+      });
     });
 
     // Solo se asientan los ajustes que efectivamente se aplicaron: con el pago
@@ -730,11 +771,13 @@ export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<
       ])
     );
 
-    await trackEvent({
-      type: 'first_sale',
-      userId: auth.userId,
-      tenantId: auth.tenantId,
-      metadata: { saleId: sale.id, totalCents: finalTotalCents, itemCount: saleItems.length },
+    scheduleAfterBackground(async () => {
+      await trackEvent({
+        type: 'first_sale',
+        userId: auth.userId,
+        tenantId: auth.tenantId,
+        metadata: { saleId: sale.id, totalCents: finalTotalCents, itemCount: saleItems.length },
+      });
     });
 
     return {

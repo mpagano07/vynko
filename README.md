@@ -164,6 +164,43 @@ Necesita, en `.env.local`: `NEXT_PUBLIC_SUPABASE_URL`,
 y `E2E_USER_PASSWORD`. **Solo contra el proyecto de test**: el script escribe
 datos reales.
 
+### Probar la concurrencia de `POST /api/sales`
+
+```bash
+npm run load-test:sales
+```
+
+Con el server corriendo en `localhost:3000`. Todas las ventas contra un mismo
+producto, con 50 conexiones por defecto.
+
+```bash
+CONNECTIONS=100 DURATION=30 npm run load-test:sales
+```
+
+Igual que `verify:rls`, **escribe datos reales**: al terminar borra las ventas
+que generó (incluidos sus movimientos de `stock_history`) y devuelve el stock del
+producto al valor que tenía.
+
+El stock se **reserva** antes de medir y se restituye siempre, incluso si el
+borrado de ventas falla. No alcanza con verificar que haya stock para
+`CONNECTIONS * QUANTITY`: la corrida dura `DURATION` segundos, así que cada
+conexión vende muchas veces y el stock se agota a mitad de la corrida. Cuando eso
+pasaba, las primeras requests medían throughput real y las últimas un 400 de
+validación, y el percentil 50 salía de una mezcla de las dos. Para cambiarlo:
+
+```bash
+STOCK_RESERVE=20000 npm run load-test:sales
+```
+
+Si ningún producto tiene siquiera stock para `CONNECTIONS * QUANTITY`, el script
+falla en vez de correr.
+
+El reporte imprime el desglose por código de respuesta y avisa cuando el
+percentil 99 no significa nada por tener pocas muestras.
+
+Autentica con la cookie de sesión real, igual que el navegador. La API acepta
+solo sesiones por cookie: no hay una vía alterna por token.
+
 ### Lint y tipos
 
 ```bash

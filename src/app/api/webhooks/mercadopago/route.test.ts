@@ -61,7 +61,97 @@ describe('POST /api/webhooks/mercadopago', () => {
     const res = await POST(req);
     expect(res.status).toBe(400);
     const json = await res.json();
-    expect(json.error).toBe('Missing id');
+    expect(json.error).toBe('`data.id` must be a non-empty string');
+  });
+
+  describe('validacion de forma', () => {
+    it('rejects a payload that is not a JSON object', async () => {
+      const req = makeWebhookRequest('not an object' as unknown as Record<string, unknown>);
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe('Payload must be a JSON object');
+    });
+
+    it('rejects `data` when it is an array instead of an object', async () => {
+      const req = makeWebhookRequest({
+        type: 'subscription_preapproval',
+        data: ['preapproval-123'],
+      });
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe('`data` must be an object when present');
+    });
+
+    it('rejects a numeric id, which would reach the service as a string check', async () => {
+      const req = makeWebhookRequest({
+        type: 'subscription_preapproval',
+        data: { id: 12345 },
+      });
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe('`data.id` must be a non-empty string');
+    });
+
+    it('rejects an id that is only whitespace', async () => {
+      const req = makeWebhookRequest({
+        type: 'subscription_preapproval',
+        data: { id: '   ' },
+      });
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe('`data.id` must be a non-empty string');
+    });
+
+    it('rejects a payload with no type at all', async () => {
+      const req = makeWebhookRequest({ data: { id: 'preapproval-123' } });
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe('Missing `type`');
+    });
+
+    it('rejects a type that is not a string', async () => {
+      const req = makeWebhookRequest({
+        type: { name: 'subscription_preapproval' },
+        data: { id: 'preapproval-123' },
+      });
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe('`type` must be a string');
+    });
+
+    it('does not touch the service when the shape is invalid', async () => {
+      const req = makeWebhookRequest({ type: 'subscription_preapproval', data: { id: 1 } });
+      await POST(req);
+      expect(mockGetPreApprovalById).not.toHaveBeenCalled();
+    });
+
+    it('still accepts the flat `id` form without `data`', async () => {
+      mockGetPreApprovalById.mockResolvedValue({
+        external_reference: 'tenant-1',
+        status: 'pending',
+      });
+      supabaseMock.__queue('tenant_users', { data: { user_id: 'owner-1' }, error: null });
+      supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }], error: null });
+      supabaseMock.__queue('tenant_users', { data: { user_id: 'owner-1' }, error: null });
+
+      const req = makeWebhookRequest({ type: 'subscription_preapproval', id: 'flat-123' });
+      const res = await POST(req);
+
+      expect(res.status).toBe(200);
+      expect(mockGetPreApprovalById).toHaveBeenCalledWith('flat-123');
+    });
+
+    it('accepts an unknown topic with a valid shape and answers 200', async () => {
+      // Un topic que no procesamos no es un error: 200 para que MercadoPago
+      // deje de reenviarlo.
+      const req = makeWebhookRequest({
+        type: 'some_future_mp_event',
+        data: { id: 'x-1' },
+      });
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      expect(mockGetPreApprovalById).not.toHaveBeenCalled();
+    });
   });
 
   it('returns 401 for invalid webhook signature', async () => {
@@ -102,10 +192,18 @@ describe('POST /api/webhooks/mercadopago', () => {
       (c) => c.table === 'tenants' && c.method === 'update'
     );
     expect(tenantCall).toBeDefined();
-    const updateData = tenantCall!.args[0] as Record<string, unknown>;
+    // El servicio parte la escritura en dos UPDATE (transicion de estado +
+    // refresco de periodo), asi que el estado final hay que leerlo del merge.
+    const updateData = supabaseMock.__calls
+      .filter((c) => c.table === 'tenants' && c.method === 'update')
+      .reduce<Record<string, unknown>>(
+        (acc, c) => ({ ...acc, ...(c.args[0] as Record<string, unknown>) }),
+        {}
+      );
     expect(updateData.subscription_status).toBe('active');
     expect(updateData.subscription_plan).toBe('starter');
     expect(updateData.mercadopago_preapproval_id).toBe('preapproval-123');
+    expect(updateData.subscription_current_period_end).toBe('2026-09-19T00:00:00.000Z');
   });
 
   it('sets business plan when reason contains Business', async () => {
@@ -314,7 +412,11 @@ describe('POST /api/webhooks/mercadopago', () => {
     expect(json.error).toBe('No external reference');
   });
 
-  it('always returns 200 even if processing throws', async () => {
+  it('returns 500 when processing fails, so MercadoPago retries the delivery', async () => {
+    // Este test afirmaba 200 "always". Con 200 MercadoPago considera el evento
+    // procesado y no lo reintenta, asi que una caida transitoria de la API
+    // dejaba al tenant sin activar para siempre. Un 5xx es lo que activa el
+    // reintento con backoff de MercadoPago.
     mockGetPreApprovalById.mockRejectedValue(new Error('MP API down'));
 
     const req = makeWebhookRequest({
@@ -323,8 +425,43 @@ describe('POST /api/webhooks/mercadopago', () => {
     });
 
     const res = await POST(req);
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe('Webhook processing failed');
+  });
+
+  it('returns 200 for an obsolete cancellation, so MercadoPago stops retrying', async () => {
+    // Al revés que el caso anterior: un evento obsoleto NO se reintenta nunca,
+    // porque reintentarlo no lo vuelve a hacer vigente.
+    supabaseMock.__queue('tenant_users', { data: { user_id: 'owner-1' }, error: null });
+    supabaseMock.__queue('tenant_users', {
+      data: [{ tenant_id: 'tenant-1' }],
+      error: null,
+    });
+    supabaseMock.__queue('tenant_users', { data: { user_id: 'owner-1' }, error: null });
+    supabaseMock.__queue('tenants', {
+      data: { subscription_plan: 'starter', mercadopago_preapproval_id: 'preapproval-new' },
+      error: null,
+    });
+
+    mockGetPreApprovalById.mockResolvedValue({
+      external_reference: 'tenant-1',
+      status: 'cancelled',
+    });
+
+    const req = makeWebhookRequest({
+      type: 'subscription_preapproval',
+      data: { id: 'preapproval-old' },
+    });
+
+    const res = await POST(req);
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.received).toBe(true);
+
+    expect(
+      supabaseMock.__calls.filter((c) => c.table === 'tenants' && c.method === 'update')
+    ).toHaveLength(0);
   });
 });
+

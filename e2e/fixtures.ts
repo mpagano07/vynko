@@ -695,7 +695,7 @@ export async function setTenantBilling(
  * que es el esperado por los specs que corren después.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- page kept for API consistency with callers
-export function cleanupBillingData(_page: Page) {
+export function cleanupBillingData(_page?: Page) {
   return setTenantBilling('business', 'active');
 }
 
@@ -947,3 +947,143 @@ export async function cleanupSalesData(page: Page, productNames: string[]) {
     expect(await isProductVisibleInTable(page, name)).toBe(false);
   }
 }
+
+// ===== Ciclo completo de suscripcion (checkout -> webhook -> plan) =====
+
+/**
+ * Encola el preapproval y devuelve el id a usar en el webhook, junto con la
+ * referencia externa que el webhook va a recibir.
+ *
+ * La referencia externa real la arma el backend al crear la suscripción en MP
+ * (`${tenantId}:${plan}`), asi que acá se replica ese formato para que el
+ * webhook encuentre la sucursal.
+ */
+export async function seedSubscriptionForWebhook(
+  plan: 'starter' | 'business' = 'business'
+): Promise<{ preapprovalId: string; externalReference: string } | null> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+  const e2eEmail = process.env.E2E_USER_EMAIL ?? '';
+  if (!url || !key || !e2eEmail) return null;
+
+  const { createClient } = await import('@supabase/supabase-js');
+  const admin = createClient(url, key, { auth: { persistSession: false } });
+
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('email', e2eEmail)
+    .single();
+  if (!profile) return null;
+
+  const { data: tu } = await admin
+    .from('tenant_users')
+    .select('tenant_id, role')
+    .eq('user_id', profile.id)
+    .in('role', ['owner', 'admin']);
+  const tenantIds = (tu ?? []).map((t) => t.tenant_id);
+  if (tenantIds.length === 0) return null;
+
+  const preapprovalId = `e2e-pa-${Date.now()}`;
+  const primaryTenant = tenantIds[0];
+
+  // Estado previo: pagado y dado de baja, con el preapproval ya registrado.
+  // Asi el webhook tiene una transicion real que aplicar.
+  await admin
+    .from('tenants')
+    .update({
+      mercadopago_preapproval_id: preapprovalId,
+      subscription_status: 'canceled',
+      subscription_plan: 'free',
+    })
+    .in('id', tenantIds);
+
+  return { preapprovalId, externalReference: `${primaryTenant}:${plan}` };
+}
+
+/**
+ * Envia un webhook de MercadoPago con la firma HMAC valida.
+ *
+ * Reproduce el formato real del header `x-signature`
+ * (`ts=<unix>;v1=<hmac sha256 hex>`) sobre el manifest
+ * `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`, que es lo que valida el
+ * backend. Mandar el webhook sin firma wouldn't probar nada: el route la
+ * rechaza con 401 antes de tocar la base.
+ */
+export async function postSignedWebhook(
+  page: Page,
+  body: { id: string; topic: string; mpStatus?: string; externalReference?: string }
+): Promise<{ status: number; json: unknown }> {
+  const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET ?? '';
+  const crypto = await import('node:crypto');
+
+  const requestId = `e2e-req-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const ts = String(Math.floor(Date.now() / 1000));
+
+  const manifest = `id:${body.id};request-id:${requestId};ts:${ts};`;
+  const hmac = crypto.createHmac('sha256', secret);
+  hmac.update(manifest);
+  const v1 = hmac.digest('hex');
+
+  const response = await page.request.post('/api/webhooks/mercadopago', {
+    headers: {
+      'content-type': 'application/json',
+      'x-signature': `ts=${ts},v1=${v1}`,
+      'x-request-id': requestId,
+    },
+    data: {
+      type: body.topic,
+      action: body.mpStatus ?? 'authorized',
+      data: {
+        id: body.id,
+        status: body.mpStatus ?? 'authorized',
+        external_reference: body.externalReference ?? '',
+      },
+    },
+  });
+
+  let json: unknown = null;
+  try {
+    json = await response.json();
+  } catch {
+    json = null;
+  }
+
+  return { status: response.status(), json };
+}
+
+/**
+ * Estado de suscripcion de las sucursales del usuario E2E, para verificar de
+ * punta a punta que el webhook efectivamente cambio algo en la base.
+ */
+export async function getTenantBillingState() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+  const e2eEmail = process.env.E2E_USER_EMAIL ?? '';
+  if (!url || !key || !e2eEmail) return [];
+
+  const { createClient } = await import('@supabase/supabase-js');
+  const admin = createClient(url, key, { auth: { persistSession: false } });
+
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('email', e2eEmail)
+    .single();
+  if (!profile) return [];
+
+  const { data: tu } = await admin
+    .from('tenant_users')
+    .select('tenant_id')
+    .eq('user_id', profile.id);
+  const tenantIds = (tu ?? []).map((t) => t.tenant_id);
+  if (tenantIds.length === 0) return [];
+
+  const { data } = await admin
+    .from('tenants')
+    .select('id, subscription_status, subscription_plan, mercadopago_preapproval_id')
+    .in('id', tenantIds);
+  return data ?? [];
+}
+
+

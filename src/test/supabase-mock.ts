@@ -80,7 +80,7 @@ function createSupabaseMock() {
         return builder;
       };
 
-    for (const method of ['select', 'eq', 'in', 'gte', 'lte', 'lt', 'gt', 'order', 'range', 'is', 'limit', 'not', 'or', 'like', 'ilike']) {
+    for (const method of ['select', 'eq', 'neq', 'in', 'gte', 'lte', 'lt', 'gt', 'order', 'range', 'is', 'limit', 'not', 'or', 'like', 'ilike']) {
       builder[method] = chain(method);
     }
     for (const method of ['insert', 'update', 'delete', 'upsert']) {
@@ -125,16 +125,30 @@ function createSupabaseMock() {
     remove: { error: null as unknown },
   };
 
-  // `rate_limit_hit` es la unica funcion que la app llama por RPC. El mock
-  // devuelve la ventana abierta: la suite ya fija `RATE_LIMIT_STORE=memory` en
-  // `vitest.setup.ts` para poder afirmar los 429, pero si un test alcanza esta
-  // ruta sin `rpc` explotaria con "rpc is not a function", que no dice nada del
-  // bug real.
+  // `rate_limit_hit` y los adjustments de stock son las unicas funciones que la
+  // app llama por RPC. El mock devuelve la ventana abierta y un descuento
+  // exitoso: la suite ya fija `RATE_LIMIT_STORE=memory` en `vitest.setup.ts`
+  // para poder afirmar los 429, pero si un test alcanza esta ruta sin `rpc`
+  // explotaria con "rpc is not a function", que no dice nada del bug real.
   const rpcResults: Record<string, unknown> = {
     rate_limit_hit: { data: [{ ok: true, retry_after_seconds: 0 }], error: null },
+    // `decrement_stock`/`increment_stock` (migracion 043) hacen el check y el
+    // write de stock en una sola sentencia. Por defecto el mock descuenta bien:
+    // un test que necesite el rechazo por stock insuficiente cambia
+    // `__rpcResults`.
+    decrement_stock: { data: [{ ok: true, stock: 0 }], error: null },
+    // `create_sale_atomic` (migracion 045) devuelve la fila de `sales` ya
+    // insertada. Por defecto devuelve una venta minima con id, que es lo que
+    // necesita el servicio para armar la respuesta.
+    create_sale_atomic: { data: { id: 'sale-1' }, error: null },
+    increment_stock: { data: [{ ok: true, stock: 0 }], error: null },
   };
 
-  const rpc = vi.fn(async (fn: string) => {
+  // El segundo parametro existe porque la app SI llama por RPC con argumentos
+  // (`decrement_stock` con product/tenant/cantidad); declararlo hace que los
+  // tests puedan afirmar sobre esos argumentos.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const rpc = vi.fn(async (fn: string, _args?: Record<string, unknown>) => {
     const result = rpcResults[fn];
     if (result === undefined) {
       return { data: null, error: { message: `mock: la funcion ${fn} no esta mockeada` } };
@@ -202,6 +216,9 @@ function createSupabaseMock() {
       storageResults.createSignedUrls = { data: [], error: null };
       storageResults.remove.error = null;
       rpcResults.rate_limit_hit = { data: [{ ok: true, retry_after_seconds: 0 }], error: null };
+      rpcResults.decrement_stock = { data: [{ ok: true, stock: 0 }], error: null };
+      rpcResults.create_sale_atomic = { data: { id: 'sale-1' }, error: null };
+      rpcResults.increment_stock = { data: [{ ok: true, stock: 0 }], error: null };
       vi.clearAllMocks();
     },
     get __calls() {
