@@ -80,6 +80,25 @@ describe('GET /api/cron/reconcile-subscriptions', () => {
     expect(res.status).toBe(401);
   });
 
+  it('does not accept an empty bearer token as valid', async () => {
+    // Sin el espacio despues de "Bearer": es lo que envia un cliente que
+    // manda el esquema sin credenciales. Con el trailing space el test era
+    // doblemente vacio, porque el constructor de Request normaliza los
+    // espacios finales y "Bearer " llegaba al handler como "Bearer".
+    //
+    // Antes esto vivia dentro del describe de "sin CRON_SECRET", asi que pasaba
+    // por 503 --el endpoint deshabilitado-- sin llegar nunca a comparar el
+    // token. Decia una cosa y probaba otra.
+    const res = await GET(
+      new Request('http://localhost/api/cron/reconcile-subscriptions', {
+        headers: { authorization: 'Bearer' },
+      })
+    );
+
+    expect(res.status).toBe(401);
+    expect(reconcileMock).not.toHaveBeenCalled();
+  });
+
   it('reports what it repaired', async () => {
     reconcileMock.mockResolvedValue({
       ...report,
@@ -115,15 +134,6 @@ describe('GET /api/cron/reconcile-subscriptions', () => {
 
       expect(res.status).toBe(503);
       expect(reconcileMock).not.toHaveBeenCalled();
-    });
-
-    it('does not accept an empty bearer token as valid', async () => {
-      const res = await GET(
-        new Request('http://localhost/api/cron/reconcile-subscriptions', {
-          headers: { authorization: 'Bearer ' },
-        })
-      );
-      expect(res.status).toBe(503);
     });
   });
 });
