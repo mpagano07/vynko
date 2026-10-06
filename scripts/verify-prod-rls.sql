@@ -121,9 +121,11 @@ ORDER BY estado, prueba;
 
 
 -- =====================================================================
--- 2) RLS por tabla. No debe haber ninguna fila con rls_-activo = false.
---    `rate_limit_buckets` con 0 policies es lo correcto: se accede solo por
---    funcion y con service_role, que bypassa RLS.
+-- 2) RLS por tabla. No debe haber ninguna fila con rls_activo = false.
+--    `rate_limit_buckets` y `sale_idempotency_keys` con 0 policies es lo
+--    correcto: se acceden solo por funcion/RPC y con service_role, que bypassa
+--    RLS. Si aparece OTRA tabla con 0 policies, revisar que su acceso no sea
+--    por PostgREST con la anon key (ver migracion 053).
 -- =====================================================================
 SELECT
   c.relname AS tabla,
