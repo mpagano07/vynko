@@ -35,11 +35,9 @@ describe('POST /api/products/[id]/adjust', () => {
     vi.mocked(getAuth).mockResolvedValue(mockAuth);
   });
 
-  it('ajusta stock positivamente y registra el historial', async () => {
+  it('ajusta stock positivamente y registra el historial en la misma RPC', async () => {
     supabaseMock.__queue('products', { data: { id: 'p1', name: 'Coca' } });
     supabaseMock.__queue('product_stock', { data: { stock: 5 } });
-    supabaseMock.__queue('product_stock', { data: null, error: null });
-    supabaseMock.__queue('stock_history', { data: null, error: null });
 
     const res = await POST(
       makeRequest({ id: 'p1' }, { quantity: 3, reason: 'found' }),
@@ -52,15 +50,19 @@ describe('POST /api/products/[id]/adjust', () => {
     expect(json.newStock).toBe(8);
     expect(json.success).toBe(true);
 
-    const historyInsert = supabaseMock.__calls.find(
-      (c) => c.table === 'stock_history' && c.method === 'insert'
-    );
-    expect(historyInsert?.args[0]).toMatchObject({
-      product_id: 'p1',
-      quantity: 3,
-      type: 'adjustment',
-      reason: 'found',
+    // El ajuste, el chequeo de no-negativo y el movimiento viajan en una sola
+    // llamada a `adjust_stock_atomic` (049): ya no hay un UPDATE separado ni
+    // un INSERT de historial que pueda faltar.
+    expect(supabaseMock.rpc).toHaveBeenCalledWith('adjust_stock_atomic', {
+      p_product_id: 'p1',
+      p_tenant_id: 'tenant-1',
+      p_quantity: 3,
+      p_reason: 'found',
+      p_created_by: 'user-1',
     });
+    expect(
+      supabaseMock.__calls.some((c) => c.table === 'stock_history' && c.method === 'insert')
+    ).toBe(false);
   });
 
   it('rechaza un ajuste que dejaría stock negativo', async () => {
@@ -117,14 +119,9 @@ describe('POST /api/products/[id]/adjust', () => {
     expect(res.status).toBe(401);
   });
 
-  it('devuelve advertencia cuando falla el registro en stock_history', async () => {
+  it('escribe las notas del ajuste en el motivo del movimiento', async () => {
     supabaseMock.__queue('products', { data: { id: 'p1', name: 'Coca' } });
     supabaseMock.__queue('product_stock', { data: { stock: 5 } });
-    supabaseMock.__queue('product_stock', { data: null, error: null }); // update
-    supabaseMock.__queue('stock_history', {
-      data: null,
-      error: { message: 'history insert failed' },
-    });
 
     const res = await POST(
       makeRequest({ id: 'p1' }, { quantity: 2, reason: 'correction', notes: 'recontado' }),
@@ -134,11 +131,42 @@ describe('POST /api/products/[id]/adjust', () => {
 
     const json = await res.json();
     expect(json.success).toBe(true);
-    expect(json.newStock).toBe(7);
-    expect(json.warning).toContain('no se pudo registrar en el historial');
-    expect(json.warning).toContain('no se pudo registrar en el historial');
+    expect(json.newStock).toBe(8);
+    // Como el movimiento lo escribe la RPC en la misma transaccion, ya no hay
+    // warning posible: el stock y su registro cambian juntos o no cambian.
+    expect(json.warning).toBeUndefined();
     expect(json.reason).toBe('correction');
     expect(json.notes).toBe('recontado');
+
+    expect(supabaseMock.rpc).toHaveBeenCalledWith('adjust_stock_atomic', {
+      p_product_id: 'p1',
+      p_tenant_id: 'tenant-1',
+      p_quantity: 2,
+      p_reason: 'correction: recontado',
+      p_created_by: 'user-1',
+    });
+  });
+
+  it('rechaza en la RPC un ajuste que otra venta dejó sin alcanzar', async () => {
+    // El fail-fast leyó stock suficiente, pero otro ajuste concurrente movió la
+    // fila y el chequeo atomico (que ve el valor REAL del momento) ya no
+    // alcanza. El caso que el UPDATE condicional de la funcion cubre.
+    supabaseMock.__queue('products', { data: { id: 'p1', name: 'Coca' } });
+    supabaseMock.__queue('product_stock', { data: { stock: 5 } });
+    supabaseMock.__rpcResults.adjust_stock_atomic = {
+      data: [{ ok: false, old_stock: 1, new_stock: null }],
+      error: null,
+    };
+
+    const res = await POST(
+      makeRequest({ id: 'p1' }, { quantity: -4, reason: 'damaged' }),
+      { params: routeParams } as never
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('El stock no puede ser negativo');
+    expect(
+      supabaseMock.__calls.some((c) => c.table === 'stock_history' && c.method === 'insert')
+    ).toBe(false);
   });
 
   it('devuelve 404 cuando el producto no tiene stock en la sucursal', async () => {
@@ -161,10 +189,10 @@ describe('POST /api/products/[id]/adjust', () => {
   it('devuelve 500 cuando falla la actualización del stock', async () => {
     supabaseMock.__queue('products', { data: { id: 'p1', name: 'Coca' } });
     supabaseMock.__queue('product_stock', { data: { stock: 5 } });
-    supabaseMock.__queue('product_stock', {
+    supabaseMock.__rpcResults.adjust_stock_atomic = {
       data: null,
       error: { message: 'update failed' },
-    });
+    };
 
     const res = await POST(
       makeRequest({ id: 'p1' }, { quantity: 1, reason: 'found' }),
@@ -173,5 +201,64 @@ describe('POST /api/products/[id]/adjust', () => {
     expect(res.status).toBe(500);
     const json = await res.json();
     expect(json.error).toBe('Ocurrio un error inesperado. Intenta de nuevo.');
+  });
+
+  it('devuelve 404 cuando la RPC no encuentra la fila del tenant', async () => {
+    supabaseMock.__queue('products', { data: { id: 'p1', name: 'Coca' } });
+    supabaseMock.__queue('product_stock', { data: { stock: 5 } });
+    // La fila de stock se borro entre el fail-fast y la RPC (eliminacion del
+    // producto): `old_stock` NULL es la senal de "no hay fila".
+    supabaseMock.__rpcResults.adjust_stock_atomic = {
+      data: [{ ok: false, old_stock: null, new_stock: null }],
+      error: null,
+    };
+
+    const res = await POST(
+      makeRequest({ id: 'p1' }, { quantity: 1, reason: 'found' }),
+      { params: routeParams } as never
+    );
+    expect(res.status).toBe(404);
+    expect((await res.json()).error).toBe('Producto no encontrado en tu sucursal');
+  });
+
+  it('dos ajustes paralelos sobre el mismo producto: el segundo pierde el CAS', async () => {
+    supabaseMock.__queue('products', { data: { id: 'p1', name: 'Coca' } });
+    supabaseMock.__queue('products', { data: { id: 'p1', name: 'Coca' } });
+    supabaseMock.__queue('product_stock', { data: { stock: 5 } });
+    supabaseMock.__queue('product_stock', { data: { stock: 5 } });
+
+    // La RPC reevalua el stock real bajo lock de fila: el segundo ajuste llega
+    // cuando el primero ya movio la fila y no matchea el UPDATE condicional.
+    supabaseMock.__rpcQueue(
+      'adjust_stock_atomic',
+      { data: [{ ok: true, old_stock: 5, new_stock: 8 }], error: null },
+      { data: [{ ok: false, old_stock: 5, new_stock: null }], error: null }
+    );
+
+    const [ra, rb] = await Promise.all([
+      POST(
+        makeRequest({ id: 'p1' }, { quantity: 3, reason: 'found' }),
+        { params: routeParams } as never
+      ),
+      POST(
+        makeRequest({ id: 'p1' }, { quantity: -4, reason: 'damaged' }),
+        { params: routeParams } as never
+      ),
+    ]);
+
+    const statuses = [ra.status, rb.status].sort();
+    expect(statuses).toEqual([200, 400]);
+
+    const loser = ra.status === 400 ? ra : rb;
+    expect((await loser.json()).error).toBe('El stock no puede ser negativo');
+
+    // Una llamada por vecino; el perdedor no dejo ningun historial huerfano.
+    const adjustCalls = supabaseMock.rpc.mock.calls.filter(
+      ([fn]) => fn === 'adjust_stock_atomic'
+    );
+    expect(adjustCalls).toHaveLength(2);
+    expect(
+      supabaseMock.__calls.some((c) => c.table === 'stock_history' && c.method === 'insert')
+    ).toBe(false);
   });
 });

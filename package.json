@@ -19,6 +19,8 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@sentry/core": "^11.4.0",
+    "@sentry/nextjs": "^11.4.0",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.108.0",
     "@zxing/library": "^0.22.0",

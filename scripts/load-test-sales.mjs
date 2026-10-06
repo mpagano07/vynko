@@ -1,16 +1,29 @@
 /**
- * Prueba de carga de POST /api/sales.
+ * Prueba de carga de los endpoints de la API con AUTOCANNON.
  *
- * Crea ventas REALES en la base de .env.local y, al terminar, borra las ventas
- * que genero y devuelve el stock del producto usado. No lo corras contra
- * produccion.
+ * Escenarios:
+ *
+ *   - `sales` (default): POST /api/sales. Crea ventas REALES en la base de
+ *     .env.local y, al terminar, borra las ventas que genero y devuelve el
+ *     stock del producto usado. No lo corras contra produccion.
+ *   - `read`: GET /api/products. Mide el camino de lectura del catalogo: es el
+ *     mismo que toca el POS al abrir una venta, y corre bajo el limite de
+ *     paginas del proxy (PROXY_IP_LIMIT en src/proxy.ts). No escribe nada.
  *
  * Requiere `next dev`/`next start` en API_URL y .env.local con
  * E2E_USER_EMAIL / E2E_USER_PASSWORD (y SUPABASE_SERVICE_ROLE_KEY para el
- * cleanup).
+ * cleanup del escenario sales).
  *
  *   node scripts/load-test-sales.mjs
  *   CONNECTIONS=100 DURATION=30 QUANTITY=1 node scripts/load-test-sales.mjs
+ *   LOAD_TEST_SCENARIO=read MAX_P99_MS=300 MAX_ERROR_RATE=0.01 node scripts/load-test-sales.mjs
+ *
+ * Umbrales de fallo OPT-IN: si se setea MAX_P99_MS (latencias p99 en ms) o
+ * MAX_ERROR_RATE (fraccion de requests no-2xx/errores/timeouts), el script sale
+ * con codigo 1 cuando se superan. Sin ellos, el veredicto es informativo y el
+ * exit code es 0 pase lo que pase (salvo errores de script). Son opt-in a
+ * proposito: un umbral fijo en ms es util para un entorno/instancia concreta y
+ * no se puede generalizar entre proveedores sin falso-positivos.
  */
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -32,6 +45,12 @@ const API_URL = process.env.LOAD_TEST_API_URL ?? 'http://localhost:3000';
 const CONNECTIONS = Number(process.env.CONNECTIONS ?? 50);
 const DURATION = Number(process.env.DURATION ?? 10);
 const QUANTITY = Number(process.env.QUANTITY ?? 1);
+const SCENARIO = process.env.LOAD_TEST_SCENARIO ?? 'sales';
+const WARMUP_SECONDS = 5;
+
+// Umbrales de fallo (opt-in, ver docblock). NaN = no chequeado.
+const MAX_P99_MS = process.env.MAX_P99_MS ? Number(process.env.MAX_P99_MS) : Number.NaN;
+const MAX_ERROR_RATE = process.env.MAX_ERROR_RATE ? Number(process.env.MAX_ERROR_RATE) : Number.NaN;
 
 // Cantidad de requests en vuelo por conexion. En 1 (default) autocannon espera
 // la respuesta antes de mandar la siguiente, que es el modelo de una persona
@@ -155,14 +174,14 @@ function countOk(result) {
   return result.requests.total - result.non2xx - result.errors - result.timeouts;
 }
 
-function runLoad({ cookie, payload, duration, connections }) {
+function runLoad({ url, method, cookie, payload, duration, connections }) {
   return new Promise((resolve, reject) => {
     const instance = autocannon({
-      url: `${API_URL}/api/sales`,
+      url,
       connections,
       duration,
       pipelining: PIPELINING,
-      method: 'POST',
+      method,
       headers: {
         Cookie: cookie,
         'Content-Type': 'application/json',
@@ -171,13 +190,32 @@ function runLoad({ cookie, payload, duration, connections }) {
         // Enviarlo igual evita depender de esa excepcion.
         Origin: API_URL,
       },
-      body: JSON.stringify(payload),
+      // GET no lleva body; `body: undefined` y autocannon lo omite.
+      body: payload ? JSON.stringify(payload) : undefined,
     });
 
     autocannon.track(instance, { renderProgressBar: true, renderResultsTable: false });
     instance.on('error', reject);
     instance.on('done', resolve);
   });
+}
+
+/**
+ * Calentamiento + medicion de un escenario.
+ *
+ * El calentamiento (5s fijo) paga compilacion de rutas y JIT; sin el, la
+ * "latencia media" mezcla el arranque con la carga sostenida. Vuelve el
+ * resultado MEDIDO y la cantidad total de 2xx (calentamiento + medicion) para
+ * poder comparar contra lo que quedo en la base.
+ */
+async function runScenario({ url, method, cookie, payload, connections }) {
+  console.log('\nCalentando (5s, no se mide)...');
+  const warmup = await runLoad({ url, method, cookie, payload, duration: WARMUP_SECONDS, connections });
+
+  console.log('\nMidiendo...');
+  const result = await runLoad({ url, method, cookie, payload, duration: DURATION, connections });
+
+  return { warmup, result, totalAccepted: countOk(warmup) + countOk(result) };
 }
 
 function adminClient() {
@@ -285,12 +323,13 @@ async function cleanup({ product, tenantId, stockBefore, saleIds }) {
   }
 }
 
-function report(result, { connections, duration, reserved, cleanupOk, saleCount, accepted }) {
+function report(result, { endpointLabel, connections, duration, reserved, cleanupOk, saleCount, accepted }) {
   const { latency, requests, throughput, statusCodeStats, non2xx, errors, timeouts } = result;
   const ok = requests.total - non2xx - errors - timeouts;
+  const errorRate = requests.total > 0 ? (non2xx + errors + timeouts) / requests.total : 0;
 
   console.log('\n===== RESULTADOS =====');
-  console.log(`Endpoint:          POST ${API_URL}/api/sales`);
+  console.log(`Endpoint:          ${endpointLabel}`);
   console.log(`Conexiones:        ${connections} (pipelining ${PIPELINING})`);
   console.log(`Duracion:          ${duration}s`);
   console.log(`Requests totales:  ${requests.total}`);
@@ -323,6 +362,7 @@ function report(result, { connections, duration, reserved, cleanupOk, saleCount,
 
   console.log('\n===== VEREDICTO =====');
   const problems = [];
+  let verdictFail = false;
 
   if (non2xx > 0) {
     const breakdown = entries.map(([code, s]) => `${code}x${s.count}`).join(', ');
@@ -343,6 +383,19 @@ function report(result, { connections, duration, reserved, cleanupOk, saleCount,
   if (accepted > 0 && requests.average < 1) {
     problems.push(`Throughput de ${requests.average.toFixed(2)} req/s: no se completo ni una venta por segundo.`);
   }
+  if (Number.isFinite(MAX_P99_MS) && latency.p99 > MAX_P99_MS) {
+    verdictFail = true;
+    problems.push(
+      `p99 de ${latency.p99}ms supera MAX_P99_MS=${MAX_P99_MS} (umbral de fallo del script).`
+    );
+  }
+  if (Number.isFinite(MAX_ERROR_RATE) && errorRate > MAX_ERROR_RATE) {
+    verdictFail = true;
+    problems.push(
+      `Tasa de error de ${(errorRate * 100).toFixed(2)}% ${(non2xx + errors + timeouts)}/${requests.total} ` +
+        `supera MAX_ERROR_RATE=${MAX_ERROR_RATE} (umbral de fallo del script).`
+    );
+  }
   if (!cleanupOk) {
     problems.push('El cleanup no esta garantizado: el stock y las ventas quedaron modificados en la base.');
   }
@@ -350,12 +403,20 @@ function report(result, { connections, duration, reserved, cleanupOk, saleCount,
   if (problems.length === 0) console.log('Sin observaciones.');
   for (const p of problems) console.log(`- ${p}`);
 
+  if (verdictFail) {
+    console.log('\nRESULTADO: FUERA DE UMBRALES (exit 1)');
+  }
+
   // Informativo, no un problema: el cleanup borra por diferencia de IDs, no por
   // cantidad, asi que encuentra tambien las ventas de requests que quedaron en
   // vuelo cuando autocannon corto la medicion (el servidor las escribe igual).
-  console.log(
-    `Ventas creadas (calentamiento + medicion): ${accepted} confirmadas, ${saleCount} encontradas en la base.`
-  );
+  if (saleCount !== undefined) {
+    console.log(
+      `Ventas creadas (calentamiento + medicion): ${accepted} confirmadas, ${saleCount} encontradas en la base.`
+    );
+  }
+
+  return verdictFail;
 }
 
 /**
@@ -402,26 +463,7 @@ async function diagnoseErrors({ cookie, payload, connections }) {
     .forEach(([line, count]) => console.log(`  ${count}x  ${line}`));
 }
 
-async function run() {
-  const required = {
-    NEXT_PUBLIC_SUPABASE_URL: SUPABASE_URL,
-    SUPABASE_ANON_KEY: ANON_KEY,
-    E2E_USER_EMAIL: EMAIL,
-    E2E_USER_PASSWORD: PASSWORD,
-  };
-  for (const [name, value] of Object.entries(required)) {
-    if (!value) throw new Error(`Falta ${name} en .env.local`);
-  }
-
-  const unitsNeeded = CONNECTIONS * QUANTITY;
-  console.log(`API:    ${API_URL}`);
-  console.log(`Carga:  ${CONNECTIONS} conexiones x ${DURATION}s = ${unitsNeeded} unidades\n`);
-
-  const cookie = await login();
-  const session = await apiGet('/api/session', cookie);
-  const tenantId = session?.tenant?.id;
-  if (!tenantId) throw new Error('No se pudo resolver el tenant del usuario E2E');
-
+async function runSales(cookie, tenantId) {
   // Antes de reservar stock. `pickProduct` ya ESCRIBE (reserva unidades para la
   // corrida), asi que sin service role no se puede ni revertir la reserva ni
   // limpiar las ventas: el producto queda con el stock inflado para siempre.
@@ -431,6 +473,9 @@ async function run() {
         'reservar stock ni limpiar: dejaria el stock modificado y las ventas metidas en la base.'
     );
   }
+
+  const unitsNeeded = CONNECTIONS * QUANTITY;
+  console.log(`Carga:  ${CONNECTIONS} conexiones x ${DURATION}s = ${unitsNeeded} unidades\n`);
 
   const { product, stockBefore, reserved } = await pickProduct(cookie, unitsNeeded, tenantId);
   console.log(
@@ -452,15 +497,13 @@ async function run() {
   };
 
   const before = await snapshotSaleIds(tenantId);
-
-  // Calentamiento: las primeras requests pagan compilacion de rutas y JIT. Sin
-  // esto la "latencia media" mezcla el arranque con la carga sostenida.
-  console.log('\nCalentando (5s, no se mide)...');
-  const warmup = await runLoad({ cookie, payload, duration: 5, connections: CONNECTIONS });
-
-  console.log('\nMidiendo...');
-  const result = await runLoad({ cookie, payload, duration: DURATION, connections: CONNECTIONS });
-  const totalAccepted = countOk(warmup) + countOk(result);
+  const { result, totalAccepted } = await runScenario({
+    url: `${API_URL}/api/sales`,
+    method: 'POST',
+    cookie,
+    payload,
+    connections: CONNECTIONS,
+  });
 
   const after = await snapshotSaleIds(tenantId);
   const saleIds = [...after].filter((id) => !before.has(id));
@@ -484,7 +527,8 @@ async function run() {
     console.error(`\nCleanup fallo: ${err.message}`);
   }
 
-  report(result, {
+  const fail = report(result, {
+    endpointLabel: `POST ${API_URL}/api/sales`,
     connections: CONNECTIONS,
     duration: DURATION,
     reserved,
@@ -494,6 +538,68 @@ async function run() {
   });
 
   console.log(diagnostic);
+  return fail;
+}
+
+async function runRead(cookie) {
+  const products = await apiGet('/api/products', cookie);
+  if (products.length === 0) {
+    throw new Error('No hay productos en el tenant del usuario E2E: no hay nada que medir con GET /api/products.');
+  }
+  console.log(
+    `Catalogo: ${products.length} producto(s) (el mayor stock: ` +
+      `${products.reduce((m, p) => Math.max(m, p.stock ?? 0), 0)})\n`
+  );
+
+  const { result } = await runScenario({
+    url: `${API_URL}/api/products`,
+    method: 'GET',
+    cookie,
+    payload: null,
+    connections: CONNECTIONS,
+  });
+
+  return report(result, {
+    endpointLabel: `GET ${API_URL}/api/products`,
+    connections: CONNECTIONS,
+    duration: DURATION,
+    reserved: 0,
+    cleanupOk: true,
+    saleCount: undefined,
+    accepted: countOk(result),
+  });
+}
+
+async function run() {
+  const required = {
+    NEXT_PUBLIC_SUPABASE_URL: SUPABASE_URL,
+    SUPABASE_ANON_KEY: ANON_KEY,
+    E2E_USER_EMAIL: EMAIL,
+    E2E_USER_PASSWORD: PASSWORD,
+  };
+  for (const [name, value] of Object.entries(required)) {
+    if (!value) throw new Error(`Falta ${name} en .env.local`);
+  }
+
+  if (SCENARIO !== 'sales' && SCENARIO !== 'read') {
+    throw new Error(
+      `LOAD_TEST_SCENARIO desconocido: "${SCENARIO}". Valores validos: sales | read`
+    );
+  }
+
+  console.log(`API:      ${API_URL}`);
+  console.log(`Escenario: ${SCENARIO} (${SCENARIO === 'sales' ? 'POST /api/sales' : 'GET /api/products'})`);
+
+  const cookie = await login();
+  const session = await apiGet('/api/session', cookie);
+  const tenantId = session?.tenant?.id;
+  if (!tenantId) throw new Error('No se pudo resolver el tenant del usuario E2E');
+
+  const fail = SCENARIO === 'sales' ? await runSales(cookie, tenantId) : await runRead(cookie);
+
+  // Los umbrales MAX_P99_MS / MAX_ERROR_RATE hacen fallar el script (exit 1).
+  // Sin umbrales, el veredicto es informativo y el exit es 0.
+  if (fail) process.exitCode = 1;
 }
 
 run().catch((err) => {

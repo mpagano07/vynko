@@ -886,6 +886,83 @@ beforeEach(() => {
   });
 
   // -----------------------------------------------------------------------
+  // Upgrade con la rama ya activa
+  // -----------------------------------------------------------------------
+
+  describe('upgrade con la rama ya activa', () => {
+    // Un UPDATE a la rama que ya estaba activa que NO lleva subscription_status:
+    // es la escritura de plan que hace la correccion (un intento de transicion
+    // trae los dos campos juntos).
+    const planWriteCalls = () =>
+      tenantUpdates().filter(
+        (c) =>
+          (c.args[0] as Record<string, unknown>).subscription_plan &&
+          !(c.args[0] as Record<string, unknown>).subscription_status
+      );
+
+    const upgradeAuthorized = {
+      external_reference: 'tenant-1:business',
+      status: 'authorized',
+      reason: 'Business',
+    };
+
+    it('aplica el plan nuevo cuando la rama ya estaba activa', async () => {
+      // El checkout de upgrade no cambia `subscription_status`, asi que el
+      // CAS de la transicion no matchea y el plan quedaba sin escribir (bug:
+      // el pago se cobraba con el plan viejo).
+      mockGetPreApprovalById.mockResolvedValue(upgradeAuthorized);
+      queueOwnerResolution();
+      supabaseMock.__queue('tenants', { data: [], error: null });
+      supabaseMock.__queue('tenants', {
+        data: { mercadopago_preapproval_id: 'pa-up', subscription_plan: 'starter' },
+        error: null,
+      });
+
+      const result = await processMercadoPagoWebhook('pa-up', 'subscription_preapproval');
+
+      expect(result.ok).toBe(true);
+      expect(planWriteCalls()).toHaveLength(1);
+      expect(planWriteCalls()[0].args[0]).toMatchObject({ subscription_plan: 'business' });
+    });
+
+    it('no toca el plan cuando el evento es de una suscripcion que ya no es la vigente', async () => {
+      // El preapproval viejo (el upgrade no cancela al anterior) sigue activo en
+      // MercadoPago y renueva cada mes. Sin esta guarda, esa renovacion
+      // reescribiria el plan recien pagado y el tenant bajaria de plan solo.
+      mockGetPreApprovalById.mockResolvedValue(upgradeAuthorized);
+      queueOwnerResolution();
+      supabaseMock.__queue('tenants', { data: [], error: null });
+      supabaseMock.__queue('tenants', {
+        data: { mercadopago_preapproval_id: 'pa-vigente', subscription_plan: 'business' },
+        error: null,
+      });
+
+      const result = await processMercadoPagoWebhook('pa-viejo', 'subscription_preapproval');
+
+      expect(result).toEqual({ ok: true, data: { received: true } });
+      expect(planWriteCalls()).toHaveLength(0);
+      // Tampoco deberia refrescar el periodo ni re-vincular el preapproval viejo.
+      expect(
+        supabaseMock.__calls.filter((c) => c.table === 'tenants' && c.method === 'update')
+      ).toHaveLength(1);
+    });
+
+    it('no reescribe el plan en un renewal si la rama ya lo tiene', async () => {
+      mockGetPreApprovalById.mockResolvedValue(upgradeAuthorized);
+      queueOwnerResolution();
+      supabaseMock.__queue('tenants', { data: [], error: null });
+      supabaseMock.__queue('tenants', {
+        data: { mercadopago_preapproval_id: 'pa-renew', subscription_plan: 'business' },
+        error: null,
+      });
+
+      await processMercadoPagoWebhook('pa-renew', 'subscription_preapproval');
+
+      expect(planWriteCalls()).toHaveLength(0);
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // Webhook fuera de orden
   // -----------------------------------------------------------------------
 
@@ -1092,14 +1169,19 @@ describe('bitacora de webhooks', () => {
 
   it('logs a repeat delivery as duplicate, not as a new activation', async () => {
     // El caso que hace util la bitacora: sin `outcome`, un renewal legitimo se
-    // veria igual que un webhook reenviado por error.
+    // veria igual que un webhook reenviado por error. La rama ya esta activa con
+    // el mismo plan, asi que la transicion no matchea y la lectura del tenant
+    // no encuentra un plan que aplicar.
     mockGetPreApprovalById.mockResolvedValue({
       external_reference: 'tenant-1:business',
       status: 'authorized',
     });
     queueOwnerResolution();
     supabaseMock.__queue('tenants', { data: [], error: null });
-    supabaseMock.__queue('tenants', { error: null });
+    supabaseMock.__queue('tenants', {
+      data: { mercadopago_preapproval_id: 'pa-1', subscription_plan: 'business' },
+      error: null,
+    });
 
     await processMercadoPagoWebhook('pa-1', 'subscription_preapproval');
 

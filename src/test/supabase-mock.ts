@@ -55,6 +55,7 @@ const FILTERABLE_VERBS = new Set(['select', 'update', 'delete']);
  */
 function createSupabaseMock() {
   const queues = new Map<string, Result[]>();
+  const rpcQueues = new Map<string, Result[]>();
   const calls: Call[] = [];
   let tenantAware = false;
 
@@ -125,23 +126,28 @@ function createSupabaseMock() {
     remove: { error: null as unknown },
   };
 
-  // `rate_limit_hit` y los adjustments de stock son las unicas funciones que la
-  // app llama por RPC. El mock devuelve la ventana abierta y un descuento
-  // exitoso: la suite ya fija `RATE_LIMIT_STORE=memory` en `vitest.setup.ts`
-  // para poder afirmar los 429, pero si un test alcanza esta ruta sin `rpc`
-  // explotaria con "rpc is not a function", que no dice nada del bug real.
+  // `rate_limit_hit` y `create_sale_atomic` son las funciones por RPC que la
+  // app llama en estos flujos. El mock devuelve la ventana abierta y una venta
+  // minima con id; las que no estan declaradas responden error para destapar
+  // una llamada que nadie esperaba.
   const rpcResults: Record<string, unknown> = {
     rate_limit_hit: { data: [{ ok: true, retry_after_seconds: 0 }], error: null },
-    // `decrement_stock`/`increment_stock` (migracion 043) hacen el check y el
-    // write de stock en una sola sentencia. Por defecto el mock descuenta bien:
-    // un test que necesite el rechazo por stock insuficiente cambia
-    // `__rpcResults`.
-    decrement_stock: { data: [{ ok: true, stock: 0 }], error: null },
-    // `create_sale_atomic` (migracion 045) devuelve la fila de `sales` ya
+    // `create_sale_atomic` (migracion 048) devuelve la fila de `sales` ya
     // insertada. Por defecto devuelve una venta minima con id, que es lo que
     // necesita el servicio para armar la respuesta.
     create_sale_atomic: { data: { id: 'sale-1' }, error: null },
-    increment_stock: { data: [{ ok: true, stock: 0 }], error: null },
+    // `adjust_stock_atomic` (migracion 049) ajusta y registra el historial en
+    // la misma transaccion; devuelve el stock previo y el resultante.
+    adjust_stock_atomic: { data: [{ ok: true, old_stock: 5, new_stock: 8 }], error: null },
+    // `send_transfer`/`receive_transfer` (migracion 050) mueven el estado de la
+    // transferencia, el stock y la bitacora en una sola transaccion. Sin stub
+    // devuelven fila vacia, como los demas, para que un test los configure.
+    send_transfer: { data: [], error: null },
+    receive_transfer: { data: [], error: null },
+    // `receive_po_stock` (migracion 051) incrementa quantity_received con
+    // tope, acredita stock y mueve el status de la PO en una sola transaccion.
+    // El default es una recepcion minima en curso (all=false -> partial).
+    receive_po_stock: { data: [{ ok: true, code: null, row: { status: 'partial', received_date: null, all: false } }], error: null },
   };
 
   // El segundo parametro existe porque la app SI llama por RPC con argumentos
@@ -149,6 +155,13 @@ function createSupabaseMock() {
   // tests puedan afirmar sobre esos argumentos.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const rpc = vi.fn(async (fn: string, _args?: Record<string, unknown>) => {
+    // La cola por funcion gana al resultado estatico: es lo que permite probar
+    // CONCURRENCIA de la misma RPC (dos ventas en paralelo, dos ajustes),
+    // donde cada llamada debe recibir un resultado distinto en orden.
+    const queued = rpcQueues.get(fn);
+    if (queued && queued.length > 0) {
+      return queued.shift()!;
+    }
     const result = rpcResults[fn];
     if (result === undefined) {
       return { data: null, error: { message: `mock: la funcion ${fn} no esta mockeada` } };
@@ -198,6 +211,10 @@ function createSupabaseMock() {
       const existing = queues.get(table) ?? [];
       queues.set(table, [...existing, ...results]);
     },
+    __rpcQueue(fn: string, ...results: Result[]) {
+      const existing = rpcQueues.get(fn) ?? [];
+      rpcQueues.set(fn, [...existing, ...results]);
+    },
     /**
      * Enciende el filtro por `tenant_id` (y el resto de predicados eq/in/is).
      * Apagado por defecto para no cambiar el comportamiento de las suites
@@ -208,6 +225,7 @@ function createSupabaseMock() {
     },
     __reset() {
       queues.clear();
+      rpcQueues.clear();
       calls.length = 0;
       tenantAware = false;
       storageCalls.length = 0;
@@ -216,9 +234,11 @@ function createSupabaseMock() {
       storageResults.createSignedUrls = { data: [], error: null };
       storageResults.remove.error = null;
       rpcResults.rate_limit_hit = { data: [{ ok: true, retry_after_seconds: 0 }], error: null };
-      rpcResults.decrement_stock = { data: [{ ok: true, stock: 0 }], error: null };
       rpcResults.create_sale_atomic = { data: { id: 'sale-1' }, error: null };
-      rpcResults.increment_stock = { data: [{ ok: true, stock: 0 }], error: null };
+      rpcResults.adjust_stock_atomic = { data: [{ ok: true, old_stock: 5, new_stock: 8 }], error: null };
+      rpcResults.send_transfer = { data: [], error: null };
+      rpcResults.receive_transfer = { data: [], error: null };
+      rpcResults.receive_po_stock = { data: [{ ok: true, code: null, row: { status: 'partial', received_date: null, all: false } }], error: null };
       vi.clearAllMocks();
     },
     get __calls() {

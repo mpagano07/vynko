@@ -8,6 +8,7 @@ export type WebhookOutcome = 'processed' | 'duplicate' | 'ignored' | 'error';
 
 type WebhookLogInput = {
   providerEventId: string;
+  deliveryId?: string | null;
   topic: string;
   mpStatus?: string | null;
   outcome: WebhookOutcome;
@@ -34,6 +35,11 @@ export async function recordWebhookEvent(input: WebhookLogInput): Promise<void> 
     const { error } = await supabaseAdmin.from('webhook_events').insert({
       provider: 'mercadopago',
       provider_event_id: input.providerEventId,
+      // Id de ENTREGA (`x-request-id` de MercadoPago), unico por notificacion
+      // y distinto del `provider_event_id` (que en suscripciones es el id del
+      // preapproval y se reutiliza entre entregas legitimas). Es la clave sobre
+      // la que el route deduplica replays (migracion 052).
+      delivery_id: input.deliveryId ?? null,
       topic: input.topic,
       mp_status: input.mpStatus ?? null,
       outcome: input.outcome,
