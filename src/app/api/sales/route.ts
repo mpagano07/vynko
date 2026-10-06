@@ -36,7 +36,8 @@ export async function POST(request: Request) {
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const body = await request.json();
-  const result = await createSale(auth, body);
+  const idempotencyKey = request.headers.get('idempotency-key');
+  const result = await createSale(auth, body, idempotencyKey ?? undefined);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status ?? 400 });
 
   return NextResponse.json(

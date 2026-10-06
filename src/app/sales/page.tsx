@@ -204,6 +204,12 @@ export default function SalesPage() {
   const checkoutBtnRef = useRef<HTMLButtonElement>(null);
   const [showScanner, setShowScanner] = useState(false);
 
+  // Idempotencia de la venta (migracion 048): el primer intento genera una
+  // clave y los reintentos del MISMO intento la reusan, para que un timeout o
+  // un doble envio no registren dos veces la misma venta. La clave se
+  // regenera cuando cambia el payload: un intento nuevo es una venta nueva.
+  const lastSaleAttemptRef = useRef<{ key: string; payload: string } | null>(null);
+
   const toggleSale = (id: string) => {
     setExpandedSales((prev) => {
       const next = new Set(prev);
@@ -459,25 +465,35 @@ export default function SalesPage() {
 
     setIsSubmitting(true);
     try {
+      const payload = JSON.stringify({
+        customer_id: selectedCustomerId || null,
+        notes: notes || null,
+        payments,
+        discount_percent: discountPercent,
+        surcharge_percent: surchargePercent,
+        items: cart.map((item) => ({
+          product_id: item.product_id,
+          quantity: item.quantity,
+        })),
+      });
+
+      if (!lastSaleAttemptRef.current || lastSaleAttemptRef.current.payload !== payload) {
+        lastSaleAttemptRef.current = { key: crypto.randomUUID(), payload };
+      }
+
       const res = await authFetch('/api/sales', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customer_id: selectedCustomerId || null,
-          notes: notes || null,
-          payments,
-          discount_percent: discountPercent,
-          surcharge_percent: surchargePercent,
-          items: cart.map((item) => ({
-            product_id: item.product_id,
-            quantity: item.quantity,
-          })),
-        }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': lastSaleAttemptRef.current.key,
+        },
+        body: payload,
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al registrar la venta');
 
+      lastSaleAttemptRef.current = null;
       toast.success(
         `Venta registrada exitosamente${change > 0 ? ` · Vuelto ${formatARS(change)}` : ''}`
       );

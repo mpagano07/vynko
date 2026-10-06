@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
 import { reduceStockForSale } from '@/lib/stock';
@@ -385,8 +386,142 @@ export type CreateSaleResult =
     }
   | { ok: false; error: string; status?: number };
 
-export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<CreateSaleResult> {
+// ============================================================
+// Idempotencia (migracion 048)
+// ============================================================
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(',')}]`;
+  }
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) =>
+      a < b ? -1 : a > b ? 1 : 0
+    );
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
+/**
+ * Hash canonico del request. El objeto se serializa con las claves ordenadas
+ * para que un reintento que llega con los campos en otro orden de una peticion
+ * vieja se compare igual (la clave de idempotencia describe el CONTENIDO, no
+ * el orden de los bytes).
+ */
+export function hashSaleRequest(body: unknown): string {
+  return createHash('sha256').update(canonicalJson(body)).digest('hex');
+}
+
+interface IdempotencyKeyRow {
+  sale_id: string;
+  request_hash: string;
+}
+
+async function readIdempotencyKey(
+  auth: AuthInfo,
+  idemKey: string
+): Promise<{ row: IdempotencyKeyRow | null; error: unknown }> {
+  const { data, error } = await supabaseAdmin
+    .from('sale_idempotency_keys')
+    .select('sale_id, request_hash')
+    .eq('tenant_id', auth.tenantId)
+    .eq('idempotency_key', idemKey)
+    .maybeSingle();
+  return { row: (data as IdempotencyKeyRow | null) ?? null, error };
+}
+
+function computeAdjustmentsApplied(
+  body: CreateSaleBody,
+  tenantRow: Record<string, unknown> | null
+): Record<string, unknown> {
+  const checkoutSettings = normalizeCheckoutSettings(
+    (tenantRow?.settings as Record<string, unknown> | undefined)?.checkout
+  );
+  const payments = Array.isArray(body.payments) ? body.payments : [];
+  const methods = payments.length > 0 ? payments.map((p) => p.method) : [body.payment_method ?? 'cash'];
+  const apply = payments.length <= 1;
+  return Object.fromEntries(
+    methods.map((m) => [
+      m,
+      apply ? checkoutSettings.payment_adjustments[m as keyof typeof checkoutSettings.payment_adjustments] ?? 0 : 0,
+    ])
+  );
+}
+
+// Sola no alcanza para responder un reintento: es para responder la venta que
+// la clave ya registro, con el MISMO shape que el primer 201 (sale + items +
+// payments + adjustments_applied) para que el cliente no tenga que distinguir
+// un reintento de una primer/correccion.
+async function buildReplayResponse(
+  auth: AuthInfo,
+  saleId: string,
+  body: CreateSaleBody
+): Promise<CreateSaleResult> {
+  const [saleRes, settingsRes, itemsRes, paymentsRes] = await Promise.all([
+    supabaseAdmin.from('sales').select('*').eq('id', saleId).eq('tenant_id', auth.tenantId).maybeSingle(),
+    supabaseAdmin.from('tenants').select('settings').eq('id', auth.tenantId).maybeSingle(),
+    // Items y pagos pueden ser varios: sin maybeSingle para no fallar con la
+    // segunda fila de una venta multicaja.
+    supabaseAdmin.from('sale_items').select('sale_id, product_id, quantity, unit_price_cents, subtotal_cents').eq('sale_id', saleId),
+    supabaseAdmin.from('sale_payments').select('sale_id, method, amount_cents, received_cents, change_cents').eq('sale_id', saleId),
+  ]);
+
+  const sale = saleRes.data as Record<string, unknown> | null;
+  if (saleRes.error || !sale) {
+    console.error('replay: la venta de la clave no existe:', saleRes.error);
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
+  }
+  if (itemsRes.error || paymentsRes.error) {
+    console.error('replay: fallo al leer items/pagos:', itemsRes.error ?? paymentsRes.error);
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
+  }
+
+  return {
+    ok: true,
+    sale,
+    items: (itemsRes.data as Record<string, unknown>[] | null) ?? [],
+    payments: (paymentsRes.data as Record<string, unknown>[] | null) ?? [],
+    adjustments_applied: computeAdjustmentsApplied(body, settingsRes.data as Record<string, unknown> | null),
+  };
+}
+
+export async function createSale(
+  auth: AuthInfo,
+  body: CreateSaleBody,
+  idempotencyKey?: string
+): Promise<CreateSaleResult> {
   const { customer_id, notes, items, payment_method = 'cash', amount_paid, discount_percent = 0, surcharge_percent = 0, payments } = body;
+
+  // ---- Idempotencia (048) ----
+  // El front genera una clave por intento de compra y la reusa en los
+  // reintentos del MISMO intento. Si la venta ya quedo registrada (timeout,
+  // doble envio), se devuelve ESA venta sin tocar stock ni volver a llamar a
+  // la RPC.
+  const rawKey = idempotencyKey?.trim() ?? '';
+  if (idempotencyKey !== undefined && (rawKey === '' || rawKey.length > 255)) {
+    return { ok: false, error: 'Idempotency-Key inválida: usa entre 1 y 255 caracteres', status: 400 };
+  }
+  const idemKey = rawKey || null;
+  const requestHash = idemKey ? hashSaleRequest(body) : null;
+
+  if (idemKey) {
+    const { row, error } = await readIdempotencyKey(auth, idemKey);
+    if (error) {
+      console.error('sale_idempotency_keys read:', error);
+      return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
+    }
+    if (row) {
+      if (row.request_hash !== requestHash) {
+        return {
+          ok: false,
+          error: 'La clave de idempotencia ya fue usada con otra venta',
+          status: 409,
+        };
+      }
+      return buildReplayResponse(auth, row.sale_id, body);
+    }
+  }
 
   if (!isPaymentMethodId(payment_method)) {
     return { ok: false, error: 'Medio de pago inválido', status: 400 };
@@ -607,77 +742,19 @@ export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<
   // El `stockMap` de arriba alcanza para RECHAZAR la venta antes de escribir
   // nada (fail fast), pero no para descontar: cuando 20 ventas compiten por el
   // mismo producto ese valor ya quedo viejo. El descuento lo hace
-  // `decrement_stock` (migracion 043), que hace el check y el write en una
-  // sola sentencia bajo el lock de fila.
+  // `create_sale_atomic` (048) adentro de la transaccion de la venta, con el
+  // check y el write en una sola sentencia bajo el lock de fila.
   //
-  // Antes esto era un compare-and-swap desde JS con 5 reintentos. Con N ventas
-  // sobre la misma fila, Postgres serializa los UPDATE: todos los SELECT devuelven
-  // el mismo stock y solo uno gana la primera ronda, asi que los unlucky tienen
-  // que reintentar y las rondas necesarias crecen con la concurrencia. Medido
-  // con scripts/load-test-sales.mjs, 7 de 20 ventas concurrentes fallaban con
-  // "Demasiada concurrencia" teniendo stock de sobra. Ese 400 no era una
-  // validacion de stock ni un problema de lentitud: era el retry rindiendose.
-  const decrementStockAtomic = async (productId: string, productName: string, quantity: number): Promise<void> => {
-    const { data, error } = await supabaseAdmin.rpc('decrement_stock', {
-      p_product_id: productId,
-      p_tenant_id: auth.tenantId,
-      p_quantity: quantity,
-    });
+  // Antes lo hacia `decrement_stock` (043), un RPC aparte que se confirmaba
+  // ANTES del INSERT de la venta. Si el proceso moria entre las dos llamadas,
+  // el stock quedaba descontado sin venta, y un fallo posterior se compensaba
+  // desde JS con `increment_stock`, que podia fallar en silencio. Aca no hay
+  // RPC compensatoria: cualquier fallo revierte el descuento con el rollback
+  // de la transaccion.
 
-    if (error) {
-      // Un error de la RPC es infraestructura (permisos, conexion), no un
-      // conflicto de stock: no se debe reportar como "vende otra vez".
-      console.error('decrement_stock fallo:', error);
-      throw new Error('Ocurrio un error inesperado. Intenta de nuevo.');
-    }
-
-    const row = Array.isArray(data) ? data[0] : data;
-    if (row?.ok) return;
-
-    if (row?.stock === null || row?.stock === undefined) {
-      throw new Error(`Stock insuficiente para "${productName}"`);
-    }
-    throw new Error(`Stock insuficiente para "${productName}" (disponible: ${row.stock})`);
-  };
-
-  // El rollback no puede arrancar desde el stock que se leyo al inicio de la
-  // venta: mientras tanto otras ventas pudieron moverlo. `increment_stock`
-  // (migracion 043) suma en una sola sentencia, asi que no hay compare-and-swap
-  // que reintentar ni una ventana en la que el stock se pierda en silencio.
-  const incrementStockAtomic = async (productId: string, quantity: number): Promise<void> => {
-    const { error } = await supabaseAdmin.rpc('increment_stock', {
-      p_product_id: productId,
-      p_tenant_id: auth.tenantId,
-      p_quantity: quantity,
-    });
-    // Un fallo aca deja el stock descontado sin venta: hay que dejarlo logged.
-    if (error) console.error(`No se pudo restituir el stock de ${productId}:`, error);
-  };
-
-  const decremented: SaleItemData[] = [];
-  try {
-    // Secuencial a proposito. Con 50 ventas concurrentes el cuello de botella es
-    // el lock de fila sobre `product_stock`, no el round trip: paralelizar los
-    // items de UNA venta no acorta la espera por ese lock y agrega contension.
-    // En este orden, si un item falla los anteriores ya quedaron en
-    // `decremented` y el catch los devuelve: el rollback es exacto.
-    for (const item of saleItems) {
-      await decrementStockAtomic(item.product_id, item.product_name, item.quantity);
-      decremented.push(item);
-    }
-
-    // Las 4 escrituras de la venta (venta, pagos, items y movimientos de stock)
-    // van en UNA sola llamada a `create_sale_atomic` (migracion 045).
-    //
-    // Antes eran 3 + N viajes secuenciales: insert de venta, select para traer
-    // el id, insert de pagos, insert de items y un insert de stock_history por
-    // item. Con 20 items, 23 viajes en el camino que el cajero esta mirando.
-    //
-    // Ademas el rollback era a mano: un `delete` compensatorio sobre `sales` si
-    // fallaba `sale_payments` o `sale_items`. Eso deja una ventana en la que la
-    // venta existe y despues no, y ademas el `delete` podia fallar y dejar una
-    // venta huerfana sin explicacion. Adentro de la funcion la transaccion la
-    // garantiza Postgres.
+    // Venta, pagos, items, movimientos de stock y descuento de stock van en
+    // UNA sola llamada (045/048). Si la clave de idempotencia viene, la fila
+    // que la registra se escribe en la MISMA transaccion.
     const { data: createdSale, error: createSaleError } = await supabaseAdmin.rpc('create_sale_atomic', {
       p_tenant_id: auth.tenantId,
       p_sold_by: auth.userId,
@@ -706,12 +783,42 @@ export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<
         type: 'out',
         created_by: auth.userId,
       })),
+      p_idempotency_key: idemKey,
+      p_request_hash: requestHash,
     });
+
+    // 23505 es la senal de carrera de idempotencia: otra peticion con la misma
+    // clave gano, y la funcion aborto TODA su transaccion (incluido el stock
+    // que se desconto aca adentro). Se relee la fila del ganador y se devuelve
+    // ESA venta como si hubiera sido esta.
+    if (createSaleError?.code === '23505' && idemKey && requestHash) {
+      const { row: winner, error: winnerError } = await readIdempotencyKey(auth, idemKey);
+      if (winnerError || !winner) {
+        console.error('replay por carrera:', winnerError ?? 'sin fila ganadora');
+        throw new Error('Ocurrio un error inesperado. Intenta de nuevo.');
+      }
+      if (winner.request_hash !== requestHash) {
+        return { ok: false, error: 'La clave de idempotencia ya fue usada con otra venta', status: 409 };
+      }
+      return buildReplayResponse(auth, winner.sale_id, body);
+    }
+
+    if (createSaleError) {
+      console.error('create_sale_atomic fallo:', createSaleError);
+      // P0001 es el codigo de los `raise` de la funcion: son los unicos
+      // mensajes armados en espanol que el usuario puede leer. Cualquier otro
+      // codigo (permisos, deadlock, caida de red) es del servidor y mostrarlo
+      // crudo confundiria al cajero.
+      if (createSaleError.code === 'P0001') {
+        throw new Error(createSaleError.message || 'No se pudo registrar la venta');
+      }
+      throw new Error('Ocurrio un error inesperado. Intenta de nuevo.');
+    }
 
     const sale = createdSale as { id: string } | null;
     if (!sale?.id) {
       console.error('create_sale_atomic no devolvio la venta:', createSaleError);
-      throw new Error(createSaleError?.message ?? 'No se pudo registrar la venta');
+      throw new Error('No se pudo registrar la venta');
     }
 
     // Lo que devuelve la respuesta se arma desde los datos de entrada: la
@@ -737,11 +844,12 @@ export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<
     //
     // Antes se awaited cada uno, asi que la venta no respondia hasta que el
     // log y el evento estaban escritos. Peor: si cualquiera de los dos fallaba,
-    // la excepcion caia en el catch de abajo, que devuelve el stock de TODOS los
-    // items. O sea, un problema de auditoria reventaba una venta que si se habia
-    // registrado en `sales`: el cashier veia un error y el stock volvia, pero la
-    // venta existia. Ademas son 2 round trips extra en el camino que el usuario
-    // esta mirando.
+    // la excepcion caia en el catch de abajo, que devolvia el stock de TODOS
+    // los items. O sea, un problema de auditoria reventaba una venta ya
+    // registrada: el cashier veia un error y el stock volvia, pero la venta
+    // existia. Hoy (048) la venta y el stock se confirmaron en la misma
+    // transaccion, asi que un fallo de auditoria no cambia el stock que se
+    // perdio por una excepcion que llega tarde.
     scheduleAfterBackground(async () => {
       await createActivityLog({
         tenantId: auth.tenantId,
@@ -788,12 +896,9 @@ export async function createSale(auth: AuthInfo, body: CreateSaleBody): Promise<
       adjustments_applied,
     };
   } catch (err) {
-    for (const item of decremented) {
-      await incrementStockAtomic(item.product_id, item.quantity);
-    }
-    return { ok: false, error: err instanceof Error ? err.message : 'Error al procesar la venta', status: 400 };
-  }
-  } catch (err) {
+    // No hay stock que devolver aca: si la RPC fallo, su transaccion entera
+    // (incluido el descuento) quedo revertida por Postgres. Si fallo despues,
+    // la venta ya esta registrada y este catch no la alcanza.
     return { ok: false, error: err instanceof Error ? err.message : 'Error al procesar la venta', status: 400 };
   }
 }
