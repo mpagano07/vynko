@@ -55,6 +55,7 @@ const FILTERABLE_VERBS = new Set(['select', 'update', 'delete']);
  */
 function createSupabaseMock() {
   const queues = new Map<string, Result[]>();
+  const rpcQueues = new Map<string, Result[]>();
   const calls: Call[] = [];
   let tenantAware = false;
 
@@ -154,6 +155,13 @@ function createSupabaseMock() {
   // tests puedan afirmar sobre esos argumentos.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const rpc = vi.fn(async (fn: string, _args?: Record<string, unknown>) => {
+    // La cola por funcion gana al resultado estatico: es lo que permite probar
+    // CONCURRENCIA de la misma RPC (dos ventas en paralelo, dos ajustes),
+    // donde cada llamada debe recibir un resultado distinto en orden.
+    const queued = rpcQueues.get(fn);
+    if (queued && queued.length > 0) {
+      return queued.shift()!;
+    }
     const result = rpcResults[fn];
     if (result === undefined) {
       return { data: null, error: { message: `mock: la funcion ${fn} no esta mockeada` } };
@@ -203,6 +211,10 @@ function createSupabaseMock() {
       const existing = queues.get(table) ?? [];
       queues.set(table, [...existing, ...results]);
     },
+    __rpcQueue(fn: string, ...results: Result[]) {
+      const existing = rpcQueues.get(fn) ?? [];
+      rpcQueues.set(fn, [...existing, ...results]);
+    },
     /**
      * Enciende el filtro por `tenant_id` (y el resto de predicados eq/in/is).
      * Apagado por defecto para no cambiar el comportamiento de las suites
@@ -213,6 +225,7 @@ function createSupabaseMock() {
     },
     __reset() {
       queues.clear();
+      rpcQueues.clear();
       calls.length = 0;
       tenantAware = false;
       storageCalls.length = 0;

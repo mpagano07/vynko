@@ -1178,3 +1178,118 @@ describe('idempotencia de la venta (migracion 048)', () => {
     expect(supabaseMock.rpc).not.toHaveBeenCalledWith('create_sale_atomic', expect.anything());
   });
 });
+
+describe('concurrencia (Fase 2)', () => {
+  const body = { items: [{ product_id: 'p1', quantity: 3 }] };
+
+  // Dos requests en paralelo contra el mismo producto. Cada uno usa su propia
+  // columna de pre-checks (products + product_stock); la RPC es la que decide
+  // quien gana.
+  const queueTwoSalesPreReads = () => {
+    supabaseMock.__queue('products', {
+      data: [{ id: 'p1', name: 'Coca', price: 2, price_cents: 200 }],
+    });
+    supabaseMock.__queue('products', {
+      data: [{ id: 'p1', name: 'Coca', price: 2, price_cents: 200 }],
+    });
+    supabaseMock.__queue('product_stock', { data: [{ product_id: 'p1', stock: 10 }] });
+    supabaseMock.__queue('product_stock', { data: [{ product_id: 'p1', stock: 10 }] });
+  };
+
+  beforeEach(() => {
+    supabaseMock.__reset();
+    vi.mocked(getAuth).mockResolvedValue(mockAuth);
+    afterCallbacks.length = 0;
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('dos ventas paralelas al mismo producto: la RPC deja pasar una sola', async () => {
+    queueTwoSalesPreReads();
+
+    // La funcion serializa el descuento bajo lock: la primera llamada gana el
+    // stock y la segunda choca contra el `stock >= qty` del UPDATE condicional.
+    supabaseMock.__rpcQueue(
+      'create_sale_atomic',
+      { data: { id: 'sale-1' }, error: null },
+      { data: null, error: { code: 'P0001', message: 'Stock insuficiente para "Coca" (disponible: 0)' } }
+    );
+
+    const [ra, rb] = await Promise.all([
+      POST(makeRequest(body, { 'Idempotency-Key': 'intento-a' })),
+      POST(makeRequest(body, { 'Idempotency-Key': 'intento-b' })),
+    ]);
+
+    const statuses = [ra.status, rb.status].sort();
+    expect(statuses).toEqual([201, 400]);
+
+    const loser = ra.status === 400 ? ra : rb;
+    expect((await loser.json()).error).toBe(
+      'Stock insuficiente para "Coca" (disponible: 0)'
+    );
+
+    // Una llamada por vecino y ninguna compensacion desde el backend: el
+    // perdedor no hizo nada porque su transaccion entera quedo revertida.
+    const createCalls = supabaseMock.rpc.mock.calls.filter(
+      ([fn]) => fn === 'create_sale_atomic'
+    );
+    expect(createCalls).toHaveLength(2);
+    expect(supabaseMock.rpc).not.toHaveBeenCalledWith('increment_stock', expect.anything());
+  });
+
+  it('carrera de idempotencia en paralelo: replica al ganador y no descuenta dos veces', async () => {
+    queueTwoSalesPreReads();
+
+    // Mismo intento desde dos vecinos. Quien gana la RPC registra la venta y
+    // su clave; el otro choca contra unique_violation (23505) y, tras releer la
+    // clave, responde la venta del ganador sin reintentar la RPC.
+    supabaseMock.__rpcQueue(
+      'create_sale_atomic',
+      { data: { id: 'sale-1' }, error: null },
+      { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } }
+    );
+
+    // Pre-checks de ambos (sin fila todavia) + la fila ganadora para el replay
+    // del perdedor. Cualquiera sea quien gane la RPC, se consumen los mismos
+    // tres: dos lecturas vacias de pre-check y una del ganador.
+    supabaseMock.__queue('sale_idempotency_keys', { data: null });
+    supabaseMock.__queue('sale_idempotency_keys', { data: null });
+    supabaseMock.__queue('sale_idempotency_keys', {
+      data: { sale_id: 'sale-1', request_hash: hashSaleRequest(body) },
+    });
+
+    // Replay: al `sales` recuperado del ganador hay que vestirle la respuesta
+    // con items y pagos.
+    supabaseMock.__queue('sales', {
+      data: { id: 'sale-1', total_cents: 600, created_at: '2026-01-01T00:00:00Z' },
+    });
+    supabaseMock.__queue('tenants', { data: { settings: { checkout: {} } } });
+    supabaseMock.__queue('sale_items', {
+      data: [{ sale_id: 'sale-1', product_id: 'p1', quantity: 3, unit_price_cents: 200, subtotal_cents: 600 }],
+    });
+    supabaseMock.__queue('sale_payments', {
+      data: [{ sale_id: 'sale-1', method: 'cash', amount_cents: 600, received_cents: 600, change_cents: 0 }],
+    });
+
+    const [ra, rb] = await Promise.all([
+      POST(makeRequest(body, { 'Idempotency-Key': 'intento-1' })),
+      POST(makeRequest(body, { 'Idempotency-Key': 'intento-1' })),
+    ]);
+
+    expect(ra.status).toBe(201);
+    expect(rb.status).toBe(201);
+    expect((await ra.json()).id).toBe('sale-1');
+    expect((await rb.json()).id).toBe('sale-1');
+
+    // Exactamente dos intentos a la RPC (uno por vecino): el stock se desconto
+    // una sola vez y el perdedor respondio con la venta ya registrada.
+    const createCalls = supabaseMock.rpc.mock.calls.filter(
+      ([fn]) => fn === 'create_sale_atomic'
+    );
+    expect(createCalls).toHaveLength(2);
+    expect(supabaseMock.rpc).not.toHaveBeenCalledWith('increment_stock', expect.anything());
+  });
+});

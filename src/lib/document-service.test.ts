@@ -74,3 +74,55 @@ describe('createDocument con numeracion', () => {
     expect(releases).toHaveLength(0);
   });
 });
+
+describe('concurrencia de numeracion (Fase 2)', () => {
+  beforeEach(() => {
+    supabaseMock.__reset();
+  });
+
+  it('dos documentos paralelos del mismo tipo se llevan numeros distintos sin colision', async () => {
+    // Antes de la ejecucion el contador esta en 5. Ambos reclaman con el MISMO
+    // next_number porque leen antes de que el otro actualice; el CAS serializa:
+    // uno gana el 5 y el otro, tras un retry, el 6. La cola reproduce ese
+    // intercalado para cualquiera de los dos ordenes posibles de llegada:
+    // leen 5, leen 5, el primer CAS gana, el segundo no matchea, relee 6, y
+    // el retry gana el 6.
+    supabaseMock.__queue('commercial_document_sequences', { data: { next_number: 5 }, error: null });
+    supabaseMock.__queue('commercial_document_sequences', { data: { next_number: 5 }, error: null });
+    supabaseMock.__queue('commercial_document_sequences', { data: [{ next_number: 6 }], error: null });
+    supabaseMock.__queue('commercial_document_sequences', { data: [], error: null });
+    supabaseMock.__queue('commercial_document_sequences', { data: { next_number: 6 }, error: null });
+    supabaseMock.__queue('commercial_document_sequences', { data: [{ next_number: 7 }], error: null });
+
+    supabaseMock.__queue('commercial_documents', { data: { id: 'doc-1' }, error: null });
+    supabaseMock.__queue('commercial_documents', { data: { id: 'doc-2' }, error: null });
+    supabaseMock.__queue('commercial_documents', { data: { id: 'doc-1', items: [] }, error: null });
+    supabaseMock.__queue('commercial_documents', { data: { id: 'doc-2', items: [] }, error: null });
+    supabaseMock.__queue('commercial_document_items', { data: null, error: null });
+    supabaseMock.__queue('commercial_document_items', { data: null, error: null });
+
+    const [a, b] = await Promise.all([
+      createDocument(AUTH, baseBody),
+      createDocument(AUTH, baseBody),
+    ]);
+
+    expect(a.ok).toBe(true);
+    expect(b.ok).toBe(true);
+    if (!a.ok || !b.ok) return;
+
+    // El dato que se afirma es con que numero se INSERTARON los documentos
+    // (el mock deja el provider ordenar los nombres, no los numeros).
+    const usedDocNumbers = supabaseMock.__calls
+      .filter((c) => c.table === 'commercial_documents' && c.method === 'insert')
+      .map((c) => (c.args[0] as Record<string, unknown>).document_number as number)
+      .sort((x, y) => x - y);
+    expect(usedDocNumbers).toEqual([5, 6]);
+
+    // El contador avanzo dos veces (5->6 del ganador y su reintento 6->7 del
+    // que perdio) y quedo en 7: ni colision, ni hueco, ni release del ganador.
+    const advances = supabaseMock.__calls
+      .filter((c) => c.table === 'commercial_document_sequences' && c.method === 'update')
+      .map((c) => (c.args[0] as Record<string, unknown>).next_number as number);
+    expect(advances).toEqual([6, 6, 7]);
+  });
+});

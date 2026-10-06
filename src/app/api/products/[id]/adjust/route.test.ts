@@ -220,4 +220,45 @@ describe('POST /api/products/[id]/adjust', () => {
     expect(res.status).toBe(404);
     expect((await res.json()).error).toBe('Producto no encontrado en tu sucursal');
   });
+
+  it('dos ajustes paralelos sobre el mismo producto: el segundo pierde el CAS', async () => {
+    supabaseMock.__queue('products', { data: { id: 'p1', name: 'Coca' } });
+    supabaseMock.__queue('products', { data: { id: 'p1', name: 'Coca' } });
+    supabaseMock.__queue('product_stock', { data: { stock: 5 } });
+    supabaseMock.__queue('product_stock', { data: { stock: 5 } });
+
+    // La RPC reevalua el stock real bajo lock de fila: el segundo ajuste llega
+    // cuando el primero ya movio la fila y no matchea el UPDATE condicional.
+    supabaseMock.__rpcQueue(
+      'adjust_stock_atomic',
+      { data: [{ ok: true, old_stock: 5, new_stock: 8 }], error: null },
+      { data: [{ ok: false, old_stock: 5, new_stock: null }], error: null }
+    );
+
+    const [ra, rb] = await Promise.all([
+      POST(
+        makeRequest({ id: 'p1' }, { quantity: 3, reason: 'found' }),
+        { params: routeParams } as never
+      ),
+      POST(
+        makeRequest({ id: 'p1' }, { quantity: -4, reason: 'damaged' }),
+        { params: routeParams } as never
+      ),
+    ]);
+
+    const statuses = [ra.status, rb.status].sort();
+    expect(statuses).toEqual([200, 400]);
+
+    const loser = ra.status === 400 ? ra : rb;
+    expect((await loser.json()).error).toBe('El stock no puede ser negativo');
+
+    // Una llamada por vecino; el perdedor no dejo ningun historial huerfano.
+    const adjustCalls = supabaseMock.rpc.mock.calls.filter(
+      ([fn]) => fn === 'adjust_stock_atomic'
+    );
+    expect(adjustCalls).toHaveLength(2);
+    expect(
+      supabaseMock.__calls.some((c) => c.table === 'stock_history' && c.method === 'insert')
+    ).toBe(false);
+  });
 });
