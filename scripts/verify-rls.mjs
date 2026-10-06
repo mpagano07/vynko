@@ -24,7 +24,13 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 function loadEnv() {
   const env = {};
-  const raw = readFileSync(resolve(ROOT, '.env.local'), 'utf8');
+  let raw = '';
+  try {
+    raw = readFileSync(resolve(ROOT, '.env.local'), 'utf8');
+  } catch {
+    // Sin .env.local (CI): las variables vienen del proceso con
+    // VERIFY_RLS_ENV_FROM=process.
+  }
   for (const line of raw.split(/\r?\n/)) {
     const m = /^\s*([A-Za-z0-9_]+)\s*=\s*(.*)$/.exec(line);
     if (!m) continue;

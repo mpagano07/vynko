@@ -17,6 +17,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # ggshield escanea el rango de commits del push/PR.
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -32,6 +35,38 @@ jobs:
 
       - name: Run lint
         run: npm run lint
+
+      # Dependencias de PRODUCCION limpias. El arbol de desarrollo tiene dos
+      # residuales sin fix no-rompedor (braces via eslint-config-next, uuid via
+      # autocannon) que se excluyen a proposito.
+      - name: Audit production dependencies
+        run: npm audit --audit-level=high --omit=dev
+
+      # Opt-in: requiere un proyecto Supabase de test con fixtures de
+      # E2E_USER_* y el flag RUN_RLS_VERIFY=true en vars del repo.
+      - name: Verify RLS isolation
+        if: vars.RUN_RLS_VERIFY == 'true'
+        run: npm run verify:rls
+        env:
+          VERIFY_RLS_ENV_FROM: process
+          VERIFY_RLS_EXPECT_REF: ${{ vars.VERIFY_RLS_EXPECT_REF }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
+          E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
+
+      # Opt-in: requiere el secret GITGUARDIAN_API_KEY. Escanea los commits del
+      # push/PR contra la API de GitGuardian (no guarda contenido).
+      - name: Secret scan (ggshield)
+        if: secrets.GITGUARDIAN_API_KEY != ''
+        uses: GitGuardian/ggshield-action@v1
+        env:
+          GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
+          GITHUB_PUSH_BASE_SHA: ${{ github.event.base }}
+          GITHUB_PULL_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
 
       - name: Build
         run: npm run build
