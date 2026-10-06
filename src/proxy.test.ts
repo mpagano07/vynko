@@ -13,6 +13,24 @@ vi.mock('@/lib/checkSubscription', async (importOriginal) => {
   return { ...original, checkSubscriptionBlocked: vi.fn() };
 });
 
+// Parametros tipados para que el mock cargue como la firma real, aunque no se
+// usen (los mocks se configuran por test). Viven en la firma por el mismo
+// motivo que `_args` en supabase-mock.
+const { rateLimitMock, getClientIpMock } = vi.hoisted(() => ({
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  rateLimitMock: vi.fn(async (_key: string, _limit: number, _windowMs: number) => ({
+    ok: true,
+    retryAfterSeconds: 0,
+  })),
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  getClientIpMock: vi.fn((_request: Request) => '203.0.113.5'),
+}));
+
+vi.mock('@/lib/rate-limit', () => ({
+  rateLimit: (key: string, limit: number, windowMs: number) => rateLimitMock(key, limit, windowMs),
+  getClientIp: (request: Request) => getClientIpMock(request),
+}));
+
 const serverClientMock = vi.mocked(createServerClient);
 const adminClientMock = vi.mocked(createClient);
 const subscriptionMock = vi.mocked(checkSubscriptionBlocked);
@@ -61,6 +79,8 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
     subscriptionMock.mockReturnValue({ blocked: false });
     makeServerClient({ id: 'user-1' });
     makeAdminClient();
+    rateLimitMock.mockResolvedValue({ ok: true, retryAfterSeconds: 0 });
+    getClientIpMock.mockReturnValue('203.0.113.5');
   });
 
   it('no redirige a onboarding si el usuario tiene una empresa', async () => {
@@ -310,5 +330,47 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
     expect(res.status).toBe(200);
     expect(res.headers.get('x-tenant-id')).toBe('t1');
     expect(subscriptionMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('proxy: rate limit global de paginas (F1-6)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    adminQueue = [];
+    subscriptionMock.mockReturnValue({ blocked: false });
+    makeServerClient({ id: 'user-1' });
+    makeAdminClient();
+    rateLimitMock.mockResolvedValue({ ok: true, retryAfterSeconds: 0 });
+    getClientIpMock.mockReturnValue('203.0.113.5');
+  });
+
+  it('usa la IP real del cliente como clave del bucket', async () => {
+    adminQueue.push({ data: [{ tenant_id: 't1' }], error: null });
+    adminQueue.push({ data: { onboarding_pending: false }, error: null });
+
+    const res = await proxy(request('/dashboard'));
+
+    expect(res.status).toBe(200);
+    expect(rateLimitMock).toHaveBeenCalledWith('proxy:ip:203.0.113.5', expect.any(Number), expect.any(Number));
+  });
+
+  it('bloquea con 429 y Retry-After cuando una IP supera el tope', async () => {
+    rateLimitMock.mockResolvedValue({ ok: false, retryAfterSeconds: 42 });
+
+    const res = await proxy(request('/dashboard'));
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get('Retry-After')).toBe('42');
+    expect(res.headers.get('Content-Security-Policy')).toBeTruthy();
+  });
+
+  it('no corre el rate limit para peticiones sin sesión (se redirige a login antes)', async () => {
+    makeServerClient(null);
+
+    const res = await proxy(request('/dashboard'));
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toContain('/login');
+    expect(rateLimitMock).not.toHaveBeenCalled();
   });
 });

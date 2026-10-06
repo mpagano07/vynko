@@ -11,7 +11,11 @@ export type MercadoPagoWebhookResult =
   | { ok: true; data: { received: true } }
   | { ok: false; error: string; status: number };
 
-export async function processMercadoPagoWebhook(id: string | undefined, topic: unknown): Promise<MercadoPagoWebhookResult> {
+export async function processMercadoPagoWebhook(
+  id: string | undefined,
+  topic: unknown,
+  deliveryId?: string
+): Promise<MercadoPagoWebhookResult> {
   const startedAt = Date.now();
 
   // Como termino este evento. Se actualiza a medida que se avanza y se escribe
@@ -27,6 +31,7 @@ export async function processMercadoPagoWebhook(id: string | undefined, topic: u
     scheduleAfterBackground(() =>
       recordWebhookEvent({
         providerEventId: id,
+        deliveryId,
         topic: typeof topic === 'string' ? topic : String(topic ?? 'unknown'),
         mpStatus,
         outcome: finalOutcome,

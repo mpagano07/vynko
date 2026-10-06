@@ -505,89 +505,76 @@ export async function receivePurchaseOrder(
     subtotal_cents: item.unit_price_cents * item.quantity,
   }));
 
+  // Si el lote de la recepcion (051) falla despues de que este remito ya se
+  // inserto, hay que devolver ambas cosas: el documento y su folio.
+  const compensateRemito = async () => {
+    await supabaseAdmin.from('commercial_documents').delete().eq('id', document.id);
+    await releaseCommercialDocumentNumber(auth.tenantId, 'remito_ingreso', nextNumber);
+  };
+
   const { error: itemsError } = await supabaseAdmin
     .from('commercial_document_items')
     .insert(documentItems);
 
   if (itemsError) {
-    await supabaseAdmin.from('commercial_documents').delete().eq('id', document.id);
-    await releaseCommercialDocumentNumber(auth.tenantId, 'remito_ingreso', nextNumber);
+    await compensateRemito();
     console.error('DB error:', itemsError);
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
   }
 
-  let allFullyReceived = true;
+  // El incremento de `quantity_received` (con tope), el credito de stock y el
+  // status de la orden van en UNA llamada por RPC (migracion 051), bajo el lock
+  // de fila de la orden. Antes eran N+2 viajes con read-modify-write sobre el
+  // stock: dos recepciones simultaneas de la misma orden acreditaban el stock
+  // el DOBLE y el cap "<= pendiente" no las frenaba, porque ambas habian leido
+  // que faltaba todo por recibir.
+  const incItems = [...receivingQuantities.entries()]
+    .filter(([, inc]) => inc > 0)
+    .map(([product_id, quantity_received]) => ({ product_id, quantity_received }));
 
-  for (const item of poItems as Record<string, unknown>[]) {
-    const productId = item.product_id as string;
-    const orderedQty = Number(item.quantity_ordered) || 0;
-    const currentQtyReceived = Number(item.quantity_received) || 0;
-    const qtyReceivingNow = receivingQuantities.get(productId) || 0;
+  const { data, error: receiveError } = await supabaseAdmin.rpc('receive_po_stock', {
+    p_order_id: purchaseOrderId,
+    p_tenant_id: auth.tenantId,
+    p_by: auth.userId,
+    p_items: incItems,
+    p_received_date: received_date || new Date().toISOString().split('T')[0],
+    p_deposito: deposito ?? null,
+    p_pasillo: pasillo ?? null,
+    p_estanteria: estanteria ?? null,
+  });
 
-    if (qtyReceivingNow > 0) {
-      const newQtyReceived = currentQtyReceived + qtyReceivingNow;
+  const outcome = (data as Array<Record<string, unknown>> | null)?.[0];
 
-      await supabaseAdmin
-        .from('purchase_order_items')
-        .update({ quantity_received: newQtyReceived })
-        .eq('id', item.id);
-
-      const { data: stockRow } = await supabaseAdmin
-        .from('product_stock')
-        .select('stock')
-        .eq('product_id', productId)
-        .eq('tenant_id', auth.tenantId)
-        .maybeSingle();
-
-      const currentStock = Number((stockRow as Record<string, unknown> | null)?.stock) || 0;
-
-      const stockUpdate: Record<string, unknown> = {
-        product_id: productId,
-        tenant_id: auth.tenantId,
-        stock: currentStock + qtyReceivingNow,
-        updated_at: new Date().toISOString(),
-      };
-      if (deposito !== undefined) stockUpdate.deposito = deposito;
-      if (pasillo !== undefined) stockUpdate.pasillo = pasillo;
-      if (estanteria !== undefined) stockUpdate.estanteria = estanteria;
-
-      await supabaseAdmin
-        .from('product_stock')
-        .upsert(stockUpdate, { onConflict: 'product_id,tenant_id' });
-
-      await supabaseAdmin
-        .from('stock_history')
-        .insert({
-          tenant_id: auth.tenantId,
-          product_id: productId,
-          quantity: qtyReceivingNow,
-          type: 'in',
-          reason: `Recepción PO #${purchaseOrderId.slice(0, 8)}`,
-          created_by: auth.userId,
-        });
+  if (receiveError) {
+    await compensateRemito();
+    // P0001 son los `raise` de la funcion: mensajes armados para el usuario,
+    // como el de tope de lo pedido.
+    if (receiveError.code === 'P0001') {
+      return { ok: false, error: receiveError.message || 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }
-
-    if (currentQtyReceived + qtyReceivingNow < orderedQty) {
-      allFullyReceived = false;
-    }
-  }
-
-  const newStatus = allFullyReceived ? 'received' : 'partial';
-
-  const { error: updateError } = await supabaseAdmin
-    .from('purchase_orders')
-    .update({
-      status: newStatus,
-      received_date: allFullyReceived ? (received_date || new Date().toISOString().split('T')[0]) : null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', purchaseOrderId)
-    .eq('tenant_id', auth.tenantId);
-
-  if (updateError) {
-    console.error('DB error:', updateError);
+    console.error('receive_po_stock fallo:', receiveError);
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
   }
+
+  if (!outcome?.ok) {
+    await compensateRemito();
+    // La foto de la orden en esta peticion podia agregar una recepcion ya
+    // hecha o una cancelacion que se registro mientras tanto.
+    if (outcome?.code === 'already_received') {
+      return { ok: false, error: 'El pedido ya fue recibido', status: 400 };
+    }
+    if (outcome?.code === 'cancelled') {
+      return { ok: false, error: 'El pedido fue cancelado', status: 400 };
+    }
+    if (outcome?.code === 'not_found') {
+      return { ok: false, error: 'Pedido no encontrado', status: 404 };
+    }
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
+  }
+
+  const row = (outcome.row as Record<string, unknown> | undefined) ?? {};
+  const allFullyReceived = Boolean(row.all);
+  const newStatus = (row.status as string) || (allFullyReceived ? 'received' : 'partial');
 
   await createActivityLog({
     tenantId: auth.tenantId,

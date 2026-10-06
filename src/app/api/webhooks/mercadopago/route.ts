@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyMercadoPagoSignature } from '@/lib/mercadopago';
 import { processMercadoPagoWebhook } from '@/lib/mercadopago-webhook-service';
 import { parseWebhookPayload } from '@/lib/mercadopago-webhook-schema';
@@ -34,7 +35,40 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized webhook request' }, { status: 401 });
   }
 
-  const result = await processMercadoPagoWebhook(id, topic);
+  // Dedupe temprano de replays, despues de la firma y ANTES de tocar la API de
+  // MercadoPago o de escribir en tenants.
+  //
+  // `x-request-id` es el id de ENTREGA: unico por notificacion. Un reintento de
+  // la misma entrega repite ese id; una renovacion mensual es una notificacion
+  // nueva (id distinto) que apunta al mismo preapproval, y tiene que procesarse.
+  // Por eso el dedupe es por delivery y no por `data.id` (el preapproval), que
+  // se reutiliza entre eventos legitimos (ver migracion 052).
+  //
+  // El chequeo es fail-open: si la lectura falla se procesa igual, el webhook
+  // no puede bloquearse por un problema de su propia bitacora. Y un delivery
+  // previo con outcome 'error' NO corta: MercadoPago lo esta reintentando para
+  // que se procese, y 200'earlo ahora lo daria por terminado sin activar nada.
+  const deliveryId = request.headers.get('x-request-id');
+  if (deliveryId) {
+    try {
+      const { data: prior } = await supabaseAdmin
+        .from('webhook_events')
+        .select('outcome')
+        .eq('provider', 'mercadopago')
+        .eq('delivery_id', deliveryId)
+        .order('received_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (prior && prior.outcome !== 'error') {
+        return NextResponse.json({ received: true });
+      }
+    } catch (err) {
+      console.warn('webhook_events dedupe no disponible, se procesa igual:', err);
+    }
+  }
+
+  const result = await processMercadoPagoWebhook(id, topic, deliveryId ?? undefined);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
   return NextResponse.json(result.data);
 }

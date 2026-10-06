@@ -135,6 +135,18 @@ function createSupabaseMock() {
     // insertada. Por defecto devuelve una venta minima con id, que es lo que
     // necesita el servicio para armar la respuesta.
     create_sale_atomic: { data: { id: 'sale-1' }, error: null },
+    // `adjust_stock_atomic` (migracion 049) ajusta y registra el historial en
+    // la misma transaccion; devuelve el stock previo y el resultante.
+    adjust_stock_atomic: { data: [{ ok: true, old_stock: 5, new_stock: 8 }], error: null },
+    // `send_transfer`/`receive_transfer` (migracion 050) mueven el estado de la
+    // transferencia, el stock y la bitacora en una sola transaccion. Sin stub
+    // devuelven fila vacia, como los demas, para que un test los configure.
+    send_transfer: { data: [], error: null },
+    receive_transfer: { data: [], error: null },
+    // `receive_po_stock` (migracion 051) incrementa quantity_received con
+    // tope, acredita stock y mueve el status de la PO en una sola transaccion.
+    // El default es una recepcion minima en curso (all=false -> partial).
+    receive_po_stock: { data: [{ ok: true, code: null, row: { status: 'partial', received_date: null, all: false } }], error: null },
   };
 
   // El segundo parametro existe porque la app SI llama por RPC con argumentos
@@ -210,6 +222,10 @@ function createSupabaseMock() {
       storageResults.remove.error = null;
       rpcResults.rate_limit_hit = { data: [{ ok: true, retry_after_seconds: 0 }], error: null };
       rpcResults.create_sale_atomic = { data: { id: 'sale-1' }, error: null };
+      rpcResults.adjust_stock_atomic = { data: [{ ok: true, old_stock: 5, new_stock: 8 }], error: null };
+      rpcResults.send_transfer = { data: [], error: null };
+      rpcResults.receive_transfer = { data: [], error: null };
+      rpcResults.receive_po_stock = { data: [{ ok: true, code: null, row: { status: 'partial', received_date: null, all: false } }], error: null };
       vi.clearAllMocks();
     },
     get __calls() {

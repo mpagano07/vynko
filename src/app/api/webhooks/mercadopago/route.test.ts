@@ -463,5 +463,77 @@ describe('POST /api/webhooks/mercadopago', () => {
       supabaseMock.__calls.filter((c) => c.table === 'tenants' && c.method === 'update')
     ).toHaveLength(0);
   });
+
+  describe('dedupe temprano por x-request-id (migracion 052)', () => {
+    it('corta un replay de la misma entrega sin llamar a la API de MercadoPago', async () => {
+      supabaseMock.__queue('webhook_events', { data: { outcome: 'processed' }, error: null });
+
+      const req = makeWebhookRequest({
+        type: 'subscription_preapproval',
+        data: { id: 'preapproval-123' },
+      });
+
+      const res = await POST(req);
+
+      expect(res.status).toBe(200);
+      expect((await res.json()).received).toBe(true);
+      expect(mockGetPreApprovalById).not.toHaveBeenCalled();
+    });
+
+    it('un delivery previo con outcome error NO corta: MercadoPago esta reintentando para que se procese', async () => {
+      supabaseMock.__queue('webhook_events', { data: { outcome: 'error' }, error: null });
+      mockGetPreApprovalById.mockResolvedValue({
+        external_reference: 'tenant-1',
+        status: 'authorized',
+        reason: 'Suscripción Starter - Vynko',
+      });
+
+      supabaseMock.__queue('tenants', { data: null, error: null });
+
+      const req = makeWebhookRequest({
+        type: 'subscription_preapproval',
+        data: { id: 'preapproval-123' },
+      });
+
+      const res = await POST(req);
+
+      expect(res.status).toBe(200);
+      expect(mockGetPreApprovalById).toHaveBeenCalledWith('preapproval-123');
+    });
+
+    it('lee la bitacora filtrando por delivery_id, no por preapproval', async () => {
+      // Modo tenant-aware del mock: aplica los filtros eq/in/is a las filas
+      // encoladas. Una fila registrada bajo OTRO delivery se filtra, la entrega
+      // se procesa normal (una renovacion mensual es un delivery distinto).
+      supabaseMock.__setTenantAware(true);
+      supabaseMock.__queue('webhook_events', {
+        data: { outcome: 'processed', delivery_id: 'another-delivery', provider: 'mercadopago' },
+        error: null,
+      });
+      mockGetPreApprovalById.mockResolvedValue({
+        external_reference: 'tenant-1',
+        status: 'authorized',
+        reason: 'Suscripción Starter - Vynko',
+      });
+
+      supabaseMock.__queue('tenants', { data: null, error: null });
+
+      const req = makeWebhookRequest({
+        type: 'subscription_preapproval',
+        data: { id: 'preapproval-123' },
+      });
+
+      const res = await POST(req);
+
+      expect(res.status).toBe(200);
+      expect(mockGetPreApprovalById).toHaveBeenCalledWith('preapproval-123');
+
+      const deliveryEq = supabaseMock.__calls.find(
+        (c) => c.table === 'webhook_events' && c.method === 'eq' && c.args[0] === 'delivery_id'
+      );
+      expect(deliveryEq).toBeDefined();
+      expect(deliveryEq!.args[1]).toBe('test-req-id');
+    });
+  });
 });
 

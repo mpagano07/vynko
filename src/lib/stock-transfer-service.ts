@@ -215,106 +215,46 @@ export async function updateTransferStatus(
     return { ok: false, error: `No se puede cambiar la transferencia de "${transfer.status}" a "${status}"`, status: 400 };
   }
 
-  const { data: items, error: itemsError } = await supabaseAdmin
-    .from('stock_transfer_items')
-    .select('*, product:products(name)')
-    .eq('transfer_id', id);
+  // El cambio de estado, el debito/acreditacion de stock y la bitacora viajan
+  // en UNA llamada por RPC (migracion 050). El UPDATE del status con guarda
+  // corre PRIMERO bajo lock de fila: dos envios simultaneos de la misma
+  // transferencia se serializan y el segundo ve el status cambiado, asi que el
+  // debito no puede duplicarse. Antes eran N+2 viajes con CAS por item que,
+  // bajo concurrencia, agotaban los reintentos o descontaban dos veces.
+  const rpcName = status === 'in_transit' ? 'send_transfer' : 'receive_transfer';
+  const { data, error: rpcError } = await supabaseAdmin.rpc(rpcName, {
+    p_transfer_id: id,
+    p_by: auth.userId,
+  });
 
-  if (itemsError || !items) {
-    return { ok: false, error: 'Error al obtener items', status: 500 };
-  }
-
-  if (status === 'in_transit') {
-    for (const item of items) {
-      let deducted = false;
-      for (let attempt = 0; attempt < 5 && !deducted; attempt++) {
-        const { data: stock } = await supabaseAdmin
-          .from('product_stock')
-          .select('stock')
-          .eq('product_id', item.product_id)
-          .eq('tenant_id', transfer.from_tenant_id)
-          .maybeSingle();
-
-        const currentStock = stock?.stock ?? 0;
-        if (currentStock < item.quantity) {
-          const itemWithProduct = item as { product?: { name?: string } };
-          const productName = itemWithProduct.product?.name || 'Producto';
-          return {
-            ok: false,
-            error: `Stock insuficiente de "${productName}" en origen. Disponible: ${currentStock}, requerido: ${item.quantity}`,
-            status: 400,
-          };
-        }
-
-        // Decremento con optimistic concurrency: solo aplica si nadie modificó
-        // el stock desde la lectura. Si no lo logra, reintenta.
-        const { data: updated, error: updateError } = await supabaseAdmin
-          .from('product_stock')
-          .update({ stock: currentStock - item.quantity, updated_at: new Date().toISOString() })
-          .eq('product_id', item.product_id)
-          .eq('tenant_id', transfer.from_tenant_id)
-          .eq('stock', currentStock)
-          .select('id')
-          .maybeSingle();
-
-        if (updateError) {
-          return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
-        }
-        if (updated) deducted = true;
-      }
-
-      if (!deducted) {
-        return { ok: false, error: 'No se pudo actualizar el stock de origen. Intenta de nuevo.', status: 409 };
-      }
-
-      await supabaseAdmin
-        .from('stock_history')
-        .insert({
-          tenant_id: transfer.from_tenant_id,
-          product_id: item.product_id,
-          quantity: -item.quantity,
-          type: 'transfer',
-          reason: `Transferencia a ${transfer.to_tenant_id}`,
-          created_by: auth.userId,
-        });
+  if (rpcError) {
+    // P0001 son los `raise` de la funcion: mensajes armados para el usuario,
+    // como el de stock insuficiente con el nombre del producto.
+    if (rpcError.code === 'P0001') {
+      return { ok: false, error: rpcError.message || 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }
-  }
-
-  if (status === 'received') {
-    for (const item of items) {
-      const creditResult = await creditDestinationStock(
-        transfer.from_tenant_id,
-        transfer.to_tenant_id,
-        item.product_id,
-        item.quantity,
-        auth.userId
-      );
-      if (!creditResult.ok) {
-        return { ok: false, error: creditResult.error, status: creditResult.status };
-      }
-    }
-  }
-
-  const updateData: Record<string, string | undefined> = {
-    status,
-    updated_at: new Date().toISOString(),
-  };
-
-  if (status === 'received') {
-    updateData.received_at = new Date().toISOString();
-  }
-
-  const { data: updated, error: updateError } = await supabaseAdmin
-    .from('stock_transfers')
-    .update(updateData)
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (updateError) {
-    console.error('DB error:', updateError);
+    console.error(rpcName + ' fallo:', rpcError);
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
+
+  const outcome = (data as Array<Record<string, unknown>> | null)?.[0];
+  if (!outcome?.ok) {
+    if (outcome?.code === 'not_found') {
+      return { ok: false, error: 'Transferencia no encontrada', status: 404 };
+    }
+    if (outcome?.code === 'wrong_status') {
+      // El status que leyo esta peticion era una foto vieja: otra operacion
+      // gano la carrera. El mensaje usa el status REAL de la fila.
+      return {
+        ok: false,
+        error: `No se puede cambiar la transferencia de "${outcome.current_status ?? transfer.status}" a "${status}"`,
+        status: 400,
+      };
+    }
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
+  }
+
+  const updated = outcome.row as Record<string, unknown>;
 
   await createActivityLog({
     tenantId: auth.tenantId,
@@ -374,79 +314,5 @@ export async function deleteTransfer(auth: AuthInfo, id: string): Promise<StockT
   return { ok: true, data: { success: true }, status: 200 };
 }
 
-type CreditResult = { ok: true } | { ok: false; error: string; status: number };
 
-/**
- * Crédita stock en el tenant destino con optimistic concurrency:
- * 1) si la fila existe, la actualiza con guarda `stock = currentStock`;
- * 2) si no existe, la inserta (si otro request la creó en el mientras, el loop
- *    reintenta con el update). Previene doble acreditación por requests
- *    concurrentes contra la misma transferencia.
- */
-async function creditDestinationStock(
-  fromTenantId: string,
-  toTenantId: string,
-  productId: string,
-  quantity: number,
-  createdBy: string
-): Promise<CreditResult> {
-  let credited = false;
-  for (let attempt = 0; attempt < 5 && !credited; attempt++) {
-    const { data: stock } = await supabaseAdmin
-      .from('product_stock')
-      .select('stock')
-      .eq('product_id', productId)
-      .eq('tenant_id', toTenantId)
-      .maybeSingle();
 
-    if (stock) {
-      const currentStock = Number(stock.stock) || 0;
-      const { data: updated, error } = await supabaseAdmin
-        .from('product_stock')
-        .update({ stock: currentStock + quantity, updated_at: new Date().toISOString() })
-        .eq('product_id', productId)
-        .eq('tenant_id', toTenantId)
-        .eq('stock', currentStock)
-        .select('id')
-        .maybeSingle();
-
-      if (error) {
-        return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
-      }
-      if (updated) credited = true;
-    } else {
-      const { data: inserted, error } = await supabaseAdmin
-        .from('product_stock')
-        .insert({
-          product_id: productId,
-          tenant_id: toTenantId,
-          stock: quantity,
-          min_stock: 0,
-          max_stock: 0,
-        })
-        .select('id')
-        .maybeSingle();
-
-      if (error) {
-        if (error.code === '23505') continue; // unique (product_id,tenant_id): reintentar update
-        return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
-      }
-      if (inserted) credited = true;
-    }
-  }
-
-  if (!credited) {
-    return { ok: false, error: 'No se pudo actualizar el stock de destino. Intenta de nuevo.', status: 409 };
-  }
-
-  await supabaseAdmin.from('stock_history').insert({
-    tenant_id: toTenantId,
-    product_id: productId,
-    quantity,
-    type: 'transfer',
-    reason: `Transferencia desde ${fromTenantId}`,
-    created_by: createdBy,
-  });
-
-  return { ok: true };
-}

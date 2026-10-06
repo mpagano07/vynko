@@ -51,7 +51,6 @@ export type AdjustProductStockResult =
       ok: true;
       data: {
         success: boolean;
-        warning?: string;
         previousStock: number;
         newStock: number;
         adjustment: number;
@@ -1153,47 +1152,49 @@ export async function adjustProductStock(auth: AuthInfo, id: string, body: {
   }
 
   const currentStock = Number((stockRow as Record<string, unknown> | null)?.stock) || 0;
+  // Fail-fast con el mismo criterio que el UPDATE atomico: le da al cajero una
+  // respuesta SIN escribir nada. El caso residual (que otro ajuste haya movido
+  // el stock entre esta lectura y el write) lo cubre la RPC.
   const result = adjustStock(currentStock, quantity);
   if (!result.ok) {
     return { ok: false, error: result.error, status: 400 };
   }
-  const newStock = result.newStock;
 
-  const { error: updateError } = await supabaseAdmin
-    .from('product_stock')
-    .update({ stock: newStock, updated_at: new Date().toISOString() })
-    .eq('product_id', id)
-    .eq('tenant_id', auth.tenantId);
+  // Ajuste, chequeo de no-negativo y movimiento de historial en UNA transaccion
+  // (migracion 049). El `stock + quantity >= 0` se evalua bajo el lock de fila:
+  // dos ajustes concurrentes ya no escriben sobre el mismo valor leido, y el
+  // `stock_history` no puede faltar si el stock cambio.
+  const { data, error: rpcError } = await supabaseAdmin.rpc('adjust_stock_atomic', {
+    p_product_id: id,
+    p_tenant_id: auth.tenantId,
+    p_quantity: quantity,
+    p_reason: `${reason}${notes ? ': ' + notes : ''}`,
+    p_created_by: auth.userId,
+  });
 
-  if (updateError) {
-    console.error('DB error:', updateError);
+  if (rpcError) {
+    console.error('adjust_stock_atomic fallo:', rpcError);
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
 
-  let warning: string | undefined;
-  const movement = buildStockMovement({
-    tenantId: auth.tenantId,
-    productId: id,
-    quantity,
-    type: 'adjustment',
-    reason: `${reason}${notes ? ': ' + notes : ''}`,
-    createdBy: auth.userId,
-  });
-  const { error: histError } = await supabaseAdmin
-    .from('stock_history')
-    .insert(movement);
-
-  if (histError) {
-    console.error('stock_history insert error:', JSON.stringify(histError));
-    warning = 'El stock se actualizó pero no se pudo registrar en el historial.';
+  const outcome = (data as Array<Record<string, unknown>> | null)?.[0];
+  if (!outcome?.ok) {
+    // `old_stock` NULL (y ok=false) es la senal de "no hay fila para este
+    // tenant": la unica forma de llegar aca con una carrera es que el stock se
+    // haya movido tanto que este ajuste ya no alcanza.
+    if (outcome?.old_stock == null) {
+      return { ok: false, error: 'Producto no encontrado en tu sucursal', status: 404 };
+    }
+    return { ok: false, error: 'El stock no puede ser negativo', status: 400 };
   }
+
+  const newStock = Number(outcome.new_stock) ?? 0;
 
   return {
     ok: true,
     data: {
       success: true,
-      warning,
-      previousStock: currentStock,
+      previousStock: newStock - quantity,
       newStock,
       adjustment: quantity,
       reason,

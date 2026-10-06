@@ -10,6 +10,7 @@ import {
   LAST_SEEN_COOKIE,
   LAST_SEEN_COOKIE_OPTIONS,
 } from '@/lib/session-policy';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
 const publicPaths = [
   '/login',
@@ -22,6 +23,19 @@ const publicPaths = [
 ];
 const onboardingPath = '/onboarding';
 const billingPath = '/billing';
+
+// Tope global de requests de PAGINA por IP por minuto, aplicado aca, en el
+// proxy, para las rutas autenticadas (el matcher excluye /api, que ya tiene
+// sus propios limites por endpoint).
+//
+// Es un limite GENEROSO a proposito: una persona normal genera decenas de
+// requests por minuto solo con navegar (la carga de la pagina, el prefetch de
+// Next y cada request RSC pasan por aca), y una oficina completa suele salir
+// detras de la MISMA IP compartida. El objetivo es frenar un bucle de requests
+// o un scrape de paginas, no modular el uso humano; si este tope llegara a
+// tocarse, es mas probable que haya un bug en el cliente que un abuso.
+const PROXY_IP_LIMIT = 6000;
+const PROXY_IP_WINDOW_MS = 60_000;
 
 /**
  * Empaqueta la CSP con un nonce nuevo y la propaga a la request y a la
@@ -112,6 +126,27 @@ export async function proxy(request: NextRequest) {
     const redirectUrl = new URL('/login', request.url);
     redirectUrl.searchParams.set('redirect_to', pathname);
     return redirectWithCookies(redirectUrl);
+  }
+
+  // Rate limit global de paginas, solo para sesiones validas. Se usa la IP real
+  // (`getClientIp` respeta los headers del edge y no acepta el `x-forwarded-for`
+  // que arma el cliente) y el store distribuido cuando hay mas de una instancia.
+  // Se bloquea con 429 y `Retry-After` para que el cliente (o el navegador)
+  // sepa cuanto esperar.
+  const ipLimit = await rateLimit(
+    `proxy:ip:${getClientIp(request)}`,
+    PROXY_IP_LIMIT,
+    PROXY_IP_WINDOW_MS
+  );
+
+  if (!ipLimit.ok) {
+    return withCsp(
+      NextResponse.json(
+        { error: 'Demasiadas peticiones desde esta conexión. Esperá unos segundos y volvé a intentar.' },
+        { status: 429, headers: { 'Retry-After': String(ipLimit.retryAfterSeconds) } }
+      ),
+      nonce
+    );
   }
 
   // Cierre por inactividad, aplicado aca y no solo en el navegador.
