@@ -1,4 +1,8 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import {
+  claimCommercialDocumentNumber,
+  releaseCommercialDocumentNumber,
+} from '@/lib/commercial-document-number';
 import { createActivityLog } from '@/lib/activity-log';
 import type { AuthInfo } from '@/lib/api-auth';
 import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
@@ -391,26 +395,6 @@ export async function receivePurchaseOrder(
   const supplier = order.supplier as Record<string, unknown> | undefined;
   const supplierName = (supplier?.name as string) || 'Proveedor';
 
-  const { data: seqResult } = await supabaseAdmin
-    .from('commercial_document_sequences')
-    .select('next_number')
-    .eq('tenant_id', auth.tenantId)
-    .eq('document_type', 'remito_ingreso')
-    .single();
-
-  let nextNumber = 1;
-  if (seqResult) {
-    nextNumber = seqResult.next_number as number;
-  } else {
-    await supabaseAdmin
-      .from('commercial_document_sequences')
-      .insert({
-        tenant_id: auth.tenantId,
-        document_type: 'remito_ingreso',
-        next_number: 1,
-      });
-  }
-
   const { data: poItems } = await supabaseAdmin
     .from('purchase_order_items')
     .select('*, product:products(id, name)')
@@ -465,26 +449,50 @@ export async function receivePurchaseOrder(
 
   const totalCents = remitoItems.reduce((sum, item) => sum + item.unit_price_cents * item.quantity, 0);
 
-  const { data: document, error: docError } = await supabaseAdmin
-    .from('commercial_documents')
-    .insert({
-      tenant_id: auth.tenantId,
-      document_type: 'remito_ingreso',
-      document_number: nextNumber,
-      purchase_order_id: purchaseOrderId,
-      customer_name: supplierName,
-      supplier_name: supplierName,
-      notes: notes || null,
-      total_cents: totalCents,
-      status: 'completed',
-      delivery_date: received_date || new Date().toISOString().split('T')[0],
-      created_by: auth.userId,
-    })
-    .select()
-    .single();
+  // El numero del remito se reclama justo antes de insertar, con compare-and-set,
+  // para que dos recepciones simultaneas no lean el mismo numero: la primera
+  // avanza el contador y la segunda reintenta con el valor ya avanzado. Antes el
+  // contador se leia al principio y se actualizaba ciego al final, asi que dos
+  // recepciones concurrentes podian insertar el mismo documento y el update podia
+  // retroceder el contador (lost update), colisiones que solo frenaba el UNIQUE.
+  let document: Record<string, unknown> | null = null;
+  let nextNumber = 0;
+  for (let attempt = 0; attempt < 5 && !document; attempt++) {
+    const claim = await claimCommercialDocumentNumber(auth.tenantId, 'remito_ingreso');
+    if (!claim.ok) return claim;
+    nextNumber = claim.number;
 
-  if (docError) {
+    const { data, error: docError } = await supabaseAdmin
+      .from('commercial_documents')
+      .insert({
+        tenant_id: auth.tenantId,
+        document_type: 'remito_ingreso',
+        document_number: nextNumber,
+        purchase_order_id: purchaseOrderId,
+        customer_name: supplierName,
+        supplier_name: supplierName,
+        notes: notes || null,
+        total_cents: totalCents,
+        status: 'completed',
+        delivery_date: received_date || new Date().toISOString().split('T')[0],
+        created_by: auth.userId,
+      })
+      .select()
+      .single();
+
+    if (!docError) {
+      document = data as Record<string, unknown>;
+      break;
+    }
+
+    // No era un numero repetido: se devuelve el numero para no dejar hueco.
+    if (docError.code !== '23505') {
+      await releaseCommercialDocumentNumber(auth.tenantId, 'remito_ingreso', nextNumber);
+    }
     console.error('DB error:', docError);
+  }
+
+  if (!document) {
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
   }
 
@@ -503,15 +511,10 @@ export async function receivePurchaseOrder(
 
   if (itemsError) {
     await supabaseAdmin.from('commercial_documents').delete().eq('id', document.id);
+    await releaseCommercialDocumentNumber(auth.tenantId, 'remito_ingreso', nextNumber);
     console.error('DB error:', itemsError);
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
   }
-
-  await supabaseAdmin
-    .from('commercial_document_sequences')
-    .update({ next_number: nextNumber + 1, updated_at: new Date().toISOString() })
-    .eq('tenant_id', auth.tenantId)
-    .eq('document_type', 'remito_ingreso');
 
   let allFullyReceived = true;
 

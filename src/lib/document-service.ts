@@ -1,4 +1,8 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import {
+  claimCommercialDocumentNumber,
+  releaseCommercialDocumentNumber,
+} from '@/lib/commercial-document-number';
 import type { CreateDocumentRequest, DocumentStatus, DocumentType } from '@/lib/types/document';
 import type { AuthInfo } from '@/lib/api-auth';
 import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
@@ -99,44 +103,18 @@ export async function createDocument(
     const totalCents = items.reduce((sum, item) => sum + item.unit_price_cents * item.quantity, 0);
 
     let document: Record<string, unknown> | null = null;
+    let claimedNumber = 0;
     for (let attempt = 0; attempt < 5 && !document; attempt++) {
-      const { data: seqResult } = await supabaseAdmin
-        .from('commercial_document_sequences')
-        .select('next_number')
-        .eq('tenant_id', auth.tenantId)
-        .eq('document_type', document_type)
-        .single();
-
-      const candidate = (seqResult?.next_number as number) ?? 1;
-      if (!seqResult) {
-        await supabaseAdmin
-          .from('commercial_document_sequences')
-          .upsert(
-            {
-              tenant_id: auth.tenantId,
-              document_type,
-              next_number: candidate,
-            },
-            { onConflict: 'tenant_id,document_type' }
-          );
-      }
-
-      const { data: claimed } = await supabaseAdmin
-        .from('commercial_document_sequences')
-        .update({ next_number: candidate + 1, updated_at: new Date().toISOString() })
-        .eq('tenant_id', auth.tenantId)
-        .eq('document_type', document_type)
-        .eq('next_number', candidate)
-        .select('next_number');
-
-      if (!claimed || claimed.length === 0) continue;
+      const claim = await claimCommercialDocumentNumber(auth.tenantId, document_type);
+      if (!claim.ok) return claim;
+      claimedNumber = claim.number;
 
       const { data, error } = await supabaseAdmin
         .from('commercial_documents')
         .insert({
           tenant_id: auth.tenantId,
           document_type,
-          document_number: candidate,
+          document_number: claim.number,
           sale_id: sale_id || null,
           purchase_order_id: purchase_order_id || null,
           customer_id: customer_id || null,
@@ -154,7 +132,17 @@ export async function createDocument(
 
       if (!error) {
         document = data as Record<string, unknown>;
+        break;
       }
+
+      // El insert fallo: si no fue por un numero repetido, el numero reservado
+      // se devuelve para que no quede un hueco en la numeracion. Si fue 23505
+      // el numero ya pertenece a otro documento, y devolverlo haria que la
+      // siguiente vuelta volviera a chocar con el mismo.
+      if (error.code !== '23505') {
+        await releaseCommercialDocumentNumber(auth.tenantId, document_type, claim.number);
+      }
+      console.error('DB error:', error);
     }
 
     if (!document) {
@@ -176,6 +164,7 @@ export async function createDocument(
 
     if (itemsError) {
       await supabaseAdmin.from('commercial_documents').delete().eq('id', document.id);
+      await releaseCommercialDocumentNumber(auth.tenantId, document_type, claimedNumber);
       console.error('DB error:', itemsError);
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }

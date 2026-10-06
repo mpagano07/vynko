@@ -116,6 +116,40 @@ const ownerUserId = await resolveOwnerUserId(tenantId);
 
         const transitioned = !Array.isArray(transitionedRows) || transitionedRows.length > 0;
 
+        // El CAS de arriba solo escribe cuando la rama NO estaba activa. Ese es
+        // exactamente el caso de un upgrade (starter -> business): el checkout no
+        // cambia `subscription_status`, asi que el webhook llega con la rama ya
+        // active y el plan quedaba sin escribir (pago cobrado con el plan viejo).
+        //
+        // Antes de aplicarlo se descarta el evento de una suscripcion que ya no es
+        // la vigente, con la misma regla que el branch de cancelacion: la renovacion
+        // de un preapproval viejo (el upgrade no cancela al anterior) reescribiria
+        // el plan recien pagado y el tenant bajaria de plan sin que nadie lo decida.
+        let planApplied = false;
+        if (!transitioned) {
+          const { data: tenantRow, error: currentError } = await supabaseAdmin
+            .from('tenants')
+            .select('mercadopago_preapproval_id, subscription_plan')
+            .eq('id', tenantId)
+            .maybeSingle();
+          if (currentError) throw currentError;
+
+          const currentPreapprovalId = tenantRow?.mercadopago_preapproval_id ?? null;
+          if (currentPreapprovalId !== null && currentPreapprovalId !== id) {
+            logOutcome('ignored', 'Plan de una suscripcion que ya no es la vigente');
+            return { ok: true, data: { received: true } };
+          }
+
+          if (planToSet && tenantRow?.subscription_plan !== planToSet) {
+            const { error: planError } = await supabaseAdmin
+              .from('tenants')
+              .update({ subscription_plan: planToSet })
+              .in('id', ownerBranchIds);
+            if (planError) throw planError;
+            planApplied = true;
+          }
+        }
+
         // El periodo se refresca en cada entrega, incluido cada renewal: esto
         // es nivel, no arista. Si se gateara con la transicion, el renewal no
         // moveria `subscription_current_period_end` y el gate de acceso
@@ -158,12 +192,12 @@ const ownerUserId = await resolveOwnerUserId(tenantId);
           });
         }
 
-        // `processed` = hubo arista (la rama no estaba activa). `duplicate` =
-        // llego de nuevo o es un renewal: el periodo se refresco igual, pero no
-        // hubo cambio de estado ni evento que contar. Distinguir los dos es lo
-        // que hace util la bitacora: un renewal legitimate no debe verse igual
-        // que un evento repetido por error.
-        outcome = transitioned ? 'processed' : 'duplicate';
+        // `processed` = hubo arista (la rama no estaba activa o el plan cambio).
+        // `duplicate` = llego de nuevo o es un renewal: el periodo se refresco
+        // igual, pero no hubo cambio de estado ni evento que contar. Distinguir
+        // los dos es lo que hace util la bitacora: un renewal legitimate no debe
+        // verse igual que un evento repetido por error.
+        outcome = transitioned || planApplied ? 'processed' : 'duplicate';
       } else if (status === 'cancelled') {
         const { data: tenantRow } = await supabaseAdmin
           .from('tenants')
