@@ -39,7 +39,7 @@ CREATE OR REPLACE FUNCTION receive_po_stock(
   p_pasillo      TEXT,
   p_estanteria   TEXT
 )
-RETURNS TABLE (ok BOOLEAN, code TEXT, row JSONB)
+RETURNS TABLE (ok BOOLEAN, code TEXT, "row" JSONB)
 LANGUAGE plpgsql
 SECURITY INVOKER
 SET search_path = public
@@ -52,6 +52,7 @@ DECLARE
   v_all        BOOLEAN := TRUE;
   v_status     TEXT;
   v_received_at DATE;
+  v_row        JSONB;
 BEGIN
   IF jsonb_typeof(p_items) IS DISTINCT FROM 'array' THEN
     RAISE EXCEPTION 'Ocurrio un error inesperado. Intenta de nuevo.';
@@ -170,9 +171,9 @@ BEGIN
          updated_at = now()
    WHERE id = v_order.id
   RETURNING jsonb_build_object('status', status, 'received_date', received_date, 'all', v_all)
-    INTO row;
+    INTO v_row;
 
-  RETURN QUERY SELECT true, NULL::TEXT, row;
+  RETURN QUERY SELECT true, NULL::TEXT, v_row;
 END;
 $$;
 

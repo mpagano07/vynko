@@ -49,7 +49,7 @@ CREATE OR REPLACE FUNCTION send_transfer(
   p_transfer_id UUID,
   p_by          UUID
 )
-RETURNS TABLE (ok BOOLEAN, code TEXT, current_status TEXT, row JSONB)
+RETURNS TABLE (ok BOOLEAN, code TEXT, current_status TEXT, "row" JSONB)
 LANGUAGE plpgsql
 SECURITY INVOKER
 SET search_path = public
@@ -60,6 +60,7 @@ DECLARE
   v_after    INTEGER;
   v_name     TEXT;
   v_stock    INTEGER;
+  v_row      JSONB;
 BEGIN
   -- Lock de fila desde el arranque: dos 'enviar' simultaneos se serializan aca
   -- y el perdedor ve el status ya cambiado en el chequeo de abajo.
@@ -142,12 +143,12 @@ BEGIN
          updated_at = now()
    WHERE id = v_transfer.id
      AND status = 'pending'
-  RETURNING to_jsonb(stock_transfers.*) INTO row;
+  RETURNING to_jsonb(stock_transfers.*) INTO v_row;
 
   -- La fila YA estaba lockeada y en 'pending', asi que el UPDATE siempre
   -- matchea; el guard es por defensa en profundidad.
-  IF row IS NOT NULL THEN
-    RETURN QUERY SELECT true, NULL::TEXT, NULL::TEXT, row;
+  IF v_row IS NOT NULL THEN
+    RETURN QUERY SELECT true, NULL::TEXT, NULL::TEXT, v_row;
     RETURN;
   END IF;
 
@@ -163,7 +164,7 @@ CREATE OR REPLACE FUNCTION receive_transfer(
   p_transfer_id UUID,
   p_by          UUID
 )
-RETURNS TABLE (ok BOOLEAN, code TEXT, current_status TEXT, row JSONB)
+RETURNS TABLE (ok BOOLEAN, code TEXT, current_status TEXT, "row" JSONB)
 LANGUAGE plpgsql
 SECURITY INVOKER
 SET search_path = public
@@ -171,6 +172,7 @@ AS $$
 DECLARE
   v_transfer RECORD;
   v_item     RECORD;
+  v_row      JSONB;
 BEGIN
   -- Mismo lock inicial que send_transfer: dos recepciones simultaneas se
   -- serializan y la perdedora ve el status ya 'received'.
@@ -226,10 +228,10 @@ BEGIN
          updated_at = now()
    WHERE id = v_transfer.id
      AND status = 'in_transit'
-  RETURNING to_jsonb(stock_transfers.*) INTO row;
+  RETURNING to_jsonb(stock_transfers.*) INTO v_row;
 
-  IF row IS NOT NULL THEN
-    RETURN QUERY SELECT true, NULL::TEXT, NULL::TEXT, row;
+  IF v_row IS NOT NULL THEN
+    RETURN QUERY SELECT true, NULL::TEXT, NULL::TEXT, v_row;
     RETURN;
   END IF;
 
