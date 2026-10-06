@@ -58,8 +58,24 @@ jobs:
 
       # Opt-in: requiere el secret GITGUARDIAN_API_KEY. Escanea los commits del
       # push/PR contra la API de GitGuardian (no guarda contenido).
+      #
+      # No se puede usar `secrets` directo en un `if:` (GitHub lo rechaza al
+      # validar el workflow: "Unrecognized named-value: 'secrets'"), asi que el
+      # chequeo de "hay secret configurado" pasa por un paso intermedio que solo
+      # escribe el resultado en un output del job.
+      - name: Check ggshield secret
+        id: ggshield-secret
+        run: |
+          if [ -n "$GITGUARDIAN_API_KEY" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+
       - name: Secret scan (ggshield)
-        if: secrets.GITGUARDIAN_API_KEY != ''
+        if: steps.ggshield-secret.outputs.configured == 'true'
         uses: GitGuardian/ggshield-action@v1
         env:
           GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
