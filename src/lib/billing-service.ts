@@ -142,76 +142,9 @@ export async function downgradePlan(
     return { ok: false, error: 'Solo el propietario puede cambiar de plan', status: 403 };
   }
 
-  if (mainTenant.mercadopago_preapproval_id) {
-    try {
-      await cancelPreApproval(mainTenant.mercadopago_preapproval_id);
-    } catch (err) {
-      console.error('Error cancelling preapproval on downgrade:', err);
-    }
-  }
-
-  const maxProducts = PLAN_LIMITS[plan].products;
-  const { data: stocks } = await supabaseAdmin
-    .from('product_stock')
-    .select('id')
-    .eq('tenant_id', mainTenant.id)
-    .eq('active', true)
-    .order('created_at', { ascending: true })
-    .order('id', { ascending: true });
-
-  if (stocks && stocks.length > maxProducts) {
-    const toDeactivate = stocks.slice(maxProducts).map((s) => s.id);
-    const { error: deactivateError } = await supabaseAdmin
-      .from('product_stock')
-      .update({ active: false })
-      .in('id', toDeactivate);
-    if (deactivateError) {
-      return { ok: false, error: 'Error al desactivar productos', status: 500 };
-    }
-  }
-
-  if (extraTenantIds.length > 0) {
-    const { error: tuError } = await supabaseAdmin
-      .from('tenant_users')
-      .delete()
-      .eq('user_id', user.id)
-      .in('tenant_id', extraTenantIds);
-    if (tuError) {
-      return { ok: false, error: 'Error al quitar sucursales', status: 500 };
-    }
-  }
-
-  const { error: collabError } = await supabaseAdmin
-    .from('tenant_users')
-    .delete()
-    .eq('tenant_id', mainTenant.id)
-    .neq('role', 'owner');
-  if (collabError) {
-    return { ok: false, error: 'Error al quitar colaboradores', status: 500 };
-  }
-
-  const { error: invError } = await supabaseAdmin
-    .from('invitations')
-    .delete()
-    .eq('tenant_id', mainTenant.id)
-    .is('accepted_at', null);
-  if (invError) {
-    return { ok: false, error: 'Error al quitar invitaciones', status: 500 };
-  }
-
-  const { error: planError } = await supabaseAdmin
-    .from('tenants')
-    .update({
-      subscription_plan: plan,
-      subscription_status: 'canceled',
-      subscription_current_period_end: null,
-      mercadopago_preapproval_id: null,
-    })
-    .in('id', ownerBranchIds);
-  if (planError) {
-    console.error('DB error:', planError);
-    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
-  }
+  // NO cancelar preapproval vigente ni hacer cambios destructivos (colaboradores,
+  // invitaciones, estado) hasta que el webhook confirme el pago del preapproval
+  // del plan destino. Esto evita que el downgrade aplique antes de cobrar.
 
   const targetPlanConfig = PLANS[plan];
   let url: string | null = null;
@@ -233,12 +166,16 @@ export async function downgradePlan(
 
     await supabaseAdmin
       .from('tenants')
-      .update({ mercadopago_preapproval_id: preapproval.id })
+      .update({
+        mercadopago_pending_preapproval_id: preapproval.id,
+        mercadopago_pending_plan: plan as 'starter' | 'business',
+      })
       .in('id', ownerBranchIds);
 
     url = preapproval.init_point || null;
   } catch (err) {
-    console.error('Error creating starter preapproval on downgrade:', err);
+    console.error('Error creating preapproval on downgrade:', err);
+    return { ok: false, error: 'No se pudo iniciar el pago. Intentá de nuevo en unos minutos.', status: 502 };
   }
 
   return { ok: true, data: { success: true, plan, url } };
@@ -317,7 +254,7 @@ export async function getSubscriptionStatus(userId: string): Promise<BillingResu
   const tenantIds = tu.map((t) => t.tenant_id);
   const { data: tenants } = await supabaseAdmin
     .from('tenants')
-    .select('subscription_status, subscription_plan, subscription_current_period_end, created_at')
+    .select('subscription_status, subscription_plan, subscription_current_period_end, created_at, mercadopago_pending_plan')
     .in('id', tenantIds);
 
   // Every branch of the owner shares a single subscription.
@@ -332,6 +269,21 @@ export async function getSubscriptionStatus(userId: string): Promise<BillingResu
     ? new Date(new Date(tenant.created_at).getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString()
     : null;
 
+  const { data: tu2 } = await supabaseAdmin
+    .from('tenant_users')
+    .select('tenant_id')
+    .eq('user_id', userId);
+  const pendingTenant = tu2 && tu2[0]
+    ? await supabaseAdmin
+        .from('tenants')
+        .select('mercadopago_pending_plan')
+        .eq('id', tu2[0].tenant_id)
+        .maybeSingle()
+    : null;
+
+  const pendingPlan = (pendingTenant?.data as { mercadopago_pending_plan?: PlanId | null } | null)
+    ?.mercadopago_pending_plan;
+
   return {
     ok: true,
     data: {
@@ -342,6 +294,7 @@ export async function getSubscriptionStatus(userId: string): Promise<BillingResu
       trialEndsAt,
       createdAt: tenant?.created_at,
       features: planConfig.features,
+      pendingPlanChange: pendingPlan ?? null,
     },
   };
 }

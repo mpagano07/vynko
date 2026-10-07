@@ -559,13 +559,16 @@ describe('downgradePlan', () => {
       new Request('http://localhost/api/billing/downgrade', { method: 'POST' })
     );
 
-    const planUpdate = supabaseMock.__calls.find(
-      (c) => c.table === 'tenants' && c.method === 'update' && (c.args[0] as Record<string, unknown>).subscription_plan === 'starter'
+    const pendingUpdate = supabaseMock.__calls.find(
+      (c) =>
+        c.table === 'tenants' &&
+        c.method === 'update' &&
+        (c.args[0] as Record<string, unknown>).mercadopago_pending_plan === 'starter'
     );
-    expect(planUpdate).toBeDefined();
+    expect(pendingUpdate).toBeDefined();
 
     const inCall = supabaseMock.__calls
-      .slice(supabaseMock.__calls.indexOf(planUpdate!))
+      .slice(supabaseMock.__calls.indexOf(pendingUpdate!))
       .find((c) => c.table === 'tenants' && c.method === 'in');
     expect(inCall).toBeDefined();
     expect(inCall!.args[0]).toBe('id');
@@ -665,7 +668,7 @@ describe('downgradePlan', () => {
       expect(data.url).toBe('https://mp.com/checkout/starter');
     }
 
-    expect(mockCancelPreApproval).toHaveBeenCalledWith('pa-old');
+    expect(mockCancelPreApproval).not.toHaveBeenCalledWith('pa-old');
   });
 
   it('returns 400 for invalid plan', async () => {

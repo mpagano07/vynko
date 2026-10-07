@@ -196,6 +196,7 @@ function BillingContent() {
 
   const currentPlanId = subscription?.plan || NEW_ACCOUNT_PLAN;
   const isPlanActive = subscription?.status === 'active';
+  const pendingPlanChange = (subscription as unknown as { pendingPlanChange?: string | null })?.pendingPlanChange;
 
   const TRIAL_DAYS = getTrialDays();
   const TRIAL_PLAN = getTrialPlan();
@@ -225,6 +226,21 @@ function BillingContent() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
+      {pendingPlanChange && (
+        <div className="rounded-xl p-5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 flex items-start gap-4">
+          <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/50 flex-shrink-0">
+            <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+          </div>
+          <div className="flex-1">
+            <p className="text-base font-bold text-amber-800 dark:text-amber-300">
+              Cambio de plan pendiente de pago
+            </p>
+            <p className="text-sm text-amber-600 dark:text-amber-400 mt-1">
+              Tenés un cambio a {PLANS[pendingPlanChange as PlanId]?.name || pendingPlanChange} pendiente de confirmación. Completá el pago en Mercado Pago para que el cambio se aplique.
+            </p>
+          </div>
+        </div>
+      )}
       {autoBlockedReason && (
         <div className="rounded-xl p-5 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 flex items-start gap-4">
           <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/50 flex-shrink-0">
