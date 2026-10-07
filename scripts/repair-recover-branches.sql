@@ -15,16 +15,16 @@ INSERT INTO tenants (
 VALUES
   (
     '04c71cb4-0454-4bcc-8e5c-89cc6e779a69',
-    'Sucursal 04c71cb4',  -- ajusta nombre original si lo tenés
-    'sucursal-04c71cb4',  -- ajusta slug original si lo tenés
+    'Sucursal 04c71cb4',
+    'sucursal-04c71cb4',
     'business',
     'active',
     NULL
   ),
   (
     'f4210c70-3c52-4e90-b804-0bd4d3db645a',
-    'Sucursal f4210c70',  -- ajusta nombre original si lo tenés
-    'sucursal-f4210c70',  -- ajusta slug original si lo tenés
+    'Sucursal f4210c70',
+    'sucursal-f4210c70',
     'business',
     'active',
     NULL
@@ -36,7 +36,7 @@ SET
 
 -- Asegurar memberships (owner)
 INSERT INTO tenant_users (tenant_id, user_id, role)
-SELECT t.id, 'a958da82-e8e7-4141-89c2-2c9ad92ea3e2', 'owner'
+SELECT t.id::uuid, 'a958da82-e8e7-4141-89c2-2c9ad92ea3e2'::uuid, 'owner'
 FROM (VALUES
   ('04c71cb4-0454-4bcc-8e5c-89cc6e779a69'),
   ('f4210c70-3c52-4e90-b804-0bd4d3db645a')
@@ -44,8 +44,8 @@ FROM (VALUES
 WHERE NOT EXISTS (
   SELECT 1
   FROM tenant_users tu
-  WHERE tu.tenant_id = t.id
-    AND tu.user_id = 'a958da82-e8e7-4141-89c2-2c9ad92ea3e2'
+  WHERE tu.tenant_id = t.id::uuid
+    AND tu.user_id = 'a958da82-e8e7-4141-89c2-2c9ad92ea3e2'::uuid
 );
 
 COMMIT;
