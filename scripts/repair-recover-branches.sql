@@ -20,9 +20,9 @@ VALUES
 ON CONFLICT (id) DO UPDATE
 SET subscription_plan='business', subscription_status='active';
 
--- Asegurar memberships (owner)
+-- Asegurar memberships (owner) - corregir user_id cuando se confirme
 INSERT INTO tenant_users (tenant_id, user_id, role)
-SELECT t.id::uuid, 'a958da82-e8e7-4141-89c2-2c9ad92ea3e2'::uuid, 'owner'
+SELECT t.id::uuid, 'REEMPLAZAR_USER_ID_CORRECTO'::uuid, 'owner'
 FROM (VALUES
   ('04c71cb4-0454-4bcc-8e5c-89cc6e779a69'),
   ('4a666997-26ea-421d-bd3f-1ff10f4dffe8'),
@@ -33,7 +33,7 @@ FROM (VALUES
 WHERE NOT EXISTS (
   SELECT 1 FROM tenant_users tu
   WHERE tu.tenant_id = t.id::uuid
-    AND tu.user_id = 'a958da82-e8e7-4141-89c2-2c9ad92ea3e2'::uuid
+    AND tu.user_id = 'REEMPLAZAR_USER_ID_CORRECTO'::uuid
 );
 
 COMMIT;
