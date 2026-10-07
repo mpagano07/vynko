@@ -14,7 +14,7 @@ SET subscription_plan = 'business',
     subscription_status = 'active',
     mercadopago_pending_preapproval_id = NULL,
     mercadopago_pending_plan = NULL
-WHERE id = '04c71cb4-0454-4bcc-8e5c-89cc6e779a69'
+WHERE id = 'REEMPLAZAR_ID_DEL_TENANT_A_RESTAURAR'
   AND subscription_status IN ('canceled', 'free', 'inactive');
 
 COMMIT;
