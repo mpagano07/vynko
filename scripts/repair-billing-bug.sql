@@ -7,14 +7,14 @@ SET mercadopago_pending_preapproval_id = NULL,
     mercadopago_pending_plan = NULL
 WHERE mercadopago_pending_preapproval_id IS NOT NULL;
 
--- Restauración específica: reemplazar REEMPLAZAR_TENANT_ID por el obtenido en el diagnóstico
+-- Restauración específica: reemplazar REEMPLAZAR_ID_DEL_TENANT_A_RESTAURAR por el obtenido en el diagnóstico
 -- Ejemplo: tenant con plan starter/canceled tras back sin pagar y con business original
 UPDATE tenants
 SET subscription_plan = 'business',
     subscription_status = 'active',
     mercadopago_pending_preapproval_id = NULL,
     mercadopago_pending_plan = NULL
-WHERE id = 'REEMPLAZAR_TENANT_ID'
+WHERE id = '04c71cb4-0454-4bcc-8e5c-89cc6e779a69'
   AND subscription_status IN ('canceled', 'free', 'inactive');
 
 COMMIT;

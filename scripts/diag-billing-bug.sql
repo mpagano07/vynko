@@ -6,12 +6,12 @@ SELECT id, name, created_at, subscription_plan, subscription_status,
 FROM tenants
 WHERE id IN (
   SELECT tenant_id FROM tenant_users WHERE user_id IN (
-    SELECT id FROM auth.users WHERE email = 'REEMPLAZAR_EMAIL' -- CAMBIAR
+    SELECT id FROM auth.users WHERE email = 'REEMPLAZAR_EMAIL_DEL_USUARIO_AFECTADO' -- CAMBIAR
   )
 ) OR id IN (
   SELECT t.id FROM tenants t
   JOIN tenant_users tu ON tu.tenant_id = t.id
   JOIN auth.users u ON u.id = tu.user_id
-  WHERE u.email = 'REEMPLAZAR_EMAIL' -- CAMBIAR
+  WHERE u.email = 'REEMPLAZAR_EMAIL_DEL_USUARIO_AFECTADO' -- CAMBIAR
 )
 ORDER BY id;
