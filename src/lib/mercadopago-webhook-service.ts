@@ -107,7 +107,7 @@ const ownerUserId = await resolveOwnerUserId(tenantId);
         const transitionData: Record<string, unknown> = { subscription_status: 'active' };
         if (planToSet) transitionData.subscription_plan = planToSet;
 
-        let { data: transitionedRows, error: transitionError } = await supabaseAdmin
+        const { data: transitionedRows, error: transitionError } = await supabaseAdmin
           .from('tenants')
           .update(transitionData)
           .in('id', ownerBranchIds)
@@ -119,7 +119,7 @@ const ownerUserId = await resolveOwnerUserId(tenantId);
         // reintente, en vez de responder 200 y dar el evento por perdido.
         if (transitionError) throw transitionError;
 
-        let transitioned = !Array.isArray(transitionedRows) || transitionedRows.length > 0;
+        const transitioned = !Array.isArray(transitionedRows) || transitionedRows.length > 0;
 
         // El CAS de arriba solo escribe cuando la rama NO estaba activa. Ese es
         // exactamente el caso de un upgrade (starter -> business): el checkout no

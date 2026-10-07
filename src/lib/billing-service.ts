@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { PLANS, getEffectivePrice, getTrialDays, getTrialPlan, PLAN_ORDER, PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
+import { PLANS, getEffectivePrice, getTrialDays, getTrialPlan, PLAN_ORDER, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import { createPreApproval, cancelPreApproval } from '@/lib/mercadopago';
 import { resolveOwnerBranchIds } from '@/lib/mercadopago-webhook-service';
@@ -120,7 +120,7 @@ export async function downgradePlan(
 
   const mainTenantId = userTenants[0].tenant_id as string;
   const mainTenant = tenants.find((t) => t.id === mainTenantId) || tenants[0];
-  const extraTenantIds = tenants.filter((t) => t.id !== mainTenant.id).map((t) => t.id);
+  // const extraTenantIds = tenants.filter((t) => t.id !== mainTenant.id).map((t) => t.id);
 
   // Se resuelve ANTES de borrar membresias: `extraTenantIds` solo contiene las
   // ramas donde ESTE usuario es miembro, asi que las ramas del owner donde no es
