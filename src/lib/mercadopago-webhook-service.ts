@@ -134,18 +134,26 @@ const ownerUserId = await resolveOwnerUserId(tenantId);
         if (!transitioned) {
           const { data: tenantRow, error: currentError } = await supabaseAdmin
             .from('tenants')
-            .select('mercadopago_preapproval_id, subscription_plan')
+            .select('mercadopago_preapproval_id, subscription_plan, mercadopago_pending_preapproval_id, mercadopago_pending_plan')
             .eq('id', tenantId)
             .maybeSingle();
           if (currentError) throw currentError;
 
           const currentPreapprovalId = tenantRow?.mercadopago_preapproval_id ?? null;
-          if (currentPreapprovalId !== null && currentPreapprovalId !== id) {
+          const pendingId = tenantRow?.mercadopago_pending_preapproval_id ?? null;
+          const pendingPlan = tenantRow?.mercadopago_pending_plan ?? null;
+          const pendingMatches = pendingId && pendingId === id;
+
+          if (pendingMatches && pendingPlan) {
+            planToSet = pendingPlan as 'starter' | 'business';
+          }
+
+          if (currentPreapprovalId !== null && currentPreapprovalId !== id && !pendingMatches) {
             logOutcome('ignored', 'Plan de una suscripcion que ya no es la vigente');
             return { ok: true, data: { received: true } };
           }
 
-          if (planToSet && tenantRow?.subscription_plan !== planToSet) {
+          if (planToSet && tenantRow?.subscription_plan !== planToSet && !pendingMatches) {
             const { error: planError } = await supabaseAdmin
               .from('tenants')
               .update({ subscription_plan: planToSet })
@@ -197,6 +205,38 @@ const ownerUserId = await resolveOwnerUserId(tenantId);
           });
         }
 
+        // Aplicar cambios de downgrade pendientes cuando este preapproval es el
+        // creado para el cambio (business->starter). Esto hace efectivo el plan
+        // destino, cancela el preapproval viejo y limpia el pendiente.
+        const { data: pendingTenant } = await supabaseAdmin
+          .from('tenants')
+          .select('mercadopago_pending_preapproval_id, mercadopago_pending_plan, mercadopago_preapproval_id, subscription_plan')
+          .eq('id', tenantId)
+          .maybeSingle();
+        const pendingId = pendingTenant?.mercadopago_pending_preapproval_id ?? null;
+        const pendingPlan = pendingTenant?.mercadopago_pending_plan ?? null;
+        if (pendingId && pendingId === id && pendingPlan) {
+          const oldPreapprovalId = pendingTenant?.mercadopago_preapproval_id ?? null;
+          const updates: Record<string, unknown> = {
+            subscription_plan: pendingPlan,
+            mercadopago_pending_preapproval_id: null,
+            mercadopago_pending_plan: null,
+          };
+          const { error: applyPendingError } = await supabaseAdmin
+            .from('tenants')
+            .update(updates)
+            .in('id', ownerBranchIds);
+          if (applyPendingError) throw applyPendingError;
+          if (oldPreapprovalId && oldPreapprovalId !== id) {
+            try {
+              await (await import('@/lib/mercadopago')).cancelPreApproval(oldPreapprovalId);
+            } catch (err) {
+              console.error('Error cancelling old preapproval after downgrade:', err);
+            }
+          }
+          planApplied = true;
+        }
+
         // `processed` = hubo arista (la rama no estaba activa o el plan cambio).
         // `duplicate` = llego de nuevo o es un renewal: el periodo se refresco
         // igual, pero no hubo cambio de estado ni evento que contar. Distinguir
@@ -206,7 +246,7 @@ const ownerUserId = await resolveOwnerUserId(tenantId);
       } else if (status === 'cancelled') {
         const { data: tenantRow } = await supabaseAdmin
           .from('tenants')
-          .select('subscription_plan, mercadopago_preapproval_id')
+          .select('subscription_plan, mercadopago_preapproval_id, mercadopago_pending_preapproval_id')
           .eq('id', tenantId)
           .single();
 
@@ -219,6 +259,17 @@ const ownerUserId = await resolveOwnerUserId(tenantId);
         // esta pagando, que es peor que ignorarla. Se responde 200 sin tocar
         // nada para que MercadoPago deje de reintentar.
         const currentPreapprovalId = tenantRow?.mercadopago_preapproval_id ?? null;
+        const pendingId = tenantRow?.mercadopago_pending_preapproval_id ?? null;
+        const isPendingCancelled = pendingId && pendingId === id;
+        if (isPendingCancelled) {
+          const { error: clearError } = await supabaseAdmin
+            .from('tenants')
+            .update({ mercadopago_pending_preapproval_id: null, mercadopago_pending_plan: null })
+            .in('id', ownerBranchIds);
+          if (clearError) throw clearError;
+          logOutcome('ignored', 'Cancelacion de intento de cambio de plan');
+          return { ok: true, data: { received: true } };
+        }
         if (currentPreapprovalId !== null && currentPreapprovalId !== id) {
           logOutcome('ignored', 'Cancelacion de una suscripcion que ya no es la vigente');
           return { ok: true, data: { received: true } };
@@ -257,6 +308,27 @@ const ownerUserId = await resolveOwnerUserId(tenantId);
 
         outcome = transitioned ? 'processed' : 'duplicate';
       } else if (status === 'paused') {
+        const { data: tenantRow } = await supabaseAdmin
+          .from('tenants')
+          .select('mercadopago_preapproval_id, mercadopago_pending_preapproval_id')
+          .eq('id', tenantId)
+          .single();
+        const currentPreapprovalId = tenantRow?.mercadopago_preapproval_id ?? null;
+        const pendingId = tenantRow?.mercadopago_pending_preapproval_id ?? null;
+        const isPendingPaused = pendingId && pendingId === id;
+        if (isPendingPaused) {
+          const { error: clearError } = await supabaseAdmin
+            .from('tenants')
+            .update({ mercadopago_pending_preapproval_id: null, mercadopago_pending_plan: null })
+            .in('id', ownerBranchIds);
+          if (clearError) throw clearError;
+          logOutcome('ignored', 'Pago pausado en intento de cambio de plan');
+          return { ok: true, data: { received: true } };
+        }
+        if (currentPreapprovalId !== null && currentPreapprovalId !== id) {
+          logOutcome('ignored', 'Paused de una suscripcion que ya no es la vigente');
+          return { ok: true, data: { received: true } };
+        }
         // Subscription paused by MercadoPago (e.g. failed payment attempts)
         // Mark as past_due so the subscription gate blocks access. Applies to
         // all of the owner's branches (shared subscription).

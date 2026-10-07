@@ -33,6 +33,7 @@ export interface TenantSubscription {
   subscription_plan?: string | null;
   created_at?: string | null;
   subscription_current_period_end?: string | null;
+  mercadopago_pending_plan?: string | null;
 }
 
 const PLAN_RANK: Record<string, number> = { enterprise: 4, business: 3, starter: 2, free: 1 };

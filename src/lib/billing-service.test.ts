@@ -559,13 +559,16 @@ describe('downgradePlan', () => {
       new Request('http://localhost/api/billing/downgrade', { method: 'POST' })
     );
 
-    const planUpdate = supabaseMock.__calls.find(
-      (c) => c.table === 'tenants' && c.method === 'update' && (c.args[0] as Record<string, unknown>).subscription_plan === 'starter'
+    const pendingUpdate = supabaseMock.__calls.find(
+      (c) =>
+        c.table === 'tenants' &&
+        c.method === 'update' &&
+        (c.args[0] as Record<string, unknown>).mercadopago_pending_plan === 'starter'
     );
-    expect(planUpdate).toBeDefined();
+    expect(pendingUpdate).toBeDefined();
 
     const inCall = supabaseMock.__calls
-      .slice(supabaseMock.__calls.indexOf(planUpdate!))
+      .slice(supabaseMock.__calls.indexOf(pendingUpdate!))
       .find((c) => c.table === 'tenants' && c.method === 'in');
     expect(inCall).toBeDefined();
     expect(inCall!.args[0]).toBe('id');
@@ -665,7 +668,7 @@ describe('downgradePlan', () => {
       expect(data.url).toBe('https://mp.com/checkout/starter');
     }
 
-    expect(mockCancelPreApproval).toHaveBeenCalledWith('pa-old');
+    expect(mockCancelPreApproval).not.toHaveBeenCalledWith('pa-old');
   });
 
   it('returns 400 for invalid plan', async () => {
@@ -773,22 +776,15 @@ describe('downgradePlan', () => {
 
     await downgradePlan(USER, 'starter', makeRequest());
 
-    // Check that deactivation was called for the 5 excess products
+    // No se desactiva stock hasta aplicar el cambio en webhook (nuevo comportamiento)
     const stockUpdates = supabaseMock.__calls.filter(
       (c) => c.table === 'product_stock' && c.method === 'update'
     );
-    expect(stockUpdates.length).toBeGreaterThanOrEqual(1);
-    const deactivateData = stockUpdates[0]!.args[0] as Record<string, unknown>;
-    expect(deactivateData.active).toBe(false);
-
-    // Verify the .in() call with the excess stock IDs
+    expect(stockUpdates.length).toBe(0);
     const inCalls = supabaseMock.__calls.filter(
       (c) => c.table === 'product_stock' && c.method === 'in'
     );
-    expect(inCalls.length).toBeGreaterThanOrEqual(1);
-    const deactivatedIds = inCalls[0]!.args[1] as string[];
-    expect(deactivatedIds).toHaveLength(5);
-    expect(deactivatedIds[0]).toBe('stock-50');
+    expect(inCalls.length).toBe(0);
   });
 
   it('removes collaborators on downgrade', async () => {
@@ -823,11 +819,11 @@ describe('downgradePlan', () => {
 
     await downgradePlan(USER, 'starter', makeRequest());
 
-    // Verify collaborators delete was called
+    // No se borran colaboradores hasta aplicar el cambio en webhook
     const deleteCall = supabaseMock.__calls.find(
       (c) => c.table === 'tenant_users' && c.method === 'delete'
     );
-    expect(deleteCall).toBeDefined();
+    expect(deleteCall).toBeUndefined();
   });
 
   it('deletes pending invitations on downgrade', async () => {
@@ -864,7 +860,7 @@ describe('downgradePlan', () => {
     const invDelete = supabaseMock.__calls.find(
       (c) => c.table === 'invitations' && c.method === 'delete'
     );
-    expect(invDelete).toBeDefined();
+    expect(invDelete).toBeUndefined();
   });
 
   it('creates a new preapproval for the target plan after downgrade', async () => {
@@ -934,10 +930,9 @@ describe('downgradePlan', () => {
     mockCreatePreApproval.mockRejectedValue(new Error('MP down'));
 
     const result = await downgradePlan(USER, 'starter', makeRequest());
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      const data = result.data as Record<string, unknown>;
-      expect(data.url).toBeNull();
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(502);
     }
   });
 });
