@@ -36,6 +36,20 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 # vynko
 
+## Documentación operativa
+
+| Doc | Para qué |
+|---|---|
+| [`docs/runbook.md`](docs/runbook.md) | Incidentes: triage, rollback, crons manuales, migraciones |
+| [`docs/continuity.md`](docs/continuity.md) | RPO/RTO, backup diario, procedimiento de restore y drill |
+| [`docs/observability.md`](docs/observability.md) | Logs estructurados (JSON), dashboard de errores en Sentry, alertas |
+| [`docs/feature-flags.md`](docs/feature-flags.md) | Feature flags de release: rollout gradual, kill switch, override por env |
+| [`docs/background-jobs.md`](docs/background-jobs.md) | Cola de trabajos de fondo: reintentos con backoff, cron, como encolar |
+| [`docs/product-metrics.md`](docs/product-metrics.md) | Metricas de producto: embudo, catalogo de eventos, como instrumentar |
+| [`docs/onboarding.md`](docs/onboarding.md) | Flujo de cuenta nueva: alta, puerta del dashboard, checklist de primeros pasos |
+| [`docs/security-secrets-rotation.md`](docs/security-secrets-rotation.md) | Inventario de secretos y checklist de rotación |
+| [`docs/architecture-plan.md`](docs/architecture-plan.md) | Decisiones de arquitectura y deuda conocida |
+
 ## Cambiar el precio de los planes (inflación)
 
 Los precios viven en un único lugar: `src/lib/prices.json`. Cambiar el precio ahí actualiza las suscripciones **nuevas**; para que los clientes existentes pasen a pagar el nuevo monto en el siguiente cobro, hay que sincronizar en Mercado Pago con el script `update-prices`.
