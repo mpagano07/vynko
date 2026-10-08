@@ -1,4 +1,5 @@
 import { supabaseAdmin } from './supabaseAdmin';
+import { logger } from '@/lib/logger';
 
 /**
  * Eventos de producto. La lista tiene que coincidir con el CHECK de
@@ -52,7 +53,7 @@ export type TrackEventParams = {
  * negocio: si la tabla no existe todavia (migracion no aplicada), si el
  * CHECK rechaza el tipo, o si Supabase esta caido, la venta o el
  * producto que el usuario estaba haciendo tienen que igual guardarse. Por
- * eso los errores van a console.error y la funcion resuelve.
+ * eso los errores van al logger y la funcion resuelve.
  */
 export async function trackEvent(params: TrackEventParams): Promise<void> {
   const { type, userId } = params;
@@ -86,10 +87,10 @@ export async function trackEvent(params: TrackEventParams): Promise<void> {
     // mismo first_* y gano una. Es el comportamiento que queriamos, no un
     // error, asi que no se loguea.
     if (error && error.code !== '23505') {
-      console.error(`[analytics] no se pudo grabar ${type}:`, error.message);
+      logger.error(`[analytics] no se pudo grabar ${type}:`, { error: error.message });
     }
   } catch (error) {
-    console.error(`[analytics] fallo inesperado en ${type}:`, error);
+    logger.error(`[analytics] fallo inesperado en ${type}:`, { error });
   }
 }
 
@@ -133,7 +134,7 @@ export async function trackAppReturn(params: {
       },
     });
   } catch (error) {
-    console.error('[analytics] fallo inesperado en app_return:', error);
+    logger.error('[analytics] fallo inesperado en app_return:', { error });
   }
 }
 

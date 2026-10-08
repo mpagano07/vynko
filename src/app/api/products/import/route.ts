@@ -1,5 +1,6 @@
 import { getAuth } from '@/lib/api-auth';
 import { prepareImport } from '@/lib/product-service';
+import { logger } from '@/lib/logger';
 
 /**
  * Import de productos con progreso por streaming.
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
         const result = await prepared.execute((progress) => send({ type: 'progress', ...progress }));
         send({ type: 'done', ...result });
       } catch (error) {
-        console.error('importProducts: el stream fallo', error);
+        logger.error('importProducts: el stream fallo', { error });
         send({ type: 'error', error: 'Ocurrio un error inesperado. Intenta de nuevo.' });
       } finally {
         controller.close();

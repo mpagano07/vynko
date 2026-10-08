@@ -2,9 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET, POST } from './route';
 
 const reconcileMock = vi.fn();
+const enqueueMock = vi.fn();
 
 vi.mock('@/lib/mercadopago-reconcile', () => ({
   reconcileSubscriptions: (...args: unknown[]) => reconcileMock(...args),
+}));
+
+// El endpoint solo encola cuando la reconciliacion revienta; sin este mock el
+// enqueue real tocaria la base.
+vi.mock('@/lib/job-queue', () => ({
+  enqueueJob: (...args: unknown[]) => enqueueMock(...args),
 }));
 
 const ORIGINAL_SECRET = process.env.CRON_SECRET;
@@ -27,6 +34,7 @@ describe('GET /api/cron/reconcile-subscriptions', () => {
   beforeEach(() => {
     reconcileMock.mockReset();
     reconcileMock.mockResolvedValue(report);
+    enqueueMock.mockReset();
     process.env.CRON_SECRET = 'test-secret';
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
@@ -42,7 +50,33 @@ describe('GET /api/cron/reconcile-subscriptions', () => {
 
     expect(res.status).toBe(200);
     expect(reconcileMock).toHaveBeenCalledTimes(1);
+    expect(enqueueMock).not.toHaveBeenCalled();
     expect(await res.json()).toEqual(report);
+  });
+
+  it('si la reconciliacion revienta, la deja en cola y responde 500', async () => {
+    // Sin esto la corrida del dia se pierde y el proximo intento es en 24 h.
+    reconcileMock.mockRejectedValue(new Error('boom'));
+    enqueueMock.mockResolvedValue('job-77');
+
+    const res = await GET(authorized());
+
+    expect(res.status).toBe(500);
+    expect(enqueueMock).toHaveBeenCalledWith({
+      jobType: 'reconcile_subscriptions',
+      payload: { source: 'cron' },
+    });
+    expect(await res.json()).toMatchObject({ error: 'Reconciliation failed', queued: true });
+  });
+
+  it('si ni siquiera se pudo encolar, lo dice en la respuesta', async () => {
+    reconcileMock.mockRejectedValue(new Error('boom'));
+    enqueueMock.mockResolvedValue(null);
+
+    const res = await GET(authorized());
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ queued: false });
   });
 
   it('is not cacheable, so a cron cannot read a stale report', async () => {
@@ -142,6 +176,7 @@ describe('POST /api/cron/reconcile-subscriptions', () => {
   beforeEach(() => {
     reconcileMock.mockReset();
     reconcileMock.mockResolvedValue(report);
+    enqueueMock.mockReset();
     process.env.CRON_SECRET = 'test-secret';
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });

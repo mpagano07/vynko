@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
 import type { AuthInfo } from '@/lib/api-auth';
 import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
+import { logger } from '@/lib/logger';
 
 export type StockTransferResult<T = unknown> =
   | { ok: true; data: T; status: number }
@@ -29,7 +30,7 @@ export async function listTransfers(auth: AuthInfo, statusFilter: string | null)
 
   const { data, error } = await q;
   if (error) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
 
@@ -148,7 +149,7 @@ export async function createTransfer(
 
   if (itemsError) {
     await supabaseAdmin.from('stock_transfers').delete().eq('id', transfer.id);
-    console.error('DB error:', itemsError);
+    logger.error('DB error:', { error: itemsError });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
   }
 
@@ -233,7 +234,7 @@ export async function updateTransferStatus(
     if (rpcError.code === 'P0001') {
       return { ok: false, error: rpcError.message || 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }
-    console.error(rpcName + ' fallo:', rpcError);
+    logger.error(`${rpcName} fallo`, { error: rpcError });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
 
@@ -298,7 +299,7 @@ export async function deleteTransfer(auth: AuthInfo, id: string): Promise<StockT
     .eq('id', id);
 
   if (deleteError) {
-    console.error('DB error:', deleteError);
+    logger.error('DB error:', { error: deleteError });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
 

@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import { trackEvent } from '@/lib/track-event';
+import { logger } from '@/lib/logger';
 
 interface UserLike {
   id: string;
@@ -67,7 +68,7 @@ export async function createCompanyForUser(
   });
 
   if (tenantError) {
-    console.error('DB error creating tenant:', tenantError);
+    logger.error('DB error creating tenant:', { error: tenantError });
     return null;
   }
 
@@ -83,7 +84,7 @@ export async function createCompanyForUser(
   );
 
   if (profileError) {
-    console.error('DB error creating profile:', profileError);
+    logger.error('DB error creating profile:', { error: profileError });
     return null;
   }
 
@@ -97,7 +98,7 @@ export async function createCompanyForUser(
   );
 
   if (tenantUserError) {
-    console.error('DB error creating tenant_user:', tenantUserError);
+    logger.error('DB error creating tenant_user:', { error: tenantUserError });
     return null;
   }
 

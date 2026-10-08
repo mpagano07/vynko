@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { isAdminProfile } from '@/lib/admin';
 import { getAdminAnalytics } from '@/lib/analytics-service';
+import { logger } from '@/lib/logger';
 
 export async function GET() {
   const supabase = await createServerSupabaseClient();
@@ -26,7 +27,7 @@ export async function GET() {
     .maybeSingle();
 
   if (error) {
-    console.error('Admin analytics: no se pudo leer el perfil:', error.message);
+    logger.error('Admin analytics: no se pudo leer el perfil:', { error: error.message });
     // Fail closed: si no se puede determinar el flag, no se concede acceso.
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }

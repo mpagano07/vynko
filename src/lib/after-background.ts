@@ -1,4 +1,5 @@
 import { after } from 'next/server';
+import { logger } from '@/lib/logger';
 
 /**
  * Encola un trabajo para que corra DESPUES de responder.
@@ -19,7 +20,7 @@ export function scheduleAfterBackground(task: () => Promise<unknown> | unknown):
         await task();
       } catch (err) {
         // Un trabajo de fondo que falla no puede romper nada: ya se respondio.
-        console.error('[after] background task failed:', err);
+        logger.error('[after] background task failed:', { error: err });
       }
     });
   } catch {
@@ -27,7 +28,7 @@ export function scheduleAfterBackground(task: () => Promise<unknown> | unknown):
     void Promise.resolve()
       .then(task)
       .catch((err) => {
-        console.error('[after] detached background task failed:', err);
+        logger.error('[after] detached background task failed:', { error: err });
       });
   }
 }

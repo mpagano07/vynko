@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 
 const { replaceMock } = vi.hoisted(() => ({ replaceMock: vi.fn() }));
 const getSessionMock = vi.hoisted(() => vi.fn());
+const trackClientEventMock = vi.hoisted(() => vi.fn());
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: replaceMock, push: vi.fn() }),
@@ -16,6 +17,11 @@ vi.mock('@/lib/hooks/useAuth', () => ({
 
 vi.mock('@/lib/supabaseClient', () => ({
   supabase: { auth: { getSession: getSessionMock } },
+}));
+
+// Sin este mock el evento dispararia el fetch global del test.
+vi.mock('@/lib/analytics-client', () => ({
+  trackClientEvent: (...args: unknown[]) => trackClientEventMock(...args),
 }));
 
 vi.mock('recharts', async () => {
@@ -46,11 +52,11 @@ vi.mock('recharts', async () => {
 
 const authMock = vi.mocked(useAuth);
 
-function mockAuth() {
+function mockAuth(subscriptionPlan = 'business') {
   authMock.mockReturnValue({
     user: null,
     profile: null,
-    tenant: { id: 't1', name: 'Central', slug: 'central', subscription_plan: 'business' },
+    tenant: { id: 't1', name: 'Central', slug: 'central', subscription_plan: subscriptionPlan },
     tenants: [{ id: 't1', name: 'Central', slug: 'central' }],
     role: 'owner',
     loading: false,
@@ -169,6 +175,7 @@ describe('ForecastPage', () => {
     fetchHandler.mockReset();
     fetchHandler.mockResolvedValue({ ok: true, json: async () => payload });
     vi.stubGlobal('fetch', fetchHandler);
+    trackClientEventMock.mockClear();
     mockAuth();
   });
 
@@ -185,6 +192,24 @@ describe('ForecastPage', () => {
     expect(within(panel).getByText('Medio')).toBeInTheDocument();
     expect(within(panel).getByText(/— quedan 2 u/)).toBeInTheDocument();
     expect(within(panel).getByText(/— quedan 20 u/)).toBeInTheDocument();
+  });
+
+  it('registra forecast_opened una sola vez cuando el usuario llega a la pagina', async () => {
+    render(<ForecastPage />);
+    await screen.findByText('Efectividad del stock');
+
+    expect(trackClientEventMock).toHaveBeenCalledTimes(1);
+    expect(trackClientEventMock).toHaveBeenCalledWith('forecast_opened');
+  });
+
+  it('no registra forecast_opened si el plan lo redirige al dashboard', async () => {
+    // El redirect corre en el mismo montaje: un plan free que rebota no
+    // "abrio" el pronostico y sumaria un falso positivo en el desglose.
+    mockAuth('free');
+
+    render(<ForecastPage />);
+
+    expect(trackClientEventMock).not.toHaveBeenCalled();
   });
 
   it('inicializa el gráfico con dimensiones válidas', async () => {

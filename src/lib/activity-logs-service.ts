@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import type { AuthInfo } from '@/lib/api-auth';
+import { logger } from '@/lib/logger';
 
 export type ActivityLogsResult<T = unknown> =
   | { ok: true; data: T; status: number }
@@ -37,7 +38,7 @@ export async function getActivityLogs(
 
   const { data, error, count } = await query;
   if (error) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
 

@@ -1,5 +1,6 @@
-﻿import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { supabaseMock } from '@/test/supabase-mock';
+import { findLog } from '@/test/log-output';
 import { __resetRateLimitStateForTests } from '@/lib/rate-limit';
 import { MAX_IMPORT_ROWS } from './excel-import-parse';
 import { buildStockMovement } from './stock';
@@ -803,12 +804,12 @@ describe('importProducts: que pasa si falla en el medio del archivo', () => {
       { name: 'Producto 3', sku: 'SKU-3' },
     ]);
 
-    expect(errorSpy).toHaveBeenCalledWith(
-      'importProducts fila',
-      2,
-      'error de base:',
-      expect.stringContaining('deadlock detected'),
-    );
+    expect(findLog(errorSpy, 'importProducts fila')).toMatchObject({
+      level: 'error',
+      fila: 2,
+      etapa: 'error de base',
+      error: { message: expect.stringContaining('deadlock detected') },
+    });
   });
 
   it('el resumen distingue una importacion limpia de una a medias', async () => {
@@ -869,12 +870,11 @@ describe('importProducts: que pasa si falla en el medio del archivo', () => {
     });
     expect(result.body.results[2].status).toBe('created');
     expect(result.body.summary).toMatchObject({ created: 2, skipped: 1, total: 3 });
-    expect(errorSpy).toHaveBeenCalledWith(
-      'importProducts fila',
-      2,
-      'error:',
-      expect.objectContaining({ message: 'conexion perdida' }),
-    );
+    expect(findLog(errorSpy, 'importProducts fila')).toMatchObject({
+      level: 'error',
+      fila: 2,
+      error: { message: 'conexion perdida' },
+    });
     vi.mocked(buildStockMovement).mockRestore();
   });
 });

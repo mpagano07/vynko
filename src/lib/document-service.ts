@@ -7,6 +7,7 @@ import type { CreateDocumentRequest, DocumentStatus, DocumentType } from '@/lib/
 import type { AuthInfo } from '@/lib/api-auth';
 import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
 import { trackEvent } from '@/lib/track-event';
+import { logger } from '@/lib/logger';
 
 export type DocumentResult<T = unknown> =
   | { ok: true; data: T; status: number }
@@ -42,7 +43,7 @@ export async function listDocuments(
   const { data: documents, error } = await query;
 
   if (error) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
   return { ok: true, data: documents ?? [], status: 200 };
@@ -142,7 +143,7 @@ export async function createDocument(
       if (error.code !== '23505') {
         await releaseCommercialDocumentNumber(auth.tenantId, document_type, claim.number);
       }
-      console.error('DB error:', error);
+      logger.error('DB error:', { error });
     }
 
     if (!document) {
@@ -165,7 +166,7 @@ export async function createDocument(
     if (itemsError) {
       await supabaseAdmin.from('commercial_documents').delete().eq('id', document.id);
       await releaseCommercialDocumentNumber(auth.tenantId, document_type, claimedNumber);
-      console.error('DB error:', itemsError);
+      logger.error('DB error:', { error: itemsError });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }
 
@@ -240,7 +241,7 @@ export async function updateDocument(
     .single();
 
   if (error) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
   }
   return { ok: true, data, status: 200 };
@@ -262,7 +263,7 @@ export async function deleteDocument(auth: AuthInfo, id: string): Promise<Docume
     .eq('tenant_id', auth.tenantId);
 
   if (error) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
   }
   return { ok: true, data: { success: true }, status: 200 };

@@ -1,0 +1,76 @@
+name: Backup de produccion
+
+# Backup diario de la base de PROD con verificacion (dump + manifiesto +
+# conteos por tabla). El mismo script se puede correr a mano con
+# `.\scripts\backup-db.ps1` (ver docs/continuity.md).
+#
+# Opt-in: si no hay secret PROD_DB_URL el workflow se saltea y no falla el CI
+# (GitHub no permite `secrets` adentro de un `if:` a nivel de job, por eso el
+# chequeo pasa por un paso intermedio con output).
+#
+# Los dumps contienen datos de clientes: el artifact vive 30 dias y lo ve
+# solo quien tiene acceso al repo.
+
+on:
+  schedule:
+    # 03:30 UTC = 00:30 ART: ventana de menor trafico.
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check backup secret
+        id: backup-secret
+        run: |
+          if [ -n "$PROD_DB_URL" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          PROD_DB_URL: ${{ secrets.PROD_DB_URL }}
+
+      - name: Checkout
+        if: steps.backup-secret.outputs.configured == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        if: steps.backup-secret.outputs.configured == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install supabase CLI
+        if: steps.backup-secret.outputs.configured == 'true'
+        run: npm install -g supabase
+
+      # El script lee .env.db (ignorado por git), igual que en local.
+      - name: Write .env.db
+        if: steps.backup-secret.outputs.configured == 'true'
+        env:
+          PROD_DB_URL: ${{ secrets.PROD_DB_URL }}
+          # Con DEV_DB_URL ademas se verifica el RESTORE en una base scratch:
+          # sin ella solo se valida la estructura del dump.
+          DEV_DB_URL: ${{ secrets.DEV_DB_URL }}
+        run: |
+          {
+            echo "PROD_DB_URL=$PROD_DB_URL"
+            if [ -n "$DEV_DB_URL" ]; then echo "DEV_DB_URL=$DEV_DB_URL"; fi
+          } > .env.db
+
+      - name: Backup con verificacion
+        if: steps.backup-secret.outputs.configured == 'true'
+        shell: pwsh
+        run: ./scripts/backup-db.ps1
+
+      - name: Upload dump
+        if: steps.backup-secret.outputs.configured == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: vynko-backup-${{ github.run_id }}
+          path: scripts/dumps/*
+          retention-days: 30
+          if-no-files-found: error

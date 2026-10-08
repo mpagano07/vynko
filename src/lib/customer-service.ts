@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import type { AuthInfo } from '@/lib/api-auth';
+import { logger } from '@/lib/logger';
 
 export type CustomerResult<T = unknown> =
   | { ok: true; data: T; status: number }
@@ -16,7 +17,7 @@ export async function listCustomers(auth: AuthInfo): Promise<CustomerResult> {
   const { data, error } = await query;
 
   if (error) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
   return { ok: true, data: data || [], status: 200 };
@@ -45,7 +46,7 @@ export async function createCustomer(
       .single();
 
     if (error) {
-      console.error('DB error:', error);
+      logger.error('DB error:', { error });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }
     return { ok: true, data, status: 201 };
@@ -82,7 +83,7 @@ export async function updateCustomer(
       .single();
 
     if (error) {
-      console.error('DB error:', error);
+      logger.error('DB error:', { error });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }
     return { ok: true, data, status: 200 };
@@ -99,7 +100,7 @@ export async function deleteCustomer(auth: AuthInfo, id: string): Promise<Custom
     .eq('tenant_id', auth.tenantId);
 
   if (error) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
   }
   return { ok: true, data: { success: true }, status: 200 };
@@ -120,7 +121,7 @@ export async function getCustomerHistory(auth: AuthInfo, id: string): Promise<Cu
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
 

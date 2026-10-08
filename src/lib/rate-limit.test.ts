@@ -108,7 +108,7 @@ describe('rateLimit (store distribuido)', () => {
     expect(second.ok).toBe(true);
     // Log una sola vez, no uno por request.
     expect(spy).toHaveBeenCalledTimes(1);
-    expect(String(spy.mock.calls[0]?.[1])).toContain('036_rate_limit_buckets');
+    expect(String(spy.mock.calls[0]?.[0])).toContain('036_rate_limit_buckets');
     spy.mockRestore();
   });
 
@@ -221,7 +221,7 @@ describe('rateLimitPeek (store distribuido)', () => {
     rpcMock.mockResolvedValue({ data: null, error: { message: 'function does not exist' } });
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     expect((await rateLimitPeek('k', 5)).ok).toBe(true);
-    expect(String(spy.mock.calls[0]?.[1])).toContain('037_rate_limit_peek');
+    expect(String(spy.mock.calls[0]?.[0])).toContain('037_rate_limit_peek');
     spy.mockRestore();
   });
 });

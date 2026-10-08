@@ -7,6 +7,7 @@ import { consolidateOwnerSubscription, type TenantSubscription } from '@/lib/che
 import { canManageTenant } from '@/lib/membership-role';
 import { safeInternalRedirect } from '@/lib/security/redirects';
 import { trackEvent } from '@/lib/track-event';
+import { logger } from '@/lib/logger';
 
 export type BillingResult<T = unknown> =
   | { ok: true; data: T }
@@ -84,7 +85,7 @@ export async function createCheckoutSession(
 
     return { ok: true, data: { url: preapproval.init_point } };
   } catch (err) {
-    console.error('Error creating MercadoPago preapproval:', err);
+    logger.error('Error creating MercadoPago preapproval:', { error: err });
     return { ok: false, error: 'No se pudo iniciar el pago. Intentá de nuevo en unos minutos.', status: 502 };
   }
 }
@@ -174,7 +175,7 @@ export async function downgradePlan(
 
     url = preapproval.init_point || null;
   } catch (err) {
-    console.error('Error creating preapproval on downgrade:', err);
+    logger.error('Error creating preapproval on downgrade:', { error: err });
     return { ok: false, error: 'No se pudo iniciar el pago. Intentá de nuevo en unos minutos.', status: 502 };
   }
 

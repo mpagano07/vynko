@@ -6,6 +6,7 @@ import {
   type WebhookOutcome,
 } from '@/lib/mercadopago-webhook-log';
 import { scheduleAfterBackground } from '@/lib/after-background';
+import { logger } from '@/lib/logger';
 
 export type MercadoPagoWebhookResult =
   | { ok: true; data: { received: true } }
@@ -231,7 +232,7 @@ const ownerUserId = await resolveOwnerUserId(tenantId);
             try {
               await (await import('@/lib/mercadopago')).cancelPreApproval(oldPreapprovalId);
             } catch (err) {
-              console.error('Error cancelling old preapproval after downgrade:', err);
+              logger.error('Error cancelling old preapproval after downgrade:', { error: err });
             }
           }
           planApplied = true;
@@ -351,7 +352,7 @@ const ownerUserId = await resolveOwnerUserId(tenantId);
 
     logOutcome(outcome);
   } catch (err) {
-    console.error('MercadoPago webhook error:', err);
+    logger.error('MercadoPago webhook error:', { error: err });
     logOutcome('error', err instanceof Error ? err.message : String(err));
     // 500 y no 200: con 200 MercadoPago da el evento por procesado y no
     // reintenta, asi que un fallo transitorio (red, API de MP caida) se pierde

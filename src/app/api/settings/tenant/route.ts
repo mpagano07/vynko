@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { updateTenantSettings } from '@/lib/settings-service';
+import { logger } from '@/lib/logger';
 
 export async function PATCH(request: Request) {
   try {
@@ -15,7 +16,7 @@ export async function PATCH(request: Request) {
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
     return NextResponse.json(result.data);
   } catch (err) {
-    console.error('Error updating tenant:', err);
+    logger.error('Error updating tenant:', { error: err });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

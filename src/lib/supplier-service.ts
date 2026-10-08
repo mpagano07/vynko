@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
 import type { AuthInfo } from '@/lib/api-auth';
 import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
+import { logger } from '@/lib/logger';
 
 export type SupplierResult<T = unknown> =
   | { ok: true; data: T; status: number }
@@ -32,7 +33,7 @@ export async function listSuppliers(auth: AuthInfo): Promise<SupplierResult> {
   const { data, error } = await query;
 
   if (error) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
   return { ok: true, data: data || [], status: 200 };
@@ -76,7 +77,7 @@ export async function createSupplier(
       .single();
 
     if (error) {
-      console.error('DB error:', error);
+      logger.error('DB error:', { error });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }
 
@@ -134,7 +135,7 @@ export async function updateSupplier(
       .single();
 
     if (error) {
-      console.error('DB error:', error);
+      logger.error('DB error:', { error });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }
 

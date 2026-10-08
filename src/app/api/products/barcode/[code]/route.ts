@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { lookupProductByCode } from '@/lib/product-service';
 import { fixResponse } from '@/lib/utils/encoding';
+import { logger } from '@/lib/logger';
 
 export async function GET(
   request: Request,
@@ -20,7 +21,7 @@ export async function GET(
     }
     return NextResponse.json(fixResponse({ product: result.product }));
   } catch (err) {
-    console.error('Error in barcode lookup:', err);
+    logger.error('Error in barcode lookup:', { error: err });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

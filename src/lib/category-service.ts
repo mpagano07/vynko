@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import type { AuthInfo } from '@/lib/api-auth';
+import { logger } from '@/lib/logger';
 
 export type CategoryResult<T = unknown> =
   | { ok: true; data: T; status: number }
@@ -16,7 +17,7 @@ export async function listCategories(auth: AuthInfo): Promise<CategoryResult> {
   const { data, error } = await query;
 
   if (error) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
   return { ok: true, data, status: 200 };
@@ -44,7 +45,7 @@ export async function createCategory(
       .single();
 
     if (error) {
-      console.error('DB error:', error);
+      logger.error('DB error:', { error });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }
     return { ok: true, data, status: 201 };
@@ -74,7 +75,7 @@ export async function updateCategory(
       .single();
 
     if (error) {
-      console.error('DB error:', error);
+      logger.error('DB error:', { error });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }
 
@@ -92,7 +93,7 @@ export async function deleteCategory(auth: AuthInfo, id: string): Promise<Catego
     .eq('tenant_id', auth.tenantId);
 
   if (error) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
   }
 

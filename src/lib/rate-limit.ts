@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { logger } from '@/lib/logger';
 
 interface Bucket {
   count: number;
@@ -159,7 +160,7 @@ export async function rateLimitPeek(key: string, limit: number): Promise<RateLim
   if (isE2eBypassEnabled()) {
     if (!warnedAboutE2eBypass) {
       warnedAboutE2eBypass = true;
-      console.warn('[rate-limit] E2E=1 con NODE_ENV != production: rate limiting desactivado');
+      logger.warn('[rate-limit] E2E=1 con NODE_ENV != production: rate limiting desactivado');
     }
     return { ok: true, retryAfterSeconds: 0 };
   }
@@ -228,7 +229,7 @@ function logStoreUnavailable(message: string, hint: string, error: unknown): voi
     return;
   }
   postgresUnavailableLoggedAt = now;
-  console.error(message, hint, error);
+  logger.error(message, { hint, error });
 }
 
 /**
@@ -254,7 +255,7 @@ export async function rateLimit(
   if (isE2eBypassEnabled()) {
     if (!warnedAboutE2eBypass) {
       warnedAboutE2eBypass = true;
-      console.warn('[rate-limit] E2E=1 con NODE_ENV != production: rate limiting desactivado');
+      logger.warn('[rate-limit] E2E=1 con NODE_ENV != production: rate limiting desactivado');
     }
     return { ok: true, retryAfterSeconds: 0 };
   }

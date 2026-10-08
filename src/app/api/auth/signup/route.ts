@@ -6,6 +6,7 @@ import { safeInternalRedirect } from '@/lib/security/redirects';
 import { validatePassword } from '@/lib/password-policy';
 import { classifyAuthFailure } from '@/lib/auth-errors';
 import { trackEvent } from '@/lib/track-event';
+import { logger } from '@/lib/logger';
 
 const MAX_IP_ATTEMPTS = 10;
 const MAX_EMAIL_ATTEMPTS = 3;
@@ -87,7 +88,7 @@ export async function POST(request: Request) {
   });
 
   if (error) {
-    console.warn(`Signup failed for ${normalizedEmail}: ${error.message}`);
+    logger.warn(`Signup failed for ${normalizedEmail}`, { error: error.message, code: error.code });
 
     // "Ya existe" se responde como un alta mas. GoTrue ofusca el alta repetida
     // cuando la confirmacion de email esta activa (devuelve el usuario con

@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { safeInternalRedirect } from '@/lib/security/redirects';
+import { logger } from '@/lib/logger';
 
 export type ResetPasswordResult = {
   data: Record<string, unknown>;
@@ -61,7 +62,7 @@ export async function sendResetPasswordEmail(request: Request): Promise<ResetPas
   });
 
   if (error) {
-    console.error('Error sending recovery email:', error);
+    logger.error('Error sending recovery email:', { error });
   }
 
   return { data: { success: true, message: 'Email enviado' }, status: 200 };

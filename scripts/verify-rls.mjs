@@ -190,21 +190,23 @@ async function setup() {
   if (sErr) throw new Error(`no se pudo crear stock victima: ${sErr.message}`);
   VICTIM.stock = stock.id;
 
-  const { data: supplier } = await admin
+  const { data: supplier, error: supErr } = await admin
     .from('suppliers')
     .insert({ tenant_id: tenant.id, name: `RLS Verify Supplier ${stamp}` })
     .select()
     .single();
+  if (supErr) throw new Error(`no se pudo crear supplier victima: ${supErr.message}`);
   VICTIM.supplier = supplier.id;
 
-  const { data: customer } = await admin
+  const { data: customer, error: custErr } = await admin
     .from('customers')
     .insert({ tenant_id: tenant.id, name: `RLS Verify Customer ${stamp}` })
     .select()
     .single();
+  if (custErr) throw new Error(`no se pudo crear customer victima: ${custErr.message}`);
   VICTIM.customer = customer.id;
 
-  const { data: movement } = await admin
+  const { data: movement, error: movErr } = await admin
     .from('stock_movements')
     .insert({
       tenant_id: tenant.id,
@@ -214,9 +216,10 @@ async function setup() {
     })
     .select()
     .single();
+  if (movErr) throw new Error(`no se pudo crear movimiento victima: ${movErr.message}`);
   VICTIM.movement = movement?.id ?? null;
 
-  const { data: document } = await admin
+  const { data: document, error: docErr } = await admin
     .from('commercial_documents')
     .insert({
       tenant_id: tenant.id,
@@ -228,18 +231,20 @@ async function setup() {
     })
     .select()
     .single();
+  if (docErr) throw new Error(`no se pudo crear documento victima: ${docErr.message}`);
   VICTIM.document = document.id;
 
-  const { data: notification } = await admin
+  const { data: notification, error: notifErr } = await admin
     .from('notifications')
     .insert({
       tenant_id: tenant.id,
       type: 'system',
       title: 'RLS verify',
-      message: 'fixture',
+      body: 'fixture',
     })
     .select()
     .single();
+  if (notifErr) throw new Error(`no se pudo crear notificacion victima: ${notifErr.message}`);
   VICTIM.notification = notification.id;
 }
 

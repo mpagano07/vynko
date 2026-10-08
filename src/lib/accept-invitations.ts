@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
+import { logger } from '@/lib/logger';
 
 interface UserLike {
   id: string;
@@ -141,7 +142,7 @@ export async function getInvitationAccountScope(
   if (error) {
     // Ante una duda no se concede el permiso: es el caso que habilita el
     // endpoint, asi que un error de base tiene que frenar.
-    console.error('getInvitationAccountScope: no se pudieron leer las invitaciones:', error.message);
+    logger.error('getInvitationAccountScope: no se pudieron leer las invitaciones:', { error: error.message });
     return { hasInvitation: false, invitedTenantIds: [], hasForeignMembership: true };
   }
 
@@ -153,7 +154,7 @@ export async function getInvitationAccountScope(
     .eq('user_id', userId);
 
   if (memberError) {
-    console.error('getInvitationAccountScope: no se pudieron leer las membresias:', memberError.message);
+    logger.error('getInvitationAccountScope: no se pudieron leer las membresias:', { error: memberError.message });
     return { hasInvitation: false, invitedTenantIds: [], hasForeignMembership: true };
   }
 

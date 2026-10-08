@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { rateLimit } from '@/lib/rate-limit';
 import type { AuthInfo } from '@/lib/api-auth';
+import { logger } from '@/lib/logger';
 
 export const PRODUCT_IMAGE_BUCKET = 'product-images';
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -147,7 +148,7 @@ export async function uploadImage(auth: AuthInfo, request: Request): Promise<Upl
     });
 
   if (uploadError) {
-    console.error('Upload error:', uploadError.message);
+    logger.error('Upload error:', { error: uploadError.message });
     return { ok: false, error: 'No se pudo subir la imagen. Intentá de nuevo.', status: 500 };
   }
 

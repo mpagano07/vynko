@@ -5,15 +5,20 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
 /**
  * Eventos que solo se pueden originar en el navegador: el de compartir por
- * WhatsApp (es un window.open, no hay servidor en el medio) y el de vuelta al
- * producto (que se dispara al montar la app, no en una accion).
+ * WhatsApp (es un window.open, no hay servidor en el medio), el de vuelta al
+ * producto (que se dispara al montar la app, no en una accion) y el de abrir
+ * el pronostico (es navegacion, no una accion sobre un recurso).
  *
  * Deliberadamente NO se acepta un event_type libre desde el body: la lista
  * esta escrita aca. Si aceptara cualquiera, cualquiera autenticado podria
  * fabricar eventos de su embudo y de otros tenants con un `curl`, y las
  * metricas dejan de significar algo.
  */
-const ALLOWED: ReadonlySet<AnalyticsEventType> = new Set(['whatsapp_ticket', 'app_return']);
+const ALLOWED: ReadonlySet<AnalyticsEventType> = new Set([
+  'whatsapp_ticket',
+  'app_return',
+  'forecast_opened',
+]);
 
 export async function POST(request: Request) {
   const auth = await getAuth(request);
@@ -45,14 +50,16 @@ export async function POST(request: Request) {
     // UnDia por usuario: trackAppReturn ya corta si el ultimo fue hace poco.
     await trackAppReturn({ userId: auth.userId, tenantId: auth.tenantId });
   } else {
-    // Mide el clic en el boton, NO que el mensaje se haya entregado. La
-    // aplicacion abre WhatsApp con window.open y no hay forma de saber si
-    // el usuario completo el chat. Por eso el nombre del evento es
-    // whatsapp_ticket y no whatsapp_sent: si alguna vez se cambia a la API
-    // de WhatsApp y se puede confirmar la entrega, el evento se separa en
-    // dos y queda claro cual es cual.
+    // Para `whatsapp_ticket` esto mide el clic en el boton, NO que el mensaje
+    // se haya entregado: la aplicacion abre WhatsApp con window.open y no hay
+    // forma de saber si el usuario completo el chat. Por eso el nombre del
+    // evento es whatsapp_ticket y no whatsapp_sent: si alguna vez se cambia a
+    // la API de WhatsApp y se puede confirmar la entrega, el evento se separa
+    // en dos y queda claro cual es cual.
     await trackEvent({
-      type: 'whatsapp_ticket',
+      // `ALLOWED` de arriba ya restringio el tipo a esta misma lista; el cast
+      // es solo para no repetir la comprobacion en el tipado.
+      type: type as AnalyticsEventType,
       userId: auth.userId,
       tenantId: auth.tenantId,
       metadata,

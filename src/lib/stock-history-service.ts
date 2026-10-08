@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import type { AuthInfo } from '@/lib/api-auth';
+import { logger } from '@/lib/logger';
 
 export type StockHistoryResult<T = unknown> =
   | { ok: true; data: T; status: number }
@@ -34,7 +35,7 @@ export async function getStockHistory(
 
   const { data, error, count } = await query;
   if (error) {
-    console.error('stock-history GET error:', JSON.stringify(error));
+    logger.error('stock-history GET error:', { error: JSON.stringify(error) });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
 

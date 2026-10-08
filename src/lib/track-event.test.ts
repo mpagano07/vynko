@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { trackEvent, trackAppReturn } from './track-event';
 import { supabaseMock } from '@/test/supabase-mock';
+import { findLog } from '@/test/log-output';
 
 vi.mock('@/lib/supabaseAdmin', async () => {
   const mod = await import('@/test/supabase-mock');
@@ -107,10 +108,11 @@ describe('track-event', () => {
 
     await trackEvent({ type: 'first_purchase', userId: 'user-1' });
 
-    expect(console.error).toHaveBeenCalledWith(
-      '[analytics] no se pudo grabar first_purchase:',
-      'check'
-    );
+    const spy = vi.spyOn(console, 'error');
+    expect(findLog(spy, '[analytics] no se pudo grabar first_purchase')).toMatchObject({
+      level: 'error',
+      error: 'check',
+    });
   });
 
   it('nunca tira, aunque el insert explote', async () => {
