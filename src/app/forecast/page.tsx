@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { Pagination } from '@/components/ui/pagination';
 import { LoadingState } from '@/components/ui/loading-state';
@@ -16,6 +16,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { formatARS } from '@/lib/utils/currency';
 import { authFetch } from '@/lib/fetchWithTenant';
+import { trackClientEvent } from '@/lib/analytics-client';
 
 interface Prediction {
   productId: string;
@@ -101,6 +102,21 @@ export default function ForecastPage() {
       router.replace('/dashboard');
     }
   }, [role, router, tenant, authLoading]);
+
+  // Pronostico abierto: es navegacion, no una accion sobre un recurso, por eso
+  // va por el endpoint de eventos de navegador (`forecast_opened` esta en el
+  // ALLOWED de /api/analytics/track). Cuenta una sola vez por montaje y solo
+  // si el usuario no es redirigido: un member o un plan free que rebota a
+  // /dashboard no "abrio" el pronostico y sumaria un falso positivo en el
+  // desglose del panel.
+  const openedTracked = useRef(false);
+  useEffect(() => {
+    if (openedTracked.current) return;
+    if (authLoading || role === 'member') return;
+    if (tenant && (tenant.subscription_plan === 'free' || tenant.subscription_plan === 'starter')) return;
+    openedTracked.current = true;
+    trackClientEvent('forecast_opened');
+  }, [authLoading, role, tenant]);
 
   if (authLoading || role === 'member') return null;
 

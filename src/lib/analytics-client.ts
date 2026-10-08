@@ -11,7 +11,7 @@ import { authFetch } from '@/lib/fetchWithTenant';
  * navegacion, asi que el error se traga y el control sigue en la UI.
  */
 export function trackClientEvent(
-  type: 'whatsapp_ticket' | 'app_return',
+  type: 'whatsapp_ticket' | 'app_return' | 'forecast_opened',
   metadata?: Record<string, unknown>
 ): void {
   if (typeof window === 'undefined') return;

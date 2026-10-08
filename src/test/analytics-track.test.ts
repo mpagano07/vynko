@@ -125,4 +125,15 @@ describe('POST /api/analytics/track', () => {
     });
     expect(trackEventMock).not.toHaveBeenCalled();
   });
+
+  it('acepta forecast_opened, que solo puede nacer en el navegador', async () => {
+    // Abrir /forecast es navegacion: no hay accion de servidor que lo
+    // registre, asi que entra por aca igual que whatsapp_ticket.
+    const res = await POST(request({ type: 'forecast_opened' }));
+
+    expect(res.status).toBe(200);
+    expect(trackEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'forecast_opened', userId: 'user-1' })
+    );
+  });
 });
