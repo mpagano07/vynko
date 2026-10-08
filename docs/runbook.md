@@ -123,7 +123,9 @@ Diseno y SQL: `docs/background-jobs.md`.
     where status = 'dead'
     order by updated_at desc limit 20;
    ```
-3. Corregida la causa, reencolar (o esperar al cron de 5 min si sigue `pending`):
+3. Corregida la causa, reencolar (o esperar al tick diario de 05:23 UTC si
+   sigue `pending`; para no esperar 24 h, correr el `curl` de `process-jobs`
+   a mano):
    ```sql
    update public.background_jobs
       set status = 'pending', run_after = now(), attempts = 0, updated_at = now()
@@ -138,7 +140,7 @@ Diseno y SQL: `docs/background-jobs.md`.
 |---|---|---|
 | Backup de prod | diario 03:30 UTC | `.github/workflows/backup.yml` (verifica estructura, sube artifact) |
 | Reconciliacion de suscripciones | diario 05:17 UTC | cron de `vercel.json` → `/api/cron/reconcile-subscriptions` |
-| Cola de trabajos de fondo | cada 5 min | cron de `vercel.json` → `/api/cron/process-jobs` (playbook 8) |
+| Cola de trabajos de fondo | diario 05:23 UTC | cron de `vercel.json` → `/api/cron/process-jobs` (playbook 8) |
 | Drill de restore | trimestral | `docs/continuity.md` → Drill |
 | Rotacion de secretos | segun politica | `docs/security-secrets-rotation.md` |
 

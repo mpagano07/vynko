@@ -22,6 +22,24 @@ simultaneas **nunca** ejecutan el mismo trabajo. Si la instancia muere con un
 trabajo tomado, el lock vence a los 15 minutos y la proxima pasada lo
 recupera.
 
+## Cadencia: tick diario (limite de Vercel Hobby)
+
+El plan Hobby solo admite crons de **una vez por dia** (una expresion como
+`*/5 * * * *` hace **fallar el deploy**), asi que el tick es diario a las
+**05:23 UTC**, justo despues de la reconciliacion de las 05:17: un trabajo que
+ese cron encola sale el mismo dia.
+
+Consecuencias a tener presentes:
+
+- El backoff (30 s, 60 s, ...) sigue calculando `run_after`, pero la cadencia
+  real es el tick: un trabajo vencido a las 05:24 sale a las 05:23 del dia
+  siguiente. Con 5 intentos, un tipo que siempre falla queda `dead` en ~5 dias.
+- Para no esperar 24 h se corre a mano con el `curl` de arriba: reclamar es
+  idempotente y `SKIP LOCKED` evita que dos corridas se pisen.
+- Si un dia hace falta mas de un tick (se subio a Pro, o hay un pinger
+  externo que llama al endpoint), solo cambia la expresion de `vercel.json`;
+  el endpoint no distingue quien lo llama, solo que traiga `CRON_SECRET`.
+
 ## Ciclo de vida
 
 ```
@@ -111,5 +129,5 @@ incidente corto: los trabajos esperan y salen en la proxima pasada.
 | `migrations/056_background_jobs.sql` | Tabla, índices, deny-all y `claim_background_jobs` |
 | `src/lib/job-queue.ts` | Encolar, reclamar, reintentos con backoff, despacho |
 | `src/lib/job-handlers.ts` | Handlers registrados |
-| `src/app/api/cron/process-jobs/route.ts` | La gorra (cron de `vercel.json`, cada 5 min) |
+| `src/app/api/cron/process-jobs/route.ts` | La gorra (cron diario de `vercel.json`, 05:23 UTC) |
 | `src/lib/job-queue.test.ts` | Cobertura del ciclo de vida |
