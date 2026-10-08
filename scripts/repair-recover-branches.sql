@@ -1,19 +1,40 @@
--- RECUPERACIÓN DE SUCURSALES BORRADAS (post-downgrade prematuro)
--- AVISO: Esto no recupera datos borrados (invitaciones/colaboradores). Solo recrea memberships de tenant_users para sucursales extra que fueron eliminadas.
--- 1) Obtener ramas que debería tener el owner (backup o listado conocido)
--- 2) Reemplazar a958da82-e8e7-4141-89c2-2c9ad92ea3e2 y TENANT_IDS_EXTRA
+
+-- RECUPERACI�N DE SUCURSALES BORRADAS (post-downgrade prematuro)
 BEGIN;
 
--- Ejemplo: restaurar membership para sucursales extra
-INSERT INTO tenant_users (tenant_id, user_id, role)
-SELECT '04c71cb4-0454-4bcc-8e5c-89cc6e779a69', 'a958da82-e8e7-4141-89c2-2c9ad92ea3e2', 'owner' WHERE NOT EXISTS (SELECT 1 FROM tenant_users WHERE tenant_id='04c71cb4-0454-4bcc-8e5c-89cc6e779a69' AND user_id='a958da82-e8e7-4141-89c2-2c9ad92ea3e2');
-INSERT INTO tenant_users (tenant_id, user_id, role)
-SELECT 'f4210c70-3c52-4e90-b804-0bd4d3db645a', 'a958da82-e8e7-4141-89c2-2c9ad92ea3e2', 'owner' WHERE NOT EXISTS (SELECT 1 FROM tenant_users WHERE tenant_id='f4210c70-3c52-4e90-b804-0bd4d3db645a' AND user_id='a958da82-e8e7-4141-89c2-2c9ad92ea3e2');
+-- Recrear/asegurar tenants de sucursales extra
+INSERT INTO tenants (
+  id,
+  name,
+  slug,
+  subscription_plan,
+  subscription_status,
+  subscription_current_period_end
+)
+VALUES
+  ('04c71cb4-0454-4bcc-8e5c-89cc6e779a69','Sucursal 04c71cb4','sucursal-04c71cb4','business','active',NULL),
+  ('4a666997-26ea-421d-bd3f-1ff10f4dffe8','Sucursal 4a666997','sucursal-4a666997','business','active',NULL),
+  ('8f3dab56-2668-489e-9242-7141fc2abac5','Sucursal 8f3dab56','sucursal-8f3dab56','business','active',NULL),
+  ('b7bbb554-6fa5-4bee-b292-66888f21e1d2','Sucursal b7bbb554','sucursal-b7bbb554','business','active',NULL),
+  ('bcee34c1-4a99-446b-b9b0-9b01e49b2511','Sucursal bcee34c1','sucursal-bcee34c1','business','active',NULL)
+ON CONFLICT (id) DO UPDATE
+SET subscription_plan='business', subscription_status='active';
 
--- Restaurar estado de suscripción de esas ramas también
-UPDATE tenants
-SET subscription_plan = 'business', subscription_status = 'active'
-WHERE id IN ('04c71cb4-0454-4bcc-8e5c-89cc6e779a69','f4210c70-3c52-4e90-b804-0bd4d3db645a')
-  AND subscription_status IN ('canceled','free','inactive');
+-- Asegurar memberships (owner) - corregir user_id cuando se confirme
+INSERT INTO tenant_users (tenant_id, user_id, role)
+SELECT t.id::uuid, 'REEMPLAZAR_USER_ID_CORRECTO'::uuid, 'owner'
+FROM (VALUES
+  ('04c71cb4-0454-4bcc-8e5c-89cc6e779a69'),
+  ('4a666997-26ea-421d-bd3f-1ff10f4dffe8'),
+  ('8f3dab56-2668-489e-9242-7141fc2abac5'),
+  ('b7bbb554-6fa5-4bee-b292-66888f21e1d2'),
+  ('bcee34c1-4a99-446b-b9b0-9b01e49b2511')
+) AS t(id)
+WHERE NOT EXISTS (
+  SELECT 1 FROM tenant_users tu
+  WHERE tu.tenant_id = t.id::uuid
+    AND tu.user_id = 'REEMPLAZAR_USER_ID_CORRECTO'::uuid
+);
 
 COMMIT;
+
