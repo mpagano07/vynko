@@ -4,6 +4,7 @@ import { isSameOriginRequest } from '@/lib/security/csrf';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { validatePassword } from '@/lib/password-policy';
 import { authErrorMessage } from '@/lib/auth-errors';
+import { logger } from '@/lib/logger';
 
 const MAX_CODE_LENGTH = 500;
 
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
     // navegador, donde no esta la cookie con el `code-verifier` que se creo al
     // pedir el email. El `code` es de un solo uso, asi que no hay forma de
     // recuperarlo: hay que pedir un link nuevo.
-    console.warn('Recovery code exchange failed:', exchangeError?.message);
+    logger.warn('Recovery code exchange failed:', { error: exchangeError?.message });
     return NextResponse.json({ error: 'Link inválido o expirado' }, { status: 400 });
   }
 
@@ -112,7 +113,7 @@ export async function POST(request: Request) {
     // entrar igual.
     const { error: signOutError } = await supabase.auth.signOut({ scope: 'global' });
     if (signOutError) {
-      console.error('Recovery signOut failed:', signOutError.message);
+      logger.error('Recovery signOut failed:', { error: signOutError.message });
     }
 
     return NextResponse.json({ success: true });

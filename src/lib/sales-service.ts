@@ -6,6 +6,7 @@ import { isPaymentMethodId, normalizeCheckoutSettings } from '@/lib/payment-meth
 import type { AuthInfo } from '@/lib/api-auth';
 import { trackEvent } from '@/lib/track-event';
 import { scheduleAfterBackground } from '@/lib/after-background';
+import { logger } from '@/lib/logger';
 
 type SalesQueryResult = { data?: unknown; total?: number; page?: number; limit?: number };
 type SalesQueryFailure = { ok: false; error: string };
@@ -57,7 +58,7 @@ export async function getSaleById(auth: AuthInfo, id: string): Promise<GetSaleRe
     .single();
 
   if (error) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 404 };
   }
 
@@ -103,8 +104,8 @@ export async function getMonthlySales(auth: AuthInfo): Promise<MonthlySalesResul
       getMonthTotals(scopeTenantIds, prevMonthStart),
     ]);
 
-    if (thisMonth.error) { console.error('DB error:', thisMonth.error); return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' }; }
-    if (prevMonth.error) { console.error('DB error:', prevMonth.error); return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' }; }
+    if (thisMonth.error) { logger.error('DB error', { error: thisMonth.error }); return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' }; }
+    if (prevMonth.error) { logger.error('DB error', { error: prevMonth.error }); return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' }; }
 
     const thisTotal = thisMonth.total / 100;
     const prevTotal = prevMonth.total / 100;
@@ -168,7 +169,7 @@ export async function getSalesSummary(auth: AuthInfo, daysParam: number): Promis
     };
     const { data: grouped, error } = res;
 
-    if (error) { console.error('DB error:', error); return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' }; }
+    if (error) { logger.error('DB error', { error }); return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' }; }
 
     const dailyTotals: Record<string, number> = {};
     for (let i = 0; i < days; i++) {
@@ -247,7 +248,7 @@ export async function getSalesMonthlySummary(auth: AuthInfo): Promise<SalesMonth
     };
     const { data: grouped, error } = res;
 
-    if (error) { console.error('DB error:', error); return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' }; }
+    if (error) { logger.error('DB error', { error }); return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' }; }
 
     const byMonth = new Map(buckets.map((b) => [b.month, b]));
     for (const row of (grouped ?? [])) {
@@ -289,7 +290,7 @@ export async function getTodaySales(auth: AuthInfo, tz: string): Promise<ListSal
 
   const { data: sales, error } = await query;
   if (error) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
   }
   return { ok: true, data: sales ?? [] };
@@ -330,7 +331,7 @@ export async function listSales(
 
   const { data: sales, error, count } = await query;
   if (error) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
   }
 
@@ -469,11 +470,11 @@ async function buildReplayResponse(
 
   const sale = saleRes.data as Record<string, unknown> | null;
   if (saleRes.error || !sale) {
-    console.error('replay: la venta de la clave no existe:', saleRes.error);
+    logger.error('replay: la venta de la clave no existe:', { error: saleRes.error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
   if (itemsRes.error || paymentsRes.error) {
-    console.error('replay: fallo al leer items/pagos:', itemsRes.error ?? paymentsRes.error);
+    logger.error('replay: fallo al leer items/pagos:', { error: itemsRes.error ?? paymentsRes.error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
 
@@ -508,7 +509,7 @@ export async function createSale(
   if (idemKey) {
     const { row, error } = await readIdempotencyKey(auth, idemKey);
     if (error) {
-      console.error('sale_idempotency_keys read:', error);
+      logger.error('sale_idempotency_keys read:', { error });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
     }
     if (row) {
@@ -582,7 +583,7 @@ export async function createSale(
   }
 
   if (prodError || stockError) {
-    console.error('DB error fetching products/stock:', prodError || stockError);
+    logger.error('DB error fetching products/stock:', { error: prodError || stockError });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
 
@@ -794,7 +795,7 @@ export async function createSale(
     if (createSaleError?.code === '23505' && idemKey && requestHash) {
       const { row: winner, error: winnerError } = await readIdempotencyKey(auth, idemKey);
       if (winnerError || !winner) {
-        console.error('replay por carrera:', winnerError ?? 'sin fila ganadora');
+        logger.error('replay por carrera:', { error: winnerError ?? 'sin fila ganadora' });
         throw new Error('Ocurrio un error inesperado. Intenta de nuevo.');
       }
       if (winner.request_hash !== requestHash) {
@@ -804,7 +805,7 @@ export async function createSale(
     }
 
     if (createSaleError) {
-      console.error('create_sale_atomic fallo:', createSaleError);
+      logger.error('create_sale_atomic fallo:', { error: createSaleError });
       // P0001 es el codigo de los `raise` de la funcion: son los unicos
       // mensajes armados en espanol que el usuario puede leer. Cualquier otro
       // codigo (permisos, deadlock, caida de red) es del servidor y mostrarlo
@@ -817,7 +818,7 @@ export async function createSale(
 
     const sale = createdSale as { id: string } | null;
     if (!sale?.id) {
-      console.error('create_sale_atomic no devolvio la venta:', createSaleError);
+      logger.error('create_sale_atomic no devolvio la venta:', { error: createSaleError });
       throw new Error('No se pudo registrar la venta');
     }
 

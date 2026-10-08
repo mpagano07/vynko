@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createServerSupabaseClient } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
 
 type SessionPayload = Record<string, unknown>;
 
@@ -41,7 +42,7 @@ export async function getSessionData(request: Request): Promise<{ ok: true; data
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (!userError) user = userData.user;
     } catch (error) {
-      console.error('Error resolving session from cookie:', error);
+      logger.error('Error resolving session from cookie:', { error });
     }
   }
 

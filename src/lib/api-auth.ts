@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { isSameOriginRequest } from '@/lib/security/csrf';
+import { enterLogContext, resolveRequestId } from '@/lib/log-context';
 
 export interface AuthInfo {
   tenantId: string;
@@ -10,6 +11,11 @@ export interface AuthInfo {
 }
 
 export async function getAuth(request?: Request): Promise<AuthInfo | null> {
+  // Contexto de log de este request. Se entra aca porque es el punto por el que
+  // pasa casi toda ruta autenticada: lo que se loguee despues (servicios, RPCs,
+  // `after()`) hereda `requestId`, `userId` y `tenantId` sin pasarselos a mano.
+  enterLogContext({ requestId: resolveRequestId(request) });
+
   // Las mutaciones se rechazan si el navegador las envía desde otro origen
   // (CSRF). Las cookies de sesión son SameSite=Lax, así que el POST
   // cross-site ya viaja sin credenciales; esto es la segunda barrera.
@@ -45,5 +51,6 @@ export async function getAuth(request?: Request): Promise<AuthInfo | null> {
     tenantId = activeTenantId;
   }
 
+  enterLogContext({ userId: user.id, tenantId, tenantIds });
   return { tenantId, userId: user.id, allTenants, tenantIds };
 }

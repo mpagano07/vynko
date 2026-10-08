@@ -5,6 +5,7 @@ import { authErrorMessage } from '@/lib/auth-errors';
 import { validatePassword } from '@/lib/password-policy';
 import { getInvitationAccountScope } from '@/lib/accept-invitations';
 import { rateLimit, rateLimitPeek } from '@/lib/rate-limit';
+import { logger } from '@/lib/logger';
 
 /** Intentos de fijar la contrasena por cuenta. */
 const MAX_SET_ATTEMPTS = 5;
@@ -96,7 +97,7 @@ export async function POST(request: Request) {
     // acaba de aceptar una invitacion, no alguien que la olvido. Y Ajustes no es
     // alcanzable para un `member` (ver el redirect por rol en esa pagina), asi
     // que mandarlo ahi lo expulsa de nuevo.
-    console.warn(
+    logger.warn(
       `invitation-password: ${user.id} tiene membresias ajenas a sus invitaciones; se rechaza`
     );
     return NextResponse.json(
@@ -133,7 +134,7 @@ export async function POST(request: Request) {
     // quedo cambiada y no se avisa error: el usuario tiene que poder entrar igual.
     const { error: signOutError } = await supabase.auth.signOut({ scope: 'global' });
     if (signOutError) {
-      console.error('Invitation signOut failed:', signOutError.message);
+      logger.error('Invitation signOut failed:', { error: signOutError.message });
     }
 
     return NextResponse.json({ success: true, allSessionsRevoked: true });

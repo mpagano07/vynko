@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { MercadoPagoConfig, PreApproval } from 'mercadopago';
+import { logger } from '@/lib/logger';
 
 let _client: MercadoPagoConfig | null = null;
 
@@ -50,11 +51,11 @@ export function verifyMercadoPagoSignature(request: Request, dataId?: string): b
   const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
   if (!secret) {
     if (process.env.NODE_ENV === 'production') {
-      console.error('MERCADOPAGO_WEBHOOK_SECRET is not configured in environment variables.');
+      logger.error('MERCADOPAGO_WEBHOOK_SECRET is not configured in environment variables');
       return false;
     }
     // In dev mode without secret, log warning but allow bypass
-    console.warn('MERCADOPAGO_WEBHOOK_SECRET is not set. Skipping signature verification in dev mode.');
+    logger.warn('MERCADOPAGO_WEBHOOK_SECRET is not set. Skipping signature verification in dev mode');
     return true;
   }
 
@@ -102,7 +103,7 @@ export function verifyMercadoPagoSignature(request: Request, dataId?: string): b
     }
     return crypto.timingSafeEqual(expected, received);
   } catch (err) {
-    console.error('Error verifying MercadoPago signature:', err);
+    logger.error('Error verifying MercadoPago signature:', { error: err });
     return false;
   }
 }

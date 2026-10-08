@@ -7,6 +7,7 @@ import { createActivityLog } from '@/lib/activity-log';
 import type { AuthInfo } from '@/lib/api-auth';
 import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
 import { trackEvent } from '@/lib/track-event';
+import { logger } from '@/lib/logger';
 
 export type PurchaseOrderResult<T = unknown> =
   | { ok: true; data: T; status: number }
@@ -90,7 +91,7 @@ export async function createPurchaseOrder(
       .in('id', productIds);
 
     if (prodError) {
-      console.error('DB error:', prodError);
+      logger.error('DB error:', { error: prodError });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
     }
 
@@ -165,7 +166,7 @@ export async function createPurchaseOrder(
       .single();
 
     if (poError) {
-      console.error('DB error:', poError);
+      logger.error('DB error:', { error: poError });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }
 
@@ -183,7 +184,7 @@ export async function createPurchaseOrder(
 
     if (itemsError) {
       await supabaseAdmin.from('purchase_orders').delete().eq('id', order.id);
-      console.error('DB error:', itemsError);
+      logger.error('DB error:', { error: itemsError });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }
 
@@ -269,7 +270,7 @@ export async function updatePurchaseOrder(
       .single();
 
     if (poError) {
-      console.error('DB error:', poError);
+      logger.error('DB error:', { error: poError });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }
 
@@ -309,7 +310,7 @@ export async function listPendingPurchaseOrders(auth: AuthInfo): Promise<Purchas
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
 
@@ -489,7 +490,7 @@ export async function receivePurchaseOrder(
     if (docError.code !== '23505') {
       await releaseCommercialDocumentNumber(auth.tenantId, 'remito_ingreso', nextNumber);
     }
-    console.error('DB error:', docError);
+    logger.error('DB error:', { error: docError });
   }
 
   if (!document) {
@@ -518,7 +519,7 @@ export async function receivePurchaseOrder(
 
   if (itemsError) {
     await compensateRemito();
-    console.error('DB error:', itemsError);
+    logger.error('DB error:', { error: itemsError });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
   }
 
@@ -552,7 +553,7 @@ export async function receivePurchaseOrder(
     if (receiveError.code === 'P0001') {
       return { ok: false, error: receiveError.message || 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }
-    console.error('receive_po_stock fallo:', receiveError);
+    logger.error('receive_po_stock fallo:', { error: receiveError });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
   }
 

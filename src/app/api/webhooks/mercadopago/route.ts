@@ -3,8 +3,13 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyMercadoPagoSignature } from '@/lib/mercadopago';
 import { processMercadoPagoWebhook } from '@/lib/mercadopago-webhook-service';
 import { parseWebhookPayload } from '@/lib/mercadopago-webhook-schema';
+import { logger } from '@/lib/logger';
+import { enterLogContext, resolveRequestId } from '@/lib/log-context';
 
 export async function POST(request: Request) {
+  // El webhook no pasa por getAuth: el contexto se entra aca para que cada log
+  // del procesamiento quede amarrado a la entrega de MercadoPago.
+  enterLogContext({ requestId: resolveRequestId(request), job: 'mercadopago-webhook' });
   // Clone the request to read the raw text for signature verification
   // while still being able to parse JSON afterwards.
   const cloned = request.clone();
@@ -31,7 +36,7 @@ export async function POST(request: Request) {
 
   const isValidSignature = verifyMercadoPagoSignature(request, id);
   if (!isValidSignature) {
-    console.error('Invalid MercadoPago webhook signature');
+    logger.error('Invalid MercadoPago webhook signature', { deliveryId: request.headers.get('x-request-id') });
     return NextResponse.json({ error: 'Unauthorized webhook request' }, { status: 401 });
   }
 
@@ -64,7 +69,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ received: true });
       }
     } catch (err) {
-      console.warn('webhook_events dedupe no disponible, se procesa igual:', err);
+      logger.warn('webhook_events dedupe no disponible, se procesa igual:', { error: err });
     }
   }
 

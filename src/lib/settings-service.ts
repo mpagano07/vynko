@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { normalizeCheckoutSettings, PAYMENT_METHODS, type CheckoutSettings } from '@/lib/payment-methods';
 import type { AuthInfo } from '@/lib/api-auth';
+import { logger } from '@/lib/logger';
 
 export type SettingsResult<T = unknown> =
   | { ok: true; data: T }
@@ -66,7 +67,7 @@ export async function updateCheckoutSettings(
     .eq('id', auth.tenantId);
 
   if (error) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
   }
 
@@ -103,7 +104,7 @@ export async function updateProfile(
     .single();
 
   if (error) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
   }
 
@@ -156,7 +157,7 @@ export async function updateTenantSettings(
     .single();
 
   if (error) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
   }
 

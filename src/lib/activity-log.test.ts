@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { createActivityLog } from './activity-log';
 import { supabaseMock } from '@/test/supabase-mock';
+import { findLog } from '@/test/log-output';
 
 vi.mock('@/lib/supabaseAdmin', async () => {
   const mod = await import('@/test/supabase-mock');
@@ -103,9 +104,12 @@ describe('activity-log', () => {
       entityType: 'product',
     });
 
-    expect(console.error).toHaveBeenCalledWith(
-      'Error creating activity log:',
-      { message: 'DB Error' }
-    );
+    const spy = vi.spyOn(console, 'error');
+    expect(findLog(spy, 'Error creating activity log')).toMatchObject({
+      level: 'error',
+      tenantId: 'tenant-1',
+      action: 'created',
+      error: { message: 'DB Error' },
+    });
   });
 });

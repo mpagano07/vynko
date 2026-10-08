@@ -11,6 +11,7 @@ import {
   LAST_SEEN_COOKIE_OPTIONS,
 } from '@/lib/session-policy';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { logger } from '@/lib/logger';
 
 const publicPaths = [
   '/login',
@@ -208,7 +209,7 @@ export async function proxy(request: NextRequest) {
     if (membershipError) {
       // Chequeo ambiguo: fail open y que el guard cliente (/api/session)
       // decida. Nunca mostrar el formulario ante un resultado indeterminado.
-      console.warn('proxy: onboarding gate membership check failed, failing open:', membershipError.message);
+      logger.warn('proxy: onboarding gate membership check failed, failing open:', { error: membershipError.message });
       return response;
     }
     if (!onboardingPending || tenantIds.length > 0) {
@@ -228,7 +229,7 @@ export async function proxy(request: NextRequest) {
   // El caso se resuelve en el guard de cliente, que decide sobre `/api/session`:
   // una segunda lectura, con la pagina ya cargada. Ahi expulsar es seguro.
   if (membershipError) {
-    console.warn('proxy: tenant_users check failed, failing open:', membershipError.message);
+    logger.warn('proxy: tenant_users check failed, failing open:', { error: membershipError.message });
   } else if (onboardingPending && (!tenantIds || tenantIds.length === 0)) {
     return redirectWithCookies(new URL('/onboarding', request.url));
   }

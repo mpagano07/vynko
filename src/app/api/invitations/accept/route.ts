@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { acceptInvitationsForUser } from '@/lib/accept-invitations';
 import { isSameOriginRequest } from '@/lib/security/csrf';
+import { logger } from '@/lib/logger';
 
 async function getAuthenticatedUser(request: Request) {
   const authHeader = request.headers.get('authorization');
@@ -58,7 +59,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ accepted });
   } catch (err) {
-    console.error('Error accepting invitations:', err);
+    logger.error('Error accepting invitations:', { error: err });
     return NextResponse.json({ accepted: 0 }, { status: 500 });
   }
 }

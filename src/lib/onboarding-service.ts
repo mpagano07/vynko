@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import { trackEvent } from '@/lib/track-event';
+import { logger } from '@/lib/logger';
 
 export type OnboardingResult<T = unknown> =
   | { ok: true; data: T }
@@ -115,7 +116,7 @@ export async function completeOnboarding(
     );
 
   if (tenantError) {
-    console.error('DB error:', tenantError);
+    logger.error('DB error:', { error: tenantError });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
 
@@ -133,7 +134,7 @@ export async function completeOnboarding(
   );
 
   if (profileError) {
-    console.error('DB error:', profileError);
+    logger.error('DB error:', { error: profileError });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
 
@@ -149,7 +150,7 @@ export async function completeOnboarding(
   );
 
   if (tenantUserError) {
-    console.error('DB error:', tenantUserError);
+    logger.error('DB error:', { error: tenantUserError });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
 

@@ -4,6 +4,7 @@ import { formatARS } from '@/lib/utils/currency';
 import { rateLimit } from '@/lib/rate-limit';
 import { fetchImageForAnalysis, ImageFetchError } from '@/lib/security/image-fetcher';
 import type { AuthInfo } from '@/lib/api-auth';
+import { logger } from '@/lib/logger';
 
 export type AiResult<T = unknown> =
   | { ok: true; data: T }
@@ -159,7 +160,7 @@ Consulta del usuario: ${message}`;
     const reply = result.response.text() || 'Lo siento, no pude procesar tu consulta.';
     return { ok: true, data: { reply } };
   } catch (err: unknown) {
-    console.error('Gemini chat error:', err instanceof Error ? err.message : 'unknown error');
+    logger.error('Gemini chat error:', { error: err instanceof Error ? err.message : 'unknown error' });
     return { ok: false, error: 'No se pudo procesar la consulta con el asistente de IA.', status: 500 };
   }
 }
@@ -338,7 +339,7 @@ Si no se ve una góndola o productos en la imagen, devolvé un JSON con descript
       },
     };
   } catch (err: unknown) {
-    console.error('Gemini Vision error:', err instanceof Error ? err.message : 'unknown error');
+    logger.error('Gemini Vision error:', { error: err instanceof Error ? err.message : 'unknown error' });
     return { ok: false, error: 'Error al analizar la imagen con IA', status: 500 };
   }
 }

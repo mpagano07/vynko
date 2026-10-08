@@ -11,6 +11,7 @@ import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
 import { trackEvent } from '@/lib/track-event';
 import { rateLimit } from '@/lib/rate-limit';
 import { MAX_IMPORT_ROWS } from '@/lib/excel-import-parse';
+import { logger } from '@/lib/logger';
 
 export type ListProductsResult =
   | { ok: true; products: Array<Record<string, unknown>> }
@@ -143,7 +144,7 @@ export async function listProducts(auth: AuthInfo): Promise<ListProductsResult> 
   q = q.eq('product_stock.active', true);
   const { data, error } = await q;
   if (error) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
   }
   const products = data?.map((p) => ({
@@ -212,7 +213,7 @@ export async function createProduct(auth: AuthInfo, body: Record<string, unknown
     .insert(insertData)
     .select();
   if (error) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
   }
   const created = data?.[0];
@@ -231,7 +232,7 @@ export async function createProduct(auth: AuthInfo, body: Record<string, unknown
       });
     if (stockError) {
       await supabaseAdmin.from('products').delete().eq('id', created.id);
-      console.error('DB error:', stockError);
+      logger.error('DB error:', { error: stockError });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }
 
@@ -329,7 +330,7 @@ export async function updateProduct(auth: AuthInfo, id: string, body: Record<str
       .single();
 
     if (error) {
-      console.error('DB error:', error);
+      logger.error('DB error:', { error });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }
     if (!data) {
@@ -365,7 +366,7 @@ export async function updateProduct(auth: AuthInfo, id: string, body: Record<str
         }, { onConflict: 'product_id,tenant_id' });
 
       if (stockError) {
-        console.error('DB error:', stockError);
+        logger.error('DB error:', { error: stockError });
         return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
       }
 
@@ -385,7 +386,7 @@ export async function updateProduct(auth: AuthInfo, id: string, body: Record<str
             .from('stock_history')
             .insert(movement);
           if (histError) {
-            console.error('stock_history insert error:', JSON.stringify(histError));
+            logger.error('stock_history insert error:', { error: JSON.stringify(histError) });
           }
         }
       }
@@ -527,7 +528,7 @@ async function resolveCategory(
   // producto, que es un error de datos silencioso y no una categoria creada.
   const createdId = created?.id;
   if (error || !createdId) {
-    console.error('importProducts: no se pudo crear la categoría', name.trim(), JSON.stringify(error));
+    logger.error('importProducts: no se pudo crear la categoría', { categoria: name.trim(), error });
     return null;
   }
   // Se guarda en el indice para que las filas siguientes del mismo archivo
@@ -784,7 +785,7 @@ export async function prepareImport(
   } catch (error) {
     // Si una lectura falla, todavía no se escribió nada: es el mejor momento
     // para abortar el import entero en vez de seguir a medias.
-    console.error('importProducts: fallo una lectura previa', error);
+    logger.error('importProducts: fallo una lectura previa', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
 
@@ -897,7 +898,7 @@ const execute = async (onProgress?: ImportProgressCallback) => {
             .from('products')
             .insert({ id: item.id, ...item.candidate.productData });
           if (rowError) {
-            console.error('importProducts fila', item.candidate.row, 'error de base:', JSON.stringify(rowError));
+            logger.error('importProducts fila', { fila: item.candidate.row, etapa: 'error de base', error: rowError });
             slots[item.candidate.index] = {
               row: item.candidate.row,
               status: 'skipped',
@@ -927,7 +928,7 @@ const execute = async (onProgress?: ImportProgressCallback) => {
           })),
         );
         if (stockError) {
-          console.error('importProducts: fallo el stock de un lote', JSON.stringify(stockError));
+          logger.error('importProducts: fallo el stock de un lote', { error: JSON.stringify(stockError) });
         }
 
         // Un `buildStockMovement` que tira (un bug de código, no un dato) deja
@@ -948,7 +949,7 @@ const execute = async (onProgress?: ImportProgressCallback) => {
                 }),
               );
             } catch (err) {
-              console.error('importProducts fila', item.candidate.row, 'error:', err);
+              logger.error('importProducts fila', { fila: item.candidate.row, error: err });
               slots[item.candidate.index] = {
                 row: item.candidate.row,
                 status: 'skipped',
@@ -966,7 +967,7 @@ const execute = async (onProgress?: ImportProgressCallback) => {
         if (movements.length > 0) {
           const { error: historyError } = await supabaseAdmin.from('stock_history').insert(movements);
           if (historyError) {
-            console.error('importProducts: fallo el historial de un lote', JSON.stringify(historyError));
+            logger.error('importProducts: fallo el historial de un lote', { error: JSON.stringify(historyError) });
           }
         }
         saved = createdItems;
@@ -997,7 +998,7 @@ const execute = async (onProgress?: ImportProgressCallback) => {
         .eq('id', item.id);
 
       if (error) {
-        console.error('importProducts fila', candidate.row, 'error de base:', JSON.stringify(error));
+        logger.error('importProducts fila', { fila: candidate.row, etapa: 'error de base', error });
         slots[candidate.index] = {
           row: candidate.row,
           status: 'skipped',
@@ -1104,7 +1105,7 @@ async function insertStockMovement(
   });
   const { error } = await supabaseAdmin.from('stock_history').insert(movement);
   if (error) {
-    console.error('stock_history insert error:', JSON.stringify(error));
+    logger.error('stock_history insert error:', { error: JSON.stringify(error) });
   }
 }
 
@@ -1173,7 +1174,7 @@ export async function adjustProductStock(auth: AuthInfo, id: string, body: {
   });
 
   if (rpcError) {
-    console.error('adjust_stock_atomic fallo:', rpcError);
+    logger.error('adjust_stock_atomic fallo:', { error: rpcError });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
 
@@ -1234,7 +1235,7 @@ export async function adjustPrices(auth: AuthInfo, body: {
     .in('tenant_id', scopeTenantIds);
 
   if (stockError) {
-    console.error('DB error:', stockError);
+    logger.error('DB error:', { error: stockError });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
 
@@ -1259,7 +1260,7 @@ export async function adjustPrices(auth: AuthInfo, body: {
   const { data: products, error: fetchError } = await productsQuery;
 
   if (fetchError) {
-    console.error('DB error:', fetchError);
+    logger.error('DB error:', { error: fetchError });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
   if (!products || products.length === 0) {
@@ -1332,7 +1333,7 @@ export async function getCriticalProducts(auth: AuthInfo): Promise<CriticalProdu
     const { data: products, error } = await productsQuery;
 
     if (error) {
-      console.error('DB error:', error);
+      logger.error('DB error:', { error });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
     }
 
@@ -1496,7 +1497,7 @@ export async function lookupProductByCode(auth: AuthInfo, code: string): Promise
 
   let { data, error } = await lookupByBarcode();
   if (error) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
   }
   if (!data) {
@@ -1504,7 +1505,7 @@ export async function lookupProductByCode(auth: AuthInfo, code: string): Promise
     data = result.data;
     error = result.error;
     if (error) {
-      console.error('DB error:', error);
+      logger.error('DB error:', { error });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
     }
   }

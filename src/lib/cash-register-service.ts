@@ -4,6 +4,7 @@ import { createActivityLog } from '@/lib/activity-log';
 import { PAYMENT_METHODS, type PaymentMethodId } from '@/lib/payment-methods';
 import type { AuthInfo } from '@/lib/api-auth';
 import { trackEvent } from '@/lib/track-event';
+import { logger } from '@/lib/logger';
 
 export type CashRegisterResult<T> =
   | { ok: true; data: T; status: number }
@@ -126,7 +127,7 @@ export async function openCashRegister(auth: AuthInfo, body: { initial_fund?: nu
     .single();
 
   if (error || !session) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
   }
 
@@ -215,7 +216,7 @@ export async function closeCashRegister(
     .single();
 
   if (error || !updated) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
   }
 
@@ -288,7 +289,7 @@ export async function recordCashMovement(
     .single();
 
   if (error || !movement) {
-    console.error('DB error:', error);
+    logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
   }
 

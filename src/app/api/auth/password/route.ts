@@ -4,6 +4,7 @@ import { isSameOriginRequest } from '@/lib/security/csrf';
 import { authErrorMessage } from '@/lib/auth-errors';
 import { validatePassword, PASSWORD_MAX_LENGTH } from '@/lib/password-policy';
 import { rateLimit, rateLimitPeek, getClientIp } from '@/lib/rate-limit';
+import { logger } from '@/lib/logger';
 
 /**
  * Intentos fallidos de verificacion de la contrasena actual, por sesion.
@@ -128,7 +129,7 @@ export async function POST(request: Request) {
   // justo lo que se espera despues de cambiar una contrasena.
   const { error: signOutError } = await supabase.auth.signOut({ scope: 'global' });
   if (signOutError) {
-    console.error('Password change signOut failed:', signOutError.message);
+    logger.error('Password change signOut failed:', { error: signOutError.message });
   }
 
   return NextResponse.json({ success: true, allSessionsRevoked: true });

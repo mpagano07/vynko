@@ -4,6 +4,7 @@ import { getForecast } from '@/lib/forecast';
 import { rateLimit } from '@/lib/rate-limit';
 import { fixResponse } from '@/lib/utils/encoding';
 import { trackEvent } from '@/lib/track-event';
+import { logger } from '@/lib/logger';
 
 export async function GET(request: Request) {
   const auth = await getAuth(request);
@@ -32,7 +33,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(fixResponse(payload));
   } catch (err) {
-    console.error('Forecast error:', err);
+    logger.error('Forecast error:', { error: err });
     return NextResponse.json({ error: 'Ocurrio un error inesperado. Intenta de nuevo.' }, { status: 500 });
   }
 }

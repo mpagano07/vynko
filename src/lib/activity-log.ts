@@ -1,4 +1,5 @@
 import { supabaseAdmin } from './supabaseAdmin';
+import { logger } from '@/lib/logger';
 
 export async function createActivityLog(params: {
   tenantId: string;
@@ -22,7 +23,7 @@ export async function createActivityLog(params: {
       details: params.details || {},
     });
 
-  if (error) console.error('Error creating activity log:', error);
+  if (error) logger.error('Error creating activity log', { tenantId: params.tenantId, action: params.action, error });
 }
 
 async function resolveUserName(userId: string): Promise<string> {

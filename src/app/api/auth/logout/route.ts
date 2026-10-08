@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { isSameOriginRequest } from '@/lib/security/csrf';
 import { LAST_SEEN_COOKIE, LAST_SEEN_COOKIE_OPTIONS } from '@/lib/session-policy';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
   } catch (error) {
     // El logout es idempotente: si la sesion ya estaba caida, el usuario igual
     // queda deslogueado del lado del cliente. No hace falta fallar el request.
-    console.error('Error in POST /api/auth/logout:', error);
+    logger.error('Error in POST /api/auth/logout:', { error });
   }
 
   const response = NextResponse.json({ success: true });

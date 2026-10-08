@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { AuthInfo } from '@/lib/api-auth';
 import type { PlanId } from '@/lib/plans';
+import { logger } from '@/lib/logger';
 
 export type CollaboratorResult =
   | { ok: true; body: unknown; status: number }
@@ -109,7 +110,7 @@ export async function listCollaborators(auth: AuthInfo): Promise<CollaboratorRes
       status: 200,
     };
   } catch (err) {
-    console.error('Error listing collaborators:', err);
+    logger.error('Error listing collaborators:', { error: err });
     return { ok: false, error: 'Internal server error', status: 500 };
   }
 }
@@ -199,7 +200,7 @@ export async function addCollaborator(
             .from('tenant_users')
             .insert({ tenant_id: tid, user_id: existingProfile.id, role: assignRole });
           if (insertError) {
-            console.error(`Error adding to tenant ${tid}:`, insertError);
+            logger.error(`Error adding to tenant ${tid}:`, { error: insertError });
           }
         }
       }
@@ -296,7 +297,7 @@ export async function addCollaborator(
     );
 
     if (inviteError) {
-      console.error('DB error:', inviteError);
+      logger.error('DB error:', { error: inviteError });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
     }
 
@@ -315,7 +316,7 @@ export async function addCollaborator(
       },
     };
   } catch (err) {
-    console.error('Error adding collaborator:', err);
+    logger.error('Error adding collaborator:', { error: err });
     return { ok: false, error: 'Internal server error', status: 500 };
   }
 }
@@ -392,7 +393,7 @@ export async function updateCollaborator(
         .in('tenant_id', toRemoveTenantIds)
         .neq('role', 'owner');
       if (error) {
-        console.error('DB error:', error);
+        logger.error('DB error:', { error });
         return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
       }
     }
@@ -406,7 +407,7 @@ export async function updateCollaborator(
           role: newRole,
         })));
       if (error) {
-        console.error('DB error:', error);
+        logger.error('DB error:', { error });
         return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
       }
     }
@@ -419,13 +420,13 @@ export async function updateCollaborator(
       .neq('role', 'owner');
 
     if (updateError) {
-      console.error('DB error:', updateError);
+      logger.error('DB error:', { error: updateError });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }
 
     return { ok: true, body: { success: true }, status: 200 };
   } catch (err) {
-    console.error('Error editing collaborator:', err);
+    logger.error('Error editing collaborator:', { error: err });
     return { ok: false, error: 'Internal server error', status: 500 };
   }
 }
@@ -460,13 +461,13 @@ export async function deleteCollaborator(auth: AuthInfo, id: string): Promise<Co
       .neq('role', 'owner');
 
     if (error) {
-      console.error('DB error:', error);
+      logger.error('DB error:', { error });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }
 
     return { ok: true, body: { success: true }, status: 200 };
   } catch (err) {
-    console.error('Error removing collaborator:', err);
+    logger.error('Error removing collaborator:', { error: err });
     return { ok: false, error: 'Internal server error', status: 500 };
   }
 }

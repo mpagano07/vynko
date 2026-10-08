@@ -1,4 +1,5 @@
-﻿import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { logger } from '@/lib/logger';
 
 /**
  * Como termino un evento desde nuestro lado. Debe coincidir con el CHECK de
@@ -52,9 +53,9 @@ export async function recordWebhookEvent(input: WebhookLogInput): Promise<void> 
 
     // PostgREST devuelve el error en el resultado, no lo lanza.
     if (error) {
-      console.error('[webhook_events] no se pudo registrar el evento:', error);
+      logger.error('[webhook_events] no se pudo registrar el evento:', { error });
     }
   } catch (err) {
-    console.error('[webhook_events] fallo inesperado al registrar:', err);
+    logger.error('[webhook_events] fallo inesperado al registrar:', { error: err });
   }
 }

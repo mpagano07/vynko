@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { rateLimit, rateLimitPeek, getClientIp } from '@/lib/rate-limit';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { isSameOriginRequest } from '@/lib/security/csrf';
+import { logger } from '@/lib/logger';
 
 const MAX_FAILED_ATTEMPTS = 5;
 /**
@@ -75,7 +76,7 @@ export async function POST(request: Request) {
       rateLimit(ipKey, MAX_FAILED_ATTEMPTS_PER_IP, WINDOW_MS),
       rateLimit(accountKey, MAX_FAILED_ATTEMPTS, WINDOW_MS),
     ]);
-    console.warn(`Login failed for ${normalizedEmail}: ${error.message}`);
+    logger.warn(`Login failed for ${normalizedEmail}`, { error: error.message, code: error.code });
 
     // Un unico caso se distingue del resto: cuando el email existe pero todavia
     // no esta verificado. Decirlo no revela si la cuenta esta registrada (el

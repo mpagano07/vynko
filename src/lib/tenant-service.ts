@@ -3,6 +3,7 @@ import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import type { AuthInfo } from '@/lib/api-auth';
 import { canManageTenant } from '@/lib/membership-role';
+import { logger } from '@/lib/logger';
 
 export type TenantResult<T = unknown> =
   | { ok: true; data: T }
@@ -101,7 +102,7 @@ export async function createTenant(
     .insert(insertData);
 
   if (tenantError) {
-    console.error('DB error:', tenantError);
+    logger.error('DB error:', { error: tenantError });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
 
@@ -114,7 +115,7 @@ export async function createTenant(
     });
 
   if (tenantUserError) {
-    console.error('DB error:', tenantUserError);
+    logger.error('DB error:', { error: tenantUserError });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
 

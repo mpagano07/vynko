@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { updateProfile } from '@/lib/settings-service';
+import { logger } from '@/lib/logger';
 
 export async function PATCH(request: Request) {
   try {
@@ -17,7 +18,7 @@ export async function PATCH(request: Request) {
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
     return NextResponse.json(result.data);
   } catch (err) {
-    console.error('Error updating profile:', err);
+    logger.error('Error updating profile:', { error: err });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

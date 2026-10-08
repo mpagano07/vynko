@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import type { AnalyticsEventType } from '@/lib/track-event';
+import { logger } from '@/lib/logger';
 
 /**
  * Orden del embudo. Solo entran los eventos que son PUERTAS: para llegar al
@@ -85,7 +86,7 @@ export async function getAdminAnalytics(): Promise<AdminAnalyticsResult> {
       // devuelve un error en vez de un embudo en ceros: un panel que dice
       // "0 registros" cuando en realidad no se puede leer la tabla es peor
       // que un panel que dice que falta aplicar la migracion.
-      console.error(`[analytics] no se pudo leer ${name}:`, result.error.message);
+      logger.error(`[analytics] no se pudo leer ${name}:`, { error: result.error.message });
       return {
         ok: false,
         error: `Falta aplicar la migracion 040 (${name} no existe)`,
