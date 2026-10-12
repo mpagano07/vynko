@@ -1,0 +1,34 @@
+name: Keepalive
+
+# En repos PUBLICOS, GitHub desactiva los workflows con `schedule` (como el
+# backup diario) tras 60 dias sin actividad en el repo.
+#
+# En lugar de crear commits dummy (que chocan con branch protection en `main`),
+# este workflow usa la API para "re-habilitar" los workflows programados:
+# habilitar un workflow resetea el contador de inactividad de 60 dias. No crea
+# commits, asi que no toca branch protection ni dispara CI.
+#
+# En repos privados es innecesario: se puede borrar.
+
+on:
+  schedule:
+    # 1ro de cada mes a las 04:00 UTC.
+    - cron: '0 4 1 * *'
+  workflow_dispatch:
+
+# `actions: write` alcanza para llamar al endpoint de habilitar workflows.
+permissions:
+  actions: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Re-enable scheduled workflows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for wf in backup.yml keepalive.yml; do
+            echo "Habilitando $wf"
+            gh workflow enable "$wf" --repo "$GITHUB_REPOSITORY"
+          done

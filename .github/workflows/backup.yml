@@ -1,15 +1,20 @@
 name: Backup de produccion
 
-# Backup diario de la base de PROD con verificacion (dump + manifiesto +
-# conteos por tabla). El mismo script se puede correr a mano con
-# `.\scripts\backup-db.ps1` (ver docs/continuity.md).
+# Backup diario con verificacion + almacenamiento offsite.
+#
+# Corre el backup (roles + schema + data) mediante scripts/backup-db.ps1, lo
+# cifra con age y lo publica como GitHub Release (retencion indefinida) para no
+# depender del backup pago de Supabase ni de la retencion de 30 dias de los
+# artifacts.
 #
 # Opt-in: si no hay secret PROD_DB_URL el workflow se saltea y no falla el CI
 # (GitHub no permite `secrets` adentro de un `if:` a nivel de job, por eso el
-# chequeo pasa por un paso intermedio con output).
+# chequeo pasa por un paso intermedio con output). Si falta AGE_RECIPIENT solo
+# se omite el cifrado + Release, no el backup.
 #
-# Los dumps contienen datos de clientes: el artifact vive 30 dias y lo ve
-# solo quien tiene acceso al repo.
+# IMPORTANTE: el repo es PUBLICO. Los dumps contienen datos de clientes, por eso
+# NO se suben en claro: el unico destino es el Release cifrado con age (la clave
+# privada vive fuera del repo). Nunca agregar un upload-artifact con los .sql.
 
 on:
   schedule:
@@ -17,12 +22,15 @@ on:
     - cron: '30 3 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   backup:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check backup secret
+      - name: Check backup secrets
         id: backup-secret
         run: |
           if [ -n "$PROD_DB_URL" ]; then
@@ -30,8 +38,14 @@ jobs:
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
           fi
+          if [ -n "$AGE_RECIPIENT" ]; then
+            echo "has_age=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_age=false" >> "$GITHUB_OUTPUT"
+          fi
         env:
           PROD_DB_URL: ${{ secrets.PROD_DB_URL }}
+          AGE_RECIPIENT: ${{ secrets.AGE_RECIPIENT }}
 
       - name: Checkout
         if: steps.backup-secret.outputs.configured == 'true'
@@ -47,13 +61,18 @@ jobs:
         if: steps.backup-secret.outputs.configured == 'true'
         run: npm install -g supabase
 
+      # psql para el restore test (solo si hay DEV_DB_URL) y age para cifrar.
+      - name: Install psql and age
+        if: steps.backup-secret.outputs.configured == 'true'
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client age
+
       # El script lee .env.db (ignorado por git), igual que en local.
       - name: Write .env.db
         if: steps.backup-secret.outputs.configured == 'true'
         env:
           PROD_DB_URL: ${{ secrets.PROD_DB_URL }}
           # Con DEV_DB_URL ademas se verifica el RESTORE en una base scratch:
-          # sin ella solo se valida la estructura del dump.
+          # sin ella solo se valida la estructura de los dumps.
           DEV_DB_URL: ${{ secrets.DEV_DB_URL }}
         run: |
           {
@@ -66,11 +85,28 @@ jobs:
         shell: pwsh
         run: ./scripts/backup-db.ps1
 
-      - name: Upload dump
-        if: steps.backup-secret.outputs.configured == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: vynko-backup-${{ github.run_id }}
-          path: scripts/dumps/*
-          retention-days: 30
-          if-no-files-found: error
+      - name: Encrypt and package
+        id: encrypt
+        if: steps.backup-secret.outputs.configured == 'true' && steps.backup-secret.outputs.has_age == 'true'
+        env:
+          AGE_RECIPIENT: ${{ secrets.AGE_RECIPIENT }}
+        run: |
+          ts="$(date -u +%Y%m%d-%H%M%S)"
+          echo "ts=$ts" >> "$GITHUB_OUTPUT"
+          mkdir -p release
+          tar -C scripts/dumps -czf "release/vynko-backup-$ts.tar.gz" .
+          age -r "$AGE_RECIPIENT" -o "release/vynko-backup-$ts.tar.gz.age" "release/vynko-backup-$ts.tar.gz"
+          rm -f "release/vynko-backup-$ts.tar.gz"
+          sha256sum "release/vynko-backup-$ts.tar.gz.age" > "release/vynko-backup-$ts.tar.gz.age.sha256"
+          sha256sum --check "release/vynko-backup-$ts.tar.gz.age.sha256"
+
+      - name: Publish encrypted backup as GitHub Release
+        if: steps.backup-secret.outputs.configured == 'true' && steps.backup-secret.outputs.has_age == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ts="${{ steps.encrypt.outputs.ts }}"
+          gh release create "backup-$ts" \
+            --title "Backup $ts" \
+            --notes "Backup automatico cifrado con age. Contenido: roles.sql, schema.sql, data.sql y manifest.json (tar.gz)." \
+            release/*.age release/*.age.sha256

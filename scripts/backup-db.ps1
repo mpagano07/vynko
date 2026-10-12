@@ -1,22 +1,28 @@
 #Requires -Version 5.1
 # =============================================================================
 # backup-db.ps1
-# Backup con verificacion de la base de PROD (public) via la CLI de Supabase.
+# Backup con verificacion de la base de PROD via la CLI de Supabase.
 #
-#   - Dump completo (schema + datos) a scripts/dumps/vynko-backup-<ts>.sql
-#   - Manifiesto JSON al lado: conteo de filas por tabla + SHA256 del dump.
-#   - Verificacion estructural: el dump no esta vacio y trae CREATE TABLE.
-#   - Verificacion de restore (opt-in): aplica el dump a una base de scratch y
-#     compara los conteos con el manifiesto. Eso prueba que el backup SIRVE
-#     para recuperar, no solo que se escribio.
+#   - Tres dumps (metodo oficial de Supabase para restore completo):
+#       roles.sql   -> --role-only (roles custom; no incluye passwords)
+#       schema.sql  -> DDL del schema public
+#       data.sql    -> --data-only --use-copy (incluye auth.users; excluye las
+#                      tablas vector de storage)
+#   - Manifiesto JSON al lado: SHA256 + tamano de cada archivo y conteo de
+#     filas por tabla (public.* + auth.users).
+#   - Verificacion estructural: los dumps no estan vacios y traen lo esperado.
+#   - Verificacion de restore (opt-in): aplica los 3 dumps a una base de scratch
+#     con `psql --single-transaction` y compara los conteos con el manifiesto.
+#     Eso prueba que el backup SIRVE para recuperar, no solo que se escribio.
 #
 # Uso:
 #   1) Crear ".env.db" en la raiz del repo (ver scripts/.env.db.example) con
 #      PROD_DB_URL y, para verificar restore, DEV_DB_URL (o pasar -RestoreUrl).
 #   2) .\scripts\backup-db.ps1 [-RestoreUrl <db-url>]
 #
-# Requisitos: CLI de Supabase (npm i -g supabase) - aunque solo para dumps
-# remotos; no necesita Docker ni login.
+# Requisitos: CLI de Supabase (npm i -g supabase) para los dumps y, para el
+# restore test, el cliente `psql` (solo con -RestoreUrl/DEV_DB_URL). No
+# necesita Docker ni login.
 # =============================================================================
 
 param(
@@ -29,6 +35,7 @@ $ErrorActionPreference = 'Stop'
 function Write-Step([string]$msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 function Write-Err([string]$msg) { Write-Host "    $msg" -ForegroundColor Red }
 function Write-Ok([string]$msg) { Write-Host "    $msg" -ForegroundColor Green }
+function Write-Warn([string]$msg) { Write-Host "    $msg" -ForegroundColor Yellow }
 
 function Invoke-Supabase {
     param([string[]]$CliArgs)
@@ -108,15 +115,32 @@ function ConvertTo-EncodedDbUrl {
     return $scheme + [Uri]::EscapeDataString($user) + ':' + [Uri]::EscapeDataString($pass) + '@' + $hostPart + $tail
 }
 
-function Get-RowCounts {
-    param([string]$Url)
-    $tables = @(Invoke-DbQueryJson -Url $Url -Sql "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' AND table_name <> 'schema_migrations' ORDER BY table_name;" | ForEach-Object { [string]$_.table_name })
-    if ($tables.Count -eq 0) { return @{} }
-    $countSql = ($tables | ForEach-Object { "SELECT '$_' AS tbl, count(*)::bigint AS rows FROM public.`"$_`"" }) -join "`nUNION ALL`n"
+# Devuelve un [ordered] con "<clave>" -> conteo, a partir de un mapa
+# "<clave>" -> "<identificador SQL calificado>".
+function Get-TableCounts {
+    param([string]$Url, [System.Collections.Specialized.OrderedDictionary]$Targets)
+    if ($Targets.Count -eq 0) { return [ordered]@{} }
+    $countSql = ($Targets.GetEnumerator() | ForEach-Object { "SELECT '$($_.Key)' AS tbl, count(*)::bigint AS rows FROM $($_.Value)" }) -join "`nUNION ALL`n"
     $countSql += ';'
-    $counts = @{}
+    $counts = [ordered]@{}
     foreach ($r in @(Invoke-DbQueryJson -Url $Url -Sql $countSql)) { $counts[[string]$r.tbl] = [int64]$r.rows }
     return $counts
+}
+
+# Tablas a contar para el manifiesto: public.* (sin schema_migrations) + auth.users.
+function Get-CountTargets {
+    param([string]$Url)
+    $targets = [ordered]@{}
+    $pubTables = @(Invoke-DbQueryJson -Url $Url -Sql "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' AND table_name <> 'schema_migrations' ORDER BY table_name;" | ForEach-Object { [string]$_.table_name })
+    foreach ($t in $pubTables) { $targets["public.$t"] = "public.`"$t`"" }
+    # auth.users puede no existir / no ser accesible segun el rol: se conta aparte.
+    try {
+        $probe = @(Invoke-DbQueryJson -Url $Url -Sql "SELECT count(*)::bigint AS rows FROM auth.users;")
+        if ($probe.Count -gt 0) { $targets['auth.users'] = 'auth."users"' }
+    } catch {
+        Write-Warn 'No se pudo contar auth.users (sin permiso o tabla ausente); queda fuera del manifiesto.'
+    }
+    return $targets
 }
 
 # -----------------------------------------------------------------------------
@@ -150,65 +174,119 @@ $restoreTarget = ''
 if ($RestoreUrl) { $restoreTarget = ConvertTo-EncodedDbUrl $RestoreUrl }
 elseif ($envVars['DEV_DB_URL']) { $restoreTarget = ConvertTo-EncodedDbUrl $envVars['DEV_DB_URL'] }
 
+if ($restoreTarget -and !(Get-Command psql -ErrorAction SilentlyContinue)) {
+    Write-Host 'El restore test necesita el cliente psql.' -ForegroundColor Red
+    Write-Host '  Instalalo (PostgreSQL client tools) o corre de nuevo sin -RestoreUrl/DEV_DB_URL.' -ForegroundColor Yellow
+    exit 1
+}
+
 Write-Host '==> Preflight OK' -ForegroundColor Green
 
 # -----------------------------------------------------------------------------
-# 1) Dump
+# 1) Dumps (roles + schema + data)
 # -----------------------------------------------------------------------------
-Write-Step '1/4 Dumping public (schema + datos)'
+Write-Step '1/5 Dumping roles, schema y data'
 $ts = Get-Date -Format 'yyyyMMdd-HHmmss'
 $dumpDir = Join-Path $PSScriptRoot 'dumps'
 New-Item -ItemType Directory -Path $dumpDir -Force | Out-Null
-$dumpFile = Join-Path $dumpDir "vynko-backup-$ts.sql"
-$manifestFile = Join-Path $dumpDir "vynko-backup-$ts.manifest.json"
+$prefix = "vynko-backup-$ts"
+$rolesFile = Join-Path $dumpDir "$prefix.roles.sql"
+$schemaFile = Join-Path $dumpDir "$prefix.schema.sql"
+$dataFile = Join-Path $dumpDir "$prefix.data.sql"
+$manifestFile = Join-Path $dumpDir "$prefix.manifest.json"
 
-Invoke-Supabase @('db', 'dump', '--db-url', $prodUrl, '--schema', 'public', '-f', $dumpFile)
-$dumpText = Get-Content -LiteralPath $dumpFile -Raw
-if ([string]::IsNullOrWhiteSpace($dumpText)) {
-    Write-Err 'El dump quedo vacio. Abortando.'
-    exit 1
+# roles: solo roles custom; no incluye passwords (hay que resetearlas luego).
+Invoke-Supabase @('db', 'dump', '--db-url', $prodUrl, '--role-only', '-f', $rolesFile)
+# schema: DDL del schema public (excluye schemas gestionados).
+Invoke-Supabase @('db', 'dump', '--db-url', $prodUrl, '--schema', 'public', '-f', $schemaFile)
+# data: datos de todas las tablas (incluye auth.users) salvo las vector de storage.
+Invoke-Supabase @('db', 'dump', '--db-url', $prodUrl, '--data-only', '--use-copy', '-x', 'storage.buckets_vectors', '-x', 'storage.vector_indexes', '-f', $dataFile)
+
+$files = [ordered]@{ roles = $rolesFile; schema = $schemaFile; data = $dataFile }
+foreach ($k in $files.Keys) {
+    $p = $files[$k]
+    $len = if (Test-Path -LiteralPath $p) { (Get-Item -LiteralPath $p).Length } else { 0 }
+    if ($len -eq 0) {
+        Write-Err "El dump '$k' quedo vacio ($p). Abortando."
+        exit 1
+    }
+    Write-Ok "$k -> $([System.IO.Path]::GetFileName($p)) ($([Math]::Round($len / 1KB, 1)) KB)"
 }
-$sizeKb = [Math]::Round((Get-Item -LiteralPath $dumpFile).Length / 1KB, 1)
-Write-Ok "Dump escrito: $dumpFile ($sizeKb KB)"
 
 # -----------------------------------------------------------------------------
-# 2) Manifiesto: conteos por tabla + SHA256
+# 2) Manifiesto: SHA256 + tamano por archivo, conteos por tabla
 # -----------------------------------------------------------------------------
-Write-Step '2/4 Generando manifiesto (conteos + checksum)'
-$counts = Get-RowCounts -Url $prodUrl
-$sha = (Get-FileHash -LiteralPath $dumpFile -Algorithm SHA256).Hash.ToLowerInvariant()
+Write-Step '2/5 Generando manifiesto (checksums + conteos)'
+$fileMeta = [ordered]@{}
+foreach ($k in $files.Keys) {
+    $p = $files[$k]
+    $fileMeta[$k] = [ordered]@{
+        file   = [System.IO.Path]::GetFileName($p)
+        bytes  = (Get-Item -LiteralPath $p).Length
+        sha256 = (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+}
+
+$targets = Get-CountTargets -Url $prodUrl
+$counts = Get-TableCounts -Url $prodUrl -Targets $targets
+$totalRows = ($counts.Values | Measure-Object -Sum).Sum
+
 $manifest = [ordered]@{
     created_at    = (Get-Date).ToUniversalTime().ToString('o')
     source_url    = $prodUrl.Split('@')[0] + '@...'    # sin credenciales
-    sha256        = $sha
+    files         = $fileMeta
     rows_by_table = $counts
 }
-$manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestFile -Encoding UTF8
-$totalRows = ($counts.Values | Measure-Object -Sum).Sum
-Write-Ok "Manifiesto: $manifestFile ($($counts.Count) tablas, $totalRows filas, sha256 $($sha.Substring(0,12))...)"
+$manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestFile -Encoding UTF8
+Write-Ok "Manifiesto: $([System.IO.Path]::GetFileName($manifestFile)) ($($counts.Count) tablas, $totalRows filas)"
+Write-Ok "SHA256 data: $($fileMeta['data'].sha256.Substring(0, 12))..."
 
 # -----------------------------------------------------------------------------
 # 3) Verificacion estructural
 # -----------------------------------------------------------------------------
-Write-Step '3/4 Verificacion estructural del dump'
-$createTables = ([regex]::Matches($dumpText, '(?im)^\s*CREATE TABLE')).Count
-$inserts = ([regex]::Matches($dumpText, '(?im)^\s*INSERT INTO')).Count
-if ($createTables -eq 0 -or $inserts -eq 0) {
-    Write-Err "El dump no parece completo: $createTables CREATE TABLE, $inserts INSERT INTO."
-    Write-Err 'Revisar supabase db dump. Abortando.'
+Write-Step '3/5 Verificacion estructural de los dumps'
+$schemaText = Get-Content -LiteralPath $schemaFile -Raw
+$dataText = Get-Content -LiteralPath $dataFile -Raw
+$rolesText = Get-Content -LiteralPath $rolesFile -Raw
+
+$createTables = ([regex]::Matches($schemaText, '(?im)^\s*CREATE TABLE')).Count
+if ($createTables -eq 0) {
+    Write-Err 'schema.sql no trae CREATE TABLE. Revisar supabase db dump. Abortando.'
     exit 1
 }
-Write-Ok "CREATE TABLE x$createTables / INSERT INTO x$inserts en el dump."
+$dataCopies = ([regex]::Matches($dataText, '(?im)^\s*COPY ')).Count
+$dataInserts = ([regex]::Matches($dataText, '(?im)^\s*INSERT INTO')).Count
+if (($dataCopies + $dataInserts) -eq 0) {
+    Write-Err 'data.sql no trae COPY ni INSERT INTO. Revisar supabase db dump. Abortando.'
+    exit 1
+}
+if ($rolesText -notmatch '(?im)CREATE ROLE|ALTER ROLE') {
+    Write-Warn 'roles.sql no menciona CREATE ROLE/ALTER ROLE (puede ser un proyecto sin roles custom).'
+}
+$hasAuthUsers = $dataText -match '(?im)(COPY|INSERT INTO)\s+auth\.users|INTO\s+auth\."?users"?'
+if ($hasAuthUsers) { Write-Ok 'data.sql incluye auth.users.' }
+else { Write-Warn 'No se detecto auth.users en data.sql; revisar el alcance del dump.' }
+
+Write-Ok "schema: CREATE TABLE x$createTables; data: COPY x$dataCopies / INSERT x$dataInserts."
 
 # -----------------------------------------------------------------------------
-# 4) Restore test (opt-in): aplicar el dump a otra base y comparar conteos
+# 4) Restore test (opt-in): aplicar los 3 dumps a una base scratch y comparar
 # -----------------------------------------------------------------------------
 if ($restoreTarget) {
-    Write-Step '4/4 Verificando restore en destino scratch'
+    Write-Step '4/5 Verificando restore en destino scratch'
+    $psqlArgs = @(
+        '--single-transaction',
+        '--variable', 'ON_ERROR_STOP=1',
+        '--file', $rolesFile,
+        '--file', $schemaFile,
+        '--command', 'SET session_replication_role = replica',
+        '--file', $dataFile,
+        '--dbname', $restoreTarget
+    )
     $prevEap = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        & supabase db query --db-url $restoreTarget -f $dumpFile 2>&1 | Out-Null
+        & psql @psqlArgs 2>&1 | Out-Null
     } finally {
         $ErrorActionPreference = $prevEap
     }
@@ -216,7 +294,7 @@ if ($restoreTarget) {
         Write-Err 'El restore fallo: el backup NO se puede recuperar en el destino.'
         exit 1
     }
-    $restored = Get-RowCounts -Url $restoreTarget
+    $restored = Get-TableCounts -Url $restoreTarget -Targets $targets
     $mismatch = $false
     $missing = 0
     foreach ($t in $counts.Keys) {
@@ -230,9 +308,10 @@ if ($restoreTarget) {
     }
     Write-Ok 'Restore verificado: conteos origen == destino.'
 } else {
-    Write-Step '4/4 Restore test'
+    Write-Step '4/5 Restore test'
     Write-Host '    Sin destino scratch (DEV_DB_URL o -RestoreUrl): se omitio el restore test.' -ForegroundColor DarkGray
     Write-Host '    Para verificar la RECUPERACION completa, volver a correr con -RestoreUrl <db-vacia>.' -ForegroundColor Yellow
 }
 
-Write-Host '`nBackup OK.' -ForegroundColor Green
+Write-Step '5/5 Listo'
+Write-Host "`nBackup OK." -ForegroundColor Green
