@@ -23,6 +23,8 @@ los dumps del backup caen en `scripts/dumps/`, también ignorado. ggshield
 | Credenciales E2E | `E2E_USER_EMAIL`, `E2E_USER_PASSWORD`, `E2E_NEW_USER_*`, `E2E_MEMBER_USER_*` | `.env.local`, secreto de CI | Playwright, load test | cuenta Supabase dedicada |
 | Guard de secrets en CI | `GITGUARDIAN_API_KEY` | Secreto de GitHub Actions | ggshield-action | GitGuardian Dashboard |
 | URL de la DB (session pooler) | `PROD_DB_URL`, `DEV_DB_URL` en `scripts/.env.db` | fuera del repo (`.env.db` ignorado); nunca en Vercel | `sync-prod-to-dev.ps1`, `backup-db.ps1` | Supabase → Project Settings → Connect (regenera la password del pooler) |
+| Clave publica de backup (`age`) | `AGE_RECIPIENT` | Secreto de GitHub Actions | `.github/workflows/backup.yml` (cifra los dumps) | `age-keygen` (regenerar el par) |
+| Clave privada de backup (`age`) | (sin variable) | **Fuera del repo y del CI**: gestor de passwords / copia fisica de quien restaura | quien ejecuta el restore (`age --decrypt`) | n/a (no se rota sola; ver regla 4) |
 
 ## Reglas
 
@@ -37,6 +39,11 @@ los dumps del backup caen en `scripts/dumps/`, también ignorado. ggshield
 3. gitleaks guard local (si se instala) y ggshield en CI aplican sobre el
    historial: un secreto ya commiteado se considera filtrado y se rota, no se
    "borra con un nuevo commit" (sigue en el historial de git).
+4. La clave privada de `age` (backup) es la unica llave para descifrar los
+   dumps: si se pierde, los Releases quedan irrecuperables; si se filtra, hay
+   que regenerar el par (`age-keygen`), actualizar `AGE_RECIPIENT` en GitHub y
+   rotar tambien `PROD_DB_URL` (los dumps viejos ya estarian expuestos). No
+   versionarla ni subirla al CI.
 
 ## Checklist de rotación (para cualquier secreto del inventario)
 
