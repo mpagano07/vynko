@@ -61,7 +61,7 @@ En `src/lib/prices.json`, actualizá el plan que quieras:
 ```json
 {
   "starter": 19900,
-  "business": 32900,
+  "business": 29900,
   "enterprise": 0
 }
 ```
@@ -90,7 +90,7 @@ El nuevo monto aplica al **siguiente cobro recurrente**. Es recomendable avisar 
 | --- | --- |
 | `npm run update-prices` | Reconcilla estados contra MP y actualiza el monto de las suscripciones activas según `prices.json` |
 | `npm run update-prices -- --dry-run` | Simula sin aplicar cambios |
-| `npm run update-prices -- --business=32900` | Sobreescribe el precio de un plan solo para esta corrida |
+| `npm run update-prices -- --business=29900` | Sobreescribe el precio de un plan solo para esta corrida |
 | `npm run update-prices -- --backfill` | Recupera el id de preaprobación de clientes activos que no lo tengan guardado (necesario una vez al migrar la columna, o si se dieron de alta antes del webhook) |
 | `npm run update-prices -- --skip-reconcile` | Omite la verificación de estado en MP (solo actualiza precios) |
 

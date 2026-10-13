@@ -11,14 +11,16 @@
 //
 // Uso:
 //   node scripts/update-prices.mjs                        usa los precios de src/lib/prices.json
-//   node scripts/update-prices.mjs --business=32900       sobreescribe el precio de un plan
+//   node scripts/update-prices.mjs --business=29900       sobreescribe el precio de un plan
 //   node scripts/update-prices.mjs --dry-run              muestra qué haría sin ejecutar cambios
 //   node scripts/update-prices.mjs --backfill             recupera los ids de preapproval
 //                                                         de clientes activos que no los tienen guardados
 //   node scripts/update-prices.mjs --skip-reconcile       salta la verificación de estado en MP
+//   node scripts/update-prices.mjs --env .env.prod.local  usa las credenciales de ese archivo
+//                                                         (pisa a .env.local). Por defecto .env.local
 //
 // Requiere: MERCADOPAGO_ACCESS_TOKEN, SUPABASE_SERVICE_ROLE_KEY y
-// NEXT_PUBLIC_SUPABASE_URL en .env.local
+// NEXT_PUBLIC_SUPABASE_URL (en .env.local o en el archivo pasado con --env)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,8 +30,8 @@ const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ---------- Carga de variables de entorno ----------
-function loadEnv(file) {
-  if (!fs.existsSync(file)) return;
+function loadEnv(file, override = false) {
+  if (!fs.existsSync(file)) return false;
   const content = fs.readFileSync(file, 'utf8');
   for (const line of content.split('\n')) {
     const matched = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
@@ -37,10 +39,26 @@ function loadEnv(file) {
     const key = matched[1];
     let val = (matched[2] ?? '').trim();
     if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
-    if (process.env[key] === undefined) process.env[key] = val;
+    if (override || process.env[key] === undefined) process.env[key] = val;
   }
+  return true;
 }
 loadEnv(path.resolve(__dirname, '..', '.env.local'));
+
+// --env <archivo> elige de dónde salen las credenciales. Por defecto
+// .env.local (dev). Para prod: --env .env.prod.local
+const envIdx = process.argv.indexOf('--env');
+if (envIdx !== -1 && process.argv[envIdx + 1]) {
+  const file = process.argv[envIdx + 1];
+  if (loadEnv(path.resolve(__dirname, '..', file), true)) {
+    console.log(`Credenciales leídas de ${file} (pisan a .env.local).`);
+  } else {
+    console.error(`No existe el archivo ${file}. Abortando.`);
+    process.exit(1);
+  }
+} else {
+  console.log('AVISO: sin --env se usan las credenciales de .env.local (dev).');
+}
 
 // ---------- Dependencias ----------
 const { MercadoPagoConfig, PreApproval } = require('mercadopago');
