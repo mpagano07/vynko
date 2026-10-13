@@ -1,18 +1,27 @@
 import { ImageResponse } from 'next/og';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
 /**
  * Card Open Graph 1200x630 generada por codigo (sin asset binario en el repo),
  * para que al compartir Vynko en WhatsApp, LinkedIn, X o Slack se vea una
  * tarjeta de marca en vez del favicon.
  *
- * Solo se usa texto ASCII: ImageResponse (satori) dibuja con la fuente por
- * defecto, y asi no dependemos de cargar un .ttf con los glifos acentuados ni
- * de una ruta de fuente que exista en el build de Linux. El layout raiz sigue
- * exponiendo el favicon para los casos sin imagen.
+ * Usa el logo real de `public/icons/icon-512.png`, leido una sola vez a nivel de
+ * modulo (no depende del request). El runtime es Node para poder leer del
+ * filesystem.
+ *
+ * Los textos van en ASCII: el cuerpo se dibuja con la fuente por defecto de
+ * satori, asi no dependemos de cargar un .ttf con glifos acentuados.
  */
+export const runtime = 'nodejs';
+
 export const alt = 'Vynko — Stock y ventas en tiempo real';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
+
+const logoData = await readFile(join(process.cwd(), 'public/icons/icon-512.png'), 'base64');
+const logoSrc = `data:image/png;base64,${logoData}`;
 
 const PILLS = ['Punto de venta', 'Multi-sucursal', 'Stock en vivo'];
 
@@ -32,28 +41,15 @@ export default function OpengraphImage() {
           fontFamily: 'sans-serif',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 104,
-              height: 104,
-              borderRadius: 24,
-              backgroundImage: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-              fontSize: 64,
-              fontWeight: 700,
-            }}
-          >
-            V
-          </div>
-          <div style={{ display: 'flex', fontSize: 88, fontWeight: 700, letterSpacing: -2 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={logoSrc} width={132} height={132} alt="" style={{ borderRadius: 28 }} />
+          <div style={{ display: 'flex', fontSize: 92, fontWeight: 700, letterSpacing: -2 }}>
             Vynko
           </div>
         </div>
 
-        <div style={{ display: 'flex', marginTop: 40, fontSize: 44, color: '#bfdbfe' }}>
+        <div style={{ display: 'flex', marginTop: 44, fontSize: 44, color: '#bfdbfe' }}>
           Stock y ventas en tiempo real
         </div>
 
