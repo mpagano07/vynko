@@ -69,6 +69,9 @@ export async function proxy(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-nonce', nonce);
   requestHeaders.set('Content-Security-Policy', buildCsp(nonce));
+  // Ruta normalizada (sin query) para que el layout raiz calcule el canonical
+  // por pagina sin hardcodear uno distinto en cada archivo.
+  requestHeaders.set('x-pathname', pathname);
 
   const next = () => {
     const res = NextResponse.next({ request: { headers: requestHeaders } });

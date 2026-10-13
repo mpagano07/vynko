@@ -4,7 +4,7 @@ import Image from 'next/image';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Términos y Condiciones | Vynko',
+  title: 'Términos y Condiciones',
   description: 'Términos y condiciones de uso de la plataforma Vynko, política de contratación, cancelación y derecho de arrepentimiento según Ley 24.240.',
 };
 
