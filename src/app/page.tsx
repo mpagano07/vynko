@@ -198,12 +198,12 @@ export default function LandingPage() {
                 Gestión de stock
               </div>
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight tracking-tight">
-                Controlá tu{' '}
-                <span className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">inventario</span>
-                {' '}en tiempo real
+                Sabé qué tenés, qué vendés y{' '}
+                <span className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">cuánto perdés</span>.
+                {' '}En todas tus sucursales.
               </h1>
               <p className="mt-6 text-lg text-gray-400 leading-relaxed max-w-lg">
-                Olvidate de las planillas. Importá tu catálogo, escaneá productos con tu teléfono y mantené el stock al día con alertas automáticas de reposición.
+                Vynko reemplaza tus planillas con una sola herramienta: caja, stock, compras, clientes y documentos, con datos en tiempo real. Escaneá con el celular, vendé en segundos y enterate a tiempo cuando algo falta o se pierde.
               </p>
               <form onSubmit={handleWaitlist} noValidate className="mt-8 max-w-md">
                 <div className="flex gap-3">
@@ -227,10 +227,10 @@ export default function LandingPage() {
                 </div>
               </form>
               <p className="mt-3 text-xs text-gray-400">
-                Sin compromiso. {getTrialDays() || 0} días de prueba gratuita.
+                {getTrialDays() || 0} días de prueba · Sin tarjeta · Cancelás cuando quieras
               </p>
-              <p className="mt-2 text-xs text-gray-400">
-                Importá tu catálogo desde el archivo de Mercado Libre o Tiendanube.
+              <p className="mt-2 text-xs text-gray-500">
+                Importá tu catálogo desde Mercado Libre o Tiendanube.
               </p>
             </div>
 
@@ -286,6 +286,14 @@ export default function LandingPage() {
               </div>
             </div>
           </div>
+          <div className="mt-16 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm text-gray-300">
+            {['Stock en tiempo real', 'Caja en segundos', 'Multi-sucursal', 'Control de mermas'].map((item) => (
+              <div key={item} className="flex items-center gap-2">
+                <span className="text-cyan-400">✓</span>
+                {item}
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -307,83 +315,119 @@ export default function LandingPage() {
       </section>
 
       {/* Comparison Section */}
-      <section className="py-20" id="features">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="py-20" id="comparison">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold">El método antiguo vs <span className="text-cyan-400">Vynko</span></h2>
+            <h2 className="text-3xl sm:text-4xl font-bold">Excel + papel vs <span className="text-cyan-400">Vynko</span></h2>
             <p className="mt-4 text-gray-400">La diferencia entre sobrevivir y escalar tu negocio.</p>
           </div>
-          <div className="grid md:grid-cols-2 gap-8">
-            <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-8">
-              <div className="text-4xl mb-4">📋</div>
-              <h3 className="text-xl font-bold text-gray-300 mb-4">Excel + papel</h3>
-              <ul className="space-y-3">
+          <div className="overflow-x-auto rounded-2xl border border-gray-800">
+            <table className="w-full min-w-[640px] border-collapse text-left">
+              <thead>
+                <tr className="bg-gray-900/60">
+                  <th className="p-4 text-xs font-semibold uppercase tracking-wider text-gray-500">&nbsp;</th>
+                  <th className="p-4 text-sm font-bold text-gray-300">Excel + papel</th>
+                  <th className="p-4 text-sm font-bold text-cyan-400">Vynko</th>
+                </tr>
+              </thead>
+              <tbody>
                 {[
-                  'Actualización manual de stock',
-                  'Errores de tipeo y descuadres',
-                  'Sin alertas de reposición',
-                  'Datos desactualizados',
-                  'Difícil de compartir con el equipo',
-                ].map(item => (
-                  <li key={item} className="flex items-start gap-3 text-sm text-gray-400">
-                    <span className="text-red-400 mt-0.5">✕</span>
-                    {item}
-                  </li>
+                  { aspect: 'Stock', excel: 'Se actualiza a mano', vynko: 'Se descuenta solo en cada venta' },
+                  { aspect: 'Sucursales', excel: 'Una planilla por local', vynko: 'Una cuenta, stock por local y transferencias' },
+                  { aspect: 'Mermas', excel: 'Nadie sabe cuánto se pierde', vynko: 'Registro valuado en pesos y ranking' },
+                  { aspect: 'Compras', excel: 'Pedidos sueltos y mercadería sin registrar', vynko: 'Pedido → recepción → remito y stock al día' },
+                  { aspect: 'Empleados', excel: 'Cualquiera edita cualquier cosa', vynko: 'Roles y permisos por sucursal' },
+                  { aspect: 'Control', excel: 'Sin saber quién cambió qué', vynko: 'Auditoría completa de cada acción' },
+                  { aspect: 'Acceso', excel: 'Un archivo en una sola compu', vynko: 'Desde el celular o la compu, en tiempo real' },
+                ].map(row => (
+                  <tr key={row.aspect} className="border-t border-gray-800/70">
+                    <td className="p-4 text-sm font-semibold text-gray-200 whitespace-nowrap">{row.aspect}</td>
+                    <td className="p-4 text-sm text-gray-500">
+                      <span className="mr-2 text-red-400">✕</span>
+                      {row.excel}
+                    </td>
+                    <td className="p-4 text-sm text-gray-200">
+                      <span className="mr-2 text-cyan-400">✓</span>
+                      {row.vynko}
+                    </td>
+                  </tr>
                 ))}
-              </ul>
-            </div>
-            <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-2xl p-8 relative">
-              <div className="absolute -top-3 left-8 px-3 py-1 bg-cyan-500 text-black text-xs font-bold rounded-full">Recomendado</div>
-              <div className="text-4xl mb-4">🚀</div>
-              <h3 className="text-xl font-bold text-cyan-400 mb-4">Vynko</h3>
-              <ul className="space-y-3">
-                {[
-                  'Escaneo móvil en tiempo real',
-                  'Stock compartido y siempre al día',
-                  'Alertas de bajo stock',
-                  'Pronósticos',
-                  'Acceso multi-dispositivo',
-                ].map(item => (
-                  <li key={item} className="flex items-start gap-3 text-sm text-gray-300">
-                    <span className="text-cyan-400 mt-0.5">✓</span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
 
       {/* Features */}
-      <section className="py-20 bg-gray-900/30">
+      <section className="py-20 bg-gray-900/30" id="features">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold">Todo lo que necesitás para gestionar tu stock</h2>
-            <p className="mt-4 text-gray-400">Una plataforma completa para tu negocio.</p>
+            <h2 className="text-3xl sm:text-4xl font-bold">Todo lo que necesitás para manejar tu comercio</h2>
+            <p className="mt-4 text-gray-400">Desde la venta en mostrador hasta la compra al proveedor, en un solo lugar.</p>
           </div>
-          <div className="grid md:grid-cols-3 gap-8 mx-auto">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
               {
-                icon: '📱',
-                title: 'Teléfono como escáner',
-                desc: 'Usá la cámara de tu celular para escanear códigos de barras y actualizar el stock al instante.',
+                icon: '🛒',
+                title: 'Caja y punto de venta',
+                desc: 'Buscá o escaneá el producto con la cámara del celular, armá el carrito, asigná el cliente y confirmá. El stock se descuenta al instante, sin descuadres ni stock negativo.',
               },
               {
-                icon: '🔔',
-                title: 'Alertas de bajo stock',
-                desc: 'Recibí notificaciones cuando un producto está por debajo del mínimo. Nunca más te quedés sin stock.',
+                icon: '📦',
+                title: 'Inventario y catálogo',
+                desc: 'Costo, precio y margen calculado automáticamente, organizados por categoría y ubicación en el depósito. Alertas de stock bajo y crítico para reponer a tiempo, y ajuste de precios en masa.',
               },
               {
-                icon: '📥',
-                title: 'Importá tu catálogo',
-                desc: 'Subí la planilla de productos que exportás de Mercado Libre o Tiendanube y arrancá con todo cargado.',
+                icon: '🏬',
+                title: 'Multi-sucursal',
+                desc: 'Todas tus sucursales en una sola cuenta, con stock independiente por local. Transferí mercadería entre sucursales con seguimiento (pendiente → en tránsito → recibida) y mirá todo el negocio en una vista consolidada.',
+              },
+              {
+                icon: '🛡️',
+                title: 'Antipérdidas',
+                desc: 'Registrá productos dañados, vencidos, perdidos o robados y mirá cuánta plata perdés, valuado en pesos. Un ranking te muestra qué productos se pierden más, y cada ajuste queda con quién, cuándo y por qué.',
+              },
+              {
+                icon: '🚚',
+                title: 'Proveedores y compras',
+                desc: 'Armá pedidos de compra con fecha esperada y productos de tu catálogo. Al recibir la mercadería, incluso parcialmente, Vynko genera el remito de ingreso y suma el stock solo.',
+              },
+              {
+                icon: '🧾',
+                title: 'Documentos con tus datos fiscales',
+                desc: 'Remitos, presupuestos, órdenes de venta y de compra, con numeración correlativa automática, estados de aprobación e impresión con tu CUIT y razón social.',
+              },
+              {
+                icon: '👥',
+                title: 'Equipo y permisos',
+                desc: 'Sumá colaboradores por email con roles de dueño, encargado o miembro, y asignales las sucursales que corresponden. Cada uno ve solo lo suyo.',
+              },
+              {
+                icon: '🔍',
+                title: 'Auditoría',
+                desc: 'Cada acción queda registrada: quién la hizo, cuándo y qué cambió. Exportá el historial a Excel cuando necesites revisarlo.',
               },
             ].map(f => (
-              <div key={f.title} className="bg-gray-950 border border-gray-800 rounded-2xl p-8 hover:border-cyan-500/30 transition-colors">
-                <div className="text-4xl mb-4">{f.icon}</div>
-                <h3 className="text-lg font-bold mb-3">{f.title}</h3>
+              <div key={f.title} className="bg-gray-950 border border-gray-800 rounded-2xl p-6 hover:border-cyan-500/30 transition-colors">
+                <div className="text-3xl mb-4">{f.icon}</div>
+                <h3 className="text-base font-bold mb-3">{f.title}</h3>
                 <p className="text-sm text-gray-400 leading-relaxed">{f.desc}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { icon: '📊', title: 'Dashboard en tiempo real', desc: 'Ventas del día, ingresos del mes, ticket promedio y alertas, por sucursal.' },
+              { icon: '🙋', title: 'Clientes', desc: 'Historial de compras y total gastado de cada uno.' },
+              { icon: '🏷️', title: 'Códigos QR por producto', desc: 'Imprimilos y pegalos en góndolas o bultos.' },
+              { icon: '📥', title: 'Importá y exportá', desc: 'Desde Excel, Mercado Libre o Tiendanube, con carga inicial escaneando códigos de barras.' },
+            ].map(f => (
+              <div key={f.title} className="bg-gray-900/50 border border-gray-800/70 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xl">{f.icon}</span>
+                  <h3 className="text-sm font-semibold text-gray-200">{f.title}</h3>
+                </div>
+                <p className="text-xs text-gray-400 leading-relaxed">{f.desc}</p>
               </div>
             ))}
           </div>
@@ -576,10 +620,10 @@ export default function LandingPage() {
       <section className="py-20">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl sm:text-4xl font-bold mb-6">
-            ¿Listo para dejar atrás las planillas?
+            Dejá de perder plata por descuadres, faltantes y mermas.
           </h2>
           <p className="text-gray-400 mb-8 max-w-lg mx-auto">
-            Comenzá a gestionar tu inventario y ventas con Vynko hoy mismo.
+            Probá Vynko {getTrialDays() || 0} días gratis, sin tarjeta.
           </p>
           <Link
             href="/auth/signup"

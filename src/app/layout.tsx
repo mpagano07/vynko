@@ -24,7 +24,7 @@ const BASE_METADATA: Metadata = {
     default: 'Vynko | Gestión de Stock y Ventas',
     template: '%s | Vynko',
   },
-  description: 'Plataforma SaaS B2B de gestión de stock en tiempo real, ventas en punto de venta, transferencia multi-sucursal y control comercial para tu negocio.',
+  description: 'Sistema de gestión para comercios: stock en tiempo real, caja, compras, multi-sucursal y control de mermas. Reemplazá el Excel. 45 días gratis.',
   generator: 'Next.js',
   applicationName: 'Vynko',
   referrer: 'origin-when-cross-origin',
@@ -35,7 +35,7 @@ const BASE_METADATA: Metadata = {
   },
   openGraph: {
     title: 'Vynko | Gestión de Stock y Ventas',
-    description: 'Plataforma SaaS B2B de gestión de stock en tiempo real, ventas en punto de venta y control comercial para tu negocio.',
+    description: 'Sistema de gestión para comercios: stock en tiempo real, caja, compras, multi-sucursal y control de mermas. Reemplazá el Excel. 45 días gratis.',
     url: 'https://vynko.dev',
     siteName: 'Vynko',
     locale: 'es_AR',
@@ -44,7 +44,7 @@ const BASE_METADATA: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Vynko | Gestión de Stock y Ventas',
-    description: 'Plataforma SaaS B2B de gestión de stock y ventas para negocios.',
+    description: 'Sistema de gestión para comercios: stock en tiempo real, caja, compras, multi-sucursal y control de mermas. 45 días gratis.',
   },
 };
 
