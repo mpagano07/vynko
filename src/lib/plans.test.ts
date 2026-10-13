@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PLANS, PLAN_ORDER, PLAN_LIMITS } from './plans';
+import { PLANS, PLAN_ORDER, PLAN_LIMITS, getTrialDays, getRemainingTrialDays } from './plans';
 
 describe('plans configuration', () => {
   it('has consistent definitions for all plans in PLAN_ORDER', () => {
@@ -56,5 +56,30 @@ describe('plans configuration', () => {
     const labels = enterprise.features.map(f => f.label);
     expect(labels).toContain('Módulos');
     expect(labels).toContain('Integraciones');
+  });
+});
+
+describe('getRemainingTrialDays', () => {
+  const daysAgo = (n: number) => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate() - n, 12, 0, 0).toISOString();
+  };
+
+  it('returns the full trial for an account created today', () => {
+    expect(getRemainingTrialDays(daysAgo(0))).toBe(getTrialDays());
+  });
+
+  it('returns only the days left for an account mid-trial', () => {
+    expect(getRemainingTrialDays(daysAgo(getTrialDays() - 8))).toBe(8);
+  });
+
+  it('returns 0 once the trial window already passed', () => {
+    expect(getRemainingTrialDays(daysAgo(getTrialDays() + 5))).toBe(0);
+  });
+
+  it('returns 0 without a reference date or with an invalid one', () => {
+    expect(getRemainingTrialDays(null)).toBe(0);
+    expect(getRemainingTrialDays(undefined)).toBe(0);
+    expect(getRemainingTrialDays('not-a-date')).toBe(0);
   });
 });

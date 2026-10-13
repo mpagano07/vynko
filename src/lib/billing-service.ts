@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { PLANS, getEffectivePrice, getTrialDays, getTrialPlan, PLAN_ORDER, NEW_ACCOUNT_PLAN } from '@/lib/plans';
+import { PLANS, getEffectivePrice, getTrialDays, getTrialPlan, getRemainingTrialDays, PLAN_ORDER, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import { createPreApproval, cancelPreApproval } from '@/lib/mercadopago';
 import { resolveOwnerBranchIds } from '@/lib/mercadopago-webhook-service';
@@ -61,6 +61,24 @@ export async function createCheckoutSession(
     return { ok: false, error: 'El plan Enterprise se activa por ventas', needsSalesContact: true, status: 400 };
   }
 
+  // La prueba gratuita es por owner y arranca en su primera rama. Para no
+  // regalar un trial nuevo en cada suscripción, el preapproval de Mercado Pago
+  // solo lleva los días de prueba que le quedan a la cuenta (0 si ya venció).
+  let trialPeriodDays = 0;
+  if (planConfig.id === getTrialPlan()) {
+    const ownerBranchIds = await resolveOwnerBranchIds(tenantId, [tenantId]);
+    const { data: branchRows } = await supabaseAdmin
+      .from('tenants')
+      .select('created_at')
+      .in('id', ownerBranchIds);
+    const earliestCreatedAt = (branchRows ?? []).reduce<string | null>((earliest, row) => {
+      const createdAt = (row as { created_at?: string | null }).created_at ?? null;
+      if (!createdAt) return earliest;
+      return !earliest || new Date(createdAt) < new Date(earliest) ? createdAt : earliest;
+    }, null);
+    trialPeriodDays = getRemainingTrialDays(earliestCreatedAt);
+  }
+
   const backUrl = safeInternalRedirect(request, '/billing?success=true');
 
   try {
@@ -74,7 +92,7 @@ export async function createCheckoutSession(
         frequency_type: 'months',
         transaction_amount: getEffectivePrice(planConfig.id),
         currency_id: 'ARS',
-        trial_period_days: planConfig.id === getTrialPlan() ? getTrialDays() : 0,
+        trial_period_days: trialPeriodDays,
       },
     });
 
@@ -255,11 +273,27 @@ export async function getSubscriptionStatus(userId: string): Promise<BillingResu
   const tenantIds = tu.map((t) => t.tenant_id);
   const { data: tenants } = await supabaseAdmin
     .from('tenants')
-    .select('subscription_status, subscription_plan, subscription_current_period_end, created_at, mercadopago_pending_plan')
+    .select('subscription_status, subscription_plan, subscription_current_period_end, created_at, mercadopago_pending_plan, mercadopago_preapproval_id, mercadopago_pending_preapproval_id')
     .in('id', tenantIds);
 
   // Every branch of the owner shares a single subscription.
   const tenant = consolidateOwnerSubscription(tenants as TenantSubscription[] | null);
+
+  // Checkout iniciado y no confirmado: hay un preapproval guardado pero la
+  // cuenta todavía no está activa (y no es un cambio de plan, que se gestiona
+  // aparte con `mercadopago_pending_preapproval_id`). Se usa para avisarle al
+  // usuario que completó el pago y, mientras tanto, sigue en la prueba.
+  const hasPendingCheckout = (tenants ?? []).some((row) => {
+    const t = row as {
+      subscription_status?: string | null;
+      mercadopago_preapproval_id?: string | null;
+      mercadopago_pending_preapproval_id?: string | null;
+    };
+    if (!t.mercadopago_preapproval_id) return false;
+    if (t.mercadopago_pending_preapproval_id) return false;
+    const status = t.subscription_status || 'free';
+    return status === 'free' || status === 'inactive';
+  });
 
   const trialPlan = getTrialPlan() ?? NEW_ACCOUNT_PLAN;
   const plan = (tenant?.subscription_plan as keyof typeof PLANS) || NEW_ACCOUNT_PLAN;
@@ -296,6 +330,7 @@ export async function getSubscriptionStatus(userId: string): Promise<BillingResu
       createdAt: tenant?.created_at,
       features: planConfig.features,
       pendingPlanChange: pendingPlan ?? null,
+      pendingCheckout: hasPendingCheckout,
     },
   };
 }
