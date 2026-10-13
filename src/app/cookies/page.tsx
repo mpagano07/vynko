@@ -4,7 +4,7 @@ import Image from 'next/image';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Política de Cookies | Vynko',
+  title: 'Política de Cookies',
   description: 'Conocé qué cookies y tecnologías de almacenamiento utiliza Vynko y cómo protegen tu sesión y preferencias.',
 };
 

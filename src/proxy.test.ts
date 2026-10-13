@@ -159,7 +159,21 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
   it('permite el acceso a rutas públicas sin autenticación', async () => {
     makeServerClient(null);
 
-    for (const p of ['/login', '/auth', '/auth/callback', '/accept-invite', '/sin-acceso']) {
+    for (const p of [
+      '/login',
+      '/auth',
+      '/auth/callback',
+      '/accept-invite',
+      '/sin-acceso',
+      // Landings SEO: deben servirse sin sesión para que los crawlers las vean.
+      '/control-de-stock',
+      '/ventas-y-caja',
+      '/alternativa-a-excel',
+      '/software-gestion-argentina',
+      // Imágenes OG/Twitter generadas: los crawlers de redes no tienen sesión.
+      '/opengraph-image',
+      '/twitter-image',
+    ]) {
       const res = await proxy(request(p));
       expect(res.status).toBe(200);
     }

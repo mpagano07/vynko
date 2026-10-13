@@ -40,17 +40,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: 'monthly',
       priority: 0.3,
     },
-    {
-      url: `${baseUrl}/login`,
-      lastModified,
-      changeFrequency: 'monthly',
-      priority: 0.5,
-    },
-    {
-      url: `${baseUrl}/auth/signup`,
-      lastModified,
-      changeFrequency: 'monthly',
-      priority: 0.5,
-    },
   ];
 }

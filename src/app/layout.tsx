@@ -18,7 +18,7 @@ const inter = Inter({
   display: 'swap',
 });
 
-export const metadata: Metadata = {
+const BASE_METADATA: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://vynko.dev'),
   title: {
     default: 'Vynko | Gestión de Stock y Ventas',
@@ -40,15 +40,25 @@ export const metadata: Metadata = {
     siteName: 'Vynko',
     locale: 'es_AR',
     type: 'website',
-    images: [{ url: '/icons/icon-512.png', width: 512, height: 512, alt: 'Vynko' }],
   },
   twitter: {
-    card: 'summary',
+    card: 'summary_large_image',
     title: 'Vynko | Gestión de Stock y Ventas',
     description: 'Plataforma SaaS B2B de gestión de stock y ventas para negocios.',
-    images: ['/icons/icon-512.png'],
   },
 };
+
+/**
+ * Canonical por pagina calculado desde la ruta normalizada que deja el proxy en
+ * `x-pathname`. Asi la home, las legales y login/signup (que son Client
+ * Components y no pueden exportar `metadata`) tambien declaran su canonical, sin
+ * repetir el dato en cada archivo. Las landings lo override con el suyo (mismo
+ * valor). Se usa ruta relativa: Next la resuelve contra `metadataBase`.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const pathname = (await headers()).get('x-pathname') ?? '/';
+  return { ...BASE_METADATA, alternates: { canonical: pathname } };
+}
 
 export const viewport: Viewport = {
   colorScheme: 'light dark',

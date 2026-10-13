@@ -4,7 +4,7 @@ import Image from 'next/image';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Política de Privacidad | Vynko',
+  title: 'Política de Privacidad',
   description: 'Política de privacidad, tratamiento de datos personales y derechos ARCO según Ley 25.326 de la plataforma Vynko.',
 };
 

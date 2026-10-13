@@ -18,4 +18,9 @@ describe('sitemap', () => {
   it('no repite URLs', () => {
     expect(new Set(urls).size).toBe(urls.length);
   });
+
+  it('excluye las paginas de auth noindex', () => {
+    expect(urls.some((url) => url.endsWith('/login'))).toBe(false);
+    expect(urls.some((url) => url.endsWith('/auth/signup'))).toBe(false);
+  });
 });
