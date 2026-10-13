@@ -142,7 +142,7 @@ describe('POST /api/products', () => {
 
   it('bloquea cuando el plan alcanzó el límite de productos', async () => {
     supabaseMock.__queue('tenants', { data: { subscription_plan: 'starter' } });
-    supabaseMock.__queue('product_stock', { data: null, error: null, count: 50 });
+    supabaseMock.__queue('product_stock', { data: null, error: null, count: 100 });
 
     const res = await POST(makeRequest({ name: 'Coca' }));
     expect(res.status).toBe(403);
