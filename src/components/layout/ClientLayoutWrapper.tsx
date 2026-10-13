@@ -52,7 +52,11 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
     pathname?.startsWith('/login') ||
     pathname?.startsWith('/auth') ||
     pathname?.startsWith('/onboarding') ||
-    pathname?.startsWith('/accept-invite');
+    pathname?.startsWith('/accept-invite') ||
+    pathname?.startsWith('/control-de-stock') ||
+    pathname?.startsWith('/ventas-y-caja') ||
+    pathname?.startsWith('/alternativa-a-excel') ||
+    pathname?.startsWith('/software-gestion-argentina');
 
   const isBillingRoute = pathname?.startsWith('/billing');
 

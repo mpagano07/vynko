@@ -21,6 +21,12 @@ const publicPaths = [
   '/privacidad',
   '/terminos',
   '/cookies',
+  // Landings SEO publicas: deben servirse sin sesion, si no el gate de auth las
+  // manda a /login y los crawlers (Googlebot, OAI-SearchBot) solo ven el login.
+  '/control-de-stock',
+  '/ventas-y-caja',
+  '/alternativa-a-excel',
+  '/software-gestion-argentina',
 ];
 const onboardingPath = '/onboarding';
 const billingPath = '/billing';
