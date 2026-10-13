@@ -263,6 +263,26 @@ describe('importProducts: SKU duplicado e inexistente', () => {
     expect(lookup).toHaveLength(1);
   });
 
+  it('manda sku vacio (no null) cuando la planilla no trae SKU', async () => {
+    // Planilla tipo Tiendanube: barcode pero sin columna SKU. `products.sku` es
+    // NOT NULL, asi que el alta tiene que mandar `''` y no omitir la columna.
+    supabaseMock.__queue('products', { data: [], error: null });
+    supabaseMock.__queue('products', { data: { id: 'prod-1' }, error: null });
+
+    const result = await importProducts(auth, [
+      { name: 'Remera basica negra', barcode: 7791234500012, price: 15900 },
+    ]);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.body.results[0].status).toBe('created');
+    expect(insertedProductRows()[0]).toMatchObject({
+      name: 'Remera basica negra',
+      barcode: 7791234500012,
+      sku: '',
+    });
+  });
+
   it('no toca productos de otro tenant: el scope viene del product_stock', async () => {
     // El SKU existe, pero para otro tenant: el select con !inner no trae nada.
     supabaseMock.__queue('products', { data: null, error: null });
