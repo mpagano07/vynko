@@ -1233,7 +1233,7 @@ function ProductsPageContent() {
           className="max-w-3xl flex flex-col max-h-[90vh]"
         >
           <div className="flex items-center gap-3 mb-4">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Importar productos desde Excel</h2>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Importar productos desde Excel o CSV</h2>
               <Tooltip content="Solo 'Nombre' es obligatorio. Las demás columnas son opcionales y podés usar nombres en español o inglés.">
                 <button
                   type="button"
@@ -1278,7 +1278,7 @@ function ProductsPageContent() {
             {importRows.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl">
                 <FileSpreadsheet className="h-12 w-12 text-gray-400 mb-4" />
-                <p className="text-sm text-gray-500 mb-4">Seleccioná un archivo Excel para comenzar</p>
+                <p className="text-sm text-gray-500 mb-4">Seleccioná un archivo Excel o CSV para comenzar</p>
                 <label className="cursor-pointer">
                   <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
                   <span className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg text-sm transition-colors">

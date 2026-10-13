@@ -35,7 +35,7 @@ function openImportModal(page: import('@playwright/test').Page) {
 async function clickImport(page: import('@playwright/test').Page) {
   await openImportModal(page);
   await page.getByRole('button', { name: 'Importar' }).first().click();
-  await expect(page.getByText('Importar productos desde Excel')).toBeVisible({ timeout: 5000 });
+  await expect(page.getByText('Importar productos desde Excel o CSV')).toBeVisible({ timeout: 5000 });
 }
 
 test.describe('Importación / Exportación de productos E2E', () => {
