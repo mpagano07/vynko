@@ -264,7 +264,7 @@ function ProductsPageContent() {
 
     try {
       const buf = await file.arrayBuffer();
-      const parsed = await parseWorkbookFile(buf);
+      const parsed = await parseWorkbookFile(buf, { fileName: file.name });
       if (!parsed.ok) {
         toast.error(parsed.error);
         return;
@@ -1233,7 +1233,7 @@ function ProductsPageContent() {
           className="max-w-3xl flex flex-col max-h-[90vh]"
         >
           <div className="flex items-center gap-3 mb-4">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Importar productos desde Excel</h2>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Importar productos desde Excel o CSV</h2>
               <Tooltip content="Solo 'Nombre' es obligatorio. Las demás columnas son opcionales y podés usar nombres en español o inglés.">
                 <button
                   type="button"
@@ -1247,7 +1247,7 @@ function ProductsPageContent() {
               </Tooltip>
             </div>
             <p className="text-sm text-gray-500 mb-4">
-              Subí un archivo <span className="font-medium text-gray-700 dark:text-gray-300">.xlsx o .xls</span> con los productos a importar. Revisá{' '}
+              Subí un archivo <span className="font-medium text-gray-700 dark:text-gray-300">.xlsx, .xls o .csv</span> con los productos a importar. Revisá{' '}
               <button
                 type="button"
                 onClick={() => setShowColumnInfo(true)}
@@ -1278,9 +1278,9 @@ function ProductsPageContent() {
             {importRows.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl">
                 <FileSpreadsheet className="h-12 w-12 text-gray-400 mb-4" />
-                <p className="text-sm text-gray-500 mb-4">Seleccioná un archivo Excel para comenzar</p>
+                <p className="text-sm text-gray-500 mb-4">Seleccioná un archivo Excel o CSV para comenzar</p>
                 <label className="cursor-pointer">
-                  <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFile} />
+                  <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
                   <span className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg text-sm transition-colors">
                     <Upload className="h-4 w-4" />
                     Seleccionar archivo
@@ -1339,7 +1339,7 @@ function ProductsPageContent() {
                   <span>{importRows.length} producto(s) detectados</span>
                   <label className="cursor-pointer text-cyan-500 hover:text-cyan-400 font-medium flex items-center gap-1">
                     <Upload className="h-3.5 w-3.5" />
-                    <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFile} />
+                    <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
                     Cambiar archivo
                   </label>
                 </div>

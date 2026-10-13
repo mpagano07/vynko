@@ -47,8 +47,8 @@ const content: SeoLandingContent = {
   features: [
     {
       icon: '📥',
-      title: 'Importá tu Excel',
-      desc: 'Subí tu lista de productos y precios y seguí trabajando sin cargar todo de nuevo.',
+      title: 'Importá tu catálogo',
+      desc: 'Subí el Excel o CSV que exportás de Mercado Libre o Tiendanube y seguí sin cargar todo de nuevo.',
     },
     {
       icon: '🧮',
@@ -95,6 +95,10 @@ const content: SeoLandingContent = {
     {
       q: '¿Pierdo la información que ya tengo en Excel?',
       a: 'No. Importás tus productos y precios actuales y arrancás con todo cargado.',
+    },
+    {
+      q: '¿Puedo importar el catálogo que ya tengo en Mercado Libre o Tiendanube?',
+      a: 'Sí. Exportás tu catálogo a Excel o CSV desde esas plataformas y lo subís a Vynko. Es una importación del archivo, no una conexión automática: cuando cambie, volvés a importar.',
     },
     {
       q: '¿Es difícil acostumbrarse?',

@@ -15,6 +15,7 @@ export const SEO_PAGES = [
   { slug: 'ventas-y-caja', label: 'Ventas y caja' },
   { slug: 'alternativa-a-excel', label: 'Alternativa a Excel' },
   { slug: 'software-gestion-argentina', label: 'Gestión en Argentina' },
+  { slug: 'importar-productos-mercadolibre-tiendanube', label: 'Importar productos' },
 ] as const;
 
 export type SeoPageSlug = (typeof SEO_PAGES)[number]['slug'];
