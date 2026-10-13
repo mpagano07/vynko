@@ -142,12 +142,12 @@ describe('POST /api/products', () => {
 
   it('bloquea cuando el plan alcanzó el límite de productos', async () => {
     supabaseMock.__queue('tenants', { data: { subscription_plan: 'starter' } });
-    supabaseMock.__queue('product_stock', { data: null, error: null, count: 50 });
+    supabaseMock.__queue('product_stock', { data: null, error: null, count: 100 });
 
     const res = await POST(makeRequest({ name: 'Coca' }));
     expect(res.status).toBe(403);
     const json = await res.json();
-    expect(json.error).toContain('permite hasta 50 productos');
+    expect(json.error).toContain('permite hasta 100 productos');
   });
 
   it('devuelve 401 sin autenticación', async () => {
