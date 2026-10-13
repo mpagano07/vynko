@@ -203,7 +203,7 @@ export default function LandingPage() {
                 {' '}en tiempo real
               </h1>
               <p className="mt-6 text-lg text-gray-400 leading-relaxed max-w-lg">
-                Olvidate de las planillas. Escaneá productos con tu teléfono, sincronizá al instante con tu negocio y recibí alertas automáticas de reposición.
+                Olvidate de las planillas. Importá tu catálogo, escaneá productos con tu teléfono y mantené el stock al día con alertas automáticas de reposición.
               </p>
               <form onSubmit={handleWaitlist} noValidate className="mt-8 max-w-md">
                 <div className="flex gap-3">
@@ -228,6 +228,9 @@ export default function LandingPage() {
               </form>
               <p className="mt-3 text-xs text-gray-400">
                 Sin compromiso. {getTrialDays() || 0} días de prueba gratuita.
+              </p>
+              <p className="mt-2 text-xs text-gray-400">
+                Importá tu catálogo desde el archivo de Mercado Libre o Tiendanube.
               </p>
             </div>
 
@@ -336,7 +339,7 @@ export default function LandingPage() {
               <ul className="space-y-3">
                 {[
                   'Escaneo móvil en tiempo real',
-                  'Sincronización automática 2-way',
+                  'Stock compartido y siempre al día',
                   'Alertas de bajo stock',
                   'Pronósticos',
                   'Acceso multi-dispositivo',
@@ -359,7 +362,7 @@ export default function LandingPage() {
             <h2 className="text-3xl sm:text-4xl font-bold">Todo lo que necesitás para gestionar tu stock</h2>
             <p className="mt-4 text-gray-400">Una plataforma completa para tu negocio.</p>
           </div>
-          <div className="grid md:grid-cols-2 gap-8 max-w-2xl mx-auto">
+          <div className="grid md:grid-cols-3 gap-8 mx-auto">
             {[
               {
                 icon: '📱',
@@ -370,6 +373,11 @@ export default function LandingPage() {
                 icon: '🔔',
                 title: 'Alertas de bajo stock',
                 desc: 'Recibí notificaciones cuando un producto está por debajo del mínimo. Nunca más te quedés sin stock.',
+              },
+              {
+                icon: '📥',
+                title: 'Importá tu catálogo',
+                desc: 'Subí la planilla de productos que exportás de Mercado Libre o Tiendanube y arrancá con todo cargado.',
               },
             ].map(f => (
               <div key={f.title} className="bg-gray-950 border border-gray-800 rounded-2xl p-8 hover:border-cyan-500/30 transition-colors">
@@ -404,9 +412,9 @@ export default function LandingPage() {
           </div>
           <div className="grid md:grid-cols-3 gap-8">
             {[
-              { step: '01', title: 'Importá tu catálogo', desc: 'Subí tu lista de productos desde Excel.' },
+              { step: '01', title: 'Importá tu catálogo', desc: 'Subí el Excel o CSV que exportás de Mercado Libre o Tiendanube.' },
               { step: '02', title: 'Escaneá productos', desc: 'Usá tu teléfono para escanear códigos de barras y registrar movimientos.' },
-              { step: '03', title: 'Sincronizá todo', desc: 'El stock se actualiza automáticamente en todos tus canales de venta.' },
+              { step: '03', title: 'Mantené todo al día', desc: 'Cada venta, compra o transferencia actualiza el stock automáticamente.' },
             ].map(s => (
               <div key={s.step} className="text-center">
                 <div className="w-16 h-16 mx-auto rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mb-6">
