@@ -869,6 +869,12 @@ const execute = async (onProgress?: ImportProgressCallback) => {
       } else {
         if (productCount !== null) productCount++;
         const id = globalThis.crypto.randomUUID();
+        // `products.sku` es NOT NULL en la base. Una planilla sin columna SKU
+        // (Tiendanube exporta sin SKU) dejaba la fila en `null` y el INSERT
+        // fallaba entero. El alta manual ya manda `''` cuando no hay SKU, asi
+        // que el import hace lo mismo. `''` no colisiona (sku no es UNIQUE) ni
+        // participa del lookup por SKU.
+        if (candidate.productData.sku === undefined) candidate.productData.sku = '';
         toCreate.push({ candidate, id });
         if (candidate.productData.sku) existingBySku.set(String(candidate.productData.sku), id);
         if (candidate.productData.barcode) {
