@@ -52,6 +52,7 @@ function BillingContent() {
     trialEndsAt: string | null;
     createdAt: string | null;
     features: string[];
+    pendingCheckout?: boolean;
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
@@ -71,20 +72,32 @@ function BillingContent() {
   }, [authLoading, role, router]);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         const res = await authFetch('/api/billing/status');
+        if (cancelled) return;
         if (res.ok) {
           setSubscription(await res.json());
+        } else if (res.status === 401) {
+          // La sesión ya no es válida (p. ej. al cerrar sesión, esta página se
+          // vuelve a montar por el cambio de tenant antes de navegar a /login).
+          // No es un error que deba ver el usuario: se redirige en silencio.
+          router.replace('/login');
+          return;
         } else {
           toast.error('No se pudo verificar el estado de tu suscripción');
         }
       } catch {
-        toast.error('No se pudo verificar el estado de tu suscripción');
+        if (!cancelled) toast.error('No se pudo verificar el estado de tu suscripción');
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      setLoading(false);
     })();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   useEffect(() => {
     if (!showRevocationTooltip) return;
@@ -197,6 +210,7 @@ function BillingContent() {
   const currentPlanId = subscription?.plan || NEW_ACCOUNT_PLAN;
   const isPlanActive = subscription?.status === 'active';
   const pendingPlanChange = (subscription as unknown as { pendingPlanChange?: string | null })?.pendingPlanChange;
+  const pendingCheckout = subscription?.pendingCheckout === true;
 
   const TRIAL_DAYS = getTrialDays();
   const TRIAL_PLAN = getTrialPlan();
@@ -241,6 +255,24 @@ function BillingContent() {
           </div>
         </div>
       )}
+      {pendingCheckout && (
+        <div className="rounded-xl p-5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 flex items-start gap-4">
+          <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/50 flex-shrink-0">
+            <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+          </div>
+          <div className="flex-1">
+            <p className="text-base font-bold text-amber-800 dark:text-amber-300">
+              Pago pendiente de confirmación
+            </p>
+            <p className="text-sm text-amber-600 dark:text-amber-400 mt-1">
+              Iniciaste el pago de tu suscripción en Mercado Pago pero no se completó. Elegí un plan para completar el pago y activarlo.
+              {isTrial && daysUntilTrialEnd !== null && daysUntilTrialEnd >= 0
+                ? ` Mientras tanto seguís con la prueba gratuita (te quedan ${daysUntilTrialEnd} día${daysUntilTrialEnd === 1 ? '' : 's'}).`
+                : ''}
+            </p>
+          </div>
+        </div>
+      )}
       {autoBlockedReason && (
         <div className="rounded-xl p-5 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 flex items-start gap-4">
           <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/50 flex-shrink-0">
@@ -262,7 +294,7 @@ function BillingContent() {
       )}
 
       {/* Trial / Renewal banner - only shown when not already blocked */}
-      {subscription && !autoBlockedReason && (isTrial || (daysUntilRenewal !== null && daysUntilRenewal <= 7)) && (
+      {subscription && !autoBlockedReason && !pendingCheckout && (isTrial || (daysUntilRenewal !== null && daysUntilRenewal <= 7)) && (
         <div className={`rounded-xl p-4 flex items-start gap-3 ${
           isTrial && daysUntilTrialEnd !== null && daysUntilTrialEnd <= 7
             ? 'bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900'

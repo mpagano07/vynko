@@ -72,6 +72,26 @@ export const getTrialDays = (): number => {
 export const getPlanBadge = (planId: PlanId | string | undefined | null): string | undefined =>
   isPromoActive(planId) ? getPromo(planId)?.badge : undefined;
 
+/**
+ * Días de prueba restantes contados desde la creación de la cuenta.
+ *
+ * Se usa para alinear el `trial_period_days` del preapproval de Mercado Pago con
+ * la prueba gratuita que la cuenta ya venía consumiendo: si la cuenta está en el
+ * día 37 de un trial de 45, al suscribirse debe cobrarse recién a los 8 días, no
+ * volver a otorgar 45. Devuelve 0 si ya venció o si no hay fecha de referencia.
+ */
+export const getRemainingTrialDays = (createdAt: string | null | undefined): number => {
+  const total = getTrialDays();
+  if (!createdAt || total <= 0) return 0;
+  const created = new Date(createdAt);
+  if (Number.isNaN(created.getTime())) return 0;
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const createdDay = new Date(created.getFullYear(), created.getMonth(), created.getDate());
+  const daysElapsed = Math.floor((todayStart.getTime() - createdDay.getTime()) / (1000 * 60 * 60 * 24));
+  return Math.max(0, total - daysElapsed);
+};
+
 /** Plan por defecto para cuentas nuevas: el plan en prueba (si hay) o starter. */
 export const NEW_ACCOUNT_PLAN: PlanId = getTrialPlan() ?? 'starter';
 

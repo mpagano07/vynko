@@ -6,6 +6,7 @@ import {
   cancelSubscription,
   getSubscriptionStatus,
 } from './billing-service';
+import { getTrialDays } from '@/lib/plans';
 
 vi.mock('@/lib/supabaseAdmin', () => ({
   supabaseAdmin: supabaseMock,
@@ -301,6 +302,52 @@ describe('createCheckoutSession', () => {
 
     const result = await createCheckoutSession(USER, { plan: 'starter' }, req);
     expect(result.ok).toBe(true);
+  });
+
+  // Cola compartida por los tests de trial: checkout de business resuelve las
+  // ramas del owner y su `created_at` más antiguo antes de crear el preapproval.
+  function queueBusinessTrialCheckout(createdAt: string) {
+    supabaseMock.__queue('tenant_users', {
+      data: [{ tenant_id: 'tenant-1', role: 'owner' }],
+      error: null,
+    });
+    supabaseMock.__queue('tenants', {
+      data: { name: 'Test', billing_email: null },
+      error: null,
+    });
+    supabaseMock.__queue('tenant_users', { data: { user_id: 'user-1' }, error: null });
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }], error: null });
+    supabaseMock.__queue('tenants', { data: [{ created_at: createdAt }], error: null });
+    supabaseMock.__queue('tenants', { data: null, error: null }); // update
+    mockCreatePreApproval.mockResolvedValue({ id: 'pa-1', init_point: 'https://mp.com/checkout' });
+  }
+
+  it('grants only the remaining trial days when subscribing mid-trial', async () => {
+    const now = new Date();
+    const createdAt = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (getTrialDays() - 8), 12).toISOString();
+    queueBusinessTrialCheckout(createdAt);
+
+    await createCheckoutSession(USER, { plan: 'business' }, makeRequest());
+
+    expect(mockCreatePreApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auto_recurring: expect.objectContaining({ trial_period_days: 8 }),
+      })
+    );
+  });
+
+  it('does not reset the trial once it already expired', async () => {
+    const now = new Date();
+    const createdAt = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (getTrialDays() + 3), 12).toISOString();
+    queueBusinessTrialCheckout(createdAt);
+
+    await createCheckoutSession(USER, { plan: 'business' }, makeRequest());
+
+    expect(mockCreatePreApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auto_recurring: expect.objectContaining({ trial_period_days: 0 }),
+      })
+    );
   });
 });
 
@@ -1001,6 +1048,75 @@ describe('getSubscriptionStatus', () => {
       const data = result.data as Record<string, unknown>;
       // consolidateOwnerSubscription defaults null status to 'free'
       expect(data.status).toBe('free');
+    }
+  });
+
+  it('flags a pending checkout when a preapproval was stored but the plan is not active', async () => {
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }], error: null });
+    supabaseMock.__queue('tenants', {
+      data: [{
+        subscription_status: 'free',
+        subscription_plan: 'business',
+        subscription_current_period_end: null,
+        created_at: '2026-01-01T00:00:00Z',
+        mercadopago_preapproval_id: 'pa-pending',
+        mercadopago_pending_preapproval_id: null,
+      }],
+      error: null,
+    });
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }], error: null });
+    supabaseMock.__queue('tenants', { data: { mercadopago_pending_plan: null }, error: null });
+
+    const result = await getSubscriptionStatus('user-1');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect((result.data as Record<string, unknown>).pendingCheckout).toBe(true);
+    }
+  });
+
+  it('does not flag a pending checkout for an active subscription', async () => {
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }], error: null });
+    supabaseMock.__queue('tenants', {
+      data: [{
+        subscription_status: 'active',
+        subscription_plan: 'business',
+        subscription_current_period_end: '2026-11-01T00:00:00Z',
+        created_at: '2026-01-01T00:00:00Z',
+        mercadopago_preapproval_id: 'pa-active',
+        mercadopago_pending_preapproval_id: null,
+      }],
+      error: null,
+    });
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }], error: null });
+    supabaseMock.__queue('tenants', { data: { mercadopago_pending_plan: null }, error: null });
+
+    const result = await getSubscriptionStatus('user-1');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect((result.data as Record<string, unknown>).pendingCheckout).toBe(false);
+    }
+  });
+
+  it('does not flag a pending checkout when it is a pending plan change', async () => {
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }], error: null });
+    supabaseMock.__queue('tenants', {
+      data: [{
+        subscription_status: 'free',
+        subscription_plan: 'business',
+        subscription_current_period_end: null,
+        created_at: '2026-01-01T00:00:00Z',
+        mercadopago_preapproval_id: 'pa-old',
+        mercadopago_pending_preapproval_id: 'pa-change',
+      }],
+      error: null,
+    });
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }], error: null });
+    supabaseMock.__queue('tenants', { data: { mercadopago_pending_plan: 'starter' }, error: null });
+
+    const result = await getSubscriptionStatus('user-1');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect((result.data as Record<string, unknown>).pendingCheckout).toBe(false);
     }
   });
 });
