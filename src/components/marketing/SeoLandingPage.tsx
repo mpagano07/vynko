@@ -28,8 +28,7 @@ type Props = {
 export default async function SeoLandingPage({ content }: Props) {
   const nonce = (await headers()).get('x-nonce') ?? undefined;
   const trialDays = getTrialDays();
-  const priceFrom = getEffectivePrice('starter');
-  const jsonLd = serializeJsonLd(buildSeoJsonLd(content, priceFrom));
+  const jsonLd = serializeJsonLd(buildSeoJsonLd(content));
   const currentPath = seoPath(content.slug);
 
   return (

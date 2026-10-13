@@ -1,4 +1,7 @@
 import type { Metadata } from 'next';
+import { APP_URL, serializeJsonLd } from './structured-data';
+
+export { serializeJsonLd };
 
 /**
  * Registro central de las landings SEO orientadas a intención de búsqueda.
@@ -59,8 +62,6 @@ export type SeoLandingContent = {
   finalCtaText: string;
 };
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://vynko.dev';
-
 export function seoPath(slug: SeoPageSlug): string {
   return `/${slug}`;
 }
@@ -98,39 +99,22 @@ export function buildSeoMetadata(content: SeoLandingContent): Metadata {
 }
 
 /**
- * Structured data (schema.org) para cada landing:
- * - SoftwareApplication: le dice a Google qué es Vynko y a qué precio arranca.
+ * Structured data específico de cada landing:
  * - FAQPage: habilita el desplegable de preguntas en los resultados.
  * - BreadcrumbList: la ruta Inicio > página.
  *
+ * El `SoftwareApplication` que describe a Vynko NO se repite acá: lo emite el
+ * layout raíz una sola vez y se referencia por `@id`. Duplicarlo por página
+ * inflaría el HTML y abriría la puerta a que las copias se contradigan.
+ *
  * No se inventa `aggregateRating`: Google penaliza reseñas falsas.
  */
-export function buildSeoJsonLd(content: SeoLandingContent, priceFrom: number): Record<string, unknown> {
+export function buildSeoJsonLd(content: SeoLandingContent): Record<string, unknown> {
   const url = `${APP_URL}${seoPath(content.slug)}`;
 
   return {
     '@context': 'https://schema.org',
     '@graph': [
-      {
-        '@type': 'SoftwareApplication',
-        name: 'Vynko',
-        applicationCategory: 'BusinessApplication',
-        operatingSystem: 'Web, Android, iOS',
-        url,
-        description: content.metaDescription,
-        inLanguage: 'es-AR',
-        offers: {
-          '@type': 'Offer',
-          price: priceFrom,
-          priceCurrency: 'ARS',
-          url: `${APP_URL}/#pricing`,
-        },
-        publisher: {
-          '@type': 'Organization',
-          name: 'Vynko',
-          url: APP_URL,
-        },
-      },
       {
         '@type': 'FAQPage',
         mainEntity: content.faq.map((item) => ({
@@ -161,12 +145,4 @@ export function buildSeoJsonLd(content: SeoLandingContent, priceFrom: number): R
       },
     ],
   };
-}
-
-/**
- * Serializa JSON-LD para incrustarlo en un `<script type="application/ld+json">`.
- * Escapa `<` para que un `</script>` dentro de un texto nunca cierre la etiqueta.
- */
-export function serializeJsonLd(data: Record<string, unknown>): string {
-  return JSON.stringify(data).replace(/</g, '\\u003c');
 }

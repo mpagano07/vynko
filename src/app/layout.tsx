@@ -1,6 +1,7 @@
 import './globals.css';
 import React from 'react';
 import { Inter } from 'next/font/google';
+import { headers } from 'next/headers';
 import { ThemeInit } from '@/components/ThemeInit';
 import { ClientLayoutWrapper } from '@/components/layout/ClientLayoutWrapper';
 import { AuthProvider } from '@/lib/contexts/auth-context';
@@ -8,6 +9,7 @@ import { NoTenantAccessGuard } from '@/components/auth/no-tenant-access-guard';
 import { TenantHeaderProvider } from '@/components/TenantHeaderProvider';
 import { AppProviders } from '@/components/AppProviders';
 import { AppReturnTracker } from '@/components/analytics/app-return-tracker';
+import { buildSiteStructuredData, serializeJsonLd } from '@/lib/marketing/structured-data';
 import type { Metadata, Viewport } from 'next';
 
 const inter = Inter({
@@ -71,16 +73,27 @@ export const viewport: Viewport = {
  */
 export const dynamic = 'force-dynamic';
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Nonce por request para firmar el JSON-LD. Sin nonce, `strict-dynamic` en
+  // produccion bloquea el `<script type="application/ld+json">` y el schema
+  // nunca llega al navegador.
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
+  const structuredData = serializeJsonLd(buildSiteStructuredData());
+
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <ThemeInit />
+        <script
+          type="application/ld+json"
+          nonce={nonce}
+          dangerouslySetInnerHTML={{ __html: structuredData }}
+        />
       </head>
       <body className={`${inter.variable} min-h-screen bg-gray-50 antialiased dark:bg-gray-950 font-sans`}>
         <AppProviders>

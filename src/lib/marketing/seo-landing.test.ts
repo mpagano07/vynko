@@ -63,15 +63,19 @@ describe('buildSeoMetadata', () => {
 });
 
 describe('buildSeoJsonLd', () => {
-  const jsonLd = buildSeoJsonLd(content, 29900) as {
+  const jsonLd = buildSeoJsonLd(content) as {
     '@graph': Array<Record<string, unknown>>;
   };
 
-  it('incluye SoftwareApplication, FAQPage y BreadcrumbList', () => {
+  it('incluye FAQPage y BreadcrumbList (lo específico de la página)', () => {
     const types = jsonLd['@graph'].map((node) => node['@type']);
-    expect(types).toContain('SoftwareApplication');
     expect(types).toContain('FAQPage');
     expect(types).toContain('BreadcrumbList');
+  });
+
+  it('NO repite SoftwareApplication: lo emite el layout una sola vez', () => {
+    const types = jsonLd['@graph'].map((node) => node['@type']);
+    expect(types).not.toContain('SoftwareApplication');
   });
 
   it('vuelca todas las preguntas en la FAQPage', () => {
