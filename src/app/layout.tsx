@@ -40,13 +40,11 @@ const BASE_METADATA: Metadata = {
     siteName: 'Vynko',
     locale: 'es_AR',
     type: 'website',
-    images: [{ url: '/icons/icon-512.png', width: 512, height: 512, alt: 'Vynko' }],
   },
   twitter: {
-    card: 'summary',
+    card: 'summary_large_image',
     title: 'Vynko | Gestión de Stock y Ventas',
     description: 'Plataforma SaaS B2B de gestión de stock y ventas para negocios.',
-    images: ['/icons/icon-512.png'],
   },
 };
 

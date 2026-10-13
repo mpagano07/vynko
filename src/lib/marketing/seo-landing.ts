@@ -87,13 +87,6 @@ export function buildSeoMetadata(content: SeoLandingContent): Metadata {
       siteName: 'Vynko',
       locale: 'es_AR',
       type: 'website',
-      images: [{ url: '/icons/icon-512.png', width: 512, height: 512, alt: 'Vynko' }],
-    },
-    twitter: {
-      card: 'summary',
-      title: content.metaTitle,
-      description: content.metaDescription,
-      images: ['/icons/icon-512.png'],
     },
   };
 }
