@@ -10,6 +10,7 @@ import { isTrialExpired } from '@/lib/checkSubscription';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { type TenantInfo } from '@/lib/contexts/auth-context';
 import { SALES_EMAIL } from '@/lib/tenant-config';
+import { SEO_PAGES, seoPath } from '@/lib/marketing/seo-landing';
 
 import { formatARS } from '@/lib/utils/currency';
 
@@ -585,6 +586,14 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="py-6 border-t border-gray-800/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 pb-6 mb-6 border-b border-gray-800/50 text-sm text-gray-400">
+            <span className="text-xs uppercase tracking-wider text-gray-500">Soluciones</span>
+            {SEO_PAGES.map((page) => (
+              <Link key={page.slug} href={seoPath(page.slug)} className="hover:text-gray-200 transition-colors">
+                {page.label}
+              </Link>
+            ))}
+          </div>
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-2">
               <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="128px" className="h-12 w-auto object-contain" />
