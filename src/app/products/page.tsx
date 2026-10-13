@@ -264,7 +264,7 @@ function ProductsPageContent() {
 
     try {
       const buf = await file.arrayBuffer();
-      const parsed = await parseWorkbookFile(buf);
+      const parsed = await parseWorkbookFile(buf, { fileName: file.name });
       if (!parsed.ok) {
         toast.error(parsed.error);
         return;
@@ -1247,7 +1247,7 @@ function ProductsPageContent() {
               </Tooltip>
             </div>
             <p className="text-sm text-gray-500 mb-4">
-              Subí un archivo <span className="font-medium text-gray-700 dark:text-gray-300">.xlsx o .xls</span> con los productos a importar. Revisá{' '}
+              Subí un archivo <span className="font-medium text-gray-700 dark:text-gray-300">.xlsx, .xls o .csv</span> con los productos a importar. Revisá{' '}
               <button
                 type="button"
                 onClick={() => setShowColumnInfo(true)}
@@ -1280,7 +1280,7 @@ function ProductsPageContent() {
                 <FileSpreadsheet className="h-12 w-12 text-gray-400 mb-4" />
                 <p className="text-sm text-gray-500 mb-4">Seleccioná un archivo Excel para comenzar</p>
                 <label className="cursor-pointer">
-                  <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFile} />
+                  <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
                   <span className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg text-sm transition-colors">
                     <Upload className="h-4 w-4" />
                     Seleccionar archivo
@@ -1339,7 +1339,7 @@ function ProductsPageContent() {
                   <span>{importRows.length} producto(s) detectados</span>
                   <label className="cursor-pointer text-cyan-500 hover:text-cyan-400 font-medium flex items-center gap-1">
                     <Upload className="h-3.5 w-3.5" />
-                    <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFile} />
+                    <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
                     Cambiar archivo
                   </label>
                 </div>

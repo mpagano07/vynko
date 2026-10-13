@@ -5,6 +5,7 @@ import {
   IMPORT_FILE_ERROR,
   MAX_IMPORT_BYTES,
   MAX_IMPORT_ROWS,
+  foldImportHeader,
   mapImportColumns,
   normalizeImportRow,
   parseImportRows,
@@ -22,6 +23,20 @@ function workbookBuffer(sheet: Record<string, unknown>[] | string[][]): ArrayBuf
   XLSX.utils.book_append_sheet(wb, ws, 'Productos');
   const out = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
   return out;
+}
+
+/** Workbook real con varias hojas, para la plantilla multipestaña de ML. */
+function workbookBufferSheets(sheets: { name: string; aoa: unknown[][] }[]): ArrayBuffer {
+  const wb = XLSX.utils.book_new();
+  for (const { name, aoa } of sheets) {
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), name);
+  }
+  return XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+}
+
+/** Buffer de un CSV plano, como el que exporta Tiendanube. */
+function csvBuffer(text: string): ArrayBuffer {
+  return new TextEncoder().encode(text).buffer as ArrayBuffer;
 }
 
 describe('parseSpreadsheetNumber', () => {
@@ -86,6 +101,58 @@ describe('mapImportColumns', () => {
     const mapped = mapImportColumns({ Nombre: 'Coca', 'Columna Rara': 'x' });
     expect(mapped.name).toBe('Coca');
     expect(mapped['Columna Rara']).toBe('x');
+  });
+
+  it('reconoce los encabezados de Mercado Libre', () => {
+    // El publicador masivo de ML titula la columna del producto "Título" y no
+    // "Nombre": sin este alias todas las filas quedaban sin nombre.
+    expect(mapImportColumns({ Título: 'Coca Cola 500ml', 'Cantidad': 5, Precio: '1500' })).toEqual({
+      name: 'Coca Cola 500ml',
+      stock: 5,
+      price: '1500',
+    });
+  });
+
+  it('reconoce los encabezados de Tiendanube', () => {
+    expect(
+      mapImportColumns({
+        Nombre: 'Remera',
+        'Identificador de URL': 'remera',
+        'Categorías': 'ROPA > MUJER',
+        'Código de barras': '779123',
+        'Descripción': 'algodón',
+        'Imágenes': 'https://cdn/x.jpg',
+        'Precio promocional': '100',
+      })
+    ).toEqual({
+      name: 'Remera',
+      'Identificador de URL': 'remera',
+      category_name: 'ROPA > MUJER',
+      barcode: '779123',
+      description: 'algodón',
+      image_url: 'https://cdn/x.jpg',
+      'Precio promocional': '100',
+    });
+  });
+
+  it('no confunde las columnas de SEO con las de producto', () => {
+    const mapped = mapImportColumns({
+      Nombre: 'Remera',
+      'Título para SEO': 'Remera infantil',
+      'Descripción para SEO': 'Remera de algodón',
+    });
+    expect(mapped.name).toBe('Remera');
+    expect(mapped['Título para SEO']).toBe('Remera infantil');
+    expect(mapped['Descripción para SEO']).toBe('Remera de algodón');
+    expect('description' in mapped).toBe(false);
+  });
+});
+
+describe('foldImportHeader', () => {
+  it('pliega mayusculas, acentos y espacios', () => {
+    expect(foldImportHeader('  Descripción Para SEO  ')).toBe('descripcion para seo');
+    expect(foldImportHeader('Categorías')).toBe('categorias');
+    expect(foldImportHeader('CÓDIGO DE BARRAS')).toBe('codigo de barras');
   });
 });
 
@@ -212,6 +279,97 @@ describe('parseWorkbookFile', () => {
       category_name: 'Almacén',
       price: 2999.99,
     });
+  });
+});
+
+describe('parseWorkbookFile: CSV de Tiendanube', () => {
+  it('lee un CSV separado por comas con los encabezados de Tiendanube', async () => {
+    const csv = [
+      'Identificador de URL,Nombre,Categorías,Precio,Stock,SKU,Código de barras,Descripción',
+      'remera,Remera,ROPA > MUJER,1500.50,5,REM-1,779123,Algodón',
+    ].join('\n');
+    const result = await parseWorkbookFile(csvBuffer(csv), { fileName: 'tiendanube.csv' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rows[0]).toMatchObject({
+      name: 'Remera',
+      category_name: 'ROPA > MUJER',
+      price: 1500.5,
+      stock: 5,
+      sku: 'REM-1',
+      // SheetJS lee un codigo de barras numerico como numero, igual que en Excel.
+      barcode: 779123,
+      description: 'Algodón',
+    });
+  });
+
+  it('lee un CSV separado por punto y coma y salta el BOM', async () => {
+    const csv = '\uFEFFNombre;SKU;Precio\r\nCoca;C1;100\r\n';
+    const result = await parseWorkbookFile(csvBuffer(csv), { fileName: 'catalogo.csv' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rows[0]).toMatchObject({ name: 'Coca', sku: 'C1', price: 100 });
+  });
+
+  it('rechaza un binario renombrado a .csv en vez de leer basura', async () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+    const result = await parseWorkbookFile(png.buffer as ArrayBuffer, { fileName: 'foto.csv' });
+    expect(result).toEqual({ ok: false, error: IMPORT_FILE_ERROR });
+  });
+
+  it('no parsea como CSV un texto renombrado a .xlsx', async () => {
+    const txt = csvBuffer('Nombre,SKU\nCoca,C1');
+    expect(await parseWorkbookFile(txt, { fileName: 'catalogo.xlsx' })).toEqual({
+      ok: false,
+      error: IMPORT_FILE_ERROR,
+    });
+  });
+
+  it('acepta la extension .csv en la validacion previa', () => {
+    expect(validateSpreadsheetFile({ name: 'tiendanube.csv', size: 2048 }).ok).toBe(true);
+  });
+});
+
+describe('parseWorkbookFile: plantilla multipestaña de Mercado Libre', () => {
+  it('saltea la hoja de Ayuda y concatena las hojas de categoria', async () => {
+    const buf = workbookBufferSheets([
+      { name: 'Ayuda', aoa: [['Cómo completar la planilla'], ['No modifiques las columnas']] },
+      { name: 'Bebidas', aoa: [['Título', 'Precio', 'Cantidad', 'SKU'], ['Coca Cola', 1500, 10, 'COC-1']] },
+      { name: 'Almacén', aoa: [['Título', 'Precio', 'Cantidad', 'SKU'], ['Arroz', 800, 5, 'ARR-1']] },
+    ]);
+    const result = await parseWorkbookFile(buf);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rows.map((r) => r.name)).toEqual(['Coca Cola', 'Arroz']);
+    expect(result.rows[0]).toMatchObject({ price: 1500, stock: 10, sku: 'COC-1' });
+  });
+
+  it('detecta la fila de encabezado debajo de las filas de ayuda', async () => {
+    const buf = workbookBufferSheets([
+      {
+        name: 'Productos',
+        aoa: [
+          ['Cargá acá tus productos', '', ''],
+          ['Para catálogo no necesitás completar este dato', '', ''],
+          ['Título', 'Precio', 'SKU'],
+          ['Pepsi', 2000, 'PEP-1'],
+        ],
+      },
+    ]);
+    const result = await parseWorkbookFile(buf);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rows).toEqual([{ name: 'Pepsi', price: 2000, sku: 'PEP-1' }]);
+  });
+
+  it('cae en la primera hoja con la fila 1 como encabezado si no reconoce ninguna', async () => {
+    const buf = workbookBufferSheets([
+      { name: 'Datos', aoa: [['Columna A', 'Columna B'], ['x', 'y']] },
+    ]);
+    const result = await parseWorkbookFile(buf);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rows).toEqual([{ 'Columna A': 'x', 'Columna B': 'y' }]);
   });
 });
 

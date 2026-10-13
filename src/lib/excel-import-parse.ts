@@ -10,11 +10,20 @@
  * (un precio vacido convertido a 0) llega intacto hasta el write.
  */
 
-/** Alias de encabezados aceptados. La clave es el encabezado ya normalizado. */
+// Solo tipos: se borran al compilar, no arrastran la libreria al bundle.
+import type { WorkBook, WorkSheet } from 'xlsx';
+
+/**
+ * Alias de encabezados aceptados. Cada clave se pliega con `foldImportHeader`
+ * (minusculas, sin acentos) antes de indexarse, asi que la variante acentuada y
+ * la pelada conviven sin problema y quedan igualadas.
+ */
 export const IMPORT_COLUMN_ALIASES: Record<string, string> = {
   nombre: 'name',
   producto: 'name',
   name: 'name',
+  titulo: 'name',
+  title: 'name',
   sku: 'sku',
   codigo: 'sku',
   'código': 'sku',
@@ -42,6 +51,15 @@ export const IMPORT_COLUMN_ALIASES: Record<string, string> = {
   categoria: 'category_name',
   'categoría': 'category_name',
   category: 'category_name',
+  categorias: 'category_name',
+  categories: 'category_name',
+  imagen: 'image_url',
+  imagenes: 'image_url',
+  images: 'image_url',
+  image: 'image_url',
+  foto: 'image_url',
+  fotos: 'image_url',
+  image_url: 'image_url',
   deposito: 'deposito',
   'depósito': 'deposito',
   ubicacion: 'deposito',
@@ -52,11 +70,35 @@ export const IMPORT_COLUMN_ALIASES: Record<string, string> = {
   estante: 'estanteria',
 };
 
+/**
+ * Normaliza un encabezado para poder compararlo contra los alias: minusculas,
+ * sin espacios al borde, sin acentos y con los espacios internos colapsados a
+ * uno. Los exportadores de terceros escriben el mismo campo con y sin tilde
+ * ("Categoría"/"Categorias", "Descripción"/"Descripcion"), asi que comparar en
+ * crudo dejaba afuera columnas que el usuario si completo.
+ */
+export function foldImportHeader(header: string): string {
+  return header
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * Indice de alias con las claves ya plegadas. Se arma una sola vez al cargar el
+ * modulo: plegar en cada celda seria recorrer el diccionario por fila.
+ */
+const IMPORT_COLUMN_ALIASES_FOLDED: Record<string, string> = Object.fromEntries(
+  Object.entries(IMPORT_COLUMN_ALIASES).map(([key, target]) => [foldImportHeader(key), target])
+);
+
 /** Columnas cuyo valor se interpreta como numero. */
 const NUMERIC_COLUMNS = ['price', 'cost', 'stock', 'min_stock', 'max_stock'] as const;
 
 export const IMPORT_FILE_ERROR =
-  'Error al leer el archivo. Asegurate de que sea un Excel válido (.xlsx o .xls)';
+  'Error al leer el archivo. Asegurate de que sea un Excel (.xlsx o .xls) o un CSV válido';
 export const IMPORT_EMPTY_FILE_ERROR = 'El archivo está vacío';
 
 /**
@@ -121,7 +163,7 @@ export function parseSpreadsheetNumber(value: unknown): number | undefined {
 export function mapImportColumns(row: Record<string, unknown>): Record<string, unknown> {
   const mapped: Record<string, unknown> = {};
   for (const [col, val] of Object.entries(row)) {
-    const key = IMPORT_COLUMN_ALIASES[col.toLowerCase().trim()] || col;
+    const key = IMPORT_COLUMN_ALIASES_FOLDED[foldImportHeader(col)] || col;
     mapped[key] = val;
   }
   return mapped;
@@ -187,7 +229,10 @@ const ZIP_SIGNATURE = [0x50, 0x4b];
 const OLE2_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0];
 
 /** Extensiones que el import acepta. Allowlist, no denylist. */
-const ALLOWED_EXTENSIONS = ['.xlsx', '.xls'] as const;
+const ALLOWED_EXTENSIONS = ['.xlsx', '.xls', '.csv'] as const;
+
+/** Sufijo aceptado para el consejo de guardado, reusado en los mensajes. */
+const SAVE_AS = '.xlsx, .xls o .csv';
 
 /**
  * Extensiones que se rechazan con un mensaje propio porque el usuario las
@@ -199,19 +244,25 @@ const ALLOWED_EXTENSIONS = ['.xlsx', '.xls'] as const;
  * leyo el contenido y se tiro el resto.
  */
 const REJECTED_EXTENSIONS: Record<string, string> = {
-  '.php': 'Los archivos .php no se importan. Guardá tu catálogo como .xlsx o .xls.',
-  '.php5': 'Los archivos .php5 no se importan. Guardá tu catálogo como .xlsx o .xls.',
-  '.phtml': 'Los archivos .phtml no se importan. Guardá tu catálogo como .xlsx o .xls.',
-  '.phar': 'Los archivos .phar no se importan. Guardá tu catálogo como .xlsx o .xls.',
-  '.htaccess': 'Los archivos .htaccess no se importan. Guardá tu catálogo como .xlsx o .xls.',
-  '.sh': 'Los archivos .sh no se importan. Guardá tu catálogo como .xlsx o .xls.',
-  '.js': 'Los archivos .js no se importan. Guardá tu catálogo como .xlsx o .xls.',
-  '.html': 'Los archivos .html no se importan. Guardá tu catálogo como .xlsx o .xls.',
-  '.svg': 'Los archivos .svg no se importan. Guardá tu catálogo como .xlsx o .xls.',
+  '.php': `Los archivos .php no se importan. Guardá tu catálogo como ${SAVE_AS}.`,
+  '.php5': `Los archivos .php5 no se importan. Guardá tu catálogo como ${SAVE_AS}.`,
+  '.phtml': `Los archivos .phtml no se importan. Guardá tu catálogo como ${SAVE_AS}.`,
+  '.phar': `Los archivos .phar no se importan. Guardá tu catálogo como ${SAVE_AS}.`,
+  '.htaccess': `Los archivos .htaccess no se importan. Guardá tu catálogo como ${SAVE_AS}.`,
+  '.sh': `Los archivos .sh no se importan. Guardá tu catálogo como ${SAVE_AS}.`,
+  '.js': `Los archivos .js no se importan. Guardá tu catálogo como ${SAVE_AS}.`,
+  '.html': `Los archivos .html no se importan. Guardá tu catálogo como ${SAVE_AS}.`,
+  '.svg': `Los archivos .svg no se importan. Guardá tu catálogo como ${SAVE_AS}.`,
   '.xlsm': 'Los Excel con macros (.xlsm) no se importan. Guardá tu planilla como .xlsx sin macros.',
   '.xlsb': 'Los Excel binarios (.xlsb) no se importan. Guardá tu planilla como .xlsx.',
-  '.csv': 'Los CSV todavía no se importan. Abrí el CSV en Excel y guardalo como .xlsx.',
 };
+
+/** Extension de un nombre de archivo, en minusculas y con el punto incluido. */
+function fileExtension(name: string): string {
+  const trimmed = (name ?? '').trim();
+  const dot = trimmed.lastIndexOf('.');
+  return dot > -1 ? trimmed.slice(dot).toLowerCase() : '';
+}
 
 /**
  * Lo unico que el navegador mira antes de dejar elegir el archivo es el
@@ -227,16 +278,14 @@ const REJECTED_EXTENSIONS: Record<string, string> = {
 export function validateSpreadsheetFile(
   file: { name: string; size: number }
 ): { ok: true } | { ok: false; error: string } {
-  const name = (file.name ?? '').trim();
-  const dot = name.lastIndexOf('.');
-  const ext = dot > -1 ? name.slice(dot).toLowerCase() : '';
+  const ext = fileExtension(file.name ?? '');
 
   if (file.size === 0) return { ok: false, error: IMPORT_EMPTY_FILE_ERROR };
 
   if (file.size > MAX_IMPORT_BYTES) {
     return {
       ok: false,
-      error: 'El archivo supera los 10MB. Volvé a exportarlo desde Excel sin imágenes para achicarlo.',
+      error: 'El archivo supera los 10MB. Volvé a exportarlo sin imágenes para achicarlo.',
     };
   }
 
@@ -263,7 +312,107 @@ export function looksLikeSpreadsheet(buf: ArrayBuffer): boolean {
 }
 
 /**
- * Lee el buffer de un archivo .xlsx/.xls y devuelve las filas ya normalizadas.
+ * Decodifica un CSV a texto, o devuelve `null` si el contenido no parece texto
+ * delimitado (por ejemplo, un binario renombrado a `.csv`). Sin este chequeo,
+ * SheetJS leería bytes basura como una fila unica y el usuario veria "el
+ * archivo está vacío" en vez de "no es un CSV".
+ */
+function decodeCsvText(buf: ArrayBuffer): string | null {
+  const text = new TextDecoder('utf-8', { fatal: false }).decode(buf);
+  const sample = text.slice(0, 8192);
+  if (sample.trim() === '') return null;
+  // Un binario distinto de xlsx (un png, un pdf) trae NUL y decodifica lleno de
+  // U+FFFD; un CSV de texto no tiene ninguno de los dos.
+  if (sample.includes('\u0000')) return null;
+  const replacement = (sample.match(/\uFFFD/g) ?? []).length;
+  if (replacement > sample.length * 0.1) return null;
+  // Un CSV real trae separador o, al menos, mas de una linea.
+  const firstLine = sample.split(/\r?\n/, 1)[0] ?? '';
+  if (!/[,;\t]/.test(firstLine) && !/\r?\n/.test(sample)) return null;
+  return text;
+}
+
+/**
+ * Fila de encabezado dentro de un bloque de celdas.
+ *
+ * Los exportadores no siempre arrancan en la fila 1: la plantilla multi-pestana
+ * de Mercado Libre trae filas de titulo y ayuda arriba de los nombres de
+ * columna. Se toma como encabezado la primera fila con una columna de nombre
+ * reconocida y al menos otra de la lista blanca, para no confundir una fila de
+ * ayuda suelta con los encabezados. Devuelve -1 cuando no encuentra ninguna.
+ */
+function findImportHeaderRow(matrix: unknown[][]): number {
+  for (let r = 0; r < matrix.length; r++) {
+    const row = matrix[r];
+    if (!Array.isArray(row)) continue;
+    let hasName = false;
+    let recognized = 0;
+    for (const cell of row) {
+      if (typeof cell !== 'string') continue;
+      const target = IMPORT_COLUMN_ALIASES_FOLDED[foldImportHeader(cell)];
+      if (!target) continue;
+      recognized++;
+      if (target === 'name') hasName = true;
+    }
+    if (hasName && recognized >= 2) return r;
+  }
+  return -1;
+}
+
+/** Filas de una hoja, ya detectada la fila de encabezado. */
+function extractSheetRows(
+  XLSX: typeof import('xlsx'),
+  ws: WorkSheet
+): { rows: Record<string, unknown>[]; detectedHeader: boolean } {
+  const matrix = XLSX.utils.sheet_to_json(ws, {
+    header: 1,
+    defval: '',
+    blankrows: false,
+  }) as unknown[][];
+  const headerRow = findImportHeaderRow(matrix);
+  const rows = XLSX.utils.sheet_to_json(ws, {
+    range: headerRow >= 0 ? headerRow : 0,
+    defval: '',
+  }) as Record<string, unknown>[];
+  return { rows, detectedHeader: headerRow >= 0 };
+}
+
+/**
+ * Junta las filas de todas las hojas con encabezado reconocible.
+ *
+ * La plantilla multi-pestana de Mercado Libre tiene una hoja por categoria; se
+ * concatenan todas para no perder productos. La hoja de "Ayuda" no tiene una
+ * fila de encabezado valida, asi que queda afuera sola. Cuando ninguna hoja
+ * tiene encabezado reconocible se conserva el comportamiento historico de leer
+ * la primera hoja con la fila 1 como encabezado.
+ */
+function extractWorkbookRows(
+  XLSX: typeof import('xlsx'),
+  wb: WorkBook
+): Record<string, unknown>[] {
+  const sheets = wb.SheetNames.map((name) => wb.Sheets[name]).filter(
+    (ws): ws is WorkSheet => Boolean(ws)
+  );
+
+  const detected: Record<string, unknown>[] = [];
+  let firstNonEmpty: Record<string, unknown>[] | null = null;
+  for (const ws of sheets) {
+    const { rows, detectedHeader } = extractSheetRows(XLSX, ws);
+    if (rows.length > 0 && firstNonEmpty === null) firstNonEmpty = rows;
+    if (detectedHeader && rows.length > 0) detected.push(...rows);
+  }
+
+  return detected.length > 0 ? detected : firstNonEmpty ?? [];
+}
+
+/**
+ * Lee el buffer de un archivo .xlsx/.xls/.csv y devuelve las filas ya
+ * normalizadas.
+ *
+ * El formato se decide por contenido: una firma de zip/OLE2 es un Excel; si no
+ * y la extension declarada es `.csv`, se decodifica como texto delimitado. Una
+ * imagen o un binario renombrado a `.csv` no pasa el chequeo de texto y cae en
+ * `{ ok: false }`.
  *
  * `xlsx` se importa de forma dinamica para que la libreria (~1MB) no entre en
  * el chunk principal de la pagina de productos: solo se descarga cuando el
@@ -273,23 +422,31 @@ export function looksLikeSpreadsheet(buf: ArrayBuffer): boolean {
  * lo carga, asi que los dos caminos devuelven `{ ok: false }` con un mensaje y
  * la UI decide que toast mostrar.
  */
-export async function parseWorkbookFile(buf: ArrayBuffer): Promise<ParseWorkbookResult> {
+export async function parseWorkbookFile(
+  buf: ArrayBuffer,
+  options: { fileName?: string } = {}
+): Promise<ParseWorkbookResult> {
   if (buf.byteLength === 0) {
     return { ok: false, error: IMPORT_EMPTY_FILE_ERROR };
   }
-  if (!looksLikeSpreadsheet(buf)) {
+
+  const binary = looksLikeSpreadsheet(buf);
+  if (!binary && fileExtension(options.fileName ?? '') !== '.csv') {
     return { ok: false, error: IMPORT_FILE_ERROR };
   }
 
   let raw: Record<string, unknown>[];
   try {
     const XLSX = await import('xlsx');
-    const wb = XLSX.read(buf, { type: 'array' });
-    const sheetName = wb.SheetNames[0];
-    if (!sheetName) return { ok: false, error: IMPORT_EMPTY_FILE_ERROR };
-    const ws = wb.Sheets[sheetName];
-    if (!ws) return { ok: false, error: IMPORT_EMPTY_FILE_ERROR };
-    raw = XLSX.utils.sheet_to_json(ws, { defval: '' }) as Record<string, unknown>[];
+    let wb: WorkBook;
+    if (binary) {
+      wb = XLSX.read(buf, { type: 'array' });
+    } else {
+      const text = decodeCsvText(buf);
+      if (text === null) return { ok: false, error: IMPORT_FILE_ERROR };
+      wb = XLSX.read(text, { type: 'string' });
+    }
+    raw = extractWorkbookRows(XLSX, wb);
   } catch {
     return { ok: false, error: IMPORT_FILE_ERROR };
   }
