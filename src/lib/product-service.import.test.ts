@@ -30,7 +30,7 @@ vi.mock('./stock', async () => {
 
 /**
  * Deja al owner en un plan sin tope de productos, para que los tests que
- * miden volumen no se crucen con el limite de 50 del plan starter.
+ * miden volumen no se crucen con el limite de 100 del plan starter.
  */
 function asOwner(plan = 'business') {
   supabaseMock.__queue('tenant_users', { data: { role: 'owner' }, error: null });
@@ -713,7 +713,7 @@ describe('importProducts: Excel enorme', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     supabaseMock.__queue('tenant_users', { data: { role: 'owner' }, error: null });
     supabaseMock.__queue('tenants', { data: { subscription_plan: 'starter' }, error: null });
-    supabaseMock.__queue('product_stock', { count: 48, error: null });
+    supabaseMock.__queue('product_stock', { count: 98, error: null });
     // El limite de plan se chequea DESPUES del lookup en bloque: 2 altas y 3
     // filas que se saltean sin escribir nada.
     supabaseMock.__queue(

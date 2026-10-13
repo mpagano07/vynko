@@ -147,7 +147,7 @@ describe('POST /api/products', () => {
     const res = await POST(makeRequest({ name: 'Coca' }));
     expect(res.status).toBe(403);
     const json = await res.json();
-    expect(json.error).toContain('permite hasta 50 productos');
+    expect(json.error).toContain('permite hasta 100 productos');
   });
 
   it('devuelve 401 sin autenticación', async () => {
