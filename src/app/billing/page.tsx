@@ -558,7 +558,7 @@ variant="danger"
       <ConfirmModal
         open={!!pendingDowngrade}
         title="¿Cambiar a Starter?"
-        message="Al pasar al plan Starter vas a perder los beneficios de Business: los productos por encima de los primeros 50 quedan desactivados (se recuperan si volvés a Business), se quita el acceso a las sucursales excepto la primera, se eliminan los colaboradores y se desactivan las funciones avanzadas (pronóstico, visión de góndolas, IA). Se cancelará tu suscripción actual y se iniciará el pago de $19.900/mes por el plan Starter. ¿Querés continuar?"
+        message="Al pasar al plan Starter vas a perder los beneficios de Business: los productos por encima de los primeros 100 quedan desactivados (se recuperan si volvés a Business), se quita el acceso a las sucursales excepto la primera, se eliminan los colaboradores y se desactivan las funciones avanzadas (pronóstico, visión de góndolas, IA). Se cancelará tu suscripción actual y se iniciará el pago de $19.900/mes por el plan Starter. ¿Querés continuar?"
         confirmLabel="Sí, cambiar a Starter"
         cancelLabel="Volver"
         variant="danger"
