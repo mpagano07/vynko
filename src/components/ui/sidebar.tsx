@@ -14,6 +14,7 @@ import { X, Clock, AlertTriangle, ChevronDown, Settings, Lock, Sparkles, ArrowRi
 import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
 import { getTrialDays, getTrialPlan } from '@/lib/plans';
 import { isAdminProfile } from '@/lib/admin';
+import { canUseFacturacion } from '@/lib/arca/access';
 import { toast } from 'react-hot-toast';
 
 interface NavItem {
@@ -23,12 +24,54 @@ interface NavItem {
   requiredPlan?: string[];
   requiredRole?: string[];
   requiredMultiBranch?: boolean;
+  /**
+   * Requiere tener la facturación electrónica habilitada. Mientras la feature
+   * esté en pruebas eso significa sólo la cuenta admin (ver `canUseFacturacion`).
+   */
+  requiresFacturacion?: boolean;
   badge?: string;
+}
+
+/** Campos de un item que participan del filtrado por plan/rol/feature. */
+export type NavItemAccess = Pick<
+  NavItem,
+  'requiredPlan' | 'requiredRole' | 'requiredMultiBranch' | 'requiresFacturacion'
+>;
+
+export interface NavAccessContext {
+  /** Plan efectivo de la empresa (free/undefined ya normalizado a `starter`). */
+  plan: string;
+  role?: string | null;
+  multiBranch?: boolean;
+  isAdmin?: boolean;
+  /** Si la cuenta tiene habilitada la facturación electrónica. */
+  facturacion?: boolean;
 }
 
 interface FilterResult {
   visible: boolean;
   locked: boolean;
+}
+
+/**
+ * Decide si un item de navegación se muestra / se ve bloqueado según plan, rol,
+ * multi-sucursal y las features habilitadas de la cuenta. Es pura para poder
+ * testearla sin montar el sidebar.
+ */
+export function resolveNavAccess(item: NavItemAccess, ctx: NavAccessContext): FilterResult {
+  // Feature en pruebas: sólo se muestra a quien la tenga habilitada (hoy, la
+  // cuenta admin). Los demás no la ven ni bloqueada.
+  if (item.requiresFacturacion && !ctx.facturacion) {
+    return { visible: false, locked: false };
+  }
+
+  const roleBlocked = Boolean(item.requiredRole && !item.requiredRole.includes(ctx.role || ''));
+  const multiBranchBlocked = Boolean(item.requiredMultiBranch && !ctx.multiBranch);
+  const planBlocked = Boolean(item.requiredPlan && !item.requiredPlan.includes(ctx.plan));
+
+  if (roleBlocked || multiBranchBlocked) return { visible: false, locked: false };
+  if (planBlocked) return { visible: true, locked: true };
+  return { visible: true, locked: false };
 }
 
 interface NavGroup {
@@ -54,7 +97,10 @@ const navGroups: NavGroup[] = [
       { name: 'Proveedores', href: '/providers', requiredPlan: ALL_PLANS },
       { name: 'Clientes', href: '/customers', requiredPlan: ALL_PLANS },
       { name: 'Documentos', href: '/documentos', requiredPlan: ALL_PLANS },
-
+      // Facturación ARCA: feature en pruebas, sólo la ve quien la tenga
+      // habilitada (hoy, la cuenta admin). Al lanzarla, `canUseFacturacion`
+      // también la habilita para business/enterprise.
+      { name: 'Facturación', href: '/facturacion', requiresFacturacion: true },
     ],
   },
   {
@@ -180,21 +226,14 @@ function LockedNavItem({ item, compact = false, onNavClick }: { item: NavItem; c
   );
 }
 
-function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, isAdmin }: { onNavClick?: () => void; tenantPlan?: string; userRole?: string | null; isBlocked?: boolean; multiBranch?: boolean; isAdmin?: boolean }) {
+function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, isAdmin, facturacion }: { onNavClick?: () => void; tenantPlan?: string; userRole?: string | null; isBlocked?: boolean; multiBranch?: boolean; isAdmin?: boolean; facturacion?: boolean }) {
   const pathname = usePathname();
   const [operacionesOpen, setOperacionesOpen] = useState(false);
 
   const effectivePlan = !tenantPlan || tenantPlan === 'free' ? 'starter' : tenantPlan;
 
-  const filterItem = (item: NavItem): FilterResult => {
-    const roleBlocked = item.requiredRole && !item.requiredRole.includes(userRole || '');
-    const multiBranchBlocked = item.requiredMultiBranch && !multiBranch;
-    const planBlocked = item.requiredPlan && !item.requiredPlan.includes(effectivePlan);
-
-    if (roleBlocked || multiBranchBlocked) return { visible: false, locked: false };
-    if (planBlocked) return { visible: true, locked: true };
-    return { visible: true, locked: false };
-  };
+  const filterItem = (item: NavItem): FilterResult =>
+    resolveNavAccess(item, { plan: effectivePlan, role: userRole, multiBranch, isAdmin, facturacion });
 
   const visibleOperaciones = operacionesItems.map((item) => ({ item, ...filterItem(item) })).filter((r) => r.visible);
   const isOperacionesActive = visibleOperaciones.some((r) => pathname === r.item.href);
@@ -345,6 +384,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const { profile, tenant, tenants, role, user, loading } = useAuth();
   const isAdmin = isAdminProfile(profile);
+  const canFacturacion = canUseFacturacion(profile, tenant);
   const { isOpen, close } = useSidebar();
 
   if (pathname?.includes('/login') || pathname?.includes('/auth') || pathname?.includes('/onboarding')) {
@@ -404,7 +444,7 @@ export function Sidebar() {
           <IconAction icon={X} label="Cerrar menú" size="md" onClick={close} />
         </div>
         <nav className="flex-1 space-y-2 overflow-y-auto">
-          <SidebarNav onNavClick={close} tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} isAdmin={isAdmin} />
+          <SidebarNav onNavClick={close} tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} isAdmin={isAdmin} facturacion={canFacturacion} />
         </nav>
         <TrialCounter tenant={tenant} />
         {userSection}
@@ -418,7 +458,7 @@ export function Sidebar() {
           </div>
         </div>
         <nav className="flex-1 overflow-y-auto">
-          <SidebarNav tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} isAdmin={isAdmin} />
+          <SidebarNav tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} isAdmin={isAdmin} facturacion={canFacturacion} />
         </nav>
         <TrialCounter tenant={tenant} />
         {userSection}

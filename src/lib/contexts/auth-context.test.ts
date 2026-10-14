@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { clearSupabaseAuthCookies, isSupabaseAuthKey } from './auth-context';
+import { clearSupabaseAuthCookies, isSupabaseAuthKey, sameTenantsList } from './auth-context';
 
 const AUTH_COOKIE = 'sb-abcdefghijklmnop-auth-token';
 
@@ -55,5 +55,39 @@ describe('clearSupabaseAuthCookies', () => {
     clearSupabaseAuthCookies();
 
     expect(document.cookie).toContain('vynko_active_tenant_id=t1');
+  });
+});
+
+describe('sameTenantsList', () => {
+  const base = { id: 't1', name: 'Empresa', slug: 'empresa', iva_condition: 'monotributista' };
+
+  it('es false cuando no hay lista previa', () => {
+    expect(sameTenantsList(null, [base])).toBe(false);
+  });
+
+  it('es true cuando las empresas son idénticas', () => {
+    expect(sameTenantsList([base], [{ ...base }])).toBe(true);
+  });
+
+  it('es false si cambia la cantidad', () => {
+    expect(sameTenantsList([base], [base, { ...base, id: 't2' }])).toBe(false);
+  });
+
+  // Regresion: antes sólo se comparaban id/name/plan/status, así que cambiar la
+  // condición de IVA no se detectaba y el contexto quedaba con la copia vieja
+  // hasta recargar la página (la Factura C no aparecía hasta el reload).
+  it('detecta cambios en la condición de IVA', () => {
+    expect(
+      sameTenantsList(
+        [base],
+        [{ ...base, iva_condition: 'responsable_inscripto' }]
+      )
+    ).toBe(false);
+  });
+
+  it('detecta cambios en otros datos fiscales', () => {
+    expect(sameTenantsList([base], [{ ...base, punto_venta: 2 }])).toBe(false);
+    expect(sameTenantsList([base], [{ ...base, cuit: '20123456789' }])).toBe(false);
+    expect(sameTenantsList([base], [{ ...base, razon_social: 'Empresa S.A.' }])).toBe(false);
   });
 });

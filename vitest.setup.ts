@@ -15,6 +15,9 @@ import { afterEach, beforeEach, vi } from 'vitest';
 // el default del store queda fijado a memoria en todos los casos.
 beforeEach(() => {
   vi.stubEnv('RATE_LIMIT_STORE', 'memory');
+  // El cifrado de credenciales ARCA falla cerrado sin clave maestra; los tests
+  // necesitan una estable. Un test puntual puede pisarla para verificar el throw.
+  vi.stubEnv('ARCA_ENCRYPTION_KEY', 'test-arca-encryption-key-32-bytes-long');
 });
 
 afterEach(() => {

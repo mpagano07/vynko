@@ -46,6 +46,7 @@ import { cn } from '@/lib/utils/cn';
 import { authFetch } from '@/lib/fetchWithTenant';
 import { matchesQuery } from '@/lib/utils/text';
 import type { Customer } from '@/lib/types/sale';
+import type { ArcaConfig } from '@/lib/types/arca';
 import { CheckoutModal, type CheckoutPayload } from '@/components/sales/checkout-modal';
 import {
   PrintReceipt,
@@ -61,6 +62,8 @@ import {
 import { getPaymentMethodLabel } from '@/lib/payment-methods';
 import { usePagination } from '@/lib/hooks/usePagination';
 import { trackClientEvent } from '@/lib/analytics-client';
+import { validateFacturaReceptor } from '@/lib/arca/validation';
+import { canUseFacturacion } from '@/lib/arca/access';
 
 interface CartItem {
   product_id: string;
@@ -154,7 +157,7 @@ function saleToReceipt(sale: SaleRecord, customers: Customer[]): ReceiptSale {
 }
 
 export default function SalesPage() {
-  const { tenant } = useAuth();
+  const { tenant, profile } = useAuth();
   const tenantId = tenant?.id ?? null;
 
   const [products, setProducts] = useState<ProductOption[]>([]);
@@ -186,6 +189,7 @@ export default function SalesPage() {
   const [showAdjustments, setShowAdjustments] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutSettings, setCheckoutSettings] = useState<CheckoutSettings>(DEFAULT_CHECKOUT_SETTINGS);
+  const [arcaConfig, setArcaConfig] = useState<ArcaConfig | null>(null);
   const [lastSale, setLastSale] = useState<ReceiptSale | null>(null);
   const [paperSize] = useState<'58mm' | '80mm'>(() => {
     if (typeof window === 'undefined') return '58mm';
@@ -295,11 +299,19 @@ export default function SalesPage() {
     if (!tenantId) return;
     let cancelled = false;
     (async () => {
-      const res = await authFetch('/api/settings/checkout');
-      if (!res.ok || cancelled) return;
-      const data = await res.json();
+      const [settingsRes, arcaRes] = await Promise.all([
+        authFetch('/api/settings/checkout'),
+        authFetch('/api/arca/config'),
+      ]);
       if (cancelled) return;
-      setCheckoutSettings(normalizeCheckoutSettings(data?.checkout));
+      if (settingsRes.ok) {
+        const data = await settingsRes.json();
+        if (cancelled) return;
+        setCheckoutSettings(normalizeCheckoutSettings(data?.checkout));
+      }
+      if (arcaRes.ok) {
+        setArcaConfig(await arcaRes.json());
+      }
     })().catch(() => toast.error('No se pudieron cargar los ajustes de ticket'));
     return () => { cancelled = true; };
   }, [tenantId]);
@@ -448,6 +460,26 @@ export default function SalesPage() {
   const surcharge = Math.round(subtotal * surchargePercent) / 100;
   const total = Math.max(0, subtotal - discount + surcharge);
 
+  // Emisión ARCA en el checkout. Los tipos válidos dependen del emisor; el
+  // sugerido, de la condición frente al IVA del cliente elegido.
+  // Además de estar activa, la cuenta debe tener habilitada la facturación
+  // (por ahora sólo la cuenta admin; ver `canUseFacturacion`).
+  const arcaEnabled = Boolean(arcaConfig?.is_active) && canUseFacturacion(profile, tenant);
+  const tenantIvaCondition = tenant?.iva_condition;
+  const arcaInvoiceTypes = useMemo<('A' | 'B' | 'C')[]>(
+    () =>
+      !tenantIvaCondition || tenantIvaCondition === 'responsable_inscripto'
+        ? ['A', 'B']
+        : ['C'],
+    [tenantIvaCondition]
+  );
+  const suggestedArcaInvoiceType = useMemo<'A' | 'B' | 'C'>(() => {
+    const customer = customers.find((c) => c.id === selectedCustomerId);
+    if (customer?.iva_condition === 'responsable_inscripto' && arcaInvoiceTypes.includes('A')) return 'A';
+    if (arcaInvoiceTypes.includes('B')) return 'B';
+    return arcaInvoiceTypes[0];
+  }, [customers, selectedCustomerId, arcaInvoiceTypes]);
+
   const openCheckout = () => {
     if (cart.length === 0) {
       toast.error('Agrega al menos un producto a la venta');
@@ -456,15 +488,52 @@ export default function SalesPage() {
     setCheckoutOpen(true);
   };
 
-  const handleConfirmCheckout = async ({ payments, primary, change, printReceipt, whatsappPhone }: CheckoutPayload) => {
+  const handleConfirmCheckout = async ({ payments, primary, change, printReceipt, whatsappPhone, emitArca, invoiceType }: CheckoutPayload) => {
     if (cart.length === 0) {
       setCheckoutOpen(false);
       toast.error('Agrega al menos un producto a la venta');
       return;
     }
 
+    const selectedCustomer = customers.find((c) => c.id === selectedCustomerId);
+
+    // Datos mínimos obligatorios del receptor antes de emitir (ej. CUIT para
+    // Factura A). Se bloquea la emisión hasta completarlos.
+    if (emitArca) {
+      const receptorError = validateFacturaReceptor(
+        {
+          invoice_type: invoiceType,
+          customer_name: selectedCustomer?.name || 'Consumidor Final',
+          document_type: selectedCustomer?.cuit
+            ? 'CUIT'
+            : selectedCustomer?.document_type || 'SinIdentificar',
+          document_number: selectedCustomer?.cuit || selectedCustomer?.document_number || '',
+          iva_condition: selectedCustomer?.iva_condition || 'consumidor_final',
+        },
+        total
+      );
+      if (receptorError) {
+        toast.error(receptorError);
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
+      const arcaPayload = emitArca
+        ? {
+            emit: true,
+            invoice_type: invoiceType,
+            customer_name: selectedCustomer?.name || 'Consumidor Final',
+            document_type: selectedCustomer?.cuit
+              ? 'CUIT'
+              : (selectedCustomer?.document_type as 'DNI' | 'CUIT' | 'CUIL' | undefined),
+            document_number: (selectedCustomer?.cuit || selectedCustomer?.document_number) || undefined,
+            iva_condition: selectedCustomer?.iva_condition || 'consumidor_final',
+            concept: arcaConfig?.concept ?? 1,
+          }
+        : undefined;
+
       const payload = JSON.stringify({
         customer_id: selectedCustomerId || null,
         notes: notes || null,
@@ -475,6 +544,7 @@ export default function SalesPage() {
           product_id: item.product_id,
           quantity: item.quantity,
         })),
+        ...(arcaPayload ? { arca: arcaPayload } : {}),
       });
 
       if (!lastSaleAttemptRef.current || lastSaleAttemptRef.current.payload !== payload) {
@@ -497,6 +567,24 @@ export default function SalesPage() {
       toast.success(
         `Venta registrada exitosamente${change > 0 ? ` · Vuelto ${formatARS(change)}` : ''}`
       );
+
+      // Resultado de la emisión ARCA (opcional). La venta ya está registrada:
+      // si ARCA falló, se avisa y se ofrece reintentar desde /facturacion.
+      if (emitArca && data.arca) {
+        if (data.arca.ok && data.arca.invoice) {
+          const inv = data.arca.invoice;
+          toast.success(
+            `Factura ${inv.invoice_type} N° ${String(inv.invoice_number).padStart(8, '0')} autorizada · CAE ${inv.cae}`,
+            { duration: 8000 }
+          );
+        } else {
+          toast.error(
+            `La venta se registró, pero ARCA no emitió el comprobante: ${data.arca.error || 'error desconocido'}. Podés reintentarlo desde Facturación.`,
+            { duration: 10000 }
+          );
+        }
+      }
+
       setCart([]);
       setNotes('');
       setSelectedCustomerId('');
@@ -1323,6 +1411,9 @@ export default function SalesPage() {
           submitting={isSubmitting}
           defaultPrint={checkoutSettings.show_receipt !== false}
           defaultPhone={customers.find((c) => c.id === selectedCustomerId)?.phone}
+          arcaEnabled={arcaEnabled}
+          arcaInvoiceTypes={arcaInvoiceTypes}
+          defaultArcaInvoiceType={suggestedArcaInvoiceType}
           onClose={() => setCheckoutOpen(false)}
           onConfirm={handleConfirmCheckout}
         />
