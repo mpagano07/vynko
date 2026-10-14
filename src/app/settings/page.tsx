@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, Suspense } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { authFetch } from '@/lib/fetchWithTenant';
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,8 @@ import {
   normalizeCheckoutSettings,
   type PaymentAdjustments,
 } from '@/lib/payment-methods';
+import { canUseFacturacion } from '@/lib/arca/access';
+import { ArcaConfigCard } from '@/components/settings/ArcaConfigCard';
 
 interface Collaborator {
   user_id: string;
@@ -59,11 +61,51 @@ function formatPhone(value: string): string {
   return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6)}`;
 }
 
-export default function SettingsPage() {
-  const { user, profile, tenant, tenants, role, loading: authLoading, logout } = useAuth();
-  const router = useRouter();
+const validTabs = ['perfil', 'empresa', 'facturacion', 'colaboradores', 'preferencias'];
 
-  const [activeTab, setActiveTab] = useState('perfil');
+export default function SettingsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+        </div>
+      }
+    >
+      <SettingsContent />
+    </Suspense>
+  );
+}
+
+function SettingsContent() {
+  const { user, profile, tenant, tenants, role, loading: authLoading, logout, loadProfileAndTenant } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams?.get('tab');
+  // La pestaña de Facturación ARCA es una feature en pruebas: por ahora sólo la
+  // ve la cuenta admin (además de la visibilidad en el sidebar).
+  const canFacturacion = canUseFacturacion(profile, tenant);
+
+  const initialTab =
+    requestedTab && (validTabs.includes(requestedTab) || requestedTab === 'arca')
+      ? (requestedTab === 'arca' ? 'facturacion' : requestedTab)
+      : 'perfil';
+
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  useEffect(() => {
+    if (!requestedTab) return;
+    const normalized = requestedTab === 'arca' ? 'facturacion' : requestedTab;
+    if (!validTabs.includes(normalized)) return;
+    // Un no-admin que entra por URL a la pestaña de Facturación ARCA (en pruebas)
+    // cae en Mi Perfil en vez de quedar en un panel vacío.
+    if (normalized === 'facturacion' && !authLoading && !canFacturacion) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setActiveTab('perfil');
+      return;
+    }
+    setActiveTab(normalized);
+  }, [requestedTab, authLoading, canFacturacion]);
 
   const [profileForm, setProfileForm] = useState({ full_name: '' });
   const [profileSynced, setProfileSynced] = useState(false);
@@ -398,13 +440,17 @@ export default function SettingsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al guardar');
 
+      // Refrescar el tenant del contexto para que las demás vistas (facturación,
+      // ventas, documentos) tomen la nueva condición de IVA y datos fiscales sin
+      // necesidad de recargar la página.
+      await loadProfileAndTenant();
       toast.success('Empresa actualizada');
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al guardar');
     } finally {
       setSavingTenant(false);
     }
-  }, [tenantForm]);
+  }, [tenantForm, loadProfileAndTenant]);
 
   const handleChangePassword = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -491,6 +537,9 @@ export default function SettingsPage() {
   const tabs = [
     { id: 'perfil', label: 'Mi Perfil', icon: <User className="h-4 w-4" /> },
     { id: 'empresa', label: 'Datos de Empresa', icon: <Building2 className="h-4 w-4" /> },
+    ...(canFacturacion
+      ? [{ id: 'facturacion', label: 'Facturación ARCA', icon: <FileText className="h-4 w-4" /> }]
+      : []),
     { id: 'colaboradores', label: 'Colaboradores', icon: <Users className="h-4 w-4" /> },
     { id: 'preferencias', label: 'Preferencias', icon: <Ticket className="h-4 w-4" /> },
   ];
@@ -856,6 +905,12 @@ export default function SettingsPage() {
               </Button>
             </form>
           </Card>
+        </div>
+      </TabPanel>
+
+      <TabPanel id="facturacion" activeTab={activeTab}>
+        <div className="space-y-6">
+          {canFacturacion && <ArcaConfigCard />}
         </div>
       </TabPanel>
 

@@ -127,6 +127,24 @@ describe('Select', () => {
     expect(screen.getByText('Sin resultados')).toBeInTheDocument();
   });
 
+  it('collects options nested inside a fragment', () => {
+    render(
+      <Select data-testid="select" value="B">
+        <>
+          <option value="B">Factura B</option>
+          <option value="A">Factura A</option>
+        </>
+      </Select>
+    );
+    const trigger = screen.getByTestId('select');
+
+    expect(trigger).toHaveTextContent('Factura B');
+
+    fireEvent.click(trigger);
+    expect(screen.getByRole('option', { name: 'Factura A' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Factura B' })).toBeInTheDocument();
+  });
+
   it('forwards ref correctly', () => {
     const selectRef = { current: null as HTMLDivElement | null };
     render(

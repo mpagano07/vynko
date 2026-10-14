@@ -17,6 +17,7 @@ import {
   Printer,
   MessageCircle,
   Phone,
+  FileText,
 } from 'lucide-react';
 import {
   PAYMENT_METHODS,
@@ -38,6 +39,8 @@ export interface CheckoutPayload {
   change: number;
   printReceipt: boolean;
   whatsappPhone: string;
+  emitArca: boolean;
+  invoiceType: 'A' | 'B' | 'C';
 }
 
 interface CheckoutModalProps {
@@ -49,6 +52,12 @@ interface CheckoutModalProps {
   submitting?: boolean;
   defaultPrint?: boolean;
   defaultPhone?: string;
+  // Emisión ARCA: solo se muestra el toggle si la empresa tiene ARCA activo.
+  arcaEnabled?: boolean;
+  // Tipos de comprobante válidos según la condición del emisor.
+  arcaInvoiceTypes?: ('A' | 'B' | 'C')[];
+  // Tipo sugerido según la condición del cliente seleccionado.
+  defaultArcaInvoiceType?: 'A' | 'B' | 'C';
   onClose: () => void;
   onConfirm: (payload: CheckoutPayload) => void;
 }
@@ -116,6 +125,9 @@ export function CheckoutModal({
   submitting = false,
   defaultPrint = true,
   defaultPhone = '',
+  arcaEnabled = false,
+  arcaInvoiceTypes = ['A', 'B', 'C'],
+  defaultArcaInvoiceType = 'B',
   onClose,
   onConfirm,
 }: CheckoutModalProps) {
@@ -128,6 +140,8 @@ export function CheckoutModal({
   const [printReceipt, setPrintReceipt] = useState<boolean>(Boolean(defaultPrint));
   const [whatsappEnabled, setWhatsappEnabled] = useState(false);
   const [whatsappPhone, setWhatsappPhone] = useState(() => (defaultPhone || '').replace(/\D/g, ''));
+  const [emitArca, setEmitArca] = useState(false);
+  const [arcaInvoiceType, setArcaInvoiceType] = useState<'A' | 'B' | 'C'>(defaultArcaInvoiceType);
   const firstAmountRef = useRef<HTMLInputElement>(null);
 
   const totalCents = Math.round(total * 100);
@@ -304,8 +318,10 @@ export function CheckoutModal({
       change: resolved.totalChangeCents / 100,
       printReceipt,
       whatsappPhone: whatsappEnabled ? whatsappPhone.trim() : '',
+      emitArca: arcaEnabled ? emitArca : false,
+      invoiceType: arcaInvoiceType,
     });
-  }, [resolved, onConfirm, printReceipt, whatsappEnabled, whatsappPhone]);
+  }, [resolved, onConfirm, printReceipt, whatsappEnabled, whatsappPhone, arcaEnabled, emitArca, arcaInvoiceType]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -633,6 +649,55 @@ return (
           </div>
 
           <div className="pt-1 space-y-2">
+            {arcaEnabled && (
+              <div className="rounded-lg bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 p-2.5">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={emitArca}
+                    onChange={(e) => setEmitArca(e.target.checked)}
+                    aria-label="Emitir factura electrónica ARCA"
+                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="inline-flex items-center gap-1.5 text-sm font-medium text-indigo-800 dark:text-indigo-200">
+                    <FileText className="h-4 w-4" />
+                    Emitir factura electrónica ARCA
+                  </span>
+                </label>
+                {emitArca && (
+                  arcaInvoiceTypes.length > 1 ? (
+                    <div className="mt-2">
+                      <label
+                        htmlFor="arca-invoice-type"
+                        className="text-[11px] font-medium text-gray-600 dark:text-gray-300"
+                      >
+                        Tipo de comprobante
+                      </label>
+                      <select
+                        id="arca-invoice-type"
+                        value={arcaInvoiceType}
+                        onChange={(e) => setArcaInvoiceType(e.target.value as 'A' | 'B' | 'C')}
+                        className="mt-1 flex h-9 w-full rounded-md border border-indigo-300 bg-white px-2.5 text-sm font-medium text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                      >
+                        {arcaInvoiceTypes.map((t) => (
+                          <option key={t} value={t}>
+                            Factura {t}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                        Sugerido según la condición frente al IVA del cliente. Se solicitará el CAE a ARCA al confirmar.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-indigo-700 dark:text-indigo-300">
+                      Se emitirá Factura {arcaInvoiceTypes[0] ?? 'B'} por {formatARS(resolved.collectedCents / 100)}. Se solicitará el CAE a ARCA al confirmar.
+                    </p>
+                  )
+                )}
+              </div>
+            )}
+
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input

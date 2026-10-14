@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getAuth } from '@/lib/api-auth';
 import { createActivityLog } from '@/lib/activity-log';
 import { trackEvent } from '@/lib/track-event';
+import { createElectronicInvoice } from '@/lib/arca-service';
 import { hashSaleRequest } from '@/lib/sales-service';
 import { supabaseMock } from '@/test/supabase-mock';
+import type { ElectronicInvoiceRecord } from '@/lib/types/arca';
 import { GET, POST } from './route';
 
 const mockAuth = {
@@ -28,6 +30,13 @@ vi.mock('@/lib/activity-log', () => ({
 
 vi.mock('@/lib/track-event', () => ({
   trackEvent: vi.fn(async () => undefined),
+}));
+
+// La emisión ARCA se mockea: el objetivo es verificar el cableado del checkout
+// (cuándo se emite, con qué datos y cómo se propaga el resultado), no el
+// servicio fiscal, que tiene sus propias suites.
+vi.mock('@/lib/arca-service', () => ({
+  createElectronicInvoice: vi.fn(),
 }));
 
 // Auditoria y analytics se difieren con `after()`. Los tests tienen que
@@ -1291,5 +1300,127 @@ describe('concurrencia (Fase 2)', () => {
     );
     expect(createCalls).toHaveLength(2);
     expect(supabaseMock.rpc).not.toHaveBeenCalledWith('increment_stock', expect.anything());
+  });
+});
+
+describe('emisión ARCA en el checkout (Fase 5)', () => {
+  const queueSale = () => {
+    supabaseMock.__queue('products', {
+      data: [{ id: 'p1', name: 'Coca', price: 2, price_cents: 200 }],
+    });
+    supabaseMock.__queue('product_stock', { data: [{ product_id: 'p1', stock: 10 }] });
+    supabaseMock.__queue('product_stock', { data: { id: 'ps1', stock: 10 } });
+    supabaseMock.__queue('product_stock', { data: [{ id: 'ps1' }] });
+  };
+
+  const fakeInvoice = (overrides: Partial<ElectronicInvoiceRecord> = {}): ElectronicInvoiceRecord => ({
+    id: 'inv-1',
+    tenant_id: 'tenant-1',
+    invoice_number: 5,
+    punto_venta: 1,
+    invoice_type: 'B',
+    cuit_emisor: '20111111112',
+    customer_name: 'Ana',
+    document_type: 'DNI',
+    document_number: '30111222',
+    iva_condition: 'consumidor_final',
+    total_cents: 400,
+    net_cents: 400,
+    iva_cents: 0,
+    iva_percentage: 0,
+    other_taxes_cents: 0,
+    cae: '74123456789012',
+    status: 'approved',
+    created_by: 'user-1',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+    ...overrides,
+  });
+
+  const arcaBody = {
+    items: [{ product_id: 'p1', quantity: 2 }],
+    arca: {
+      emit: true,
+      invoice_type: 'B' as const,
+      customer_name: 'Ana',
+      document_type: 'DNI' as const,
+      document_number: '30111222',
+      iva_condition: 'consumidor_final' as const,
+    },
+  };
+
+  beforeEach(() => {
+    supabaseMock.__reset();
+    afterCallbacks.length = 0;
+    vi.mocked(getAuth).mockResolvedValue(mockAuth);
+    vi.mocked(createElectronicInvoice).mockReset();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('emite la factura después de la venta y devuelve el resultado en `arca`', async () => {
+    queueSale();
+    supabaseMock.__rpcResults.create_sale_atomic = {
+      data: { id: 'sale-1', discount_cents: 40, surcharge_cents: 0 },
+      error: null,
+    };
+    vi.mocked(createElectronicInvoice).mockResolvedValue({
+      ok: true,
+      data: fakeInvoice(),
+      status: 201,
+    });
+
+    const res = await POST(makeRequest(arcaBody));
+    expect(res.status).toBe(201);
+
+    const json = await res.json();
+    expect(json.id).toBe('sale-1');
+    expect(json.arca).toEqual({ ok: true, invoice: expect.objectContaining({ id: 'inv-1' }) });
+
+    // La factura se arma con el nombre del producto de la venta y los ajustes
+    // reales de la venta para que el importe coincida con lo cobrado.
+    expect(createElectronicInvoice).toHaveBeenCalledWith(
+      mockAuth,
+      expect.objectContaining({
+        sale_id: 'sale-1',
+        customer_name: 'Ana',
+        invoice_type: 'B',
+        discount_cents: 40,
+        surcharge_cents: 0,
+        items: [
+          expect.objectContaining({ description: 'Coca', quantity: 2, unit_price_cents: 200 }),
+        ],
+      })
+    );
+  });
+
+  it('registra la venta igual aunque ARCA falle, con el error en `arca`', async () => {
+    queueSale();
+    vi.mocked(createElectronicInvoice).mockResolvedValue({
+      ok: false,
+      error: 'ARCA rechazó el comprobante',
+      status: 400,
+    });
+
+    const res = await POST(makeRequest(arcaBody));
+    expect(res.status).toBe(201);
+
+    const json = await res.json();
+    expect(json.id).toBe('sale-1');
+    expect(json.items).toHaveLength(1);
+    expect(json.arca).toEqual({ ok: false, error: 'ARCA rechazó el comprobante' });
+  });
+
+  it('no intenta emitir cuando el checkout no lo pide', async () => {
+    queueSale();
+
+    const res = await POST(makeRequest({ items: [{ product_id: 'p1', quantity: 1 }] }));
+    expect(res.status).toBe(201);
+
+    const json = await res.json();
+    expect(json.arca).toBeUndefined();
+    expect(createElectronicInvoice).not.toHaveBeenCalled();
   });
 });

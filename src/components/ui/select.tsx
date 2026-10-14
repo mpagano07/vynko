@@ -50,7 +50,15 @@ function extractText(node: React.ReactNode): string {
 function collectOptions(children: React.ReactNode): OptionData[] {
   const out: OptionData[] = [];
   React.Children.forEach(children, (child) => {
-    if (!React.isValidElement(child) || child.type !== 'option') return;
+    if (!React.isValidElement(child)) return;
+    // Los `<option>` pueden venir envueltos en un Fragment (típico al renderizar
+    // condicionalmente varios grupos de opciones). React.Children no desciende
+    // en Fragments, así que hay que hacerlo a mano o el desplegable queda vacío.
+    if (child.type === React.Fragment) {
+      out.push(...collectOptions((child.props as { children?: React.ReactNode }).children));
+      return;
+    }
+    if (child.type !== 'option') return;
     const props = child.props as React.OptionHTMLAttributes<HTMLOptionElement>;
     out.push({ value: String(props.value ?? ''), disabled: Boolean(props.disabled), label: extractText(props.children) });
   });

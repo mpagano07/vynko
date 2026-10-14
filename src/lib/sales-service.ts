@@ -463,8 +463,9 @@ async function buildReplayResponse(
     supabaseAdmin.from('sales').select('*').eq('id', saleId).eq('tenant_id', auth.tenantId).maybeSingle(),
     supabaseAdmin.from('tenants').select('settings').eq('id', auth.tenantId).maybeSingle(),
     // Items y pagos pueden ser varios: sin maybeSingle para no fallar con la
-    // segunda fila de una venta multicaja.
-    supabaseAdmin.from('sale_items').select('sale_id, product_id, quantity, unit_price_cents, subtotal_cents').eq('sale_id', saleId),
+    // segunda fila de una venta multicaja. Se trae el nombre del producto para
+    // poder emitir el comprobante ARCA sobre un reintento (replay).
+    supabaseAdmin.from('sale_items').select('sale_id, product_id, quantity, unit_price_cents, subtotal_cents, product:products(name)').eq('sale_id', saleId),
     supabaseAdmin.from('sale_payments').select('sale_id, method, amount_cents, received_cents, change_cents').eq('sale_id', saleId),
   ]);
 
@@ -478,10 +479,16 @@ async function buildReplayResponse(
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
 
+  const rawItems = (itemsRes.data as Record<string, unknown>[] | null) ?? [];
+  const itemsWithNames = rawItems.map((i) => {
+    const product = i.product as Record<string, unknown> | undefined;
+    return { ...i, product_name: product?.name ?? null };
+  });
+
   return {
     ok: true,
     sale,
-    items: (itemsRes.data as Record<string, unknown>[] | null) ?? [],
+    items: itemsWithNames,
     payments: (paymentsRes.data as Record<string, unknown>[] | null) ?? [],
     adjustments_applied: computeAdjustmentsApplied(body, settingsRes.data as Record<string, unknown> | null),
   };
@@ -833,6 +840,7 @@ export async function createSale(
     const itemsWithSaleId = saleItems.map((item) => ({
       sale_id: sale.id,
       product_id: item.product_id,
+      product_name: item.product_name,
       quantity: item.quantity,
       unit_price_cents: item.unit_price_cents,
       subtotal_cents: item.subtotal_cents,

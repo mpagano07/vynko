@@ -169,12 +169,19 @@ function storedAuthKeys(): string[] {
 // Se evita deliberadamente reincorporar un chequeo de cookies desde el
 // navegador: volveria a exponer la sesion al JS, que es justo lo que secerra.
 
-function sameTenantsList(a: TenantInfo[] | null, b: TenantInfo[]): boolean {
+// Compara las empresas por valor, no por unos pocos campos. Antes sólo miraba
+// id/name/plan/status, así que un cambio en la condición de IVA (o en cualquier
+// otro dato fiscal como razón social, CUIT o punto de venta) no se detectaba:
+// `loadProfileAndTenant` cortaba por "mismo dato" y las vistas seguían usando la
+// copia vieja del contexto hasta recargar la página. El JSON de una fila de
+// `tenants` es estable entre respuestas idénticas, así que sigue evitando
+// recrear referencias (y refetches) cuando no hubo cambios.
+export function sameTenantsList(a: TenantInfo[] | null, b: TenantInfo[]): boolean {
   if (!a) return false;
   if (a.length !== b.length) return false;
   return a.every((t, i) => {
     const u = b[i];
-    return u && t.id === u.id && t.name === u.name && t.subscription_plan === u.subscription_plan && t.subscription_status === u.subscription_status;
+    return u !== undefined && JSON.stringify(t) === JSON.stringify(u);
   });
 }
 
