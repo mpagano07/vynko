@@ -40,7 +40,7 @@ jobs:
       # residuales sin fix no-rompedor (braces via eslint-config-next, uuid via
       # autocannon) que se excluyen a proposito.
       - name: Audit production dependencies
-        run: npm audit --audit-level=high --omit=dev
+        run: node scripts/audit-prod.mjs
 
       # Opt-in: requiere un proyecto Supabase de test con fixtures de
       # E2E_USER_* y el flag RUN_RLS_VERIFY=true en vars del repo.
