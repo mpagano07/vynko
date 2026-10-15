@@ -43,7 +43,7 @@ export function CookieBanner() {
       <div className="max-w-4xl mx-auto bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl p-5 md:p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
         <div className="flex-1 min-w-0">
           <p className="text-sm text-gray-300 leading-relaxed">
-            Usamos cookies y almacenamiento local esenciales para autenticación y tus preferencias (tema, sucursal activa). No usamos cookies de rastreo ni publicidad. Podés aceptarlas, rechazarlas o retirar tu consentimiento en cualquier momento.{' '}
+            Usamos cookies y almacenamiento local esenciales para autenticación, tu región (para mostrarte precios y contenido adaptados) y tus preferencias (tema, sucursal activa). No usamos cookies de rastreo ni publicidad. Podés aceptarlas, rechazarlas o retirar tu consentimiento en cualquier momento.{' '}
             <Link href="/cookies" className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2">
               Más información
             </Link>
