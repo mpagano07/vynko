@@ -148,38 +148,71 @@ test.describe('Importación / Exportación de productos E2E', () => {
 
   // ─── 5. Exportar productos ────────────────────────────────
 
-  test('exportar productos genera archivo xlsx con columnas correctas', async ({ authenticatedPage: page }) => {
+  test('exportar productos abre modal de formato y genera el archivo elegido', async ({ authenticatedPage: page }) => {
     await page.goto('/products');
     await expect(page.locator('table, [role="grid"]').first()).toBeVisible({ timeout: 10_000 });
 
-    // Click en Gestionar > Exportar
+    // Gestionar > Exportar abre el modal (no descarga directo)
     await page.locator('button').filter({ hasText: 'Gestionar' }).first().click();
+    await page.getByRole('button', { name: 'Exportar', exact: true }).first().click();
+    await expect(page.getByRole('dialog').getByText('Exportar productos')).toBeVisible({ timeout: 5000 });
 
-    const [download] = await Promise.all([
+    // Default: Genérico + XLS (descarga simple, sin elegir plataforma)
+    const [xlsDownload] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByRole('button', { name: 'Exportar' }).first().click(),
+      page.getByRole('button', { name: 'Exportar', exact: true }).click(),
     ]);
+    expect(xlsDownload.suggestedFilename()).toMatch(/^productos_\d{4}-\d{2}-\d{2}\.xls$/);
 
-    // Verificar que se descarga un archivo .xlsx
-    expect(download.suggestedFilename()).toMatch(/productos_.*\.xlsx/);
-
-    // Guardar y leer el archivo
-    const savePath = path.join(TMP_DIR, download.suggestedFilename());
-    await download.saveAs(savePath);
-
-    const wb = XLSX.readFile(savePath);
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws);
-
-    // Debe tener al menos 1 fila (productos existentes)
+    const xlsPath = path.join(TMP_DIR, xlsDownload.suggestedFilename());
+    await xlsDownload.saveAs(xlsPath);
+    const wb = XLSX.readFile(xlsPath);
+    const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]]);
     expect(data.length).toBeGreaterThanOrEqual(1);
-
-    // Verificar columnas esperadas
     const headers = Object.keys(data[0]);
     expect(headers).toContain('Nombre');
+    expect(headers).toContain('Categoría');
     expect(headers).toContain('SKU');
     expect(headers).toContain('Precio Venta');
     expect(headers).toContain('Stock');
+
+    // Reabrir y elegir MercadoLibre + CSV
+    await page.locator('button').filter({ hasText: 'Gestionar' }).first().click();
+    await page.getByRole('button', { name: 'Exportar', exact: true }).first().click();
+    await expect(page.getByRole('dialog').getByText('Exportar productos')).toBeVisible({ timeout: 5000 });
+    await page.getByRole('radio', { name: 'MercadoLibre' }).click();
+    await page.getByRole('radio', { name: 'CSV' }).click();
+
+    const [csvDownload] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: 'Exportar', exact: true }).click(),
+    ]);
+    expect(csvDownload.suggestedFilename()).toMatch(/productos_mercadolibre_.*\.csv$/);
+
+    const csvPath = path.join(TMP_DIR, csvDownload.suggestedFilename());
+    await csvDownload.saveAs(csvPath);
+    const csv = fs.readFileSync(csvPath, 'utf-8');
+    expect(csv).toContain('Título');
+    expect(csv).toContain('Cantidad');
+
+    // Tiendanube usa los encabezados de su import
+    await page.locator('button').filter({ hasText: 'Gestionar' }).first().click();
+    await page.getByRole('button', { name: 'Exportar', exact: true }).first().click();
+    await page.getByRole('radio', { name: 'Tiendanube' }).click();
+    const [tnDownload] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: 'Exportar', exact: true }).click(),
+    ]);
+    expect(tnDownload.suggestedFilename()).toMatch(/productos_tiendanube_.*\.xls$/);
+    const tnPath = path.join(TMP_DIR, tnDownload.suggestedFilename());
+    await tnDownload.saveAs(tnPath);
+    const tnWb = XLSX.readFile(tnPath);
+    const tnHeaders = Object.keys(
+      XLSX.utils.sheet_to_json<Record<string, unknown>>(tnWb.Sheets[tnWb.SheetNames[0]])[0],
+    );
+    expect(tnHeaders).toContain('Identificador de URL');
+    expect(tnHeaders).toContain('Categorías');
+    expect(tnHeaders).toContain('Precio');
   });
 
   // ─── 6. Columnas del archivo de importación ───────────────
