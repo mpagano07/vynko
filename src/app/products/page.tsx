@@ -49,6 +49,9 @@ import { formatARS, groupThousands, parseAmountInput, amountToInput } from '@/li
 import { getTenantHeaders, authFetch } from '@/lib/fetchWithTenant';
 import { filterProducts } from '@/lib/product-search';
 import { IMPORT_FILE_ERROR, parseWorkbookFile, validateSpreadsheetFile } from '@/lib/excel-import-parse';
+import { exportProductsFile } from '@/lib/excel-export';
+import type { ExportFormat, ExportPlatform } from '@/lib/excel-export';
+import { ExportProductsModal } from '@/components/products/export-products-modal';
 import { matchesQuery } from '@/lib/utils/text';
 import { TransferInbox } from '@/components/transfers/TransferInbox';
 import { SortableTh, SortDir } from '@/components/ui/sortable-th';
@@ -223,6 +226,7 @@ function ProductsPageContent() {
 
   // Export State
   const { exporting, busy, run } = useExport();
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
   // Transfer State
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -323,7 +327,7 @@ function ProductsPageContent() {
     }
   };
 
-  const handleExport = async () => {
+  const handleExport = async ({ platform, format }: { platform: ExportPlatform; format: ExportFormat }) => {
     if (filteredProducts.length === 0) {
       toast.error('No hay productos para exportar');
       return;
@@ -331,38 +335,26 @@ function ProductsPageContent() {
 
     await run(async () => {
       try {
-        const XLSX = await import('xlsx');
-
-        const data = filteredProducts.map((p) => {
-          const cat = categories.find((c) => c.id === p.category_id);
-          return {
-            'Nombre': p.name,
-            'Categoría': cat?.name || '',
-            'SKU': p.sku || '',
-            'Código de Barras': p.barcode || '',
-            'Costo': p.cost ?? 0,
-            'Precio Venta': p.price ?? 0,
-            'Stock': p.stock ?? 0,
-            'Stock Mínimo': p.min_stock ?? 0,
-            'Stock Máximo': p.max_stock ?? 0,
-            'Depósito': p.deposito || '',
-            'Pasillo': p.pasillo || '',
-            'Estantería': p.estanteria || '',
-          };
+        await exportProductsFile({
+          products: filteredProducts,
+          categories,
+          platform,
+          format,
         });
-
-        const ws = XLSX.utils.json_to_sheet(data);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Productos');
-
-        const now = new Date().toISOString().slice(0, 10);
-        XLSX.writeFile(wb, `productos_${now}.xlsx`);
-
-        toast.success(`${data.length} producto(s) exportados`);
+        toast.success(`${filteredProducts.length} producto(s) exportados`);
+        setIsExportModalOpen(false);
       } catch {
         toast.error('Error al exportar');
       }
     });
+  };
+
+  const openExportModal = () => {
+    if (filteredProducts.length === 0) {
+      toast.error('No hay productos para exportar');
+      return;
+    }
+    setIsExportModalOpen(true);
   };
 
   const handlePriceAdjust = async () => {
@@ -742,16 +734,12 @@ function ProductsPageContent() {
                     Importar
                   </button>
                   <button
-                    onClick={() => { handleExport(); setIsActionsMenuOpen(false); }}
+                    onClick={() => { openExportModal(); setIsActionsMenuOpen(false); }}
                     disabled={busy}
                     className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
                   >
-                    {exporting ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-blue-500 shrink-0" />
-                    ) : (
-                      <Download className="h-4 w-4 text-blue-500 shrink-0" />
-                    )}
-                    {exporting ? 'Exportando...' : 'Exportar'}
+                    <Download className="h-4 w-4 text-blue-500 shrink-0" />
+                    Exportar
                   </button>
                   {multiBranch && (
                     <>
@@ -1224,6 +1212,17 @@ function ProductsPageContent() {
               </div>
             </form>
         </Modal>
+      )}
+
+      {/* EXPORT FORMAT MODAL */}
+      {isExportModalOpen && (
+        <ExportProductsModal
+          open={isExportModalOpen}
+          onClose={() => setIsExportModalOpen(false)}
+          onExport={handleExport}
+          exporting={exporting}
+          count={filteredProducts.length}
+        />
       )}
 
       {/* IMPORT EXCEL MODAL */}
