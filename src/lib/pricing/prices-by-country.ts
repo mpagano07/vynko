@@ -1,3 +1,5 @@
+import { getEffectivePrice } from '@/lib/plans'
+import { usesLocalCurrency } from './format'
 import type { CountryCode } from './country'
 
 export type PlanId = 'starter' | 'business' | 'enterprise'
@@ -34,7 +36,35 @@ export const PRICES_BY_COUNTRY: Record<CountryCode, PriceSet> = {
   DEFAULT: { starter: 17, business: 25, enterprise: 0 },
 }
 
+/**
+ * Precio de un plan para un país.
+ *
+ * Si la moneda local no se puede cobrar (Paddle no la soporta), devuelve el
+ * precio USD de `DEFAULT`: es el monto que efectivamente cobra el checkout, así
+ * que mostrar el valor en moneda local sería inconsistente. Ver
+ * `usesLocalCurrency`.
+ */
 export function getPriceForCountry(country: CountryCode, plan: PlanId): number {
-  const set = PRICES_BY_COUNTRY[country] ?? PRICES_BY_COUNTRY.DEFAULT
+  const set = usesLocalCurrency(country)
+    ? PRICES_BY_COUNTRY[country] ?? PRICES_BY_COUNTRY.DEFAULT
+    : PRICES_BY_COUNTRY.DEFAULT
   return set[plan]
+}
+
+/**
+ * Precio a mostrar para un país.
+ *
+ * En Argentina el precio vive en `plans.ts` y pasa por `getEffectivePrice`,
+ * que aplica las promos/descuentos en pesos. Fuera de Argentina se muestra el
+ * precio de referencia en moneda local de `PRICES_BY_COUNTRY`: ese monto es el
+ * que se cobra a través de la pasarela del país, así que las promos en ARS no
+ * aplican. Sin este helper las landings formateaban el monto en ARS con el
+ * símbolo local (29.900 COP en vez de 109.000 COP).
+ */
+export function getDisplayPrice(country: CountryCode, plan: PlanId): number {
+  if (country === 'AR') {
+    const ar = getEffectivePrice(plan)
+    return ar > 0 ? ar : getPriceForCountry(country, plan)
+  }
+  return getPriceForCountry(country, plan)
 }

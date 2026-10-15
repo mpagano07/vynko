@@ -2,9 +2,9 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { headers } from 'next/headers';
 import type { ReactNode } from 'react';
-import { PLANS, PLAN_ORDER, getEffectivePrice, getPlanBadge, getTrialDays } from '@/lib/plans';
+import { PLANS, PLAN_ORDER, getPlanBadge, getTrialDays } from '@/lib/plans';
 import { SALES_EMAIL } from '@/lib/tenant-config';
-import { getCountryFromHeaders, formatPriceByCountry } from '@/lib/pricing';
+import { getCountryFromHeaders, formatPriceByCountry, getDisplayPrice, type PlanId } from '@/lib/pricing';
 import {
   SEO_PAGES,
   buildSeoJsonLd,
@@ -197,7 +197,7 @@ export default async function SeoLandingPage({ content }: Props) {
             {PLAN_ORDER.map((id) => {
               const plan = PLANS[id];
               const badge = getPlanBadge(id);
-              const price = getEffectivePrice(id);
+              const price = getDisplayPrice(country, id as PlanId);
 
               let cta: ReactNode;
               if (plan.comingSoon) {

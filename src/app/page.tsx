@@ -5,14 +5,14 @@ import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { PLANS, getActivePromoPlan, getEffectivePrice, getPlanBadge, getTrialDays, getTrialPlan } from '@/lib/plans';
+import { PLANS, getActivePromoPlan, getPlanBadge, getTrialDays, getTrialPlan } from '@/lib/plans';
 import { isTrialExpired } from '@/lib/checkSubscription';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { type TenantInfo } from '@/lib/contexts/auth-context';
 import { SALES_EMAIL } from '@/lib/tenant-config';
 import { SEO_PAGES, seoPath } from '@/lib/marketing/seo-landing';
 
-import { formatPriceByCountry, type CountryCode } from '@/lib/pricing';
+import { formatPriceByCountry, getDisplayPrice, type CountryCode, type PlanId } from '@/lib/pricing';
 
 import PromoCountdown from '@/components/landing/PromoCountdown';
 
@@ -497,7 +497,7 @@ export default function LandingPage() {
               const isPopular = id === getActivePromoPlan();
               const badge = getPlanBadge(id);
               const isTrialPlan = id === getTrialPlan();
-              const price = getEffectivePrice(id);
+              const price = getDisplayPrice(country, id as PlanId);
               const trialDays = getTrialDays();
 
               let cta: ReactNode;

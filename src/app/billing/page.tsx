@@ -15,10 +15,9 @@ import {
   getTrialPlan,
   getPlanBadge,
   getActivePromoPlan,
-  getEffectivePrice,
 } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
-import { formatARS } from '@/lib/utils/currency';
+import { formatPriceByCountry, getDisplayPrice, type CountryCode } from '@/lib/pricing';
 import { formatDate } from '@/lib/utils/format';
 import { CreditCard, CheckCircle2, XCircle, Loader2, ArrowRight, AlertTriangle, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -53,7 +52,18 @@ function BillingContent() {
     createdAt: string | null;
     features: string[];
     pendingCheckout?: boolean;
+    provider?: 'mercadopago' | 'paddle' | null;
   } | null>(null);
+  const [country] = useState<CountryCode>(() => {
+    // El país vive en la cookie que setea el proxy; es best-effort (default AR).
+    if (typeof document === 'undefined') return 'AR';
+    try {
+      const match = document.cookie.match(/(?:^|; )vynko_country=([^;]+)/);
+      return match ? (decodeURIComponent(match[1]).toUpperCase().slice(0, 2) as CountryCode) : 'AR';
+    } catch {
+      return 'AR';
+    }
+  });
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -211,6 +221,7 @@ function BillingContent() {
   const isPlanActive = subscription?.status === 'active';
   const pendingPlanChange = (subscription as unknown as { pendingPlanChange?: string | null })?.pendingPlanChange;
   const pendingCheckout = subscription?.pendingCheckout === true;
+  const providerName = subscription?.provider === 'paddle' ? 'Paddle' : 'Mercado Pago';
 
   const TRIAL_DAYS = getTrialDays();
   const TRIAL_PLAN = getTrialPlan();
@@ -250,7 +261,7 @@ function BillingContent() {
               Cambio de plan pendiente de pago
             </p>
             <p className="text-sm text-amber-600 dark:text-amber-400 mt-1">
-              Tenés un cambio a {PLANS[pendingPlanChange as PlanId]?.name || pendingPlanChange} pendiente de confirmación. Completá el pago en Mercado Pago para que el cambio se aplique.
+              Tenés un cambio a {PLANS[pendingPlanChange as PlanId]?.name || pendingPlanChange} pendiente de confirmación. Completá el pago en {providerName} para que el cambio se aplique.
             </p>
           </div>
         </div>
@@ -265,7 +276,7 @@ function BillingContent() {
               Pago pendiente de confirmación
             </p>
             <p className="text-sm text-amber-600 dark:text-amber-400 mt-1">
-              Iniciaste el pago de tu suscripción en Mercado Pago pero no se completó. Elegí un plan para completar el pago y activarlo.
+              Iniciaste el pago de tu suscripción en {providerName} pero no se completó. Elegí un plan para completar el pago y activarlo.
               {isTrial && daysUntilTrialEnd !== null && daysUntilTrialEnd >= 0
                 ? ` Mientras tanto seguís con la prueba gratuita (te quedan ${daysUntilTrialEnd} día${daysUntilTrialEnd === 1 ? '' : 's'}).`
                 : ''}
@@ -483,9 +494,9 @@ function BillingContent() {
               <div className="mt-2 mb-4">
                 {plan.comingSoon ? (
                   <span className="text-xl font-semibold text-gray-500">Próximamente</span>
-                ) : getEffectivePrice(id) > 0 ? (
+                ) : getDisplayPrice(country, id as PlanId) > 0 ? (
                   <>
-                    <span className="text-3xl font-extrabold text-gray-900 dark:text-white">{formatARS(getEffectivePrice(id))}</span>
+                    <span className="text-3xl font-extrabold text-gray-900 dark:text-white">{formatPriceByCountry({ amount: getDisplayPrice(country, id as PlanId), country })}</span>
                     <span className="text-sm text-gray-500">/mes</span>
                   </>
                 ) : (
@@ -590,7 +601,7 @@ variant="danger"
       <ConfirmModal
         open={!!pendingDowngrade}
         title="¿Cambiar a Starter?"
-        message="Al pasar al plan Starter vas a perder los beneficios de Business: los productos por encima de los primeros 100 quedan desactivados (se recuperan si volvés a Business), se quita el acceso a las sucursales excepto la primera, se eliminan los colaboradores y se desactivan las funciones avanzadas (pronóstico, visión de góndolas, IA). Se cancelará tu suscripción actual y se iniciará el pago de $19.900/mes por el plan Starter. ¿Querés continuar?"
+        message={`Al pasar al plan Starter vas a perder los beneficios de Business: los productos por encima de los primeros 100 quedan desactivados (se recuperan si volvés a Business), se quita el acceso a las sucursales excepto la primera, se eliminan los colaboradores y se desactivan las funciones avanzadas (pronóstico, visión de góndolas, IA). Se cancelará tu suscripción actual y se iniciará el pago de ${formatPriceByCountry({ amount: getDisplayPrice(country, 'starter'), country })}/mes por el plan Starter. ¿Querés continuar?`}
         confirmLabel="Sí, cambiar a Starter"
         cancelLabel="Volver"
         variant="danger"
