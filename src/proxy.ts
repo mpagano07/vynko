@@ -13,6 +13,8 @@ import {
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 
+const COUNTRY_COOKIE = 'vynko_country';
+
 const publicPaths = [
   '/login',
   '/auth',
@@ -71,16 +73,34 @@ function withCsp(response: NextResponse, nonce: string): NextResponse {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Detect country for pricing localization
+  const country =
+    request.headers.get('x-vercel-ip-country') ||
+    request.headers.get('cf-ipcountry') ||
+    request.headers.get('x-country') ||
+    request.cookies.get(COUNTRY_COOKIE)?.value ||
+    'AR';
+  const normalizedCountry = country.toUpperCase().slice(0, 2);
+
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-nonce', nonce);
   requestHeaders.set('Content-Security-Policy', buildCsp(nonce));
+  requestHeaders.set('x-vynko-country', normalizedCountry);
   // Ruta normalizada (sin query) para que el layout raiz calcule el canonical
   // por pagina sin hardcodear uno distinto en cada archivo.
   requestHeaders.set('x-pathname', pathname);
 
   const next = () => {
     const res = NextResponse.next({ request: { headers: requestHeaders } });
+    try {
+      res.cookies.set(COUNTRY_COOKIE, normalizedCountry, {
+        path: '/',
+        maxAge: 60 * 60 * 24 * 7,
+        sameSite: 'lax',
+        httpOnly: false,
+      });
+    } catch (e) {}
     return withCsp(res, nonce);
   };
 

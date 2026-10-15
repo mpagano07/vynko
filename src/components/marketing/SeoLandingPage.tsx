@@ -4,7 +4,7 @@ import { headers } from 'next/headers';
 import type { ReactNode } from 'react';
 import { PLANS, PLAN_ORDER, getEffectivePrice, getPlanBadge, getTrialDays } from '@/lib/plans';
 import { SALES_EMAIL } from '@/lib/tenant-config';
-import { formatARS } from '@/lib/utils/currency';
+import { getCountryFromHeaders, formatPriceByCountry } from '@/lib/pricing';
 import {
   SEO_PAGES,
   buildSeoJsonLd,
@@ -26,7 +26,9 @@ type Props = {
  * para que no lo bloquee `script-src`.
  */
 export default async function SeoLandingPage({ content }: Props) {
-  const nonce = (await headers()).get('x-nonce') ?? undefined;
+  const h = await headers();
+  const nonce = h.get('x-nonce') ?? undefined;
+  const country = getCountryFromHeaders(h);
   const trialDays = getTrialDays();
   const jsonLd = serializeJsonLd(buildSeoJsonLd(content));
   const currentPath = seoPath(content.slug);
@@ -237,7 +239,7 @@ export default async function SeoLandingPage({ content }: Props) {
                       <span className="text-4xl font-extrabold">A medida</span>
                     ) : (
                       <>
-                        <span className="text-4xl font-extrabold">{formatARS(price)}</span>
+                        <span className="text-4xl font-extrabold">{formatPriceByCountry({ amount: price, country })}</span>
                         <span className="text-sm text-gray-400 ml-1">/mes</span>
                       </>
                     )}

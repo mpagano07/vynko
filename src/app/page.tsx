@@ -12,7 +12,7 @@ import { type TenantInfo } from '@/lib/contexts/auth-context';
 import { SALES_EMAIL } from '@/lib/tenant-config';
 import { SEO_PAGES, seoPath } from '@/lib/marketing/seo-landing';
 
-import { formatARS } from '@/lib/utils/currency';
+import { formatPriceByCountry, type CountryCode } from '@/lib/pricing';
 
 import PromoCountdown from '@/components/landing/PromoCountdown';
 
@@ -64,6 +64,7 @@ export default function LandingPage() {
   const [emailError, setEmailError] = useState('');
   const [waitlistLoading, setWaitlistLoading] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [country, setCountry] = useState<CountryCode>('AR');
 
   const tenantRef = useRef<TenantInfo | null>(null);
   const tenantsRef = useRef<TenantInfo[]>([]);
@@ -102,6 +103,13 @@ export default function LandingPage() {
     // Inicialización única (evita mismatch de hidratación)
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsMounted(true);
+    try {
+      const match = document.cookie.match(/(?:^|; )vynko_country=([^;]+)/);
+      if (match) {
+        const c = decodeURIComponent(match[1]).toUpperCase().slice(0,2) as CountryCode;
+        setCountry(c as CountryCode);
+      }
+    } catch (e) {}
   }, []);
 
   const trialExpired = isTrialExpired(tenant);
@@ -559,7 +567,7 @@ export default function LandingPage() {
                     ) : isTrialPlan ? (
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-base text-gray-500 line-through">{formatARS(price)}</span>
+                          <span className="text-base text-gray-500 line-through">{formatPriceByCountry({ amount: price, country })}</span>
                           <span className="text-sm text-gray-400">/mes</span>
                           <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
                             Oferta
@@ -571,12 +579,12 @@ export default function LandingPage() {
                           <span className="text-sm text-gray-400">por {trialDays} días</span>
                         </div>
                         <p className="mt-2 text-xs text-gray-400">
-                          Ahorrás <span className="text-gray-100 font-semibold">{formatARS(price)}</span> durante tu prueba.
+                          Ahorrás <span className="text-gray-100 font-semibold">{formatPriceByCountry({ amount: price, country })}</span> durante tu prueba.
                         </p>
                       </div>
                     ) : (
                       <>
-                        <span className="text-4xl font-extrabold">{formatARS(price)}</span>
+                        <span className="text-4xl font-extrabold">{formatPriceByCountry({ amount: price, country })}</span>
                         <span className="text-sm text-gray-400 ml-1">/mes</span>
                       </>
                     )}
