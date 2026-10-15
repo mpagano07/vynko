@@ -260,6 +260,11 @@ export default async function SeoLandingPage({ content }: Props) {
               );
             })}
           </div>
+          {country !== 'AR' && (
+            <p className="mt-8 text-center text-xs text-gray-500 max-w-2xl mx-auto">
+              El cobro se procesa en pesos argentinos (ARS) a través de MercadoPago. El precio en tu moneda es una referencia orientativa y puede variar según el tipo de cambio de tu banco.
+            </p>
+          )}
         </div>
       </section>
 

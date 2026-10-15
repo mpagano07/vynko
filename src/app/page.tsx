@@ -109,7 +109,9 @@ export default function LandingPage() {
         const c = decodeURIComponent(match[1]).toUpperCase().slice(0,2) as CountryCode;
         setCountry(c as CountryCode);
       }
-    } catch (e) {}
+    } catch {
+      // La cookie de país es best-effort: si no está, queda el default AR.
+    }
   }, []);
 
   const trialExpired = isTrialExpired(tenant);
@@ -621,6 +623,11 @@ export default function LandingPage() {
             <span>⚡ Configuración lista en menos de 2 minutos.</span>
             <span>🔒 Cancelá cuando quieras sin compromisos.</span>
           </div>
+          {country !== 'AR' && (
+            <p className="mt-6 text-center text-xs text-gray-500 max-w-2xl mx-auto">
+              El cobro se procesa en pesos argentinos (ARS) a través de MercadoPago. El precio en tu moneda es una referencia orientativa y puede variar según el tipo de cambio de tu banco.
+            </p>
+          )}
         </div>
       </section>
 

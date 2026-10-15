@@ -100,7 +100,9 @@ export async function proxy(request: NextRequest) {
         sameSite: 'lax',
         httpOnly: false,
       });
-    } catch (e) {}
+    } catch {
+      // La cookie de país es best-effort: si falla, el header ya quedó seteado.
+    }
     return withCsp(res, nonce);
   };
 
