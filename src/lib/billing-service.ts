@@ -139,7 +139,7 @@ export async function createCheckoutSession(
         })
         .in('id', ownerBranchIds);
 
-      return { ok: true, data: { url: checkout.url } };
+      return { ok: true, data: { url: checkout.url, transactionId: checkout.transactionId } };
     } catch (err) {
       logger.error('Error creating Paddle transaction:', { error: err });
       return { ok: false, error: 'No se pudo iniciar el pago. Intentá de nuevo en unos minutos.', status: 502 };
@@ -235,6 +235,7 @@ export async function downgradePlan(
 
   const targetPlanConfig = PLANS[plan];
   let url: string | null = null;
+  let transactionId: string | null = null;
 
   // Un cambio de plan se cobra con la misma pasarela que ya tiene la cuenta:
   // no se puede cancelar en Paddle algo que se paga por MercadoPago. Si nunca
@@ -274,12 +275,13 @@ export async function downgradePlan(
         .in('id', ownerBranchIds);
 
       url = checkout.url;
+      transactionId = checkout.transactionId;
     } catch (err) {
       logger.error('Error creating Paddle transaction on downgrade:', { error: err });
       return { ok: false, error: 'No se pudo iniciar el pago. Intentá de nuevo en unos minutos.', status: 502 };
     }
 
-    return { ok: true, data: { success: true, plan, url } };
+    return { ok: true, data: { success: true, plan, url, transactionId } };
   }
 
   try {

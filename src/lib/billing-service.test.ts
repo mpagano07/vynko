@@ -175,6 +175,8 @@ describe('createCheckoutSession', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect((result.data as Record<string, unknown>).url).toBe('https://paddle.test/checkout');
+      // El cliente abre el overlay de Paddle.js con la transacción ya creada.
+      expect((result.data as Record<string, unknown>).transactionId).toBe('txn_1');
     }
 
     const update = supabaseMock.__calls.find(
@@ -766,6 +768,7 @@ describe('downgradePlan', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect((result.data as Record<string, unknown>).url).toBe('https://paddle.test/downgrade');
+      expect((result.data as Record<string, unknown>).transactionId).toBe('txn_2');
     }
 
     const update = supabaseMock.__calls.find(

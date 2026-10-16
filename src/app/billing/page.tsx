@@ -23,6 +23,7 @@ import { CreditCard, CheckCircle2, XCircle, Loader2, ArrowRight, AlertTriangle, 
 import toast from 'react-hot-toast';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { authFetch } from '@/lib/fetchWithTenant';
+import { getPaddleClient, openPaddleCheckout } from '@/lib/paddle-client';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function BillingPage() {
@@ -115,6 +116,12 @@ function BillingContent() {
   }, [router]);
 
   useEffect(() => {
+    // Precalienta Paddle.js (overlay del checkout internacional) para que el
+    // primer click no espere la descarga del CDN. No-op si falta el client token.
+    void getPaddleClient();
+  }, []);
+
+  useEffect(() => {
     if (!showRevocationTooltip) return;
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       if (revocationTooltipRef.current && !revocationTooltipRef.current.contains(event.target as Node)) {
@@ -154,6 +161,11 @@ function BillingContent() {
       });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error || 'Error'); return; }
+      // El server ya creó la transacción (valida moneda/precio y guarda el
+      // `custom_data` que resuelve el webhook). Con Paddle.js disponible se
+      // abre el overlay para esa transacción; si no, se cae al redirect del
+      // `checkout.url` de la cuenta.
+      if (data.transactionId && await openPaddleCheckout(data.transactionId)) return;
       if (data.url) window.location.assign(data.url);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
@@ -176,8 +188,16 @@ function BillingContent() {
 
       setPendingDowngrade(null);
 
+      const planName = PLANS[pendingDowngrade as PlanId].name;
+      // Mismo criterio que el alta: overlay de Paddle si hay transacción y
+      // Paddle.js está disponible; si no, redirect al `checkout.url`.
+      if (data.transactionId && await openPaddleCheckout(data.transactionId)) {
+        toast.success(`Tu plan es ${planName}. Completá el pago para activar tu suscripción.`);
+        return;
+      }
+
       if (data.url) {
-        toast.success(`Tu plan es ${PLANS[pendingDowngrade as PlanId].name}. Completá el pago para activar tu suscripción.`);
+        toast.success(`Tu plan es ${planName}. Completá el pago para activar tu suscripción.`);
         window.location.assign(data.url);
         return;
       }
