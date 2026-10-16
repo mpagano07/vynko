@@ -1,5 +1,5 @@
 -- ============================================================
--- 060: backfill de billing_provider para cuentas que ya cobraban por MercadoPago
+-- 060: backfill de billing_provider + comentario de paddle_price_id
 -- ============================================================
 --
 -- La 059 agregó `billing_provider` dejando NULL en toda cuenta preexistente,
@@ -21,3 +21,14 @@ UPDATE tenants
    SET billing_provider = 'mercadopago'
  WHERE billing_provider IS NULL
    AND mercadopago_preapproval_id IS NOT NULL;
+
+-- ============================================================
+-- Comentario de `paddle_price_id`: la 059 lo describía como "vigente", pero el
+-- código lo escribe al INICIAR un checkout o cambio de plan (`createCheckoutSession`,
+-- `downgradePlan`) con el `pri_` del checkout, y el webhook nunca lo actualiza ni
+-- lo limpia. O sea: es el precio del último checkout iniciado, que puede quedar
+-- pendiente de pago y no refleja necesariamente la suscripción vigente.
+-- ============================================================
+
+COMMENT ON COLUMN tenants.paddle_price_id IS
+  'Precio de Paddle (pri_...) del último checkout iniciado. Depende del plan y la moneda del país. Se escribe al iniciar un checkout o cambio de plan; no se actualiza ni se limpia con el webhook.';
