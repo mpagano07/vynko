@@ -53,7 +53,26 @@ function Invoke-Supabase {
 
 function Invoke-DbQueryJson {
     param([string]$Url, [string]$Sql)
-    $tmp = Join-Path $env:TEMP ("supa-q-" + [guid]::NewGuid().ToString('N') + '.sql')
+    # Obtener directorio temporal de forma multiplataforma
+    $TempPath = $null
+    if ($env:TEMP) { $TempPath = $env:TEMP }
+    elseif ($env:TMP) { $TempPath = $env:TMP }
+    elseif ($env:TMPDIR) { $TempPath = $env:TMPDIR }
+
+    if (-not $TempPath) {
+        try {
+            $TempPath = [System.IO.Path]::GetTempPath()
+        }
+        catch {
+            $TempPath = "/tmp"
+        }
+    }
+
+    if (-not (Test-Path -Path $TempPath)) {
+        New-Item -ItemType Directory -Path $TempPath -Force | Out-Null
+    }
+
+    $tmp = Join-Path -Path $TempPath -ChildPath ("supa-q-" + [guid]::NewGuid().ToString('N') + '.sql')
     [System.IO.File]::WriteAllText($tmp, $Sql, (New-Object System.Text.UTF8Encoding($false)))
     $prevEap = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
