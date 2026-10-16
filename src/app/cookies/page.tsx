@@ -91,6 +91,12 @@ export default function CookiesPage() {
                     <td className="py-3">7 días</td>
                   </tr>
                   <tr>
+                    <td className="py-3 pr-4 font-mono text-xs text-cyan-400">vynko_paddle_currencies</td>
+                    <td className="py-3 pr-4">Cookie técnica</td>
+                    <td className="py-3 pr-4">Recordar en qué monedas está habilitado el cobro para mostrarte el precio en la misma moneda en la que se te va a cobrar.</td>
+                    <td className="py-3">7 días</td>
+                  </tr>
+                  <tr>
                     <td className="py-3 pr-4 font-mono text-xs text-cyan-400">vynko-theme</td>
                     <td className="py-3 pr-4">LocalStorage</td>
                     <td className="py-3 pr-4">Recordar tu preferencia visual (modo claro u oscuro).</td>
