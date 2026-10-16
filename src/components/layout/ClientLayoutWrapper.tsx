@@ -56,7 +56,8 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
     pathname?.startsWith('/control-de-stock') ||
     pathname?.startsWith('/ventas-y-caja') ||
     pathname?.startsWith('/alternativa-a-excel') ||
-    pathname?.startsWith('/software-gestion-argentina');
+    pathname?.startsWith('/software-gestion-argentina') ||
+    pathname?.startsWith('/importar-productos-mercadolibre-tiendanube');
 
   const isBillingRoute = pathname?.startsWith('/billing');
 

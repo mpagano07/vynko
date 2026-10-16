@@ -64,6 +64,15 @@ export default function FacturacionPage() {
   // en el sidebar y acá se corta el acceso directo por URL.
   const canInvoice = canUseFacturacion(profile, tenant);
 
+  const [country] = useState<'AR' | string>(() => {
+    if (typeof document === 'undefined') return 'AR';
+    try {
+      const match = document.cookie.match(/(?:^|; )vynko_country=([^;]+)/);
+      return match ? decodeURIComponent(match[1]).toUpperCase().slice(0, 2) : 'AR';
+    } catch {
+      return 'AR';
+    }
+  });
   const [invoices, setInvoices] = useState<ElectronicInvoiceRecord[]>([]);
   const [arcaConfig, setArcaConfig] = useState<ArcaConfig | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -473,6 +482,19 @@ export default function FacturacionPage() {
   }, [invoices]);
 
   if (authLoading || !canInvoice) return null;
+
+  if (country !== 'AR') {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <AlertTriangle className="h-12 w-12 text-amber-500 mb-4" />
+        <h1 className="text-xl font-semibold text-gray-900 mb-2">Facturación no disponible</h1>
+        <p className="text-sm text-gray-600 text-center max-w-md mb-4">
+          El módulo de facturación solo está disponible para cuentas de Argentina. ARCA (ex-AFIP) solo opera en Argentina.
+        </p>
+        <Button onClick={() => router.replace('/dashboard')}>Volver al inicio</Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
