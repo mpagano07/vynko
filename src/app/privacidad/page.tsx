@@ -88,9 +88,9 @@ export default function PrivacidadPage() {
             <ul className="list-disc list-inside space-y-2 text-gray-300">
               <li>Proveer, sincronizar y operar el sistema de gestión de inventario, punto de venta y control multi-sucursal.</li>
               <li>Administrar altas de cuenta, recuperación de credenciales y comunicaciones esenciales sobre el estado de la suscripción o alertas de seguridad.</li>
-              <li>Procesar el cobro recurrente de suscripciones a través de pasarelas de pago homologadas (Mercado Pago). Vynko no almacena datos sensibles de tarjetas de crédito o débito.</li>
+              <li>Procesar el cobro recurrente de suscripciones a través de pasarelas de pago homologadas (Mercado Pago y Paddle). Vynko no almacena datos sensibles de tarjetas de crédito o débito.</li>
               <li>Proveer soporte técnico asistido y responder a consultas o requerimientos operativos.</li>
-              <li>Estimar tu país de conexión a partir de tu dirección IP con el fin de mostrar precios, moneda de referencia y contenido adaptados a tu región.</li>
+              <li>Estimar tu país de conexión a partir de tu dirección IP con el fin de mostrar precios, moneda y contenido adaptados a tu región.</li>
               <li>Cumplir con requerimientos legales, contables o regulatorios aplicables.</li>
             </ul>
           </section>
@@ -109,6 +109,9 @@ export default function PrivacidadPage() {
               </li>
               <li>
                 <strong>Mercado Pago:</strong> Pasarela de pagos certificada PCI-DSS para el procesamiento seguro de transacciones monetarias y suscripciones.
+              </li>
+              <li>
+                <strong>Paddle (Paddle.com Market Ltd.):</strong> Procesador de pagos internacional y Merchant of Record para las suscripciones contratadas fuera de Argentina. Gestiona el cobro recurrente, la facturación y la liquidación de impuestos locales.
               </li>
               <li>
                 <strong>Google Generative AI (Google LLC):</strong> En los planes habilitados (Business y Enterprise) que utilizan voluntariamente funciones de análisis o asistencia por Inteligencia Artificial, se procesan únicamente las consultas puntuales generadas para dicho análisis. No se ceden datos personales a modelos públicos de terceros ni se comercializa tu información.

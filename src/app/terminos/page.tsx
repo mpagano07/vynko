@@ -54,7 +54,7 @@ export default function TerminosPage() {
               </Link>.
             </p>
             <p className="leading-relaxed mt-3">
-              El Servicio está disponible para usuarios de la República Argentina y de otros países de América Latina. El acceso desde otras jurisdicciones no modifica la moneda de contratación (pesos argentinos) ni la ley aplicable prevista en la sección 10, y el usuario es responsable de verificar que el uso del Servicio cumpla con la normativa local que le resulte aplicable.
+              El Servicio está disponible para usuarios de la República Argentina y de otros países de América Latina. La moneda de contratación depende del país desde el que se contrate (ver sección 4): pesos argentinos (ARS) para Argentina y la moneda local —o dólares (USD) cuando no haya una habilitada— para el resto. Ello no modifica la ley aplicable prevista en la sección 10, y el usuario es responsable de verificar que el uso del Servicio cumpla con la normativa local que le resulte aplicable.
             </p>
           </section>
 
@@ -77,10 +77,10 @@ export default function TerminosPage() {
           <section className="bg-gray-900/50 border border-gray-800 rounded-xl p-6">
             <h2 className="text-xl font-semibold text-white mb-3">4. Suscripciones, Pagos y Facturación</h2>
             <ul className="list-disc list-inside space-y-2 text-gray-300">
-              <li>El acceso continuo a los planes de pago se efectúa mediante suscripciones mensuales recurrentes procesadas a través de la pasarela de pagos Mercado Pago.</li>
-              <li>El cobro de las suscripciones se procesa en <strong>pesos argentinos (ARS)</strong>, que constituye la moneda de contratación y liquidación del Servicio. Los precios incluyen los impuestos correspondientes que por ley apliquen.</li>
-              <li>Cuando accedas desde un país distinto de la República Argentina, podremos mostrarte un <strong>precio de referencia aproximado en la moneda local</strong> a los fines informativos y de comparación. Dicho valor es meramente orientativo: el importe efectivamente cobrado se determina en pesos argentinos (ARS) y el contravalor en tu moneda dependerá del tipo de cambio, las comisiones por conversión de divisas y los cargos que aplique tu banco o emisor de tarjeta. La moneda y el importe definitivos se informan antes de confirmar el pago en la pantalla de Mercado Pago.</li>
-              <li>Las tarjetas emitidas fuera de la República Argentina pueden estar sujetas a restricciones del emisor o de la pasarela de pagos, así como a cargos por conversión de moneda o transacciones internacionales ajenos a Vynko.</li>
+              <li>El acceso continuo a los planes de pago se efectúa mediante suscripciones mensuales recurrentes procesadas a través de pasarelas de pago homologadas: <strong>Mercado Pago</strong> para Argentina y <strong>Paddle</strong> (Merchant of Record) para el resto de los países.</li>
+              <li>El cobro de las suscripciones se procesa en <strong>pesos argentinos (ARS)</strong> para los usuarios de Argentina, y en la <strong>moneda local</strong> que se muestra antes de confirmar el pago para el resto de los países (o en <strong>dólares (USD)</strong> cuando no exista una moneda habilitada para tu país). En todos los casos los precios incluyen los impuestos correspondientes que por ley apliquen. En los cobros internacionales, Paddle actúa como vendedor registrado (Merchant of Record), liquida los impuestos locales y emite el comprobante correspondiente.</li>
+              <li>Cuando accedas desde un país distinto de la República Argentina, el precio que se muestra en tu moneda es el importe que efectivamente se cobra a través de Paddle, salvo en los países sin moneda habilitada, que se cobran en dólares (USD). La moneda y el importe definitivos se informan antes de confirmar el pago en la pantalla del checkout. Si tu cobro se procesa en una moneda distinta a la de tu tarjeta, tu banco o emisor puede aplicar cargos por conversión de divisas o transacciones internacionales ajenos a Vynko.</li>
+              <li>Las tarjetas emitidas fuera de la República Argentina pueden estar sujetas a restricciones del emisor o de la pasarela de pagos ajenas a Vynko.</li>
               <li>Cualquier actualización de tarifas será comunicada con un preaviso mínimo de treinta (30) días corridos a la casilla de correo del suscriptor antes de impactar en su próximo ciclo de facturación.</li>
             </ul>
           </section>

@@ -625,7 +625,7 @@ export default function LandingPage() {
           </div>
           {country !== 'AR' && (
             <p className="mt-6 text-center text-xs text-gray-500 max-w-2xl mx-auto">
-              El cobro se procesa en pesos argentinos (ARS) a través de MercadoPago. El precio en tu moneda es una referencia orientativa y puede variar según el tipo de cambio de tu banco.
+              Fuera de Argentina el cobro se procesa en la moneda que ves, a través de nuestra pasarela internacional (Paddle), que actúa como Merchant of Record y liquida los impuestos locales. Si tu país no tiene una moneda habilitada, el cobro se realiza en dólares (USD). El importe y la moneda definitivos se muestran antes de confirmar el pago.
             </p>
           )}
         </div>
