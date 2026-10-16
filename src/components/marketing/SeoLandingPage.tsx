@@ -14,6 +14,7 @@ import {
 import { SALES_EMAIL } from '@/lib/tenant-config';
 import { formatARS } from '@/lib/utils/currency';
 import PromoCountdown from '@/components/landing/PromoCountdown';
+import ROICalculator from '@/components/landing/ROICalculator';
 import {
   SEO_PAGES,
   buildSeoJsonLd,
@@ -80,19 +81,19 @@ export default async function SeoLandingPage({ content }: Props) {
               </Link>
               <div className="hidden md:flex items-center gap-6">
                 <Link href="#funcionalidades" className="text-sm text-gray-400 hover:text-white transition-colors">
-                  Funcionalidades
+                  Características
                 </Link>
-                <Link href="#para-quien" className="text-sm text-gray-400 hover:text-white transition-colors">
-                  Para quién
+                <Link href="#como-funciona" className="text-sm text-gray-400 hover:text-white transition-colors">
+                  Cómo funciona
                 </Link>
                 <Link href="#precios" className="text-sm text-gray-400 hover:text-white transition-colors">
                   Precios
                 </Link>
-                <Link href="#faq" className="text-sm text-gray-400 hover:text-white transition-colors">
-                  Preguntas
-                </Link>
                 <Link href="/#demo" className="text-sm text-gray-400 hover:text-white transition-colors">
                   Ver demo
+                </Link>
+                <Link href="#roi" className="text-sm text-gray-400 hover:text-white transition-colors">
+                  Calculá cuánto podés ahorrar
                 </Link>
               </div>
             </div>
@@ -254,8 +255,117 @@ export default async function SeoLandingPage({ content }: Props) {
         </div>
       </section>
 
+      {/* Cómo funciona */}
+      <section className="py-20 bg-gray-900/30" id="como-funciona">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl sm:text-4xl font-bold">
+              Empezá en <span className="text-cyan-400">3 pasos</span>
+            </h2>
+            <p className="mt-4 text-gray-400 max-w-2xl mx-auto">
+              En minutos tenés el negocio ordenado. Sin instalar nada ni saber de tecnología.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+            {[
+              {
+                step: '01',
+                title: 'Cargá tu catálogo',
+                desc: 'Importá tu planilla de Excel, Mercado Libre o Tiendanube y tus productos quedan listos.',
+              },
+              {
+                step: '02',
+                title: 'Escaneá y vendé',
+                desc: 'Con la cámara del celular escaneás el código de barras y registrás la venta en segundos.',
+              },
+              {
+                step: '03',
+                title: 'Mantené todo al día',
+                desc: 'Cada venta, compra o transferencia actualiza el stock solo. Vos solo mirás el resultado.',
+              },
+            ].map((item) => (
+              <div key={item.step} className="text-center">
+                <div className="w-16 h-16 mx-auto rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mb-6">
+                  <span className="text-xl font-extrabold text-cyan-400">{item.step}</span>
+                </div>
+                <h3 className="text-lg font-bold mb-3">{item.title}</h3>
+                <p className="text-sm text-gray-400 leading-relaxed">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Comparativa */}
+      <section className="py-20" id="comparativa">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl sm:text-4xl font-bold">
+              Excel y papel vs <span className="text-cyan-400">Vynko</span>
+            </h2>
+            <p className="mt-4 text-gray-400 max-w-2xl mx-auto">
+              Lo que cambia el día que dejás de anotar todo a mano.
+            </p>
+          </div>
+          <div className="overflow-x-auto rounded-2xl border border-gray-800">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead>
+                <tr className="bg-gray-900/60">
+                  <th className="px-6 py-4 font-semibold text-gray-400">&nbsp;</th>
+                  <th className="px-6 py-4 font-semibold text-gray-300">📋 Excel + papel</th>
+                  <th className="px-6 py-4 font-semibold text-cyan-400">⚡ Vynko</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800">
+                {[
+                  { label: 'Stock actualizado', excel: 'A mano, con errores', vynko: 'En tiempo real y automático' },
+                  { label: 'Velocidad de venta', excel: 'Buscás en la planilla', vynko: 'Escaneás y cobrás en segundos' },
+                  { label: 'Alertas de reposición', excel: 'Depende de tu memoria', vynko: 'Automáticas por stock crítico' },
+                  { label: 'Varias sucursales', excel: 'Planillas separadas', vynko: 'Todo centralizado' },
+                  { label: 'Reportes de ventas', excel: 'Los armás vos cada mes', vynko: 'Listos al instante' },
+                  { label: 'Trabajo en equipo', excel: 'Una sola persona', vynko: 'Usuarios y roles por sucursal' },
+                ].map((row) => (
+                  <tr key={row.label} className="bg-gray-950">
+                    <td className="px-6 py-4 font-medium text-gray-200">{row.label}</td>
+                    <td className="px-6 py-4 text-gray-500">
+                      <span className="flex items-start gap-2">
+                        <span className="text-red-400/80 shrink-0">✕</span>
+                        {row.excel}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-gray-200">
+                      <span className="flex items-start gap-2">
+                        <span className="text-cyan-400 shrink-0">✓</span>
+                        {row.vynko}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      {/* Calculadora de ahorro */}
+      <section className="py-20 bg-gray-900/30" id="roi">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl font-bold">
+              ¿Cuánto <span className="text-cyan-400">podés ahorrar</span>?
+            </h2>
+            <p className="mt-4 text-gray-400 max-w-2xl mx-auto">
+              Movés los números y en segundos ves cuánto tiempo y plata te cuesta hoy el desorden.
+            </p>
+          </div>
+          <div className="max-w-4xl mx-auto">
+            <ROICalculator />
+          </div>
+        </div>
+      </section>
+
       {/* Para quién es */}
-      <section className="py-20 bg-gray-900/30" id="para-quien">
+      <section className="py-20" id="para-quien">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold">{content.audienceTitle}</h2>
@@ -273,7 +383,7 @@ export default async function SeoLandingPage({ content }: Props) {
       </section>
 
       {/* Precios */}
-      <section className="py-20" id="precios">
+      <section className="py-20 bg-gray-900/30" id="precios">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold">Planes simples y transparentes</h2>
@@ -402,16 +512,11 @@ export default async function SeoLandingPage({ content }: Props) {
             })}
           </div>
 
-          <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6 text-sm text-gray-400">
-            <span>💳 Sin tarjeta de crédito requerida.</span>
-            <span>⚡ Configuración lista en menos de 2 minutos.</span>
-            <span>🔒 Cancelá cuando quieras sin compromisos.</span>
-          </div>
         </div>
       </section>
 
       {/* FAQ */}
-      <section className="py-20 bg-gray-900/30" id="faq">
+      <section className="py-20" id="faq">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold">{content.faqTitle}</h2>
@@ -425,6 +530,34 @@ export default async function SeoLandingPage({ content }: Props) {
                 </summary>
                 <p className="mt-3 text-sm text-gray-400 leading-relaxed">{item.a}</p>
               </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Confianza y garantía */}
+      <section className="py-20 bg-gray-900/30" id="garantia">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl sm:text-4xl font-bold">
+              Probá Vynko <span className="text-cyan-400">sin riesgo</span>
+            </h2>
+            <p className="mt-4 text-gray-400 max-w-2xl mx-auto">
+              Empezá hoy y decidí después. Para arrancar no te pedimos nada.
+            </p>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
+            {[
+              { icon: '💳', title: 'Sin tarjeta', desc: 'Empezás la prueba sin cargar datos de pago.' },
+              { icon: '🔓', title: 'Cancelás cuando quieras', desc: 'Sin contratos largos ni permanencia mínima.' },
+              { icon: '🇦🇷', title: 'Soporte en español', desc: 'Te respondemos en tu idioma, de persona a persona.' },
+              { icon: '🔒', title: 'Datos protegidos', desc: 'Conexión cifrada y permisos por rol para tu equipo.' },
+            ].map((item) => (
+              <div key={item.title} className="bg-gray-950 border border-gray-800 rounded-2xl p-6 text-center">
+                <div className="text-3xl mb-3">{item.icon}</div>
+                <h3 className="text-base font-bold mb-2">{item.title}</h3>
+                <p className="text-sm text-gray-400 leading-relaxed">{item.desc}</p>
+              </div>
             ))}
           </div>
         </div>
