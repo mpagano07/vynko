@@ -18,6 +18,8 @@ los dumps del backup caen en `scripts/dumps/`, también ignorado. ggshield
 | Access Token de Mercado Pago | `MERCADOPAGO_ACCESS_TOKEN` | Vercel env + `.env.local` | `mercadopago-*.ts` (cobros, refunds) | https://www.mercadopago.com.ar/developers → Credenciales |
 | Clave pública de Mercado Pago | `NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY` | Vercel env | charge-button en el browser | Mercado Pago (no sensible, pero rotarla junto con las credenciales) |
 | Webhook secret de Mercado Pago | `MERCADOPAGO_WEBHOOK_SECRET` | Vercel env + `.env.local` | `mercadopago-webhook-service.ts` | Mercado Pago → Webhooks |
+| API key de Paddle | `PADDLE_API_KEY` | Vercel env + `.env.local` | `src/lib/paddle.ts` (checkout, suscripciones) | Paddle → Developer tools → Authentication |
+| Webhook secret de Paddle | `PADDLE_WEBHOOK_SECRET` | Vercel env + `.env.local` | `src/lib/paddle.ts` (firma `Paddle-Signature`) | Paddle → Developer tools → Notifications → destination `/api/webhooks/paddle` |
 | API key de Google AI | `GOOGLE_AI_API_KEY` | Vercel env + `.env.local` | `src/lib/ai-service.ts` | https://aistudio.google.com/apikey |
 | DSN de Sentry | `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN` | Vercel env | `instrumentation.ts`, `sentry.client.ts` | Sentry → Project → Client Keys |
 | Credenciales E2E | `E2E_USER_EMAIL`, `E2E_USER_PASSWORD`, `E2E_NEW_USER_*`, `E2E_MEMBER_USER_*` | `.env.local`, secreto de CI | Playwright, load test | cuenta Supabase dedicada |
@@ -58,7 +60,8 @@ los dumps del backup caen en `scripts/dumps/`, también ignorado. ggshield
 3. **Verificar** antes de revocar el valor viejo:
    - `GET /api/health` con `?check=db` → 200 (valida supabase service role);
    - cobro real de prueba (o endpoint de refund) contra producción puntual;
-   - webhook: re-enviar un evento de prueba desde el panel de MP;
+   - webhook: re-enviar un evento de prueba desde el panel de MP (o de Paddle,
+     en `sandbox` o `production` según `PADDLE_ENVIRONMENT`);
    - `GOOGLE_AI_API_KEY`: `POST /api/ai/suggest` manual o test spot;
    - run corto de `node scripts/load-test-sales.mjs` con `DURATION=10`.
 4. **Rotar la sign-session en Supabase** cuando se rote service role/anon:

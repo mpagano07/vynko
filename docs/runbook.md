@@ -60,21 +60,30 @@ consuma.
 4. Mientras este caida, las ventas del cliente no se guardan: avisar
    comunicacion breve ("estamos con un problema de base de datos").
 
-### 3. Cobros / webhooks de MercadoPago
+### 3. Cobros / webhooks (MercadoPago y Paddle)
 
-- **Webhook rechazado (401)**: firma invalida. Revisar
-  `MERCADOPAGO_WEBHOOK_SECRET` (Vercel env + panel de MP → Webhooks) y
-  rotarlo con `docs/security-secrets-rotation.md`.
-- **Suscripciones desincronizadas**: correr el cron a mano y leer el reporte:
+- **Webhook rechazado (401)**: firma invalida. Revisar el secreto del
+  destination del proveedor y rotarlo con `docs/security-secrets-rotation.md`:
+  - MercadoPago: `MERCADOPAGO_WEBHOOK_SECRET` (Vercel env + panel de MP → Webhooks).
+  - Paddle: `PADDLE_WEBHOOK_SECRET` (Vercel env + Paddle → Developer tools →
+    Notifications → destination `/api/webhooks/paddle`).
+- **Suscripciones desincronizadas**: correr el cron a mano y leer el reporte.
+  Reconcilia las dos pasarelas y devuelve `{ mercadopago, paddle }`:
   ```bash
   curl -X POST https://<app>/api/cron/reconcile-subscriptions \
     -H "Authorization: Bearer $CRON_SECRET"
   ```
   `CRON_SECRET` esta en los envs de Vercel; el mismo endpoint acepta GET (es
-  el que usa el cron programado de `vercel.json`, diario 05:17 UTC).
+  el que usa el cron programado de `vercel.json`, diario 05:17 UTC). En cada
+  reporte, `inSync + repaired + unreachable` tiene que cuadrar con `checked`.
 - **Cobro no reflejado en la app**: los eventos son at-least-once y con
-  dedupe; un reintento de MP llega igual. Recien despues de dos reintentos
-  mirar logs con `job:mercadopago-webhook`.
+  dedupe; un reintento de MP/Paddle llega igual. Recien despues de dos
+  reintentos mirar logs con `job:mercadopago-webhook` o `job:paddle-webhook`.
+- **Alta de Paddle en un entorno nuevo**: `PADDLE_ENVIRONMENT`
+  (`sandbox`|`production`), `PADDLE_API_KEY` y `PADDLE_PRICE_IDS` (JSON por
+  moneda). Los `pri_` de sandbox NO sirven en produccion: hay que correr
+  `node scripts/paddle-bootstrap.mjs --env <archivo>` contra la cuenta de ese
+  entorno para crear productos, precios y el destination del webhook.
 
 ### 4. Errores masivos en Sentry
 
@@ -150,7 +159,7 @@ Diseno y SQL: `docs/background-jobs.md`.
 |---|---|---|
 | Responsable tecnico | _(completar)_ | _(completar)_ |
 | Responsable de producto | _(completar)_ | _(completar)_ |
-| Proveedor (Supabase / Vercel / Mercado Pago) | — | status pages + soporte del plan |
+| Proveedor (Supabase / Vercel / Mercado Pago / Paddle) | — | status pages + soporte del plan |
 
 ## Referencias
 
