@@ -1,5 +1,8 @@
 import crypto from 'crypto';
 import { logger } from '@/lib/logger';
+import { parsePriceIds, type PaddlePlan } from '@/lib/paddle-price-ids';
+
+export type { PaddlePlan } from '@/lib/paddle-price-ids';
 
 /**
  * Cliente mínimo de Paddle Billing.
@@ -15,10 +18,6 @@ import { logger } from '@/lib/logger';
 
 const SANDBOX_BASE = 'https://sandbox-api.paddle.com';
 const PRODUCTION_BASE = 'https://api.paddle.com';
-
-export type PaddlePlan = 'starter' | 'business';
-
-type PriceIds = Record<string, Partial<Record<PaddlePlan, string>>>;
 
 function getApiBase(): string {
   const env = (process.env.PADDLE_ENVIRONMENT || 'sandbox').toLowerCase();
@@ -44,34 +43,18 @@ export function isPaddleConfigured(): boolean {
 }
 
 /**
- * Precios por moneda, configurados como JSON en `PADDLE_PRICE_IDS`. Ejemplo:
- *   {"USD":{"starter":"pri_...","business":"pri_..."},"COP":{...}}
+ * `price_id` de Paddle para una moneda y plan, o `null` si esa moneda no tiene
+ * precio configurado.
  *
- * Se mantiene en una sola variable en vez de una por moneda+plan (hoy son 15
- * monedas) para que sumar un precio no implique tocar el panel de env vars de
- * Vercel con un nombre nuevo.
- */
-function parsePriceIds(): PriceIds {
-  const raw = process.env.PADDLE_PRICE_IDS;
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object') return parsed as PriceIds;
-  } catch (err) {
-    logger.error('PADDLE_PRICE_IDS no es JSON válido, se ignora', { error: err });
-  }
-  return {};
-}
-
-/**
- * `price_id` de Paddle para una moneda y plan, o `null` si no está configurado.
- * El router de billing usa `null` para decidir que ese país todavía no puede
- * pagar por Paddle.
+ * NO cae a USD: la moneda la resuelve `getCurrencyForCountry` con el set de
+ * monedas configuradas (una moneda que Paddle soporta pero sin precio se cae a
+ * USD ahi), asi el `price_id` que se cobra SIEMPRE es el de la moneda mostrada.
+ * El router de billing usa `null` para decidir que ese pais no puede pagar por
+ * Paddle.
  */
 export function getPaddlePriceId(currency: string, plan: PaddlePlan): string | null {
   const ids = parsePriceIds();
-  const entry = ids[currency?.toUpperCase()] ?? ids.USD;
-  return entry?.[plan] ?? null;
+  return ids[currency?.toUpperCase()]?.[plan] ?? null;
 }
 
 type PaddleErrorBody = { error?: { detail?: string; code?: string } };

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getCountryFromHeaders } from './country';
-import { formatPriceByCountry, getCurrencyForCountry } from './format';
+import { formatPriceByCountry, getCurrencyForCountry, usesLocalCurrency } from './format';
 import { PRICES_BY_COUNTRY, getDisplayPrice, getPriceForCountry } from './prices-by-country';
 
 describe('pricing', () => {
@@ -113,6 +113,51 @@ describe('pricing', () => {
 
     it('devuelve "A medida" para 0', () => {
       expect(formatPriceByCountry({ amount: 0, country: 'AR' })).toBe('A medida');
+    });
+  });
+
+  describe('monedas configuradas (fallback a USD)', () => {
+    // Regresión del bug: una moneda que Paddle SOPORTA pero sin `price_id`
+    // configurado se mostraba en local pero se cobraba en USD. Ahora el display
+    // resuelve la moneda con el set de configuradas, así "mostrado == cobrado".
+    const soloUsd = new Set(['USD']);
+    const conCop = new Set(['COP', 'USD']);
+
+    it('getCurrencyForCountry cae a USD si la local no está configurada', () => {
+      expect(getCurrencyForCountry('CO', soloUsd)).toBe('USD');
+      expect(getCurrencyForCountry('CO', conCop)).toBe('COP');
+    });
+
+    it('Argentina cobra ARS (MercadoPago) sin importar la config de Paddle', () => {
+      expect(getCurrencyForCountry('AR', soloUsd)).toBe('ARS');
+      expect(usesLocalCurrency('AR', new Set())).toBe(true);
+    });
+
+    it('usesLocalCurrency es false si la moneda local no está configurada', () => {
+      expect(usesLocalCurrency('CO', soloUsd)).toBe(false);
+      expect(usesLocalCurrency('CO', conCop)).toBe(true);
+    });
+
+    it('getDisplayPrice usa el monto USD si la local no está configurada', () => {
+      expect(getDisplayPrice('CO', 'business', soloUsd)).toBe(PRICES_BY_COUNTRY.DEFAULT.business);
+      expect(getDisplayPrice('CO', 'business', conCop)).toBe(PRICES_BY_COUNTRY.CO.business);
+    });
+
+    it('formatPriceByCountry formatea en la misma moneda que se cobra', () => {
+      const usd = formatPriceByCountry({
+        amount: PRICES_BY_COUNTRY.DEFAULT.business,
+        country: 'CO',
+        configuredCurrencies: soloUsd,
+      });
+      expect(usd).toMatch(/USD|\$/);
+      expect(usd).not.toMatch(/109\.000/);
+
+      const cop = formatPriceByCountry({
+        amount: PRICES_BY_COUNTRY.CO.business,
+        country: 'CO',
+        configuredCurrencies: conCop,
+      });
+      expect(cop).toMatch(/109\.000/);
     });
   });
 });

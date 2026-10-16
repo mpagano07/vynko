@@ -1,6 +1,7 @@
 import type { CountryCode } from '@/lib/pricing';
 import { getCurrencyForCountry } from '@/lib/pricing';
 import { getPaddlePriceId, isPaddleConfigured, type PaddlePlan } from '@/lib/paddle';
+import { getPaddleConfiguredCurrencies } from '@/lib/paddle-price-ids';
 
 export type BillingProvider = 'mercadopago' | 'paddle';
 
@@ -11,15 +12,18 @@ export function isPaddlePlan(plan: string): plan is PaddlePlan {
 /**
  * Devuelve `true` si el país puede pagar por Paddle para ese plan.
  *
- * Argentina siempre queda afuera (se cobra en ARS con MercadoPago) y los países
- * sin un `price_id` de Paddle configurado para su moneda también, para que el
- * router caiga a MercadoPago en vez de fallar el checkout.
+ * Argentina siempre queda afuera (se cobra en ARS con MercadoPago). Para el
+ * resto, `getCurrencyForCountry` resuelve la moneda entre las CONFIGURADAS: si la
+ * moneda local no tiene `price_id`, cae a USD (que también se muestra en USD),
+ * así el precio mostrado y el cobrado coinciden. Solo si ni USD está configurado
+ * el país queda afuera.
  */
 export function canUsePaddle(country: CountryCode, plan: string): boolean {
   if (country === 'AR') return false;
   if (!isPaddlePlan(plan)) return false;
   if (!isPaddleConfigured()) return false;
-  return Boolean(getPaddlePriceId(getCurrencyForCountry(country), plan));
+  const configured = new Set(getPaddleConfiguredCurrencies());
+  return Boolean(getPaddlePriceId(getCurrencyForCountry(country, configured), plan));
 }
 
 /**

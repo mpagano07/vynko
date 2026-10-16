@@ -12,6 +12,8 @@ import {
 } from '@/lib/session-policy';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
+import { getPaddleConfiguredCurrencies } from '@/lib/paddle-price-ids';
+import { PADDLE_CURRENCIES_COOKIE } from '@/lib/pricing/configured-currencies';
 
 const COUNTRY_COOKIE = 'vynko_country';
 
@@ -100,8 +102,19 @@ export async function proxy(request: NextRequest) {
         sameSite: 'lax',
         httpOnly: false,
       });
+      // Monedas de Paddle realmente configuradas, para que el cliente muestre el
+      // precio en la misma moneda en la que el checkout va a cobrar (una moneda
+      // que Paddle soporta pero sin `price_id` se muestra y cobra en USD). El
+      // cliente no puede leer `PADDLE_PRICE_IDS` (env server-only).
+      res.cookies.set(PADDLE_CURRENCIES_COOKIE, getPaddleConfiguredCurrencies().join(','), {
+        path: '/',
+        maxAge: 60 * 60 * 24 * 7,
+        sameSite: 'lax',
+        httpOnly: false,
+      });
     } catch {
-      // La cookie de país es best-effort: si falla, el header ya quedó seteado.
+      // Las cookies de país/monedas son best-effort: si fallan, los headers ya
+      // quedaron seteados.
     }
     return withCsp(res, nonce);
   };

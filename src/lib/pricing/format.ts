@@ -48,9 +48,11 @@ const LOCALE_MAP: Record<CountryCode, string> = {
 
 // Monedas de pago que acepta Paddle Billing (developer.paddle.com/concepts/sell/
 // supported-currencies). Es la pasarela de todo LATAM menos Argentina (que cobra
-// por MercadoPago en ARS). Si la moneda local de un país no está acá, no podemos
-// cobrarla: ese país se muestra y se cobra en USD para no prometer un precio en
-// una moneda que el checkout no va a usar.
+// por MercadoPago en ARS). Es la lista de lo que Paddle acepta EN TEORIA; para
+// saber si realmente podemos cobrar una moneda hay que mirar las configuradas en
+// `PADDLE_PRICE_IDS` (ver `configuredCurrencies` mas abajo). Si la moneda local
+// de un país no tiene precio configurado, ese país se muestra y se cobra en USD
+// para no prometer un precio en una moneda que el checkout no va a usar.
 const PADDLE_PAYMENT_CURRENCIES = new Set([
   'USD', 'GBP', 'EUR', 'ARS', 'AUD', 'BRL', 'CAD', 'CHF', 'CLP', 'CNY', 'COP',
   'CZK', 'DKK', 'HKD', 'HUF', 'ILS', 'INR', 'JPY', 'KRW', 'MXN', 'NOK', 'NZD',
@@ -58,36 +60,58 @@ const PADDLE_PAYMENT_CURRENCIES = new Set([
 ])
 
 /**
- * Moneda en la que realmente se cobra el plan de un país: ARS por MercadoPago en
- * Argentina, la moneda local si Paddle la soporta, y USD como fallback. Es la
- * que hay que usar tanto para mostrar el precio como para elegir el `price_id`.
+ * Monedas de Paddle realmente configuradas (con `price_id`), o `undefined` para
+ * usar el default ("Paddle soporta la moneda").
+ *
+ * El server la pasa desde `getPaddleConfiguredCurrencies()` (env `PADDLE_PRICE_IDS`)
+ * y el cliente desde la cookie que setea el proxy. Cuando no se pasa, se asume
+ * la lista de Paddle soportadas: preserva el comportamiento previo solo para
+ * callers que no participan del cobro.
  */
-export function getCurrencyForCountry(country: CountryCode): string {
+export type ConfiguredCurrencies = ReadonlySet<string> | null | undefined
+
+/**
+ * Moneda en la que realmente se cobra el plan de un país: ARS por MercadoPago en
+ * Argentina, la moneda local si Paddle la TIENE CONFIGURADA, y USD como
+ * fallback. Es la que hay que usar tanto para mostrar el precio como para elegir
+ * el `price_id`, para que el monto mostrado y el cobrado nunca difieran.
+ */
+export function getCurrencyForCountry(
+  country: CountryCode,
+  configuredCurrencies?: ConfiguredCurrencies
+): string {
   if (country === 'AR') return 'ARS'
+  const configured = configuredCurrencies ?? PADDLE_PAYMENT_CURRENCIES
   const local = CURRENCY_MAP[country] ?? 'USD'
-  return PADDLE_PAYMENT_CURRENCIES.has(local) ? local : 'USD'
+  return configured.has(local.toUpperCase()) ? local : 'USD'
 }
 
 /**
  * ¿El precio de este país se cobra en su moneda local? Argentina siempre (ARS vía
- * MercadoPago); el resto solo si Paddle soporta esa moneda. Cuando es `false` el
- * precio se muestra en USD (`PRICES_BY_COUNTRY.DEFAULT`).
+ * MercadoPago); el resto solo si Paddle tiene un `price_id` para esa moneda.
+ * Cuando es `false` el precio se muestra en USD (`PRICES_BY_COUNTRY.DEFAULT`).
  */
-export function usesLocalCurrency(country: CountryCode): boolean {
+export function usesLocalCurrency(
+  country: CountryCode,
+  configuredCurrencies?: ConfiguredCurrencies
+): boolean {
   if (country === 'AR') return true
-  return PADDLE_PAYMENT_CURRENCIES.has(CURRENCY_MAP[country] ?? 'USD')
+  const configured = configuredCurrencies ?? PADDLE_PAYMENT_CURRENCIES
+  return configured.has((CURRENCY_MAP[country] ?? 'USD').toUpperCase())
 }
 
 export function formatPriceByCountry({
   amount,
   country,
   locale,
+  configuredCurrencies,
 }: {
   amount: number
   country: CountryCode
   locale?: string
+  configuredCurrencies?: ConfiguredCurrencies
 }): string {
-  const currency = getCurrencyForCountry(country)
+  const currency = getCurrencyForCountry(country, configuredCurrencies)
   const loc = locale ?? LOCALE_MAP[country]
 
   if (amount === 0) return 'A medida'

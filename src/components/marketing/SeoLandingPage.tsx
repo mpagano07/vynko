@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { PLANS, PLAN_ORDER, getPlanBadge, getTrialDays } from '@/lib/plans';
 import { SALES_EMAIL } from '@/lib/tenant-config';
 import { getCountryFromHeaders, formatPriceByCountry, getDisplayPrice, type PlanId } from '@/lib/pricing';
+import { getPaddleConfiguredCurrencies } from '@/lib/paddle-price-ids';
 import {
   SEO_PAGES,
   buildSeoJsonLd,
@@ -29,6 +30,9 @@ export default async function SeoLandingPage({ content }: Props) {
   const h = await headers();
   const nonce = h.get('x-nonce') ?? undefined;
   const country = getCountryFromHeaders(h);
+  // Monedas de Paddle configuradas: si la local no tiene `price_id`, el precio
+  // se muestra y se cobra en USD (misma resolución que el checkout).
+  const configuredCurrencies = new Set(getPaddleConfiguredCurrencies());
   const trialDays = getTrialDays();
   const jsonLd = serializeJsonLd(buildSeoJsonLd(content));
   const currentPath = seoPath(content.slug);
@@ -197,7 +201,7 @@ export default async function SeoLandingPage({ content }: Props) {
             {PLAN_ORDER.map((id) => {
               const plan = PLANS[id];
               const badge = getPlanBadge(id);
-              const price = getDisplayPrice(country, id as PlanId);
+              const price = getDisplayPrice(country, id as PlanId, configuredCurrencies);
 
               let cta: ReactNode;
               if (plan.comingSoon) {
@@ -239,7 +243,7 @@ export default async function SeoLandingPage({ content }: Props) {
                       <span className="text-4xl font-extrabold">A medida</span>
                     ) : (
                       <>
-                        <span className="text-4xl font-extrabold">{formatPriceByCountry({ amount: price, country })}</span>
+                        <span className="text-4xl font-extrabold">{formatPriceByCountry({ amount: price, country, configuredCurrencies })}</span>
                         <span className="text-sm text-gray-400 ml-1">/mes</span>
                       </>
                     )}

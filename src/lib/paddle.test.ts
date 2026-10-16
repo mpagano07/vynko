@@ -67,11 +67,14 @@ describe('paddle', () => {
       expect(getPaddlePriceId('USD', 'starter')).toBe('pri_usd_starter');
     });
 
-    it('cae a USD si no hay precio para la moneda', () => {
+    it('NO cae a USD si la moneda no tiene precio (la resuelve el caller)', () => {
+      // La resolución moneda-local→USD la hace `getCurrencyForCountry` con el
+      // set de monedas configuradas. Acá no puede haber fallback: si cayera a
+      // USD, se cobraría una moneda distinta a la mostrada.
       process.env.PADDLE_PRICE_IDS = JSON.stringify({
         USD: { starter: 'pri_usd_starter', business: 'pri_usd_business' },
       });
-      expect(getPaddlePriceId('GTQ', 'starter')).toBe('pri_usd_starter');
+      expect(getPaddlePriceId('GTQ', 'starter')).toBeNull();
     });
 
     it('ignora un JSON inválido', () => {

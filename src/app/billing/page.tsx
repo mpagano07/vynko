@@ -17,7 +17,7 @@ import {
   getActivePromoPlan,
 } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
-import { formatPriceByCountry, getDisplayPrice, type CountryCode } from '@/lib/pricing';
+import { formatPriceByCountry, getDisplayPrice, getConfiguredCurrenciesFromCookie, type CountryCode, type ConfiguredCurrencies } from '@/lib/pricing';
 import { formatDate } from '@/lib/utils/format';
 import { CreditCard, CheckCircle2, XCircle, Loader2, ArrowRight, AlertTriangle, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -64,6 +64,11 @@ function BillingContent() {
       return 'AR';
     }
   });
+  // Monedas de Paddle configuradas (cookie del proxy): el cliente no puede leer
+  // `PADDLE_PRICE_IDS`. `null`/undefined usa el default.
+  const [configuredCurrencies] = useState<ConfiguredCurrencies>(() =>
+    getConfiguredCurrenciesFromCookie()
+  );
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -494,9 +499,9 @@ function BillingContent() {
               <div className="mt-2 mb-4">
                 {plan.comingSoon ? (
                   <span className="text-xl font-semibold text-gray-500">Próximamente</span>
-                ) : getDisplayPrice(country, id as PlanId) > 0 ? (
+                ) : getDisplayPrice(country, id as PlanId, configuredCurrencies) > 0 ? (
                   <>
-                    <span className="text-3xl font-extrabold text-gray-900 dark:text-white">{formatPriceByCountry({ amount: getDisplayPrice(country, id as PlanId), country })}</span>
+                    <span className="text-3xl font-extrabold text-gray-900 dark:text-white">{formatPriceByCountry({ amount: getDisplayPrice(country, id as PlanId, configuredCurrencies), country, configuredCurrencies })}</span>
                     <span className="text-sm text-gray-500">/mes</span>
                   </>
                 ) : (
@@ -601,7 +606,7 @@ variant="danger"
       <ConfirmModal
         open={!!pendingDowngrade}
         title="¿Cambiar a Starter?"
-        message={`Al pasar al plan Starter vas a perder los beneficios de Business: los productos por encima de los primeros 100 quedan desactivados (se recuperan si volvés a Business), se quita el acceso a las sucursales excepto la primera, se eliminan los colaboradores y se desactivan las funciones avanzadas (pronóstico, visión de góndolas, IA). Se cancelará tu suscripción actual y se iniciará el pago de ${formatPriceByCountry({ amount: getDisplayPrice(country, 'starter'), country })}/mes por el plan Starter. ¿Querés continuar?`}
+        message={`Al pasar al plan Starter vas a perder los beneficios de Business: los productos por encima de los primeros 100 quedan desactivados (se recuperan si volvés a Business), se quita el acceso a las sucursales excepto la primera, se eliminan los colaboradores y se desactivan las funciones avanzadas (pronóstico, visión de góndolas, IA). Se cancelará tu suscripción actual y se iniciará el pago de ${formatPriceByCountry({ amount: getDisplayPrice(country, 'starter', configuredCurrencies), country, configuredCurrencies })}/mes por el plan Starter. ¿Querés continuar?`}
         confirmLabel="Sí, cambiar a Starter"
         cancelLabel="Volver"
         variant="danger"

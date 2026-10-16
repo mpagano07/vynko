@@ -1,5 +1,5 @@
 import { getEffectivePrice } from '@/lib/plans'
-import { usesLocalCurrency } from './format'
+import { usesLocalCurrency, type ConfiguredCurrencies } from './format'
 import type { CountryCode } from './country'
 
 export type PlanId = 'starter' | 'business' | 'enterprise'
@@ -39,13 +39,17 @@ export const PRICES_BY_COUNTRY: Record<CountryCode, PriceSet> = {
 /**
  * Precio de un plan para un país.
  *
- * Si la moneda local no se puede cobrar (Paddle no la soporta), devuelve el
- * precio USD de `DEFAULT`: es el monto que efectivamente cobra el checkout, así
- * que mostrar el valor en moneda local sería inconsistente. Ver
+ * Si la moneda local no se puede cobrar (Paddle no tiene un `price_id` para ella),
+ * devuelve el precio USD de `DEFAULT`: es el monto que efectivamente cobra el
+ * checkout, así que mostrar el valor en moneda local sería inconsistente. Ver
  * `usesLocalCurrency`.
  */
-export function getPriceForCountry(country: CountryCode, plan: PlanId): number {
-  const set = usesLocalCurrency(country)
+export function getPriceForCountry(
+  country: CountryCode,
+  plan: PlanId,
+  configuredCurrencies?: ConfiguredCurrencies
+): number {
+  const set = usesLocalCurrency(country, configuredCurrencies)
     ? PRICES_BY_COUNTRY[country] ?? PRICES_BY_COUNTRY.DEFAULT
     : PRICES_BY_COUNTRY.DEFAULT
   return set[plan]
@@ -61,10 +65,14 @@ export function getPriceForCountry(country: CountryCode, plan: PlanId): number {
  * aplican. Sin este helper las landings formateaban el monto en ARS con el
  * símbolo local (29.900 COP en vez de 109.000 COP).
  */
-export function getDisplayPrice(country: CountryCode, plan: PlanId): number {
+export function getDisplayPrice(
+  country: CountryCode,
+  plan: PlanId,
+  configuredCurrencies?: ConfiguredCurrencies
+): number {
   if (country === 'AR') {
     const ar = getEffectivePrice(plan)
-    return ar > 0 ? ar : getPriceForCountry(country, plan)
+    return ar > 0 ? ar : getPriceForCountry(country, plan, configuredCurrencies)
   }
-  return getPriceForCountry(country, plan)
+  return getPriceForCountry(country, plan, configuredCurrencies)
 }

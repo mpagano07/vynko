@@ -3,6 +3,7 @@ import { PLANS, getEffectivePrice, getTrialDays, getTrialPlan, getRemainingTrial
 import type { PlanId } from '@/lib/plans';
 import { createPreApproval, cancelPreApproval } from '@/lib/mercadopago';
 import { createPaddleCheckout, getPaddlePriceId, cancelPaddleSubscription } from '@/lib/paddle';
+import { getPaddleConfiguredCurrencies } from '@/lib/paddle-price-ids';
 import {
   asBillingProvider,
   isPaddlePlan,
@@ -97,7 +98,7 @@ export async function createCheckoutSession(
   // por Paddle en su moneda local. Si la cuenta ya paga con una pasarela, se
   // respeta esa para no partir la suscripción entre dos cobradores.
   const country = getCountryFromHeaders(request.headers);
-  const currency = getCurrencyForCountry(country);
+  const currency = getCurrencyForCountry(country, new Set(getPaddleConfiguredCurrencies()));
   const existingProvider = asBillingProvider(tenant?.billing_provider);
   const provider = resolveBillingProvider(country, planConfig.id, existingProvider);
 
@@ -236,7 +237,10 @@ export async function downgradePlan(
     if (!isPaddlePlan(plan)) {
       return { ok: false, error: 'Plan inválido', status: 400 };
     }
-    const currency = getCurrencyForCountry(getCountryFromHeaders(request.headers));
+    const currency = getCurrencyForCountry(
+      getCountryFromHeaders(request.headers),
+      new Set(getPaddleConfiguredCurrencies())
+    );
     const priceId = getPaddlePriceId(currency, plan);
     if (!priceId) {
       return { ok: false, error: 'El pago con tarjeta todavía no está disponible para tu país.', status: 400 };
