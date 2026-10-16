@@ -22,7 +22,22 @@ describe('pricing', () => {
       expect(getCountryFromHeaders(new Headers({ 'x-vercel-ip-country': 'DE' }))).toBe('DEFAULT');
     });
 
-    it('default AR sin headers', () => {
+    it('usa la cookie vynko_country cuando no hay headers de IP', () => {
+      // En /api (el proxy no corre) no existe `x-vynko-country`; sin IP (local)
+      // la cookie es el único rastro del país que resolvió el proxy.
+      const h = new Headers({ cookie: 'other=1; vynko_country=CO; otro=2' });
+      expect(getCountryFromHeaders(h)).toBe('CO');
+    });
+
+    it('la IP gana sobre la cookie (no se puede spoofear el cobro)', () => {
+      const h = new Headers({
+        'x-vercel-ip-country': 'MX',
+        cookie: 'vynko_country=CO',
+      });
+      expect(getCountryFromHeaders(h)).toBe('MX');
+    });
+
+    it('default AR sin headers ni cookie', () => {
       expect(getCountryFromHeaders(new Headers())).toBe('AR');
     });
   });
