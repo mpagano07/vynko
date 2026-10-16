@@ -123,6 +123,10 @@ export async function createCheckoutSession(
         .update({
           billing_provider: 'paddle',
           paddle_pending_transaction_id: checkout.transactionId,
+          // Queda registrado el `pri_` concreto del checkout (cada moneda tiene
+          // el suyo y no se deduce del plan sin la config de env) para soporte
+          // y auditoría.
+          paddle_price_id: priceId,
         })
         .in('id', ownerBranchIds);
 
@@ -251,6 +255,9 @@ export async function downgradePlan(
         .update({
           paddle_pending_transaction_id: checkout.transactionId,
           paddle_pending_plan: plan,
+          // Ver la nota en `createCheckoutSession`: se guarda el `pri_` del
+          // checkout iniciado (el del plan destino).
+          paddle_price_id: priceId,
         })
         .in('id', ownerBranchIds);
 

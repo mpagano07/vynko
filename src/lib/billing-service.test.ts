@@ -20,6 +20,27 @@ vi.mock('@/lib/mercadopago', () => ({
   cancelPreApproval: (...args: unknown[]) => mockCancelPreApproval(...args),
 }));
 
+const mockCreatePaddleCheckout = vi.fn();
+const mockGetPaddlePriceId = vi.fn();
+const mockCancelPaddleSubscription = vi.fn();
+const mockIsPaddleConfigured = vi.fn();
+
+vi.mock('@/lib/paddle', () => ({
+  createPaddleCheckout: (...args: unknown[]) => mockCreatePaddleCheckout(...args),
+  getPaddlePriceId: (...args: unknown[]) => mockGetPaddlePriceId(...args),
+  cancelPaddleSubscription: (...args: unknown[]) => mockCancelPaddleSubscription(...args),
+  isPaddleConfigured: (...args: unknown[]) => mockIsPaddleConfigured(...args),
+}));
+
+// `isPaddleConfigured` (via `canUsePaddle`) decide si un checkout nuevo va por
+// Paddle. Por defecto queda apagado para no tocar los tests de MercadoPago.
+beforeEach(() => {
+  mockCreatePaddleCheckout.mockReset();
+  mockGetPaddlePriceId.mockReset();
+  mockCancelPaddleSubscription.mockReset();
+  mockIsPaddleConfigured.mockReset();
+});
+
 const mockTrackEvent = vi.fn();
 
 vi.mock('@/lib/track-event', () => ({
@@ -121,6 +142,52 @@ describe('createCheckoutSession', () => {
 
     const result = await createCheckoutSession(USER, { plan: 'starter' }, makeRequest());
     expect(result.ok).toBe(true);
+  });
+
+  it('crea el checkout de Paddle y guarda el price_id del checkout', async () => {
+    supabaseMock.__queue('tenant_users', {
+      data: [{ tenant_id: 'tenant-1', role: 'owner' }],
+      error: null,
+    });
+    supabaseMock.__queue('tenants', {
+      data: {
+        name: 'Mi Tienda',
+        billing_email: 'billing@test.com',
+        billing_provider: null,
+        paddle_customer_id: null,
+      },
+      error: null,
+    });
+
+    mockIsPaddleConfigured.mockReturnValue(true);
+    mockGetPaddlePriceId.mockReturnValue('pri_cop_starter');
+    mockCreatePaddleCheckout.mockResolvedValue({
+      url: 'https://paddle.test/checkout',
+      transactionId: 'txn_1',
+    });
+
+    const result = await createCheckoutSession(
+      USER,
+      { plan: 'starter' },
+      makeRequest('http://localhost/api/billing/checkout', { 'x-vercel-ip-country': 'CO' })
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect((result.data as Record<string, unknown>).url).toBe('https://paddle.test/checkout');
+    }
+
+    const update = supabaseMock.__calls.find(
+      (c) => c.table === 'tenants' && c.method === 'update'
+    );
+    expect(update?.args[0]).toMatchObject({
+      billing_provider: 'paddle',
+      paddle_pending_transaction_id: 'txn_1',
+      paddle_price_id: 'pri_cop_starter',
+    });
+    expect(mockCreatePaddleCheckout).toHaveBeenCalledWith(
+      expect.objectContaining({ priceId: 'pri_cop_starter' })
+    );
   });
 
   it('returns 400 for invalid plan', async () => {
@@ -620,6 +687,53 @@ describe('downgradePlan', () => {
     expect(inCall).toBeDefined();
     expect(inCall!.args[0]).toBe('id');
     expect(inCall!.args[1]).toEqual(['tenant-1', 'tenant-9']);
+  });
+
+  it('inicia el checkout de Paddle para el plan destino y guarda el price_id', async () => {
+    supabaseMock.__queue('tenant_users', {
+      data: [{ tenant_id: 'tenant-1', role: 'owner' }],
+      error: null,
+    });
+    supabaseMock.__queue('tenants', {
+      data: [{
+        id: 'tenant-1',
+        name: 'Mi Tienda',
+        billing_email: 'test@test.com',
+        billing_provider: 'paddle',
+        paddle_customer_id: 'ctm-1',
+        subscription_plan: 'business',
+        subscription_status: 'active',
+        mercadopago_preapproval_id: null,
+        created_at: '2026-01-01T00:00:00Z',
+      }],
+      error: null,
+    });
+
+    mockGetPaddlePriceId.mockReturnValue('pri_cop_starter');
+    mockCreatePaddleCheckout.mockResolvedValue({
+      url: 'https://paddle.test/downgrade',
+      transactionId: 'txn_2',
+    });
+
+    const result = await downgradePlan(
+      { id: 'user-1', email: 'test@test.com' },
+      'starter',
+      makeRequest('http://localhost/api/billing/downgrade', { 'x-vercel-ip-country': 'CO' })
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect((result.data as Record<string, unknown>).url).toBe('https://paddle.test/downgrade');
+    }
+
+    const update = supabaseMock.__calls.find(
+      (c) => c.table === 'tenants' && c.method === 'update'
+    );
+    expect(update?.args[0]).toMatchObject({
+      paddle_pending_transaction_id: 'txn_2',
+      paddle_pending_plan: 'starter',
+      paddle_price_id: 'pri_cop_starter',
+    });
   });
 
   it('includes the target plan in external_reference so the webhook does not guess', async () => {
