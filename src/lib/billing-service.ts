@@ -292,7 +292,12 @@ export async function downgradePlan(
       auto_recurring: {
         frequency: 1,
         frequency_type: 'months',
-        transaction_amount: targetPlanConfig.price,
+        // Mismo criterio que `createCheckoutSession`: se cobra el precio
+        // efectivo del plan destino (con la promo de descuento aplicada si
+        // hubiera una), no el precio de lista. Antes usaba
+        // `targetPlanConfig.price` (lista), así que con una promo `discount`
+        // activa el downgrade cobraba de más y quedaba inconsistente con la UI.
+        transaction_amount: getEffectivePrice(plan),
         currency_id: 'ARS',
         trial_period_days: 0,
       },

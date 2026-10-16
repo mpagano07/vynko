@@ -131,6 +131,21 @@ function BillingContent() {
 
   if (authLoading || role === 'member') return null;
 
+  if (country !== 'AR') {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <AlertTriangle className="h-12 w-12 text-amber-500 mb-4" />
+        <h1 className="text-xl font-semibold text-gray-900 mb-2">Facturación no disponible</h1>
+        <p className="text-sm text-gray-600 text-center max-w-md mb-4">
+          El módulo de facturación solo está disponible para cuentas de Argentina. ARCA (ex-AFIP)
+          solo opera en Argentina, por lo que los pagos y la facturación electrónica no están
+          habilitados fuera de este país.
+        </p>
+        <Button onClick={() => router.replace('/dashboard')}>Volver al inicio</Button>
+      </div>
+    );
+  }
+
   const handleSubscribe = async (planId: string) => {
     const targetRank = PLAN_ORDER.indexOf(planId as PlanId);
     const currentRank = PLAN_ORDER.indexOf((currentPlanId as PlanId) || NEW_ACCOUNT_PLAN);

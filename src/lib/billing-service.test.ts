@@ -874,6 +874,50 @@ describe('downgradePlan', () => {
     expect(mockCancelPreApproval).not.toHaveBeenCalledWith('pa-old');
   });
 
+  it('crea el preapproval de MercadoPago con el precio efectivo del plan destino en un downgrade', async () => {
+    supabaseMock.__queue('tenant_users', {
+      data: [{ tenant_id: 'tenant-1', role: 'owner' }],
+      error: null,
+    });
+    supabaseMock.__queue('tenants', {
+      data: [{
+        id: 'tenant-1',
+        name: 'Mi Tienda',
+        billing_email: 'test@test.com',
+        subscription_plan: 'business',
+        subscription_status: 'active',
+        mercadopago_preapproval_id: 'pa-old',
+        created_at: '2026-01-01T00:00:00Z',
+      }],
+      error: null,
+    });
+    supabaseMock.__queue('tenant_users', { data: { user_id: 'user-1' }, error: null });
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }], error: null });
+
+    mockCancelPreApproval.mockResolvedValue({});
+    supabaseMock.__queue('product_stock', { data: [], error: null });
+    supabaseMock.__queue('tenant_users', { data: null, error: null });
+    supabaseMock.__queue('invitations', { data: null, error: null });
+    supabaseMock.__queue('tenants', { data: null, error: null });
+    mockCreatePreApproval.mockResolvedValue({ id: 'pa-new', init_point: 'https://mp.test' });
+    supabaseMock.__queue('tenants', { data: null, error: null });
+
+    await downgradePlan(
+      { id: 'user-1', email: 'test@test.com' },
+      'starter',
+      makeRequest()
+    );
+
+    const { getEffectivePrice } = await import('@/lib/plans');
+    expect(mockCreatePreApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auto_recurring: expect.objectContaining({
+          transaction_amount: getEffectivePrice('starter'),
+        }),
+      })
+    );
+  });
+
   it('returns 400 for invalid plan', async () => {
     const result = await downgradePlan(USER, 'nonexistent' as never, makeRequest());
     expect(result.ok).toBe(false);
