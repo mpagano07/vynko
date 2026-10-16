@@ -51,7 +51,7 @@ export async function createCheckoutSession(
 
   const { data: tenant } = await supabaseAdmin
     .from('tenants')
-    .select('name, billing_email, billing_provider, paddle_customer_id')
+    .select('name, billing_email, billing_provider, paddle_customer_id, mercadopago_preapproval_id')
     .eq('id', tenantId)
     .single();
 
@@ -99,7 +99,15 @@ export async function createCheckoutSession(
   // respeta esa para no partir la suscripción entre dos cobradores.
   const country = getCountryFromHeaders(request.headers);
   const currency = getCurrencyForCountry(country, new Set(getPaddleConfiguredCurrencies()));
-  const existingProvider = asBillingProvider(tenant?.billing_provider);
+  // `billing_provider` es NULL en las cuentas anteriores a esta feature, que ya
+  // podían estar cobrando por MercadoPago. Un preapproval existente es la señal
+  // de que la cuenta paga (o pagaba) por MP: sin esto, un país distinto de AR
+  // la rutearía a Paddle y podría iniciar un cobro nuevo encima del de MP
+  // (doble cobro). El caso típico es una cuenta de AR detectada fuera del país
+  // (viaje, VPN, proxy corporativo) al hacer un upgrade.
+  const storedProvider = asBillingProvider(tenant?.billing_provider);
+  const existingProvider =
+    storedProvider ?? (tenant?.mercadopago_preapproval_id ? 'mercadopago' : null);
   const provider = resolveBillingProvider(country, planConfig.id, existingProvider);
 
   if (provider === 'paddle') {

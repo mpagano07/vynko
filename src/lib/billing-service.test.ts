@@ -190,6 +190,48 @@ describe('createCheckoutSession', () => {
     );
   });
 
+  it('respeta MercadoPago en cuentas legacy (billing_provider NULL con preapproval) aunque el país no sea AR', async () => {
+    supabaseMock.__queue('tenant_users', {
+      data: [{ tenant_id: 'tenant-1', role: 'owner' }],
+      error: null,
+    });
+    supabaseMock.__queue('tenants', {
+      data: {
+        name: 'Mi Tienda',
+        billing_email: 'billing@test.com',
+        // Cuenta anterior a la feature: nunca se le escribió billing_provider,
+        // pero ya venía cobrando por MercadoPago.
+        billing_provider: null,
+        mercadopago_preapproval_id: 'pa-legacy',
+        paddle_customer_id: null,
+      },
+      error: null,
+    });
+    supabaseMock.__queue('tenants', { data: null, error: null });
+
+    // Paddle está configurado y la moneda del país tiene precio: sin el guard,
+    // el país no-AR rutearía a Paddle y se cobraría encima del preapproval de MP.
+    mockIsPaddleConfigured.mockReturnValue(true);
+    mockGetPaddlePriceId.mockReturnValue('pri_cop_starter');
+    mockCreatePreApproval.mockResolvedValue({
+      id: 'preapproval-new',
+      init_point: 'https://mp.com/checkout/xyz',
+    });
+
+    const result = await createCheckoutSession(
+      USER,
+      { plan: 'starter' },
+      makeRequest('http://localhost/api/billing/checkout', { 'x-vercel-ip-country': 'CO' })
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect((result.data as Record<string, unknown>).url).toBe('https://mp.com/checkout/xyz');
+    }
+    expect(mockCreatePaddleCheckout).not.toHaveBeenCalled();
+    expect(mockCreatePreApproval).toHaveBeenCalledTimes(1);
+  });
+
   it('returns 400 for invalid plan', async () => {
     supabaseMock.__queue('tenant_users', {
       data: [{ tenant_id: 'tenant-1', role: 'owner' }],
