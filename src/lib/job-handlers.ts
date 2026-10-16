@@ -1,5 +1,6 @@
 import { logger } from '@/lib/logger';
 import { reconcileSubscriptions } from '@/lib/mercadopago-reconcile';
+import { reconcilePaddleSubscriptions } from '@/lib/paddle-reconcile';
 import { registerJobHandler } from '@/lib/job-queue';
 
 let registered = false;
@@ -23,18 +24,30 @@ export function registerJobHandlers(): void {
    * caso en el que esa corrida revienta: el cron la deja encolada con
    * `enqueueJob` y la cola reintenta con backoff en vez de esperar 24 horas.
    *
-   * Que falle significa algo inesperado (la funcion ya atrapa los errores
-   * transitorios de MP y los reporta como `unreachable`/`deferred`), asi que
-   * reintentar es correcto: la reconciliacion es idempotente, en el peor caso
-   * reutiliza `processMercadoPagoWebhook` y los compare-and-set no matchean.
+   * Que falle significa algo inesperado (las funciones ya atrapan los errores
+   * transitorios de MP/Paddle y los reportan como `unreachable`/`deferred`),
+   * asi que reintentar es correcto: la reconciliacion es idempotente, en el peor
+   * caso reutiliza `processMercadoPagoWebhook`/`processPaddleWebhook` y los
+   * compare-and-set no matchean.
    */
   registerJobHandler('reconcile_subscriptions', async () => {
-    const report = await reconcileSubscriptions();
+    const [mp, paddle] = await Promise.all([
+      reconcileSubscriptions(),
+      reconcilePaddleSubscriptions(),
+    ]);
     logger.info('jobs: reconcile_subscriptions termino', {
-      checked: report.checked,
-      inSync: report.inSync,
-      repaired: report.repaired,
-      unreachable: report.unreachable,
+      mercadopago: {
+        checked: mp.checked,
+        inSync: mp.inSync,
+        repaired: mp.repaired,
+        unreachable: mp.unreachable,
+      },
+      paddle: {
+        checked: paddle.checked,
+        inSync: paddle.inSync,
+        repaired: paddle.repaired,
+        unreachable: paddle.unreachable,
+      },
     });
   });
 }

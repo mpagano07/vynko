@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { reconcileSubscriptions } from '@/lib/mercadopago-reconcile';
+import { reconcilePaddleSubscriptions } from '@/lib/paddle-reconcile';
 import { enqueueJob } from '@/lib/job-queue';
 import { logger } from '@/lib/logger';
 import { enterLogContext, resolveRequestId } from '@/lib/log-context';
@@ -30,9 +31,18 @@ async function handle(request: Request) {
   }
 
   try {
-    const report = await reconcileSubscriptions();
+    // Se reconcilian los dos cobradores: Argentina por MercadoPago y el resto
+    // de LATAM por Paddle. Cada uno atrapa sus fallos transitorios y los reporta
+    // como `unreachable`/`deferred`; un throw aca ya es algo inesperado.
+    const [mercadopago, paddle] = await Promise.all([
+      reconcileSubscriptions(),
+      reconcilePaddleSubscriptions(),
+    ]);
 
-    return NextResponse.json(report, { headers: { 'Cache-Control': 'no-store, max-age=0' } });
+    return NextResponse.json(
+      { mercadopago, paddle },
+      { headers: { 'Cache-Control': 'no-store, max-age=0' } }
+    );
   } catch (error) {
     // La reconciliacion revienta: algo inesperado (los fallos transitorios de
     // la API de MP ya estan atrapados adentro y se reportan como `unreachable`).
