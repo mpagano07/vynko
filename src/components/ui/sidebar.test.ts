@@ -28,6 +28,21 @@ describe('resolveNavAccess', () => {
         locked: false,
       });
     });
+
+    it('la oculta fuera de Argentina aunque la cuenta la tenga habilitada', () => {
+      expect(
+        resolveNavAccess(facturacion, { plan: 'business', facturacion: true, country: 'CO' })
+      ).toEqual({ visible: false, locked: false });
+      expect(
+        resolveNavAccess(facturacion, { plan: 'business', facturacion: true, country: 'MX' })
+      ).toEqual({ visible: false, locked: false });
+    });
+
+    it('la muestra en Argentina cuando la cuenta la tiene habilitada', () => {
+      expect(
+        resolveNavAccess(facturacion, { plan: 'business', facturacion: true, country: 'AR' })
+      ).toEqual({ visible: true, locked: false });
+    });
   });
 
   describe('items gated por plan', () => {

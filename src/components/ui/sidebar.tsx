@@ -46,6 +46,8 @@ export interface NavAccessContext {
   isAdmin?: boolean;
   /** Si la cuenta tiene habilitada la facturación electrónica. */
   facturacion?: boolean;
+  /** País del visitante (ISO-2). ARCA (ex-AFIP) sólo opera en Argentina. */
+  country?: string | null;
 }
 
 interface FilterResult {
@@ -60,8 +62,10 @@ interface FilterResult {
  */
 export function resolveNavAccess(item: NavItemAccess, ctx: NavAccessContext): FilterResult {
   // Feature en pruebas: sólo se muestra a quien la tenga habilitada (hoy, la
-  // cuenta admin). Los demás no la ven ni bloqueada.
-  if (item.requiresFacturacion && !ctx.facturacion) {
+  // cuenta admin). Los demás no la ven ni bloqueada. Además ARCA (ex-AFIP) sólo
+  // opera en Argentina, así que la facturación electrónica no se ofrece fuera
+  // del país (si no viene el país, se asume AR para no ocultarla de más).
+  if (item.requiresFacturacion && (!ctx.facturacion || (ctx.country ?? 'AR') !== 'AR')) {
     return { visible: false, locked: false };
   }
 
@@ -226,14 +230,14 @@ function LockedNavItem({ item, compact = false, onNavClick }: { item: NavItem; c
   );
 }
 
-function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, isAdmin, facturacion }: { onNavClick?: () => void; tenantPlan?: string; userRole?: string | null; isBlocked?: boolean; multiBranch?: boolean; isAdmin?: boolean; facturacion?: boolean }) {
+function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, isAdmin, facturacion, country }: { onNavClick?: () => void; tenantPlan?: string; userRole?: string | null; isBlocked?: boolean; multiBranch?: boolean; isAdmin?: boolean; facturacion?: boolean; country?: string | null }) {
   const pathname = usePathname();
   const [operacionesOpen, setOperacionesOpen] = useState(false);
 
   const effectivePlan = !tenantPlan || tenantPlan === 'free' ? 'starter' : tenantPlan;
 
   const filterItem = (item: NavItem): FilterResult =>
-    resolveNavAccess(item, { plan: effectivePlan, role: userRole, multiBranch, isAdmin, facturacion });
+    resolveNavAccess(item, { plan: effectivePlan, role: userRole, multiBranch, isAdmin, facturacion, country });
 
   const visibleOperaciones = operacionesItems.map((item) => ({ item, ...filterItem(item) })).filter((r) => r.visible);
   const isOperacionesActive = visibleOperaciones.some((r) => pathname === r.item.href);
@@ -385,7 +389,24 @@ export function Sidebar() {
   const { profile, tenant, tenants, role, user, loading } = useAuth();
   const isAdmin = isAdminProfile(profile);
   const canFacturacion = canUseFacturacion(profile, tenant);
+  // País del visitante: la cookie `vynko_country` la setea el proxy con la
+  // geolocalización de la request. ARCA (ex-AFIP) sólo opera en Argentina, así
+  // que el ítem de Facturación se oculta fuera del país (default AR para no
+  // ocultarlo cuando la cookie todavía no está).
+  const [country, setCountry] = useState<string>('AR');
   const { isOpen, close } = useSidebar();
+
+  useEffect(() => {
+    try {
+      const match = document.cookie.match(/(?:^|; )vynko_country=([^;]+)/);
+      if (match) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setCountry(decodeURIComponent(match[1]).toUpperCase().slice(0, 2));
+      }
+    } catch {
+      // La cookie de país es best-effort: si falta, se mantiene AR.
+    }
+  }, []);
 
   if (pathname?.includes('/login') || pathname?.includes('/auth') || pathname?.includes('/onboarding')) {
     return null;
@@ -444,7 +465,7 @@ export function Sidebar() {
           <IconAction icon={X} label="Cerrar menú" size="md" onClick={close} />
         </div>
         <nav className="flex-1 space-y-2 overflow-y-auto">
-          <SidebarNav onNavClick={close} tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} isAdmin={isAdmin} facturacion={canFacturacion} />
+          <SidebarNav onNavClick={close} tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} isAdmin={isAdmin} facturacion={canFacturacion} country={country} />
         </nav>
         <TrialCounter tenant={tenant} />
         {userSection}
@@ -458,7 +479,7 @@ export function Sidebar() {
           </div>
         </div>
         <nav className="flex-1 overflow-y-auto">
-          <SidebarNav tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} isAdmin={isAdmin} facturacion={canFacturacion} />
+          <SidebarNav tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} isAdmin={isAdmin} facturacion={canFacturacion} country={country} />
         </nav>
         <TrialCounter tenant={tenant} />
         {userSection}
