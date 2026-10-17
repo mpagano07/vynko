@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SearchInput } from '@/components/ui/search-input';
@@ -19,6 +20,16 @@ import { formatDate } from '@/lib/utils/format';
 import { matchesQuery } from '@/lib/utils/text';
 import { SortableTh, SortDir } from '@/components/ui/sortable-th';
 import { FormLabel } from '@/components/ui/form-label';
+import {
+  IVA_CONDITIONS,
+  IVA_CONDITION_LABELS,
+  PARTY_DOCUMENT_TYPES,
+  PARTY_DOCUMENT_TYPE_LABELS,
+  formatCuit,
+  formatCuitInput,
+  formatDocumentNumberInput,
+  validatePartyTaxFields,
+} from '@/lib/tax-fields';
 import toast from 'react-hot-toast';
 
 type SortKey = 'name' | 'email' | 'phone' | 'address';
@@ -29,6 +40,10 @@ interface Customer {
   email?: string;
   phone?: string;
   address?: string;
+  cuit?: string | null;
+  iva_condition?: string | null;
+  document_type?: string | null;
+  document_number?: string | null;
   created_at?: string;
 }
 
@@ -52,6 +67,35 @@ interface CustomerHistory {
   visitCount: number;
 }
 
+function emptyCustomerForm() {
+  return {
+    name: '',
+    email: '',
+    phone: '',
+    address: '',
+    cuit: '',
+    iva_condition: 'consumidor_final',
+    document_type: 'DNI',
+    document_number: '',
+  };
+}
+
+type CustomerForm = ReturnType<typeof emptyCustomerForm>;
+
+function customerFormFrom(c: Customer): CustomerForm {
+  const documentType = c.document_type || 'DNI';
+  return {
+    name: c.name,
+    email: c.email || '',
+    phone: c.phone || '',
+    address: c.address || '',
+    cuit: formatCuitInput(c.cuit || ''),
+    iva_condition: c.iva_condition || 'consumidor_final',
+    document_type: documentType,
+    document_number: formatDocumentNumberInput(c.document_number || '', documentType),
+  };
+}
+
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +108,7 @@ export default function CustomersPage() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Customer | null>(null);
-  const [form, setForm] = useState({ name: '', email: '', phone: '', address: '' });
+  const [form, setForm] = useState(emptyCustomerForm());
   const [submitting, setSubmitting] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
@@ -90,19 +134,23 @@ export default function CustomersPage() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: '', email: '', phone: '', address: '' });
+    setForm(emptyCustomerForm());
     setModalOpen(true);
   };
 
   const openEdit = (c: Customer) => {
     setEditing(c);
-    setForm({ name: c.name, email: c.email || '', phone: c.phone || '', address: c.address || '' });
+    setForm(customerFormFrom(c));
     setModalOpen(true);
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) { toast.error('El nombre es requerido'); return; }
+
+    const taxError = validatePartyTaxFields(form, { requireCuit: true });
+    if (taxError) { toast.error(taxError); return; }
+
     setSubmitting(true);
     try {
       const url = editing ? `/api/customers/${editing.id}` : '/api/customers';
@@ -151,7 +199,9 @@ export default function CustomersPage() {
   const filtered = customers.filter(c =>
     matchesQuery(c.name, search) ||
     matchesQuery(c.email, search) ||
-    matchesQuery(c.phone, search)
+    matchesQuery(c.phone, search) ||
+    matchesQuery(c.cuit, search) ||
+    matchesQuery(c.document_number, search)
   );
 
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
@@ -197,7 +247,7 @@ export default function CustomersPage() {
       />
 
       <Card className="p-4 border border-gray-100 dark:border-gray-800">
-        <SearchInput ref={searchInputRef} placeholder="Buscar por nombre, email o teléfono..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        <SearchInput ref={searchInputRef} placeholder="Buscar por nombre, CUIT, documento, email o teléfono..." value={search} onChange={(e) => setSearch(e.target.value)} />
       </Card>
 
       <Card className="overflow-hidden border border-gray-100 dark:border-gray-800 p-0">
@@ -210,6 +260,7 @@ export default function CustomersPage() {
             <table className="w-full text-left border-collapse">
               <Thead>
                 <SortableTh label="Nombre" sortFor="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                <Th>Documento</Th>
                 <SortableTh label="Email" sortFor="email" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
                 <SortableTh label="Teléfono" sortFor="phone" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
                 <SortableTh label="Dirección" sortFor="address" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
@@ -219,6 +270,13 @@ export default function CustomersPage() {
                 {sortedCustomers.map((c) => (
                   <tr key={c.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
                     <td className="py-4 px-6 font-semibold text-gray-900 dark:text-gray-100">{c.name}</td>
+                    <td className="py-4 px-6 text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                      {c.cuit
+                        ? formatCuit(c.cuit)
+                        : c.document_number
+                          ? `${c.document_type ? `${c.document_type} ` : ''}${c.document_number}`
+                          : '—'}
+                    </td>
                     <td className="py-4 px-6 text-gray-600 dark:text-gray-400">{c.email || '—'}</td>
                     <td className="py-4 px-6 text-gray-600 dark:text-gray-400">{c.phone || '—'}</td>
                     <td className="py-4 px-6 text-gray-600 dark:text-gray-400 max-w-[200px] truncate">{c.address || '—'}</td>
@@ -257,24 +315,76 @@ export default function CustomersPage() {
 
       {/* Create/Edit Modal */}
       {modalOpen && (
-        <Modal onClose={() => setModalOpen(false)} className="max-w-md" title={editing ? 'Editar Cliente' : 'Nuevo Cliente'}>
+        <Modal onClose={() => setModalOpen(false)} className="max-w-lg" title={editing ? 'Editar Cliente' : 'Nuevo Cliente'}>
           <form onSubmit={handleSave} className="space-y-4">
               <div>
-                <FormLabel>Nombre *</FormLabel>
+                <FormLabel>Nombre o Razón Social *</FormLabel>
                 <Input required placeholder="Nombre del cliente" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
               </div>
-              <div>
-                <FormLabel>Email</FormLabel>
-                <Input type="email" placeholder="cliente@ejemplo.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+
+              <div className="space-y-4 rounded-lg border border-gray-100 bg-gray-50/60 p-3 dark:border-gray-800 dark:bg-gray-900/40">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  Datos fiscales para facturar
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <FormLabel>CUIT</FormLabel>
+                    <Input placeholder="20-12345678-9" inputMode="numeric" value={form.cuit} onChange={(e) => setForm({ ...form, cuit: formatCuitInput(e.target.value) })} />
+                  </div>
+                  <div>
+                    <FormLabel>Condición frente al IVA</FormLabel>
+                    <Select value={form.iva_condition} onChange={(e) => setForm({ ...form, iva_condition: e.target.value })}>
+                      {IVA_CONDITIONS.map((c) => (
+                        <option key={c} value={c}>{IVA_CONDITION_LABELS[c]}</option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div>
+                    <FormLabel>Tipo de documento</FormLabel>
+                    <Select
+                      value={form.document_type}
+                      onChange={(e) => {
+                        const document_type = e.target.value;
+                        setForm({
+                          ...form,
+                          document_type,
+                          document_number: formatDocumentNumberInput(form.document_number, document_type),
+                        });
+                      }}
+                    >
+                      {PARTY_DOCUMENT_TYPES.map((t) => (
+                        <option key={t} value={t}>{PARTY_DOCUMENT_TYPE_LABELS[t]}</option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div>
+                    <FormLabel>Número de documento</FormLabel>
+                    <Input
+                      placeholder="12345678"
+                      inputMode="numeric"
+                      value={form.document_number}
+                      onChange={(e) => setForm({ ...form, document_number: formatDocumentNumberInput(e.target.value, form.document_type) })}
+                    />
+                  </div>
+                </div>
               </div>
-              <div>
-                <FormLabel>Teléfono</FormLabel>
-                <Input placeholder="+54 11 1234-5678" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <FormLabel>Email</FormLabel>
+                  <Input type="email" placeholder="cliente@ejemplo.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                </div>
+                <div>
+                  <FormLabel>Teléfono</FormLabel>
+                  <Input placeholder="+54 11 1234-5678" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+                </div>
               </div>
+
               <div>
                 <FormLabel>Dirección</FormLabel>
                 <Input placeholder="Dirección del cliente" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
               </div>
+
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
                 <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
                 <Button type="submit" disabled={submitting}>{submitting ? 'Guardando...' : 'Guardar'}</Button>

@@ -84,6 +84,57 @@ describe('Suppliers API', () => {
       expect(json.error).toBe('El nombre del proveedor es requerido');
     });
 
+    it('crea proveedor con datos fiscales y los espeja en providers (201)', async () => {
+      supabaseMock.__queue('suppliers', { data: null, error: null }); // duplicate check
+      supabaseMock.__queue('suppliers', {
+        data: { id: 's3', name: 'Sancor', tenant_id: 'tenant-1' },
+      });
+      supabaseMock.__queue('providers', {
+        data: { id: 's3', name: 'Sancor', tenant_id: 'tenant-1' },
+      });
+
+      const res = await POST(
+        makeRequest('POST', {
+          name: 'Sancor',
+          cuit: '30-11223344-5',
+          iva_condition: 'responsable_inscripto',
+          document_type: 'CUIT',
+          document_number: '30-11223344-5',
+        })
+      );
+      expect(res.status).toBe(201);
+
+      const insertSup = supabaseMock.__calls.find(
+        (c) => c.table === 'suppliers' && c.method === 'insert'
+      );
+      expect(insertSup?.args[0]).toMatchObject({
+        name: 'Sancor',
+        cuit: '30112233445',
+        document_type: 'CUIT',
+        document_number: '30112233445',
+        iva_condition: 'responsable_inscripto',
+      });
+
+      const insertProv = supabaseMock.__calls.find(
+        (c) => c.table === 'providers' && c.method === 'insert'
+      );
+      expect(insertProv?.args[0]).toMatchObject({
+        cuit: '30112233445',
+        iva_condition: 'responsable_inscripto',
+        document_type: 'CUIT',
+        document_number: '30112233445',
+      });
+    });
+
+    it('rechaza un CUIT inválido sin tocar la base (400)', async () => {
+      const res = await POST(makeRequest('POST', { name: 'Sancor', cuit: '30-11' }));
+      expect(res.status).toBe(400);
+
+      const json = await res.json();
+      expect(json.error).toMatch(/11 dígitos/);
+      expect(supabaseMock.__calls.some((c) => c.method === 'insert')).toBe(false);
+    });
+
     it('creates supplier and records activity log (201)', async () => {
       supabaseMock.__queue('suppliers', { data: null, error: null }); // duplicate check
       supabaseMock.__queue('suppliers', {
