@@ -1,6 +1,13 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import type { AuthInfo } from '@/lib/api-auth';
 import { logger } from '@/lib/logger';
+import {
+  PARTY_TAX_FIELD_KEYS,
+  normalizePartyTaxFields,
+  normalizeProvidedTaxFields,
+  validatePartyTaxFields,
+  type PartyTaxFields,
+} from '@/lib/tax-fields';
 
 export type CustomerResult<T = unknown> =
   | { ok: true; data: T; status: number }
@@ -32,6 +39,10 @@ export async function createCustomer(
       return { ok: false, error: 'El nombre del cliente es requerido', status: 400 };
     }
 
+    const tax = normalizePartyTaxFields(body as PartyTaxFields);
+    const taxError = validatePartyTaxFields(tax, { requireCuit: true });
+    if (taxError) return { ok: false, error: taxError, status: 400 };
+
     const { data, error } = await supabaseAdmin
       .from('customers')
       .insert({
@@ -41,6 +52,10 @@ export async function createCustomer(
         phone: body.phone || null,
         address: body.address || null,
         notes: body.notes || null,
+        cuit: tax.cuit,
+        iva_condition: tax.iva_condition || 'consumidor_final',
+        document_type: tax.document_type || 'DNI',
+        document_number: tax.document_number,
       })
       .select()
       .single();
@@ -55,7 +70,17 @@ export async function createCustomer(
   }
 }
 
-const CUSTOMER_ALLOWED_FIELDS = ['name', 'email', 'phone', 'address', 'notes'];
+const CUSTOMER_ALLOWED_FIELDS = [
+  'name',
+  'email',
+  'phone',
+  'address',
+  'notes',
+  'cuit',
+  'iva_condition',
+  'document_type',
+  'document_number',
+];
 
 export async function updateCustomer(
   auth: AuthInfo,
@@ -70,6 +95,21 @@ export async function updateCustomer(
 
     if (Object.keys(updates).length === 0) {
       return { ok: false, error: 'No hay campos para actualizar', status: 400 };
+    }
+
+    const taxTouched = PARTY_TAX_FIELD_KEYS.some((key) => updates[key] !== undefined);
+    if (taxTouched) Object.assign(updates, normalizeProvidedTaxFields(body));
+
+    if (taxTouched) {
+      const { data: existing } = await supabaseAdmin
+        .from('customers')
+        .select('cuit, iva_condition, document_type, document_number')
+        .eq('id', id)
+        .eq('tenant_id', auth.tenantId)
+        .maybeSingle();
+
+      const taxError = validatePartyTaxFields({ ...(existing || {}), ...updates }, { requireCuit: true });
+      if (taxError) return { ok: false, error: taxError, status: 400 };
     }
 
     updates.updated_at = new Date().toISOString();
