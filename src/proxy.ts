@@ -31,6 +31,7 @@ const publicPaths = [
   '/ventas-y-caja',
   '/alternativa-a-excel',
   '/software-gestion-argentina',
+  '/importar-productos-mercadolibre-tiendanube',
   // Imagenes Open Graph/Twitter generadas (next/og). No tienen punto en la ruta,
   // asi que el matcher las incluiria y el gate de auth las mandaria a /login:
   // los crawlers de redes sociales (WhatsApp, LinkedIn, X) reciben HTML en vez

@@ -9,6 +9,10 @@ export interface Supplier {
   phone?: string;
   address?: string;
   notes?: string;
+  cuit?: string | null;
+  iva_condition?: string | null;
+  document_type?: string | null;
+  document_number?: string | null;
   created_at?: string;
   updated_at?: string;
 }

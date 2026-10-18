@@ -3,6 +3,13 @@ import { createActivityLog } from '@/lib/activity-log';
 import type { AuthInfo } from '@/lib/api-auth';
 import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
 import { logger } from '@/lib/logger';
+import {
+  PARTY_TAX_FIELD_KEYS,
+  normalizePartyTaxFields,
+  normalizeProvidedTaxFields,
+  validatePartyTaxFields,
+  type PartyTaxFields,
+} from '@/lib/tax-fields';
 
 export type SupplierResult<T = unknown> =
   | { ok: true; data: T; status: number }
@@ -51,6 +58,10 @@ export async function createSupplier(
       return { ok: false, error: 'El nombre del proveedor es requerido', status: 400 };
     }
 
+    const tax = normalizePartyTaxFields(body as PartyTaxFields);
+    const taxError = validatePartyTaxFields(tax);
+    if (taxError) return { ok: false, error: taxError, status: 400 };
+
     const { data: existing } = await supabaseAdmin
       .from('suppliers')
       .select('id')
@@ -72,6 +83,10 @@ export async function createSupplier(
         phone: body.phone || null,
         address: body.address || null,
         notes: body.notes || null,
+        cuit: tax.cuit,
+        iva_condition: tax.iva_condition,
+        document_type: tax.document_type,
+        document_number: tax.document_number,
       })
       .select()
       .single();
@@ -90,6 +105,10 @@ export async function createSupplier(
         email: body.email || null,
         phone: body.phone || null,
         address: body.address || null,
+        cuit: tax.cuit,
+        iva_condition: tax.iva_condition,
+        document_type: tax.document_type,
+        document_number: tax.document_number,
       })
       .select()
       .single();
@@ -109,7 +128,18 @@ export async function createSupplier(
   }
 }
 
-const SUPPLIER_ALLOWED_FIELDS = ['name', 'contact_name', 'email', 'phone', 'address', 'notes'];
+const SUPPLIER_ALLOWED_FIELDS = [
+  'name',
+  'contact_name',
+  'email',
+  'phone',
+  'address',
+  'notes',
+  'cuit',
+  'iva_condition',
+  'document_type',
+  'document_number',
+];
 
 export async function updateSupplier(
   auth: AuthInfo,
@@ -124,6 +154,22 @@ export async function updateSupplier(
     for (const key of SUPPLIER_ALLOWED_FIELDS) {
       if (body[key] !== undefined) updateData[key] = body[key];
     }
+
+    const taxTouched = PARTY_TAX_FIELD_KEYS.some((key) => updateData[key] !== undefined);
+    if (taxTouched) {
+      Object.assign(updateData, normalizeProvidedTaxFields(body));
+
+      const { data: existing } = await supabaseAdmin
+        .from('suppliers')
+        .select('cuit, iva_condition, document_type, document_number')
+        .eq('id', id)
+        .eq('tenant_id', auth.tenantId)
+        .maybeSingle();
+
+      const taxError = validatePartyTaxFields({ ...(existing || {}), ...updateData });
+      if (taxError) return { ok: false, error: taxError, status: 400 };
+    }
+
     updateData.updated_at = new Date().toISOString();
 
     const { data, error } = await supabaseAdmin
@@ -146,6 +192,10 @@ export async function updateSupplier(
         email: body.email !== undefined ? body.email : undefined,
         phone: body.phone !== undefined ? body.phone : undefined,
         address: body.address !== undefined ? body.address : undefined,
+        cuit: body.cuit !== undefined ? updateData.cuit : undefined,
+        iva_condition: body.iva_condition !== undefined ? updateData.iva_condition : undefined,
+        document_type: body.document_type !== undefined ? updateData.document_type : undefined,
+        document_number: body.document_number !== undefined ? updateData.document_number : undefined,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)

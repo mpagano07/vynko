@@ -36,10 +36,53 @@ import { formatDate } from '@/lib/utils/format';
 import { matchesQuery } from '@/lib/utils/text';
 import { SortableTh, SortDir } from '@/components/ui/sortable-th';
 import { FormLabel } from '@/components/ui/form-label';
+import {
+  IVA_CONDITIONS,
+  IVA_CONDITION_LABELS,
+  PARTY_DOCUMENT_TYPES,
+  PARTY_DOCUMENT_TYPE_LABELS,
+  formatCuit,
+  formatCuitInput,
+  formatDocumentNumberInput,
+  validatePartyTaxFields,
+} from '@/lib/tax-fields';
 
 const PO_INTENT_KEY = 'create_po_intent';
 
 type SortKey = 'name' | 'contact' | 'email' | 'address';
+
+function emptySupplierForm() {
+  return {
+    name: '',
+    contact_name: '',
+    email: '',
+    phone: '',
+    address: '',
+    notes: '',
+    cuit: '',
+    iva_condition: 'responsable_inscripto',
+    document_type: 'CUIT',
+    document_number: '',
+  };
+}
+
+type SupplierForm = ReturnType<typeof emptySupplierForm>;
+
+function supplierFormFrom(s: Supplier): SupplierForm {
+  const documentType = s.document_type || 'CUIT';
+  return {
+    name: s.name || '',
+    contact_name: s.contact_name || '',
+    email: s.email || '',
+    phone: s.phone || '',
+    address: s.address || '',
+    notes: s.notes || '',
+    cuit: formatCuitInput(s.cuit || ''),
+    iva_condition: s.iva_condition || 'responsable_inscripto',
+    document_type: documentType,
+    document_number: formatDocumentNumberInput(s.document_number || '', documentType),
+  };
+}
 
 export default function ProvidersPage() {
   const router = useRouter();
@@ -54,14 +97,7 @@ export default function ProvidersPage() {
   // Supplier form
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
-  const [supplierForm, setSupplierForm] = useState({
-    name: '',
-    contact_name: '',
-    email: '',
-    phone: '',
-    address: '',
-    notes: '',
-  });
+  const [supplierForm, setSupplierForm] = useState<SupplierForm>(emptySupplierForm());
 
   const [isSubmittingSupplier, setIsSubmittingSupplier] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -288,7 +324,9 @@ export default function ProvidersPage() {
   const filteredSuppliers = suppliers.filter((s) =>
     matchesQuery(s.name, searchTerm) ||
     matchesQuery(s.contact_name, searchTerm) ||
-    matchesQuery(s.email, searchTerm)
+    matchesQuery(s.email, searchTerm) ||
+    matchesQuery(s.cuit, searchTerm) ||
+    matchesQuery(s.document_number, searchTerm)
   );
 
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
@@ -320,20 +358,8 @@ export default function ProvidersPage() {
     : filteredSuppliers;
 
   const openSupplierModal = (supplier: Supplier | null = null) => {
-    if (supplier) {
-      setEditingSupplier(supplier);
-      setSupplierForm({
-        name: supplier.name || '',
-        contact_name: supplier.contact_name || '',
-        email: supplier.email || '',
-        phone: supplier.phone || '',
-        address: supplier.address || '',
-        notes: supplier.notes || '',
-      });
-    } else {
-      setEditingSupplier(null);
-      setSupplierForm({ name: '', contact_name: '', email: '', phone: '', address: '', notes: '' });
-    }
+    setEditingSupplier(supplier);
+    setSupplierForm(supplier ? supplierFormFrom(supplier) : emptySupplierForm());
     setIsSupplierModalOpen(true);
   };
 
@@ -343,6 +369,13 @@ export default function ProvidersPage() {
       toast.error('El nombre del proveedor es requerido');
       return;
     }
+
+    const taxError = validatePartyTaxFields(supplierForm);
+    if (taxError) {
+      toast.error(taxError);
+      return;
+    }
+
     if (isSubmittingSupplier) return;
 
     try {
@@ -419,7 +452,7 @@ export default function ProvidersPage() {
       <Card className="p-4 border border-gray-100 dark:border-gray-800">
         <SearchInput
           ref={searchInputRef}
-          placeholder="Buscar proveedor por nombre, contacto o email..."
+          placeholder="Buscar proveedor por nombre, CUIT, contacto o email..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
@@ -444,6 +477,7 @@ export default function ProvidersPage() {
             <table className="w-full text-left border-collapse">
               <Thead>
                 <SortableTh label="Nombre" sortFor="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
+                <Th>CUIT / Documento</Th>
                 <SortableTh label="Contacto" sortFor="contact" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
                 <SortableTh label="Email / Teléfono" sortFor="email" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
                 <SortableTh label="Dirección" sortFor="address" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
@@ -462,6 +496,13 @@ export default function ProvidersPage() {
                     >
                       <td className="py-4 px-6">
                         <div className="font-semibold text-gray-900 dark:text-gray-100">{supplier.name}</div>
+                      </td>
+                      <td className="py-4 px-6 text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                        {supplier.cuit
+                          ? formatCuit(supplier.cuit)
+                          : supplier.document_number
+                            ? `${supplier.document_type ? `${supplier.document_type} ` : ''}${supplier.document_number}`
+                            : '—'}
                       </td>
                       <td className="py-4 px-6 text-gray-600 dark:text-gray-400">
                         {supplier.contact_name || '—'}
@@ -492,7 +533,7 @@ export default function ProvidersPage() {
                     </tr>
                     {selectedSupplierId === supplier.id && (
                       <tr>
-                        <td colSpan={5} className="p-0">
+                        <td colSpan={6} className="p-0">
                           <div className="border-t border-indigo-200 dark:border-indigo-800 bg-indigo-50/60 dark:bg-indigo-900/10">
                             {loadingChain ? (
                               <div className="flex items-center justify-center py-8">
@@ -572,6 +613,68 @@ export default function ProvidersPage() {
                   value={supplierForm.name}
                   onChange={(e) => setSupplierForm({ ...supplierForm, name: e.target.value })}
                 />
+              </div>
+
+              <div className="space-y-4 rounded-lg border border-gray-100 bg-gray-50/60 p-3 dark:border-gray-800 dark:bg-gray-900/40">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  Datos fiscales
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <FormLabel>CUIT</FormLabel>
+                    <Input
+                      type="text"
+                      placeholder="30-12345678-9"
+                      inputMode="numeric"
+                      value={supplierForm.cuit}
+                      onChange={(e) => setSupplierForm({ ...supplierForm, cuit: formatCuitInput(e.target.value) })}
+                    />
+                  </div>
+                  <div>
+                    <FormLabel>Condición frente al IVA</FormLabel>
+                    <Select
+                      value={supplierForm.iva_condition}
+                      onChange={(e) => setSupplierForm({ ...supplierForm, iva_condition: e.target.value })}
+                    >
+                      {IVA_CONDITIONS.map((c) => (
+                        <option key={c} value={c}>{IVA_CONDITION_LABELS[c]}</option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div>
+                    <FormLabel>Tipo de documento</FormLabel>
+                    <Select
+                      value={supplierForm.document_type}
+                      onChange={(e) => {
+                        const document_type = e.target.value;
+                        setSupplierForm({
+                          ...supplierForm,
+                          document_type,
+                          document_number: formatDocumentNumberInput(supplierForm.document_number, document_type),
+                        });
+                      }}
+                    >
+                      {PARTY_DOCUMENT_TYPES.map((t) => (
+                        <option key={t} value={t}>{PARTY_DOCUMENT_TYPE_LABELS[t]}</option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div>
+                    <FormLabel>Número de documento</FormLabel>
+                    <Input
+                      type="text"
+                      placeholder="12345678"
+                      inputMode="numeric"
+                      value={supplierForm.document_number}
+                      onChange={(e) =>
+                        setSupplierForm({
+                          ...supplierForm,
+                          document_number: formatDocumentNumberInput(e.target.value, supplierForm.document_type),
+                        })
+                      }
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

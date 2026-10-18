@@ -35,6 +35,8 @@ import {
   Ban,
   Receipt,
   FlaskConical,
+  PencilLine,
+  PackageSearch,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import { formatDate } from '@/lib/utils/format';
@@ -114,6 +116,7 @@ export default function FacturacionPage() {
       quantity: number;
       unit_price: number; // en pesos
       iva_percentage: number;
+      manual?: boolean;
     }[];
   }>({
     customer_id: '',
@@ -238,7 +241,8 @@ export default function FacturacionPage() {
       docType = 'CUIT';
       docNum = cust.cuit.replace(/\D/g, '');
     } else if (cust.document_number) {
-      docType = (cust.document_type as 'DNI' | 'CUIT' | 'CUIL') || 'DNI';
+      const rawType = cust.document_type as string | undefined | null;
+      docType = rawType === 'DNI' || rawType === 'CUIT' || rawType === 'CUIL' ? rawType : rawType ? 'SinIdentificar' : 'DNI';
       docNum = cust.document_number.replace(/\D/g, '');
     }
 
@@ -276,7 +280,7 @@ export default function FacturacionPage() {
     setCreateForm((prev) => {
       const items = prev.items.map((it, i) => {
         if (i !== index) return it;
-        if (!productId) return { ...it, product_id: undefined };
+        if (!productId) return { ...it, product_id: undefined, manual: true };
         const product = products.find((p) => p.id === productId);
         if (!product) return { ...it, product_id: undefined };
         return {
@@ -288,6 +292,15 @@ export default function FacturacionPage() {
       });
       return { ...prev, items };
     });
+  };
+
+  const handleToggleManualItem = (index: number) => {
+    setCreateForm((prev) => ({
+      ...prev,
+      items: prev.items.map((it, i) =>
+        i === index ? { ...it, manual: !it.manual, product_id: undefined } : it
+      ),
+    }));
   };
 
   const handleRemoveItem = (index: number) => {
@@ -358,7 +371,7 @@ export default function FacturacionPage() {
 
     for (const item of createForm.items) {
       if (!item.product_id && !item.description.trim()) {
-        toast.error('Seleccioná un producto en cada ítem');
+        toast.error('Cargá un producto del stock o escribí el detalle de cada ítem');
         return;
       }
       if (item.quantity <= 0 || item.unit_price <= 0) {
@@ -918,24 +931,69 @@ export default function FacturacionPage() {
 
               <div className="space-y-2">
                 {createForm.items.map((item, index) => (
-                  <div key={index} className="space-y-1 bg-gray-50/50 dark:bg-gray-900/30 p-2 rounded-lg">
+                  <div key={index} className="bg-gray-50/50 dark:bg-gray-900/30 p-2 rounded-lg">
                     <div className="grid grid-cols-12 gap-2 items-center">
                       <div className="col-span-12 sm:col-span-6">
-                        <Select
-                          value={item.product_id || ''}
-                          onChange={(e) => handleSelectItemProduct(index, e.target.value)}
-                          aria-label="Producto"
-                          searchable={products.length > 8}
-                          className="w-full"
-                        >
-                          <option value="">Producto / servicio (opcional)</option>
-                          {products.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name}
-                              {p.sku ? ` · ${p.sku}` : ''}
-                            </option>
-                          ))}
-                        </Select>
+                        <div className="flex items-center gap-1.5">
+                          {item.manual ? (
+                            <Input
+                              type="text"
+                              className="flex-1 min-w-0"
+                              aria-label="Producto o servicio"
+                              placeholder="Ej: Servicio de armado de PC"
+                              value={item.description}
+                              onChange={(e) => {
+                                const updated = createForm.items.map((it, i) =>
+                                  i === index ? { ...it, description: e.target.value } : it
+                                );
+                                setCreateForm({ ...createForm, items: updated });
+                              }}
+                            />
+                          ) : (
+                            <Select
+                              value={item.product_id || ''}
+                              onChange={(e) => handleSelectItemProduct(index, e.target.value)}
+                              aria-label="Producto"
+                              searchable={products.length > 8}
+                              className="flex-1 min-w-0"
+                            >
+                              <option value="">Producto / servicio del stock</option>
+                              {products.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name}
+                                  {p.sku ? ` · ${p.sku}` : ''}
+                                </option>
+                              ))}
+                            </Select>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleManualItem(index)}
+                            title={
+                              item.manual
+                                ? 'Elegir un producto del stock'
+                                : 'Cargar un detalle manual (servicio fuera del stock)'
+                            }
+                            aria-label={
+                              item.manual
+                                ? 'Elegir un producto del stock'
+                                : 'Cargar un detalle manual (servicio fuera del stock)'
+                            }
+                            aria-pressed={Boolean(item.manual)}
+                            className={cn(
+                              'h-10 w-10 shrink-0 flex items-center justify-center rounded-md border transition-colors',
+                              item.manual
+                                ? 'border-amber-300 bg-amber-50 text-amber-600 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-400'
+                                : 'border-gray-200 bg-white text-gray-400 hover:text-indigo-600 hover:border-indigo-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-500 dark:hover:text-indigo-400 dark:hover:border-indigo-700'
+                            )}
+                          >
+                            {item.manual ? (
+                              <PackageSearch className="h-4 w-4" />
+                            ) : (
+                              <PencilLine className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
                       </div>
                       <div className="col-span-5 sm:col-span-2">
                         <Input
@@ -957,6 +1015,8 @@ export default function FacturacionPage() {
                           min={0}
                           step="0.01"
                           placeholder="Precio ($)"
+                          aria-label="Precio unitario"
+                          title="Precio unitario"
                           value={item.unit_price || ''}
                           onChange={(e) => {
                             const updated = [...createForm.items];

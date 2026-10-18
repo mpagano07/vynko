@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
 import { LAST_SEEN_COOKIE } from '@/lib/session-policy';
 import { PADDLE_CURRENCIES_COOKIE } from '@/lib/pricing/configured-currencies';
+import { SEO_PAGES, seoPath } from '@/lib/marketing/seo-landing';
 
 vi.mock('@supabase/ssr', () => ({ createServerClient: vi.fn() }));
 vi.mock('@supabase/supabase-js', () => ({ createClient: vi.fn() }));
@@ -193,11 +194,25 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
       '/ventas-y-caja',
       '/alternativa-a-excel',
       '/software-gestion-argentina',
+      '/importar-productos-mercadolibre-tiendanube',
       // Imágenes OG/Twitter generadas: los crawlers de redes no tienen sesión.
       '/opengraph-image',
       '/twitter-image',
     ]) {
       const res = await proxy(request(p));
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it('sirve TODAS las landings SEO sin sesión (una landing nueva no puede quedar gateada)', async () => {
+    // Regresión: `/importar-productos-mercadolibre-tiendanube` estaba en el
+    // sitemap y en SEO_PAGES pero faltaba en `publicPaths`, así que el proxy
+    // mandaba a /login a Googlebot y a los visitantes anónimos. Este test ata la
+    // lista pública al registro central para que no vuelva a desincronizarse.
+    makeServerClient(null);
+
+    for (const page of SEO_PAGES) {
+      const res = await proxy(request(seoPath(page.slug)));
       expect(res.status).toBe(200);
     }
   });

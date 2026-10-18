@@ -112,6 +112,62 @@ describe('Customers API', () => {
       expect(json.error).toBe('El nombre del cliente es requerido');
     });
 
+    it('crea cliente con datos fiscales normalizados (201)', async () => {
+      supabaseMock.__queue('customers', {
+        data: { id: 'c9', name: 'Acme', tenant_id: 'tenant-1' },
+      });
+
+      const res = await POST(
+        makeRequest('POST', {
+          name: 'Acme',
+          cuit: '30-12345678-9',
+          iva_condition: 'responsable_inscripto',
+          document_type: 'CUIT',
+          document_number: '30-12345678-9',
+        })
+      );
+      expect(res.status).toBe(201);
+
+      const insertCall = supabaseMock.__calls.find(
+        (c) => c.table === 'customers' && c.method === 'insert'
+      );
+      expect(insertCall?.args[0]).toMatchObject({
+        name: 'Acme',
+        cuit: '30123456789',
+        document_type: 'CUIT',
+        document_number: '30123456789',
+        iva_condition: 'responsable_inscripto',
+      });
+    });
+
+    it('rechaza un CUIT inválido (400)', async () => {
+      const res = await POST(makeRequest('POST', { name: 'Acme', cuit: '3012345' }));
+      expect(res.status).toBe(400);
+
+      const json = await res.json();
+      expect(json.error).toMatch(/11 dígitos/);
+      expect(supabaseMock.__calls.some((c) => c.method === 'insert')).toBe(false);
+    });
+
+    it('rechaza un Responsable Inscripto sin CUIT (400)', async () => {
+      const res = await POST(
+        makeRequest('POST', { name: 'Acme', iva_condition: 'responsable_inscripto' })
+      );
+      expect(res.status).toBe(400);
+
+      const json = await res.json();
+      expect(json.error).toMatch(/CUIT/);
+    });
+
+    it('acepta un consumidor final sin datos fiscales (201)', async () => {
+      supabaseMock.__queue('customers', {
+        data: { id: 'c10', name: 'Sin Doc', tenant_id: 'tenant-1' },
+      });
+
+      const res = await POST(makeRequest('POST', { name: 'Sin Doc' }));
+      expect(res.status).toBe(201);
+    });
+
     it('rejects invalid JSON body (400)', async () => {
       const req = new Request('http://localhost/api/customers', {
         method: 'POST',
