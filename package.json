@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@paddle/paddle-js": "^1.6.5",
     "@sentry/core": "^11.4.0",
     "@sentry/nextjs": "^11.4.0",
     "@supabase/ssr": "^0.10.3",

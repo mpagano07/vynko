@@ -17,6 +17,8 @@ type WebhookLogInput = {
   userId?: string | null;
   error?: string | null;
   durationMs?: number | null;
+  /** Pasarela que originó el evento. Default 'mercadopago'. */
+  provider?: string;
 };
 
 /**
@@ -34,7 +36,7 @@ type WebhookLogInput = {
 export async function recordWebhookEvent(input: WebhookLogInput): Promise<void> {
   try {
     const { error } = await supabaseAdmin.from('webhook_events').insert({
-      provider: 'mercadopago',
+      provider: input.provider ?? 'mercadopago',
       provider_event_id: input.providerEventId,
       // Id de ENTREGA (`x-request-id` de MercadoPago), unico por notificacion
       // y distinto del `provider_event_id` (que en suscripciones es el id del

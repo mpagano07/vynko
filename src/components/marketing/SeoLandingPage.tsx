@@ -2,17 +2,10 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { headers } from 'next/headers';
 import type { ReactNode } from 'react';
-import {
-  PLANS,
-  PLAN_ORDER,
-  getActivePromoPlan,
-  getEffectivePrice,
-  getPlanBadge,
-  getTrialDays,
-  getTrialPlan,
-} from '@/lib/plans';
+import { PLANS, PLAN_ORDER, getActivePromoPlan, getPlanBadge, getTrialDays, getTrialPlan } from '@/lib/plans';
 import { SALES_EMAIL } from '@/lib/tenant-config';
-import { formatARS } from '@/lib/utils/currency';
+import { getCountryFromHeaders, formatPriceByCountry, getDisplayPrice, type PlanId } from '@/lib/pricing';
+import { getPaddleConfiguredCurrencies } from '@/lib/paddle-price-ids';
 import PromoCountdown from '@/components/landing/PromoCountdown';
 import ROICalculator from '@/components/landing/ROICalculator';
 import {
@@ -57,7 +50,12 @@ const TRUST_ITEMS = ['Stock en tiempo real', 'Caja en segundos', 'Multi-sucursal
  * justifica.
  */
 export default async function SeoLandingPage({ content }: Props) {
-  const nonce = (await headers()).get('x-nonce') ?? undefined;
+  const h = await headers();
+  const nonce = h.get('x-nonce') ?? undefined;
+  const country = getCountryFromHeaders(h);
+  // Monedas de Paddle configuradas: si la local no tiene `price_id`, el precio
+  // se muestra y se cobra en USD (misma resolución que el checkout).
+  const configuredCurrencies = new Set(getPaddleConfiguredCurrencies());
   const trialDays = getTrialDays();
 
   return (
@@ -399,7 +397,7 @@ export default async function SeoLandingPage({ content }: Props) {
               const isPopular = id === getActivePromoPlan();
               const badge = getPlanBadge(id);
               const isTrialPlan = id === getTrialPlan();
-              const price = getEffectivePrice(id);
+              const price = getDisplayPrice(country, id as PlanId, configuredCurrencies);
 
               let cta: ReactNode;
               if (plan.comingSoon) {
@@ -466,7 +464,7 @@ export default async function SeoLandingPage({ content }: Props) {
                     ) : isTrialPlan ? (
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-base text-gray-500 line-through">{formatARS(price)}</span>
+                          <span className="text-base text-gray-500 line-through">{formatPriceByCountry({ amount: price, country, configuredCurrencies })}</span>
                           <span className="text-sm text-gray-400">/mes</span>
                           <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
                             Oferta
@@ -478,12 +476,12 @@ export default async function SeoLandingPage({ content }: Props) {
                           <span className="text-sm text-gray-400">por {trialDays} días</span>
                         </div>
                         <p className="mt-2 text-xs text-gray-400">
-                          Ahorrás <span className="text-gray-100 font-semibold">{formatARS(price)}</span> durante tu prueba.
+                          Ahorrás <span className="text-gray-100 font-semibold">{formatPriceByCountry({ amount: price, country, configuredCurrencies })}</span> durante tu prueba.
                         </p>
                       </div>
                     ) : (
                       <>
-                        <span className="text-4xl font-extrabold">{formatARS(price)}</span>
+                        <span className="text-4xl font-extrabold">{formatPriceByCountry({ amount: price, country, configuredCurrencies })}</span>
                         <span className="text-sm text-gray-400 ml-1">/mes</span>
                       </>
                     )}
@@ -511,7 +509,11 @@ export default async function SeoLandingPage({ content }: Props) {
               );
             })}
           </div>
-
+          {country !== 'AR' && (
+            <p className="mt-8 text-center text-xs text-gray-500 max-w-2xl mx-auto">
+              Fuera de Argentina el cobro se procesa en la moneda que ves, a través de nuestra pasarela internacional (Paddle), que actúa como Merchant of Record y liquida los impuestos locales. Si tu país no tiene una moneda habilitada, el cobro se realiza en dólares (USD). El importe y la moneda definitivos se muestran antes de confirmar el pago.
+            </p>
+          )}
         </div>
       </section>
 

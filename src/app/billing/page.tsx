@@ -15,15 +15,15 @@ import {
   getTrialPlan,
   getPlanBadge,
   getActivePromoPlan,
-  getEffectivePrice,
 } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
-import { formatARS } from '@/lib/utils/currency';
+import { formatPriceByCountry, getDisplayPrice, getConfiguredCurrenciesFromCookie, type CountryCode, type ConfiguredCurrencies } from '@/lib/pricing';
 import { formatDate } from '@/lib/utils/format';
 import { CreditCard, CheckCircle2, XCircle, Loader2, ArrowRight, AlertTriangle, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { authFetch } from '@/lib/fetchWithTenant';
+import { getPaddleClient, openPaddleCheckout } from '@/lib/paddle-client';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function BillingPage() {
@@ -53,7 +53,23 @@ function BillingContent() {
     createdAt: string | null;
     features: string[];
     pendingCheckout?: boolean;
+    provider?: 'mercadopago' | 'paddle' | null;
   } | null>(null);
+  const [country] = useState<CountryCode>(() => {
+    // El país vive en la cookie que setea el proxy; es best-effort (default AR).
+    if (typeof document === 'undefined') return 'AR';
+    try {
+      const match = document.cookie.match(/(?:^|; )vynko_country=([^;]+)/);
+      return match ? (decodeURIComponent(match[1]).toUpperCase().slice(0, 2) as CountryCode) : 'AR';
+    } catch {
+      return 'AR';
+    }
+  });
+  // Monedas de Paddle configuradas (cookie del proxy): el cliente no puede leer
+  // `PADDLE_PRICE_IDS`. `null`/undefined usa el default.
+  const [configuredCurrencies] = useState<ConfiguredCurrencies>(() =>
+    getConfiguredCurrenciesFromCookie()
+  );
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -100,6 +116,12 @@ function BillingContent() {
   }, [router]);
 
   useEffect(() => {
+    // Precalienta Paddle.js (overlay del checkout internacional) para que el
+    // primer click no espere la descarga del CDN. No-op si falta el client token.
+    void getPaddleClient();
+  }, []);
+
+  useEffect(() => {
     if (!showRevocationTooltip) return;
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       if (revocationTooltipRef.current && !revocationTooltipRef.current.contains(event.target as Node)) {
@@ -139,6 +161,11 @@ function BillingContent() {
       });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error || 'Error'); return; }
+      // El server ya creó la transacción (valida moneda/precio y guarda el
+      // `custom_data` que resuelve el webhook). Con Paddle.js disponible se
+      // abre el overlay para esa transacción; si no, se cae al redirect del
+      // `checkout.url` de la cuenta.
+      if (data.transactionId && await openPaddleCheckout(data.transactionId)) return;
       if (data.url) window.location.assign(data.url);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
@@ -161,8 +188,16 @@ function BillingContent() {
 
       setPendingDowngrade(null);
 
+      const planName = PLANS[pendingDowngrade as PlanId].name;
+      // Mismo criterio que el alta: overlay de Paddle si hay transacción y
+      // Paddle.js está disponible; si no, redirect al `checkout.url`.
+      if (data.transactionId && await openPaddleCheckout(data.transactionId)) {
+        toast.success(`Tu plan es ${planName}. Completá el pago para activar tu suscripción.`);
+        return;
+      }
+
       if (data.url) {
-        toast.success(`Tu plan es ${PLANS[pendingDowngrade as PlanId].name}. Completá el pago para activar tu suscripción.`);
+        toast.success(`Tu plan es ${planName}. Completá el pago para activar tu suscripción.`);
         window.location.assign(data.url);
         return;
       }
@@ -211,6 +246,7 @@ function BillingContent() {
   const isPlanActive = subscription?.status === 'active';
   const pendingPlanChange = (subscription as unknown as { pendingPlanChange?: string | null })?.pendingPlanChange;
   const pendingCheckout = subscription?.pendingCheckout === true;
+  const providerName = subscription?.provider === 'paddle' ? 'Paddle' : 'Mercado Pago';
 
   const TRIAL_DAYS = getTrialDays();
   const TRIAL_PLAN = getTrialPlan();
@@ -250,7 +286,7 @@ function BillingContent() {
               Cambio de plan pendiente de pago
             </p>
             <p className="text-sm text-amber-600 dark:text-amber-400 mt-1">
-              Tenés un cambio a {PLANS[pendingPlanChange as PlanId]?.name || pendingPlanChange} pendiente de confirmación. Completá el pago en Mercado Pago para que el cambio se aplique.
+              Tenés un cambio a {PLANS[pendingPlanChange as PlanId]?.name || pendingPlanChange} pendiente de confirmación. Completá el pago en {providerName} para que el cambio se aplique.
             </p>
           </div>
         </div>
@@ -265,7 +301,7 @@ function BillingContent() {
               Pago pendiente de confirmación
             </p>
             <p className="text-sm text-amber-600 dark:text-amber-400 mt-1">
-              Iniciaste el pago de tu suscripción en Mercado Pago pero no se completó. Elegí un plan para completar el pago y activarlo.
+              Iniciaste el pago de tu suscripción en {providerName} pero no se completó. Elegí un plan para completar el pago y activarlo.
               {isTrial && daysUntilTrialEnd !== null && daysUntilTrialEnd >= 0
                 ? ` Mientras tanto seguís con la prueba gratuita (te quedan ${daysUntilTrialEnd} día${daysUntilTrialEnd === 1 ? '' : 's'}).`
                 : ''}
@@ -483,9 +519,9 @@ function BillingContent() {
               <div className="mt-2 mb-4">
                 {plan.comingSoon ? (
                   <span className="text-xl font-semibold text-gray-500">Próximamente</span>
-                ) : getEffectivePrice(id) > 0 ? (
+                ) : getDisplayPrice(country, id as PlanId, configuredCurrencies) > 0 ? (
                   <>
-                    <span className="text-3xl font-extrabold text-gray-900 dark:text-white">{formatARS(getEffectivePrice(id))}</span>
+                    <span className="text-3xl font-extrabold text-gray-900 dark:text-white">{formatPriceByCountry({ amount: getDisplayPrice(country, id as PlanId, configuredCurrencies), country, configuredCurrencies })}</span>
                     <span className="text-sm text-gray-500">/mes</span>
                   </>
                 ) : (
@@ -590,7 +626,7 @@ variant="danger"
       <ConfirmModal
         open={!!pendingDowngrade}
         title="¿Cambiar a Starter?"
-        message="Al pasar al plan Starter vas a perder los beneficios de Business: los productos por encima de los primeros 100 quedan desactivados (se recuperan si volvés a Business), se quita el acceso a las sucursales excepto la primera, se eliminan los colaboradores y se desactivan las funciones avanzadas (pronóstico, visión de góndolas, IA). Se cancelará tu suscripción actual y se iniciará el pago de $19.900/mes por el plan Starter. ¿Querés continuar?"
+        message={`Al pasar al plan Starter vas a perder los beneficios de Business: los productos por encima de los primeros 100 quedan desactivados (se recuperan si volvés a Business), se quita el acceso a las sucursales excepto la primera, se eliminan los colaboradores y se desactivan las funciones avanzadas (pronóstico, visión de góndolas, IA). Se cancelará tu suscripción actual y se iniciará el pago de ${formatPriceByCountry({ amount: getDisplayPrice(country, 'starter', configuredCurrencies), country, configuredCurrencies })}/mes por el plan Starter. ¿Querés continuar?`}
         confirmLabel="Sí, cambiar a Starter"
         cancelLabel="Volver"
         variant="danger"

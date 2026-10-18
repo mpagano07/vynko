@@ -5,14 +5,14 @@ import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { PLANS, getActivePromoPlan, getEffectivePrice, getPlanBadge, getTrialDays, getTrialPlan } from '@/lib/plans';
+import { PLANS, getActivePromoPlan, getPlanBadge, getTrialDays, getTrialPlan } from '@/lib/plans';
 import { isTrialExpired } from '@/lib/checkSubscription';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { type TenantInfo } from '@/lib/contexts/auth-context';
 import { SALES_EMAIL } from '@/lib/tenant-config';
 import { SEO_PAGES, seoPath } from '@/lib/marketing/seo-landing';
 
-import { formatARS } from '@/lib/utils/currency';
+import { formatPriceByCountry, getDisplayPrice, getConfiguredCurrenciesFromCookie, type CountryCode, type ConfiguredCurrencies, type PlanId } from '@/lib/pricing';
 
 import PromoCountdown from '@/components/landing/PromoCountdown';
 
@@ -64,6 +64,10 @@ export default function LandingPage() {
   const [emailError, setEmailError] = useState('');
   const [waitlistLoading, setWaitlistLoading] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [country, setCountry] = useState<CountryCode>('AR');
+  // Monedas de Paddle configuradas, leidas de la cookie que setea el proxy: el
+  // cliente no puede leer `PADDLE_PRICE_IDS`. `null`/undefined usa el default.
+  const [configuredCurrencies, setConfiguredCurrencies] = useState<ConfiguredCurrencies>(undefined);
 
   const tenantRef = useRef<TenantInfo | null>(null);
   const tenantsRef = useRef<TenantInfo[]>([]);
@@ -102,6 +106,16 @@ export default function LandingPage() {
     // Inicialización única (evita mismatch de hidratación)
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsMounted(true);
+    try {
+      const match = document.cookie.match(/(?:^|; )vynko_country=([^;]+)/);
+      if (match) {
+        const c = decodeURIComponent(match[1]).toUpperCase().slice(0,2) as CountryCode;
+        setCountry(c as CountryCode);
+      }
+      setConfiguredCurrencies(getConfiguredCurrenciesFromCookie());
+    } catch {
+      // Las cookies de país/monedas son best-effort: si no están, quedan los defaults.
+    }
   }, []);
 
   const trialExpired = isTrialExpired(tenant);
@@ -487,7 +501,7 @@ export default function LandingPage() {
               const isPopular = id === getActivePromoPlan();
               const badge = getPlanBadge(id);
               const isTrialPlan = id === getTrialPlan();
-              const price = getEffectivePrice(id);
+              const price = getDisplayPrice(country, id as PlanId, configuredCurrencies);
               const trialDays = getTrialDays();
 
               let cta: ReactNode;
@@ -559,7 +573,7 @@ export default function LandingPage() {
                     ) : isTrialPlan ? (
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-base text-gray-500 line-through">{formatARS(price)}</span>
+                          <span className="text-base text-gray-500 line-through">{formatPriceByCountry({ amount: price, country, configuredCurrencies })}</span>
                           <span className="text-sm text-gray-400">/mes</span>
                           <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
                             Oferta
@@ -571,12 +585,12 @@ export default function LandingPage() {
                           <span className="text-sm text-gray-400">por {trialDays} días</span>
                         </div>
                         <p className="mt-2 text-xs text-gray-400">
-                          Ahorrás <span className="text-gray-100 font-semibold">{formatARS(price)}</span> durante tu prueba.
+                          Ahorrás <span className="text-gray-100 font-semibold">{formatPriceByCountry({ amount: price, country, configuredCurrencies })}</span> durante tu prueba.
                         </p>
                       </div>
                     ) : (
                       <>
-                        <span className="text-4xl font-extrabold">{formatARS(price)}</span>
+                        <span className="text-4xl font-extrabold">{formatPriceByCountry({ amount: price, country, configuredCurrencies })}</span>
                         <span className="text-sm text-gray-400 ml-1">/mes</span>
                       </>
                     )}
@@ -613,6 +627,11 @@ export default function LandingPage() {
             <span>⚡ Configuración lista en menos de 2 minutos.</span>
             <span>🔒 Cancelá cuando quieras sin compromisos.</span>
           </div>
+          {country !== 'AR' && (
+            <p className="mt-6 text-center text-xs text-gray-500 max-w-2xl mx-auto">
+              Fuera de Argentina el cobro se procesa en la moneda que ves, a través de nuestra pasarela internacional (Paddle), que actúa como Merchant of Record y liquida los impuestos locales. Si tu país no tiene una moneda habilitada, el cobro se realiza en dólares (USD). El importe y la moneda definitivos se muestran antes de confirmar el pago.
+            </p>
+          )}
         </div>
       </section>
 

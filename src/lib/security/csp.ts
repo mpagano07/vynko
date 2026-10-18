@@ -27,6 +27,14 @@
  *   asi que nunca hay `onclick=` en el HTML. 'none' dice exactamente lo que se
  *   quiso decir. Verificado con `scripts/scan-inline-handlers.mjs` contra el server
  *   real: cero atributos de evento inline en el HTML renderizado.
+ * - Paddle.js (checkout internacional) se carga desde `cdn.paddle.com` y el
+ *   overlay embebido abre un iframe en `*.paddle.com`, ademas de sus llamadas
+ *   de API a `*.paddle.com`. El paquete `@paddle/paddle-js` inyecta el <script>
+ *   en runtime, no en el HTML inicial: en produccion lo habilita `'strict-dynamic'`
+ *   (el script lo crea un bundle ya nonceado) y en dev, donde no hay
+ *   'strict-dynamic', cae en el host list. `style-src`/`connect-src`/`frame-src`
+ *   usan `*.paddle.com` porque el checkout real corre en subdominios distintos
+ *   segun el entorno (`sandbox-buy`, `sandbox-cdn`, `sandbox-create-checkout`).
  *
  * Ver `scripts/verify-csp.mjs`, que comprueba contra el server real que todo
  * script inline de la pagina lleva el nonce vigente.
@@ -37,16 +45,16 @@ export function buildCsp(nonce: string): string {
 
   const directives = [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}'${strictDynamic}${isDev ? " 'unsafe-eval'" : ''}`,
+    `script-src 'self' 'nonce-${nonce}'${strictDynamic}${isDev ? " 'unsafe-eval'" : ''} https://cdn.paddle.com`,
     // Los handlers inline (onclick=, onload=, ...) quedan en 'none'. React no los
     // emite nunca (usa delegacion), asi que no se rompe nada y se cierra la via
     // de ejecutar codigo desde un atributo inyectado.
     "script-src-attr 'none'",
-    "style-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline' https://*.paddle.com",
     "img-src 'self' blob: data: https://*.supabase.co https://*.supabase.in https://*.mercadopago.com https://http2.mlstatic.com https://*.gravatar.com https://images.unsplash.com",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
-    "frame-src https://*.mercadopago.com",
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.paddle.com",
+    "frame-src https://*.mercadopago.com https://*.paddle.com",
     "media-src 'self' blob:",
     "worker-src 'self' blob:",
     "object-src 'none'",

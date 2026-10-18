@@ -2,10 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET, POST } from './route';
 
 const reconcileMock = vi.fn();
+const paddleReconcileMock = vi.fn();
 const enqueueMock = vi.fn();
 
 vi.mock('@/lib/mercadopago-reconcile', () => ({
   reconcileSubscriptions: (...args: unknown[]) => reconcileMock(...args),
+}));
+
+vi.mock('@/lib/paddle-reconcile', () => ({
+  reconcilePaddleSubscriptions: (...args: unknown[]) => paddleReconcileMock(...args),
 }));
 
 // El endpoint solo encola cuando la reconciliacion revienta; sin este mock el
@@ -30,11 +35,26 @@ const report = {
   details: [],
 };
 
+const paddleReport = {
+  checked: 1,
+  inSync: 0,
+  repaired: 1,
+  unreachable: 0,
+  deferred: [],
+  details: [],
+};
+
+function resetMocks() {
+  reconcileMock.mockReset();
+  reconcileMock.mockResolvedValue(report);
+  paddleReconcileMock.mockReset();
+  paddleReconcileMock.mockResolvedValue(paddleReport);
+  enqueueMock.mockReset();
+}
+
 describe('GET /api/cron/reconcile-subscriptions', () => {
   beforeEach(() => {
-    reconcileMock.mockReset();
-    reconcileMock.mockResolvedValue(report);
-    enqueueMock.mockReset();
+    resetMocks();
     process.env.CRON_SECRET = 'test-secret';
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
@@ -50,8 +70,9 @@ describe('GET /api/cron/reconcile-subscriptions', () => {
 
     expect(res.status).toBe(200);
     expect(reconcileMock).toHaveBeenCalledTimes(1);
+    expect(paddleReconcileMock).toHaveBeenCalledTimes(1);
     expect(enqueueMock).not.toHaveBeenCalled();
-    expect(await res.json()).toEqual(report);
+    expect(await res.json()).toEqual({ mercadopago: report, paddle: paddleReport });
   });
 
   it('si la reconciliacion revienta, la deja en cola y responde 500', async () => {
@@ -67,6 +88,19 @@ describe('GET /api/cron/reconcile-subscriptions', () => {
       payload: { source: 'cron' },
     });
     expect(await res.json()).toMatchObject({ error: 'Reconciliation failed', queued: true });
+  });
+
+  it('tambien encola si lo que revienta es la reconciliacion de Paddle', async () => {
+    paddleReconcileMock.mockRejectedValue(new Error('boom'));
+    enqueueMock.mockResolvedValue('job-78');
+
+    const res = await GET(authorized());
+
+    expect(res.status).toBe(500);
+    expect(enqueueMock).toHaveBeenCalledWith({
+      jobType: 'reconcile_subscriptions',
+      payload: { source: 'cron' },
+    });
   });
 
   it('si ni siquiera se pudo encolar, lo dice en la respuesta', async () => {
@@ -142,8 +176,9 @@ describe('GET /api/cron/reconcile-subscriptions', () => {
 
     const json = await (await GET(authorized())).json();
 
-    expect(json.repaired).toBe(1);
-    expect(json.details[0]).toMatchObject({ tenantId: 't9', outcome: 'repaired' });
+    expect(json.mercadopago.repaired).toBe(1);
+    expect(json.mercadopago.details[0]).toMatchObject({ tenantId: 't9', outcome: 'repaired' });
+    expect(json.paddle.repaired).toBe(1);
   });
 
   it('does not leak the secret in the error body', async () => {
@@ -174,9 +209,7 @@ describe('GET /api/cron/reconcile-subscriptions', () => {
 
 describe('POST /api/cron/reconcile-subscriptions', () => {
   beforeEach(() => {
-    reconcileMock.mockReset();
-    reconcileMock.mockResolvedValue(report);
-    enqueueMock.mockReset();
+    resetMocks();
     process.env.CRON_SECRET = 'test-secret';
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });

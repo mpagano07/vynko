@@ -5,6 +5,7 @@ import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
 import { LAST_SEEN_COOKIE } from '@/lib/session-policy';
+import { PADDLE_CURRENCIES_COOKIE } from '@/lib/pricing/configured-currencies';
 import { SEO_PAGES, seoPath } from '@/lib/marketing/seo-landing';
 
 vi.mock('@supabase/ssr', () => ({ createServerClient: vi.fn() }));
@@ -155,6 +156,28 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
     const res = await proxy(request('/'));
 
     expect(res.status).toBe(200);
+  });
+
+  it('setea la cookie de monedas de Paddle configuradas para el display del cliente', async () => {
+    // El cliente no puede leer `PADDLE_PRICE_IDS`; el proxy le pasa las monedas
+    // configuradas por cookie para que muestre el precio en la misma moneda que
+    // el checkout va a cobrar.
+    makeServerClient(null);
+    const original = process.env.PADDLE_PRICE_IDS;
+    process.env.PADDLE_PRICE_IDS = JSON.stringify({
+      USD: { starter: 'pri_usd_starter' },
+      COP: { business: 'pri_cop_business' },
+    });
+    try {
+      const res = await proxy(request('/'));
+      expect(res.cookies.get(PADDLE_CURRENCIES_COOKIE)?.value.split(',').sort()).toEqual([
+        'COP',
+        'USD',
+      ]);
+    } finally {
+      if (original === undefined) delete process.env.PADDLE_PRICE_IDS;
+      else process.env.PADDLE_PRICE_IDS = original;
+    }
   });
 
   it('permite el acceso a rutas públicas sin autenticación', async () => {

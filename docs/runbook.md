@@ -60,21 +60,76 @@ consuma.
 4. Mientras este caida, las ventas del cliente no se guardan: avisar
    comunicacion breve ("estamos con un problema de base de datos").
 
-### 3. Cobros / webhooks de MercadoPago
+### 3. Cobros / webhooks (MercadoPago y Paddle)
 
-- **Webhook rechazado (401)**: firma invalida. Revisar
-  `MERCADOPAGO_WEBHOOK_SECRET` (Vercel env + panel de MP → Webhooks) y
-  rotarlo con `docs/security-secrets-rotation.md`.
-- **Suscripciones desincronizadas**: correr el cron a mano y leer el reporte:
+- **Webhook rechazado (401)**: firma invalida. Revisar el secreto del
+  destination del proveedor y rotarlo con `docs/security-secrets-rotation.md`:
+  - MercadoPago: `MERCADOPAGO_WEBHOOK_SECRET` (Vercel env + panel de MP → Webhooks).
+  - Paddle: `PADDLE_WEBHOOK_SECRET` (Vercel env + Paddle → Developer tools →
+    Notifications → destination `/api/webhooks/paddle`).
+- **Suscripciones desincronizadas**: correr el cron a mano y leer el reporte.
+  Reconcilia las dos pasarelas y devuelve `{ mercadopago, paddle }`:
   ```bash
   curl -X POST https://<app>/api/cron/reconcile-subscriptions \
     -H "Authorization: Bearer $CRON_SECRET"
   ```
   `CRON_SECRET` esta en los envs de Vercel; el mismo endpoint acepta GET (es
-  el que usa el cron programado de `vercel.json`, diario 05:17 UTC).
+  el que usa el cron programado de `vercel.json`, diario 05:17 UTC). En cada
+  reporte, `inSync + repaired + unreachable` tiene que cuadrar con `checked`.
 - **Cobro no reflejado en la app**: los eventos son at-least-once y con
-  dedupe; un reintento de MP llega igual. Recien despues de dos reintentos
-  mirar logs con `job:mercadopago-webhook`.
+  dedupe; un reintento de MP/Paddle llega igual. Recien despues de dos
+  reintentos mirar logs con `job:mercadopago-webhook` o `job:paddle-webhook`.
+- **Alta de Paddle en un entorno nuevo**: `PADDLE_ENVIRONMENT`
+  (`sandbox`|`production`), `PADDLE_API_KEY` y `PADDLE_PRICE_IDS` (JSON por
+  moneda). Los `pri_` de sandbox NO sirven en produccion: hay que correr
+  `node scripts/paddle-bootstrap.mjs --env <archivo>` contra la cuenta de ese
+  entorno para crear productos, precios y el destination del webhook.
+- **Probar el cobro internacional (Paddle) en sandbox**: en local no hay
+  headers de IP, asi que el pais se fuerza con la cookie `vynko_country` (el
+  mismo valor que el proxy escribe en produccion).
+  1. Precondiciones: `PADDLE_ENVIRONMENT=sandbox`, `PADDLE_API_KEY`
+     (`pdl_sdbx_...`), `PADDLE_PRICE_IDS` (al menos `USD`; idealmente las
+     monedas locales) y `PADDLE_WEBHOOK_SECRET`. Generar catalogo y secreto:
+     `node scripts/paddle-bootstrap.mjs --env .env.local --webhook https://<host>/api/webhooks/paddle`.
+     Correr `npm run dev`.
+  2. **Pais**: en DevTools → Application → Cookies crear `vynko_country=CO`
+     (o `MX`/`BR`/`CL`/`PE`). `/api/*` no pasa por el proxy, pero la cookie
+     viaja en el fetch del checkout y en local es el unico rastro del pais.
+  3. **Display**: en `/` y `/billing` el precio tiene que salir en la moneda
+     local configurada (p. ej. `$ 69.900 COP`). Si la moneda del pais NO esta
+     en `PADDLE_PRICE_IDS`, se muestra en USD. La cookie
+     `vynko_paddle_currencies` lista las monedas con `price_id`; la nota al pie
+     de la landing ("Fuera de Argentina el cobro se procesa...") aparece para
+     no-AR.
+  4. **Checkout**: iniciar Starter/Business en `/billing` → redirige al checkout
+     de Paddle sandbox por el importe mostrado. Tarjeta de prueba:
+     `4242 4242 4242 4242`, cualquier vencimiento futuro y CVC.
+  5. **Webhook**: al pagar, Paddle manda `transaction.completed` +
+     `subscription.created/activated`. Verificar en `tenants`:
+     `billing_provider='paddle'`, `subscription_status='active'`,
+     `subscription_plan=<plan>`, `paddle_subscription_id='sub_...'`,
+     `paddle_customer_id='ctm_...'`; una fila en `webhook_events` con
+     `provider='paddle'` y `outcome='processed'`; y un evento
+     `subscription_started`. Antes del webhook la cuenta queda con
+     `paddle_pending_transaction_id` (aviso de "pago pendiente" en `/billing`).
+  6. **Replay**: reenviar el MISMO evento desde el panel de Paddle → 200 sin
+     duplicar (dedupe por `event_id`, o `duplicate` por compare-and-set).
+  7. **Cancelacion**: Cancelar en `/billing` → `next_billing_period`; la DB
+     queda `subscription_status='canceled'`, `subscription_plan='free'`,
+     `paddle_subscription_id=NULL`; evento `subscription_cancelled`
+     (`source: portal`).
+  8. **Reconciliacion**: `curl -X POST <app>/api/cron/reconcile-subscriptions
+     -H "Authorization: Bearer $CRON_SECRET"`; el bloque `paddle` tiene que
+     cuadrar (`inSync + repaired + unreachable == checked`). Para forzar un
+     `repaired`: desincronizar a mano (`update tenants set
+     subscription_status='active' where id=...` con la suscripcion ya cancelada
+     en Paddle) y correr el cron.
+  9. **Firma invalida**: un POST a `/api/webhooks/paddle` sin
+     `Paddle-Signature` (o con firma mala) devuelve 401. Requiere
+     `PADDLE_WEBHOOK_SECRET`: sin el, fuera de produccion la firma se OMITE a
+     proposito.
+  10. Argentina siempre cae a MercadoPago (ARS): para probar Paddle hay que
+      usar un pais no-AR.
 
 ### 4. Errores masivos en Sentry
 
@@ -150,7 +205,7 @@ Diseno y SQL: `docs/background-jobs.md`.
 |---|---|---|
 | Responsable tecnico | _(completar)_ | _(completar)_ |
 | Responsable de producto | _(completar)_ | _(completar)_ |
-| Proveedor (Supabase / Vercel / Mercado Pago) | — | status pages + soporte del plan |
+| Proveedor (Supabase / Vercel / Mercado Pago / Paddle) | — | status pages + soporte del plan |
 
 ## Referencias
 

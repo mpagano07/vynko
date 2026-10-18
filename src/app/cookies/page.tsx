@@ -38,7 +38,7 @@ export default function CookiesPage() {
         <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
           Política de Cookies y Almacenamiento Local
         </h1>
-        <p className="text-sm text-gray-400 mb-8">Última actualización: Septiembre 2026</p>
+        <p className="text-sm text-gray-400 mb-8">Última actualización: Octubre 2026</p>
 
         <div className="space-y-6 text-gray-300">
           <section className="bg-gray-900/50 border border-gray-800 rounded-xl p-6">
@@ -83,6 +83,18 @@ export default function CookiesPage() {
                     <td className="py-3 pr-4">Cookie estricta, inaccesible para JavaScript (HttpOnly)</td>
                     <td className="py-3 pr-4">Mantener tu sesión iniciada de forma segura mediante tokens criptográficos.</td>
                     <td className="py-3">Sesión / Renovable</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-4 font-mono text-xs text-cyan-400">vynko_country</td>
+                    <td className="py-3 pr-4">Cookie técnica</td>
+                    <td className="py-3 pr-4">Recordar el país de conexión estimado a partir de tu dirección IP para mostrar precios y contenido adaptados a tu región.</td>
+                    <td className="py-3">7 días</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-4 font-mono text-xs text-cyan-400">vynko_paddle_currencies</td>
+                    <td className="py-3 pr-4">Cookie técnica</td>
+                    <td className="py-3 pr-4">Recordar en qué monedas está habilitado el cobro para mostrarte el precio en la misma moneda en la que se te va a cobrar.</td>
+                    <td className="py-3">7 días</td>
                   </tr>
                   <tr>
                     <td className="py-3 pr-4 font-mono text-xs text-cyan-400">vynko-theme</td>

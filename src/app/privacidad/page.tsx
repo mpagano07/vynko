@@ -38,7 +38,7 @@ export default function PrivacidadPage() {
         <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
           Política de Privacidad y Protección de Datos
         </h1>
-        <p className="text-sm text-gray-400 mb-8">Última actualización: Septiembre 2026</p>
+        <p className="text-sm text-gray-400 mb-8">Última actualización: Octubre 2026</p>
 
         <div className="space-y-6 text-gray-300">
           <section className="bg-gray-900/50 border border-gray-800 rounded-xl p-6">
@@ -68,6 +68,9 @@ export default function PrivacidadPage() {
                 <strong>Datos Técnicos y de Conectividad:</strong> Dirección IP, agente de usuario del navegador, sistema operativo y eventos de diagnóstico de red necesarios para mitigar abusos y asegurar la disponibilidad del sistema.
               </li>
               <li>
+                <strong>Ubicación Aproximada (a nivel país):</strong> A partir de tu dirección IP estimamos el país desde el que te conectás. No accedemos a tu ubicación precisa ni a datos de GPS. Este dato se utiliza únicamente para mostrar precios y contenido adaptados a tu región.
+              </li>
+              <li>
                 <strong>Cookies y Tecnologías de Almacenamiento:</strong> Empleamos almacenamiento local y cookies técnicas estrictamente necesarias para sostener tu sesión autenticada y tus preferencias visuales. Podés consultar el detalle en nuestra{' '}
                 <Link href="/cookies" className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2">
                   Política de Cookies
@@ -85,8 +88,9 @@ export default function PrivacidadPage() {
             <ul className="list-disc list-inside space-y-2 text-gray-300">
               <li>Proveer, sincronizar y operar el sistema de gestión de inventario, punto de venta y control multi-sucursal.</li>
               <li>Administrar altas de cuenta, recuperación de credenciales y comunicaciones esenciales sobre el estado de la suscripción o alertas de seguridad.</li>
-              <li>Procesar el cobro recurrente de suscripciones a través de pasarelas de pago homologadas (Mercado Pago). Vynko no almacena datos sensibles de tarjetas de crédito o débito.</li>
+              <li>Procesar el cobro recurrente de suscripciones a través de pasarelas de pago homologadas (Mercado Pago y Paddle). Vynko no almacena datos sensibles de tarjetas de crédito o débito.</li>
               <li>Proveer soporte técnico asistido y responder a consultas o requerimientos operativos.</li>
+              <li>Estimar tu país de conexión a partir de tu dirección IP con el fin de mostrar precios, moneda y contenido adaptados a tu región.</li>
               <li>Cumplir con requerimientos legales, contables o regulatorios aplicables.</li>
             </ul>
           </section>
@@ -105,6 +109,9 @@ export default function PrivacidadPage() {
               </li>
               <li>
                 <strong>Mercado Pago:</strong> Pasarela de pagos certificada PCI-DSS para el procesamiento seguro de transacciones monetarias y suscripciones.
+              </li>
+              <li>
+                <strong>Paddle (Paddle.com Market Ltd.):</strong> Procesador de pagos internacional y Merchant of Record para las suscripciones contratadas fuera de Argentina. Gestiona el cobro recurrente, la facturación y la liquidación de impuestos locales.
               </li>
               <li>
                 <strong>Google Generative AI (Google LLC):</strong> En los planes habilitados (Business y Enterprise) que utilizan voluntariamente funciones de análisis o asistencia por Inteligencia Artificial, se procesan únicamente las consultas puntuales generadas para dicho análisis. No se ceden datos personales a modelos públicos de terceros ni se comercializa tu información.

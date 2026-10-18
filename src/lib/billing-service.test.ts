@@ -20,6 +20,27 @@ vi.mock('@/lib/mercadopago', () => ({
   cancelPreApproval: (...args: unknown[]) => mockCancelPreApproval(...args),
 }));
 
+const mockCreatePaddleCheckout = vi.fn();
+const mockGetPaddlePriceId = vi.fn();
+const mockCancelPaddleSubscription = vi.fn();
+const mockIsPaddleConfigured = vi.fn();
+
+vi.mock('@/lib/paddle', () => ({
+  createPaddleCheckout: (...args: unknown[]) => mockCreatePaddleCheckout(...args),
+  getPaddlePriceId: (...args: unknown[]) => mockGetPaddlePriceId(...args),
+  cancelPaddleSubscription: (...args: unknown[]) => mockCancelPaddleSubscription(...args),
+  isPaddleConfigured: (...args: unknown[]) => mockIsPaddleConfigured(...args),
+}));
+
+// `isPaddleConfigured` (via `canUsePaddle`) decide si un checkout nuevo va por
+// Paddle. Por defecto queda apagado para no tocar los tests de MercadoPago.
+beforeEach(() => {
+  mockCreatePaddleCheckout.mockReset();
+  mockGetPaddlePriceId.mockReset();
+  mockCancelPaddleSubscription.mockReset();
+  mockIsPaddleConfigured.mockReset();
+});
+
 const mockTrackEvent = vi.fn();
 
 vi.mock('@/lib/track-event', () => ({
@@ -121,6 +142,96 @@ describe('createCheckoutSession', () => {
 
     const result = await createCheckoutSession(USER, { plan: 'starter' }, makeRequest());
     expect(result.ok).toBe(true);
+  });
+
+  it('crea el checkout de Paddle y guarda el price_id del checkout', async () => {
+    supabaseMock.__queue('tenant_users', {
+      data: [{ tenant_id: 'tenant-1', role: 'owner' }],
+      error: null,
+    });
+    supabaseMock.__queue('tenants', {
+      data: {
+        name: 'Mi Tienda',
+        billing_email: 'billing@test.com',
+        billing_provider: null,
+        paddle_customer_id: null,
+      },
+      error: null,
+    });
+
+    mockIsPaddleConfigured.mockReturnValue(true);
+    mockGetPaddlePriceId.mockReturnValue('pri_cop_starter');
+    mockCreatePaddleCheckout.mockResolvedValue({
+      url: 'https://paddle.test/checkout',
+      transactionId: 'txn_1',
+    });
+
+    const result = await createCheckoutSession(
+      USER,
+      { plan: 'starter' },
+      makeRequest('http://localhost/api/billing/checkout', { 'x-vercel-ip-country': 'CO' })
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect((result.data as Record<string, unknown>).url).toBe('https://paddle.test/checkout');
+      // El cliente abre el overlay de Paddle.js con la transacción ya creada.
+      expect((result.data as Record<string, unknown>).transactionId).toBe('txn_1');
+    }
+
+    const update = supabaseMock.__calls.find(
+      (c) => c.table === 'tenants' && c.method === 'update'
+    );
+    expect(update?.args[0]).toMatchObject({
+      billing_provider: 'paddle',
+      paddle_pending_transaction_id: 'txn_1',
+      paddle_price_id: 'pri_cop_starter',
+    });
+    expect(mockCreatePaddleCheckout).toHaveBeenCalledWith(
+      expect.objectContaining({ priceId: 'pri_cop_starter' })
+    );
+  });
+
+  it('respeta MercadoPago en cuentas legacy (billing_provider NULL con preapproval) aunque el país no sea AR', async () => {
+    supabaseMock.__queue('tenant_users', {
+      data: [{ tenant_id: 'tenant-1', role: 'owner' }],
+      error: null,
+    });
+    supabaseMock.__queue('tenants', {
+      data: {
+        name: 'Mi Tienda',
+        billing_email: 'billing@test.com',
+        // Cuenta anterior a la feature: nunca se le escribió billing_provider,
+        // pero ya venía cobrando por MercadoPago.
+        billing_provider: null,
+        mercadopago_preapproval_id: 'pa-legacy',
+        paddle_customer_id: null,
+      },
+      error: null,
+    });
+    supabaseMock.__queue('tenants', { data: null, error: null });
+
+    // Paddle está configurado y la moneda del país tiene precio: sin el guard,
+    // el país no-AR rutearía a Paddle y se cobraría encima del preapproval de MP.
+    mockIsPaddleConfigured.mockReturnValue(true);
+    mockGetPaddlePriceId.mockReturnValue('pri_cop_starter');
+    mockCreatePreApproval.mockResolvedValue({
+      id: 'preapproval-new',
+      init_point: 'https://mp.com/checkout/xyz',
+    });
+
+    const result = await createCheckoutSession(
+      USER,
+      { plan: 'starter' },
+      makeRequest('http://localhost/api/billing/checkout', { 'x-vercel-ip-country': 'CO' })
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect((result.data as Record<string, unknown>).url).toBe('https://mp.com/checkout/xyz');
+    }
+    expect(mockCreatePaddleCheckout).not.toHaveBeenCalled();
+    expect(mockCreatePreApproval).toHaveBeenCalledTimes(1);
   });
 
   it('returns 400 for invalid plan', async () => {
@@ -622,6 +733,54 @@ describe('downgradePlan', () => {
     expect(inCall!.args[1]).toEqual(['tenant-1', 'tenant-9']);
   });
 
+  it('inicia el checkout de Paddle para el plan destino y guarda el price_id', async () => {
+    supabaseMock.__queue('tenant_users', {
+      data: [{ tenant_id: 'tenant-1', role: 'owner' }],
+      error: null,
+    });
+    supabaseMock.__queue('tenants', {
+      data: [{
+        id: 'tenant-1',
+        name: 'Mi Tienda',
+        billing_email: 'test@test.com',
+        billing_provider: 'paddle',
+        paddle_customer_id: 'ctm-1',
+        subscription_plan: 'business',
+        subscription_status: 'active',
+        mercadopago_preapproval_id: null,
+        created_at: '2026-01-01T00:00:00Z',
+      }],
+      error: null,
+    });
+
+    mockGetPaddlePriceId.mockReturnValue('pri_cop_starter');
+    mockCreatePaddleCheckout.mockResolvedValue({
+      url: 'https://paddle.test/downgrade',
+      transactionId: 'txn_2',
+    });
+
+    const result = await downgradePlan(
+      { id: 'user-1', email: 'test@test.com' },
+      'starter',
+      makeRequest('http://localhost/api/billing/downgrade', { 'x-vercel-ip-country': 'CO' })
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect((result.data as Record<string, unknown>).url).toBe('https://paddle.test/downgrade');
+      expect((result.data as Record<string, unknown>).transactionId).toBe('txn_2');
+    }
+
+    const update = supabaseMock.__calls.find(
+      (c) => c.table === 'tenants' && c.method === 'update'
+    );
+    expect(update?.args[0]).toMatchObject({
+      paddle_pending_transaction_id: 'txn_2',
+      paddle_pending_plan: 'starter',
+      paddle_price_id: 'pri_cop_starter',
+    });
+  });
+
   it('includes the target plan in external_reference so the webhook does not guess', async () => {
     supabaseMock.__queue('tenant_users', {
       data: [{ tenant_id: 'tenant-1', role: 'owner' }],
@@ -716,6 +875,50 @@ describe('downgradePlan', () => {
     }
 
     expect(mockCancelPreApproval).not.toHaveBeenCalledWith('pa-old');
+  });
+
+  it('crea el preapproval de MercadoPago con el precio efectivo del plan destino en un downgrade', async () => {
+    supabaseMock.__queue('tenant_users', {
+      data: [{ tenant_id: 'tenant-1', role: 'owner' }],
+      error: null,
+    });
+    supabaseMock.__queue('tenants', {
+      data: [{
+        id: 'tenant-1',
+        name: 'Mi Tienda',
+        billing_email: 'test@test.com',
+        subscription_plan: 'business',
+        subscription_status: 'active',
+        mercadopago_preapproval_id: 'pa-old',
+        created_at: '2026-01-01T00:00:00Z',
+      }],
+      error: null,
+    });
+    supabaseMock.__queue('tenant_users', { data: { user_id: 'user-1' }, error: null });
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }], error: null });
+
+    mockCancelPreApproval.mockResolvedValue({});
+    supabaseMock.__queue('product_stock', { data: [], error: null });
+    supabaseMock.__queue('tenant_users', { data: null, error: null });
+    supabaseMock.__queue('invitations', { data: null, error: null });
+    supabaseMock.__queue('tenants', { data: null, error: null });
+    mockCreatePreApproval.mockResolvedValue({ id: 'pa-new', init_point: 'https://mp.test' });
+    supabaseMock.__queue('tenants', { data: null, error: null });
+
+    await downgradePlan(
+      { id: 'user-1', email: 'test@test.com' },
+      'starter',
+      makeRequest()
+    );
+
+    const { getEffectivePrice } = await import('@/lib/plans');
+    expect(mockCreatePreApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auto_recurring: expect.objectContaining({
+          transaction_amount: getEffectivePrice('starter'),
+        }),
+      })
+    );
   });
 
   it('returns 400 for invalid plan', async () => {
