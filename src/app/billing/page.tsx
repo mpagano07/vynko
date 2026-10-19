@@ -23,7 +23,7 @@ import { CreditCard, CheckCircle2, XCircle, Loader2, ArrowRight, AlertTriangle, 
 import toast from 'react-hot-toast';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { authFetch } from '@/lib/fetchWithTenant';
-import { getPaddleClient, openPaddleCheckout } from '@/lib/paddle-client';
+import { getPaddleClient, openPaddleCheckout, setPaddleCustomer } from '@/lib/paddle-client';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function BillingPage() {
@@ -94,7 +94,11 @@ function BillingContent() {
         const res = await authFetch('/api/billing/status');
         if (cancelled) return;
         if (res.ok) {
-          setSubscription(await res.json());
+          const status = await res.json();
+          setSubscription(status);
+          // Retain: Paddle identifica al cliente firmado por su `ctm_`; se setea
+          // antes de precalentar Paddle.js para que viaje desde Initialize.
+          setPaddleCustomer(status.paddleCustomerId ?? null);
         } else if (res.status === 401) {
           // La sesión ya no es válida (p. ej. al cerrar sesión, esta página se
           // vuelve a montar por el cambio de tenant antes de navegar a /login).
@@ -107,19 +111,20 @@ function BillingContent() {
       } catch {
         if (!cancelled) toast.error('No se pudo verificar el estado de tu suscripción');
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          // Precalienta Paddle.js (overlay del checkout internacional) para que
+          // el primer click no espere la descarga del CDN. No-op sin client
+          // token; corre después de setPaddleCustomer para que `pwCustomer`
+          // viaje desde el Initialize inicial.
+          void getPaddleClient();
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [router]);
-
-  useEffect(() => {
-    // Precalienta Paddle.js (overlay del checkout internacional) para que el
-    // primer click no espere la descarga del CDN. No-op si falta el client token.
-    void getPaddleClient();
-  }, []);
 
   useEffect(() => {
     if (!showRevocationTooltip) return;
@@ -165,6 +170,7 @@ function BillingContent() {
       // `custom_data` que resuelve el webhook). Con Paddle.js disponible se
       // abre el overlay para esa transacción; si no, se cae al redirect del
       // `checkout.url` de la cuenta.
+      if (data.paddleCustomerId) setPaddleCustomer(data.paddleCustomerId);
       if (data.transactionId && await openPaddleCheckout(data.transactionId)) return;
       if (data.url) window.location.assign(data.url);
     } catch (err) {
@@ -187,6 +193,8 @@ function BillingContent() {
       if (!res.ok) { toast.error(data.error || 'Error'); return; }
 
       setPendingDowngrade(null);
+
+      if (data.paddleCustomerId) setPaddleCustomer(data.paddleCustomerId);
 
       const planName = PLANS[pendingDowngrade as PlanId].name;
       // Mismo criterio que el alta: overlay de Paddle si hay transacción y

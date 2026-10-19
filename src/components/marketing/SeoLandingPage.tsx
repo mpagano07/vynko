@@ -601,6 +601,7 @@ export default async function SeoLandingPage({ content }: Props) {
               <div className="flex items-center gap-6">
                 <Link href="/privacidad" className="hover:text-gray-200 transition-colors">Privacidad</Link>
                 <Link href="/terminos" className="hover:text-gray-200 transition-colors">Términos</Link>
+                <Link href="/reembolsos" className="hover:text-gray-200 transition-colors">Reembolsos</Link>
                 <Link href="/cookies" className="hover:text-gray-200 transition-colors">Cookies</Link>
               </div>
               <span className="text-xs text-gray-400">

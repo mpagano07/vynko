@@ -311,6 +311,7 @@ function LoginContent() {
           <div className="mt-8 flex justify-center gap-4 text-xs text-gray-500">
             <Link href="/privacidad" className="hover:text-gray-300 underline underline-offset-2">Privacidad</Link>
             <Link href="/terminos" className="hover:text-gray-300 underline underline-offset-2">Términos</Link>
+            <Link href="/reembolsos" className="hover:text-gray-300 underline underline-offset-2">Reembolsos</Link>
             <Link href="/cookies" className="hover:text-gray-300 underline underline-offset-2">Cookies</Link>
           </div>
         </div>

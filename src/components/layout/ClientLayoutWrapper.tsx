@@ -48,6 +48,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
     pathname === '/' ||
     pathname?.startsWith('/privacidad') ||
     pathname?.startsWith('/terminos') ||
+    pathname?.startsWith('/reembolsos') ||
     pathname?.startsWith('/cookies') ||
     pathname?.startsWith('/login') ||
     pathname?.startsWith('/auth') ||

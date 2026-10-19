@@ -191,6 +191,7 @@ export default function PrivacidadPage() {
         <div className="flex justify-center gap-4 text-xs text-gray-400">
           <Link href="/cookies" className="hover:text-gray-200 underline underline-offset-2">Política de Cookies</Link>
           <Link href="/terminos" className="hover:text-gray-200 underline underline-offset-2">Términos y Condiciones</Link>
+          <Link href="/reembolsos" className="hover:text-gray-200 underline underline-offset-2">Política de Reembolsos</Link>
           <Link href="/" className="hover:text-gray-200 underline underline-offset-2">Inicio</Link>
         </div>
         <p className="text-xs text-gray-400">

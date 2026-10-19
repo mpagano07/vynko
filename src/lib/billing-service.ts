@@ -139,7 +139,14 @@ export async function createCheckoutSession(
         })
         .in('id', ownerBranchIds);
 
-      return { ok: true, data: { url: checkout.url, transactionId: checkout.transactionId } };
+      return {
+        ok: true,
+        data: {
+          url: checkout.url,
+          transactionId: checkout.transactionId,
+          paddleCustomerId: tenant?.paddle_customer_id ?? null,
+        },
+      };
     } catch (err) {
       logger.error('Error creating Paddle transaction:', { error: err });
       return { ok: false, error: 'No se pudo iniciar el pago. Intentá de nuevo en unos minutos.', status: 502 };
@@ -281,7 +288,16 @@ export async function downgradePlan(
       return { ok: false, error: 'No se pudo iniciar el pago. Intentá de nuevo en unos minutos.', status: 502 };
     }
 
-    return { ok: true, data: { success: true, plan, url, transactionId } };
+    return {
+      ok: true,
+      data: {
+        success: true,
+        plan,
+        url,
+        transactionId,
+        paddleCustomerId: mainTenant.paddle_customer_id ?? null,
+      },
+    };
   }
 
   try {
@@ -433,7 +449,7 @@ export async function getSubscriptionStatus(userId: string): Promise<BillingResu
   const tenantIds = tu.map((t) => t.tenant_id);
   const { data: tenants } = await supabaseAdmin
     .from('tenants')
-    .select('subscription_status, subscription_plan, subscription_current_period_end, created_at, mercadopago_pending_plan, mercadopago_preapproval_id, mercadopago_pending_preapproval_id, billing_provider, paddle_pending_transaction_id')
+    .select('subscription_status, subscription_plan, subscription_current_period_end, created_at, mercadopago_pending_plan, mercadopago_preapproval_id, mercadopago_pending_preapproval_id, billing_provider, paddle_pending_transaction_id, paddle_customer_id')
     .in('id', tenantIds);
 
   // Every branch of the owner shares a single subscription.
@@ -489,6 +505,12 @@ export async function getSubscriptionStatus(userId: string): Promise<BillingResu
     | null;
   const pendingPlan = pendingRow?.mercadopago_pending_plan ?? pendingRow?.paddle_pending_plan ?? null;
 
+  // Customer de Paddle (ctm_) del tenant, para `pwCustomer` en Paddle.js
+  // (Retain). Se toma de las ramas crudas: el consolidado no lo trae.
+  const paddleCustomerId = (tenants ?? [])
+    .map((row) => (row as { paddle_customer_id?: string | null }).paddle_customer_id)
+    .find((id) => Boolean(id)) ?? null;
+
   return {
     ok: true,
     data: {
@@ -502,6 +524,7 @@ export async function getSubscriptionStatus(userId: string): Promise<BillingResu
       pendingPlanChange: pendingPlan ?? null,
       pendingCheckout: hasPendingCheckout,
       provider,
+      paddleCustomerId,
     },
   };
 }

@@ -82,4 +82,57 @@ describe('paddle-client', () => {
 
     await expect(openPaddleCheckout('txn_123')).resolves.toBe(false);
   });
+
+  it('inicializa con pwCustomer (Retain) cuando hay un customer de Paddle', async () => {
+    mockInitializePaddle.mockResolvedValue({ Initialized: true });
+    const { getPaddleClient, setPaddleCustomer } = await loadPaddleClient();
+
+    setPaddleCustomer('ctm_123');
+    await getPaddleClient();
+
+    expect(mockInitializePaddle).toHaveBeenCalledTimes(1);
+    const options = mockInitializePaddle.mock.calls[0][0] as {
+      pwCustomer?: { id?: string };
+    };
+    expect(options.pwCustomer).toEqual({ id: 'ctm_123' });
+  });
+
+  it('sin customer no manda pwCustomer', async () => {
+    mockInitializePaddle.mockResolvedValue({ Initialized: true });
+    const { getPaddleClient } = await loadPaddleClient();
+
+    await getPaddleClient();
+
+    const options = mockInitializePaddle.mock.calls[0][0] as {
+      pwCustomer?: { id?: string };
+    };
+    expect(options.pwCustomer).toBeUndefined();
+  });
+
+  it('si el customer cambia después de inicializar, re-inicializa con el nuevo pwCustomer', async () => {
+    mockInitializePaddle.mockResolvedValue({ Initialized: true });
+    const { getPaddleClient, setPaddleCustomer } = await loadPaddleClient();
+
+    await getPaddleClient();
+    setPaddleCustomer('ctm_nuevo');
+    await getPaddleClient();
+
+    expect(mockInitializePaddle).toHaveBeenCalledTimes(2);
+    const last = mockInitializePaddle.mock.calls[1][0] as {
+      pwCustomer?: { id?: string };
+    };
+    expect(last.pwCustomer).toEqual({ id: 'ctm_nuevo' });
+  });
+
+  it('setPaddleCustomer con el mismo id no re-inicializa', async () => {
+    mockInitializePaddle.mockResolvedValue({ Initialized: true });
+    const { getPaddleClient, setPaddleCustomer } = await loadPaddleClient();
+
+    setPaddleCustomer('ctm_123');
+    await getPaddleClient();
+    setPaddleCustomer('ctm_123');
+    await getPaddleClient();
+
+    expect(mockInitializePaddle).toHaveBeenCalledTimes(1);
+  });
 });

@@ -17,6 +17,23 @@ export const PADDLE_SUCCESS_PATH = '/billing?success=true';
 
 let clientPromise: Promise<Paddle | null> | null = null;
 
+// Customer de Paddle (ctm_...) del tenant firmado, para Paddle Retain. Debe ser
+// el `paddle_customer_id` de Paddle, nunca el id interno ni el email: Retain lo
+// usa para identificar al cliente en los flujos de retención/cancelación.
+let paddleCustomerId: string | null = null;
+
+/**
+ * Setea el customer de Paddle antes de inicializar Paddle.js (`pwCustomer`).
+ * Si el cliente ya estaba inicializado sin este id, se resetea la promesa para
+ * que la siguiente llamada re-inicialice (el paquete aplica un `Update()` con
+ * las nuevas opciones).
+ */
+export function setPaddleCustomer(id: string | null): void {
+  if (id === paddleCustomerId) return;
+  paddleCustomerId = id;
+  if (clientPromise) clientPromise = null;
+}
+
 function getSuccessUrl(): string {
   return `${window.location.origin}${PADDLE_SUCCESS_PATH}`;
 }
@@ -47,6 +64,9 @@ export function getPaddleClient(): Promise<Paddle | null> {
   clientPromise = initializePaddle({
     token,
     environment,
+    // Retain: identifica al cliente firmado con su `ctm_` de Paddle. Sin esto
+    // los flujos de retención de Paddle no saben a quién ofrecerles.
+    ...(paddleCustomerId ? { pwCustomer: { id: paddleCustomerId } } : {}),
     eventCallback: (event) => {
       if (event.type === 'checkout.warning') {
         // El checkout abrió pero Paddle descartó algún valor (p. ej. un
