@@ -671,9 +671,11 @@ export default function LandingPage() {
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-sm text-gray-400">
               <div className="flex items-center gap-6">
-                <Link href="/privacidad" className="hover:text-gray-200 transition-colors">Privacidad</Link>
                 <Link href="/terminos" className="hover:text-gray-200 transition-colors">Términos</Link>
+                <Link href="/privacidad" className="hover:text-gray-200 transition-colors">Privacidad</Link>
+                <Link href="/reembolsos" className="hover:text-gray-200 transition-colors">Reembolsos</Link>
                 <Link href="/cookies" className="hover:text-gray-200 transition-colors">Cookies</Link>
+                <a href="mailto:soporte@vynko.dev" className="hover:text-gray-200 transition-colors">Contacto</a>
               </div>
               <span className="text-xs text-gray-400">
                 © {new Date().getFullYear()} Vynko. Todos los derechos reservados.

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "paddle-sandbox": {
+      "type": "http",
+      "url": "https://sandbox-mcp.paddle.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:PADDLE_SANDBOX_API_KEY}"
+      },
+      "enabled": true
+    },
+    "paddle-live": {
+      "type": "http",
+      "url": "https://mcp.paddle.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:PADDLE_LIVE_API_KEY}"
+      },
+      "enabled": true,
+      "disabledTools": [
+        "update_product",
+        "update_price",
+        "update_discount",
+        "delete_product",
+        "delete_price",
+        "delete_discount",
+        "archive_product",
+        "archive_price",
+        "archive_discount"
+      ]
+    }
+  }
+}

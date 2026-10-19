@@ -1,14 +1,34 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyPaddleSignature } from '@/lib/paddle';
+import { checkPaddleSourceIp } from '@/lib/paddle-ips';
 import { processPaddleWebhook, type PaddleEvent } from '@/lib/paddle-webhook-service';
 import { logger } from '@/lib/logger';
 import { enterLogContext, resolveRequestId } from '@/lib/log-context';
+import { getClientIp } from '@/lib/rate-limit';
 
 export async function POST(request: Request) {
   // El webhook no pasa por getAuth: el contexto se entra acá para que cada log
   // del procesamiento quede amarrado a la entrega de Paddle.
   enterLogContext({ requestId: resolveRequestId(request), job: 'paddle-webhook' });
+
+  // Allowlist de IPs de origen: solo production. Los deliveries de sandbox
+  // salen de otros rangos (el simulador incluso desde IPs distintas), así que
+  // aplicarla en dev rompería las pruebas con la cuenta de sandbox.
+  if ((process.env.PADDLE_ENVIRONMENT || 'sandbox').toLowerCase() === 'production') {
+    const ip = getClientIp(request);
+    const check = await checkPaddleSourceIp(ip);
+    if (check === 'list-unavailable') {
+      // No se pudo bajar https://api.paddle.com/ips: no se verifica nada a
+      // ciegas. 503 (retryable) para que Paddle reintente la entrega.
+      logger.error('Allowlist de IPs de Paddle no disponible, entrega diferida');
+      return NextResponse.json({ error: 'Paddle IP list unavailable' }, { status: 503 });
+    }
+    if (check === 'blocked') {
+      logger.error('Paddle webhook desde IP fuera de la allowlist', { ip });
+      return NextResponse.json({ error: 'Unauthorized webhook request' }, { status: 403 });
+    }
+  }
 
   // El cuerpo crudo es lo que se firma: hay que leerlo como texto y validar la
   // firma ANTES de parsearlo (re-serializar cambiaría los bytes firmados).
