@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuthContext } from '@/lib/contexts/auth-context';
 
 /**
- * Expulsa a `/sin-acceso` a la sesion que no tiene ninguna empresa.
+ * Expulsa a `/no-access` a la sesion que no tiene ninguna empresa.
  *
  * El caso real es que al usuario lo sacaron de todos sus tenants. Sin esto caia
  * en el dashboard y cada pedido devolvia 401, sin ninguna explicacion de por que
@@ -18,7 +18,7 @@ import { useAuthContext } from '@/lib/contexts/auth-context';
  * te vuelva a invitado". Aca `/api/session` ya es una segunda lectura, con la
  * pagina cargada.
  *
- * `/sin-acceso` esta en las `publicPaths` del proxy justamente para que este
+ * `/no-access` esta en las `publicPaths` del proxy justamente para que este
  * redireccionamiento no se realimente: sin eso el proxy mandaria de vuelta y
  * seria un bucle.
  */
@@ -29,8 +29,8 @@ export function NoTenantAccessGuard() {
 
   useEffect(() => {
     if (loading || !noTenantAccess) return;
-    if (pathname === '/sin-acceso') return;
-    router.replace('/sin-acceso');
+    if (pathname === '/no-access') return;
+    router.replace('/no-access');
   }, [loading, noTenantAccess, pathname, router]);
 
   return null;

@@ -313,7 +313,7 @@ export default function ProvidersPage() {
       toast.success('Pedido creado exitosamente');
       closePoModal();
 
-      router.push(`/documentos?type=orden_compra&selected=${data.id}`);
+      router.push(`/documents?type=orden_compra&selected=${data.id}`);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al crear pedido');
     } finally {
@@ -559,7 +559,7 @@ export default function ProvidersPage() {
                                       status={po.status}
                                       total={po.total_cents}
                                       date={po.created_at}
-                                      href={`/documentos?type=orden_compra&selected=${po.id}`}
+                                      href={`/documents?type=orden_compra&selected=${po.id}`}
                                       isLast={isLast}
                                     >
                                       {poRemitos.map((rem, remIdx) => {
@@ -573,7 +573,7 @@ export default function ProvidersPage() {
                                             total={rem.total_cents}
                                             isLast={isLastRem}
                                             isChild
-                                            href={`/documentos?type=remito_ingreso&selected=${rem.id}`}
+                                            href={`/documents?type=remito_ingreso&selected=${rem.id}`}
                                           />
                                         );
                                       })}

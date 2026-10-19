@@ -174,7 +174,7 @@ export default function StockAndActivity({
                     <Button
                       size="sm"
                       className="h-7 px-2.5 text-xs flex-shrink-0 ml-3 bg-sky-600 hover:bg-sky-700 text-white"
-                      onClick={() => router.push(`/documentos?type=orden_compra&selected=${order.id}&receive=${order.id}`)}
+                      onClick={() => router.push(`/documents?type=orden_compra&selected=${order.id}&receive=${order.id}`)}
                     >
                       Recibir
                     </Button>

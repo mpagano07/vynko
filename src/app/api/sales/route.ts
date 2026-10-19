@@ -55,7 +55,7 @@ export async function POST(request: Request) {
   // Emisión ARCA opcional. La venta ya quedó registrada (y el stock descontado)
   // en su propia transacción: ARCA es externo y puede fallar después. En ese
   // caso se devuelve la venta igual, con el error, para no perder el cobro; el
-  // comprobante se puede reintentar desde /facturacion.
+  // comprobante se puede reintentar desde /invoices.
   const sale = result.sale as Record<string, unknown>;
   let arca: { ok: boolean; invoice?: unknown; error?: string } | undefined;
 

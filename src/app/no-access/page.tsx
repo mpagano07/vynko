@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card';
  *
  * El caso real es que al usuario lo sacaron de todos los tenants: antes caia en
  * el dashboard y cada pedido devolvia 401, sin ninguna explicacion de por que la
- * app no le funcionaba. `/sin-acceso` esta en `publicPaths` del proxy, asi que el
+ * app no le funcionaba. `/no-access` esta en `publicPaths` del proxy, asi que el
  * gate no la vuelve a redirigir.
  */
 export default function NoAccessPage() {

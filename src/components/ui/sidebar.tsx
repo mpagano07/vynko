@@ -100,11 +100,11 @@ const navGroups: NavGroup[] = [
       { name: 'Productos', href: '/products', requiredPlan: ALL_PLANS },
       { name: 'Proveedores', href: '/providers', requiredPlan: ALL_PLANS },
       { name: 'Clientes', href: '/customers', requiredPlan: ALL_PLANS },
-      { name: 'Documentos', href: '/documentos', requiredPlan: ALL_PLANS },
+      { name: 'Documentos', href: '/documents', requiredPlan: ALL_PLANS },
       // Facturación ARCA: feature en pruebas, sólo la ve quien la tenga
       // habilitada (hoy, la cuenta admin). Al lanzarla, `canUseFacturacion`
       // también la habilita para business/enterprise.
-      { name: 'Facturación', href: '/facturacion', requiresFacturacion: true },
+      { name: 'Facturación', href: '/invoices', requiresFacturacion: true },
     ],
   },
   {
@@ -118,7 +118,7 @@ const navGroups: NavGroup[] = [
 ];
 
 const operacionesItems: NavItem[] = [
-  { name: 'QR', href: '/codigos', requiredPlan: ALL_PLANS },
+  { name: 'QR', href: '/qr-codes', requiredPlan: ALL_PLANS },
   { name: 'Escáner', href: '/scanning', requiredPlan: ALL_PLANS },
 ];
 

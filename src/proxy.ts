@@ -21,7 +21,7 @@ const publicPaths = [
   '/login',
   '/auth',
   '/accept-invite',
-  '/sin-acceso',
+  '/no-access',
   '/privacidad',
   '/terminos',
   '/cookies',
@@ -42,6 +42,16 @@ const publicPaths = [
 ];
 const onboardingPath = '/onboarding';
 const billingPath = '/billing';
+
+// Rutas de app que estaban en español y se renombraron a inglés antes de abrir
+// el producto. Se redirigen de forma permanente para no romper bookmarks ni
+// links externos. El query string se conserva (varios links usan `?type=...`).
+const legacyRouteRedirects: Record<string, string> = {
+  '/documentos': '/documents',
+  '/codigos': '/qr-codes',
+  '/facturacion': '/invoices',
+  '/sin-acceso': '/no-access',
+};
 
 // Tope global de requests de PAGINA por IP por minuto, aplicado aca, en el
 // proxy, para las rutas autenticadas (el matcher excluye /api, que ya tiene
@@ -120,6 +130,16 @@ export async function proxy(request: NextRequest) {
     }
     return withCsp(res, nonce);
   };
+
+  // Renombres de rutas: va antes del gate de auth y de publicPaths para que
+  // `/sin-acceso` (que ya no es publica) redirija a `/no-access` aunque no haya
+  // sesion, sin pasar por el redirect a /login.
+  const legacyRedirect = legacyRouteRedirects[pathname];
+  if (legacyRedirect) {
+    const url = request.nextUrl.clone();
+    url.pathname = legacyRedirect;
+    return withCsp(NextResponse.redirect(url, 308), nonce);
+  }
 
   if (pathname === '/') return next();
 
@@ -270,7 +290,7 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-  // OJO: aca NO se redirige a `/sin-acceso` cuando `tenant_users` viene vacio y el
+  // OJO: aca NO se redirige a `/no-access` cuando `tenant_users` viene vacio y el
   // onboarding ya esta completado. `tenant_users` es el unico origen de
   // membresia del schema, asi que una lectura vacia es indistinguible de "lo
   // sacaron de todos los tenants": con una lectura transitoria (lag de replica,

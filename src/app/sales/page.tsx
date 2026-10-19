@@ -569,7 +569,7 @@ export default function SalesPage() {
       );
 
       // Resultado de la emisión ARCA (opcional). La venta ya está registrada:
-      // si ARCA falló, se avisa y se ofrece reintentar desde /facturacion.
+      // si ARCA falló, se avisa y se ofrece reintentar desde /invoices.
       if (emitArca && data.arca) {
         if (data.arca.ok && data.arca.invoice) {
           const inv = data.arca.invoice;
