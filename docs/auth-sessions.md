@@ -29,7 +29,7 @@ Consecuencias Practicas:
   elige cuál; si el id no está en sus membresías se ignora y se usa la primera, así
   que esa header no es vector de escalada.
 - Quitarle todas las membresías **no** invalida la sesión. El usuario sigue
-  autenticado, llega a la app, y `NoTenantAccessGuard` lo manda a `/sin-acceso`.
+  autenticado, llega a la app, y `NoTenantAccessGuard` lo manda a `/no-access`.
   Es una decisión deliberada: el proxy no expulsa por esto porque una lectura
   transitoria de `tenant_users` (un error de red) mandaría a un cliente legítimo
   a esa pantalla y perdería su contexto de trabajo.

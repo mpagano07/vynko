@@ -180,6 +180,34 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
     }
   });
 
+  it('redirige permanentemente las rutas de app renombradas de español a inglés', async () => {
+    makeServerClient(null);
+
+    const cases: Array<[string, string]> = [
+      ['/documentos', '/documents'],
+      ['/codigos', '/qr-codes'],
+      ['/facturacion', '/invoices'],
+      ['/sin-acceso', '/no-access'],
+    ];
+    for (const [from, to] of cases) {
+      const res = await proxy(request(from));
+      expect(res.status, `${from} -> ${to}`).toBe(308);
+      expect(res.headers.get('location')).toContain(to);
+    }
+  });
+
+  it('conserva el query string al redirigir una ruta vieja (/documentos?type=...)', async () => {
+    makeServerClient(null);
+
+    const res = await proxy(request('/documentos?type=orden_compra&selected=abc'));
+
+    expect(res.status).toBe(308);
+    const location = res.headers.get('location') ?? '';
+    expect(location).toContain('/documents');
+    expect(location).toContain('type=orden_compra');
+    expect(location).toContain('selected=abc');
+  });
+
   it('permite el acceso a rutas públicas sin autenticación', async () => {
     makeServerClient(null);
 
@@ -188,7 +216,7 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
       '/auth',
       '/auth/callback',
       '/accept-invite',
-      '/sin-acceso',
+      '/no-access',
       // Legales: tienen que servirse sin sesión (son link obligatorio en el
       // footer y Paddle las revisa durante el Domain Review).
       '/terminos',
@@ -223,15 +251,15 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
     }
   });
 
-  it('NO expulsa a /sin-acceso aunque las membresías lleguen vacías y el flag diga completado', async () => {
+  it('NO expulsa a /no-access aunque las membresías lleguen vacías y el flag diga completado', async () => {
     // El caso se resuelve en el guard de cliente, no aca: desde el proxy una
     // lectura vacia de `tenant_users` es indistinguible de un fallo
     // transitorio, y expulsar de este lado le mostraria a un cliente que si
     // tiene empresa un cartel de "pedile a un owner que te vuelva a invitar".
-    // Ademas `/sin-acceso` tiene que quedar accesible para que ese guard del
+    // Ademas `/no-access` tiene que quedar accesible para que ese guard del
     // cliente no se realimente en un bucle.
     makeServerClient({ id: 'user-1' });
-    const res = await proxy(request('/sin-acceso'));
+    const res = await proxy(request('/no-access'));
 
     expect(res.status).toBe(200);
   });

@@ -22,11 +22,11 @@ beforeEach(() => {
 });
 
 describe('NoTenantAccessGuard', () => {
-  it('manda a /sin-acceso a una sesión sin empresas', () => {
+  it('manda a /no-access a una sesión sin empresas', () => {
     contextValue = { noTenantAccess: true, loading: false };
     render(<NoTenantAccessGuard />);
 
-    expect(replaceMock).toHaveBeenCalledWith('/sin-acceso');
+    expect(replaceMock).toHaveBeenCalledWith('/no-access');
   });
 
   it('no molesta a una sesión normal', () => {
@@ -46,7 +46,7 @@ describe('NoTenantAccessGuard', () => {
   });
 
   it('no se redirige a sí mismo', () => {
-    pathname = '/sin-acceso';
+    pathname = '/no-access';
     contextValue = { noTenantAccess: true, loading: false };
     render(<NoTenantAccessGuard />);
 

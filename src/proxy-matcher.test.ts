@@ -32,8 +32,8 @@ describe('proxy matcher', () => {
       '/privacidad',
       '/terminos',
       '/reembolsos',
-      '/codigos',
-      '/documentos',
+      '/qr-codes',
+      '/documents',
       '/sales/cash-register',
     ];
     for (const page of pages) {

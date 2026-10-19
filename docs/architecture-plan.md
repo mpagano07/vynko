@@ -27,7 +27,7 @@ Fecha: 2026-09-24. Rama origen: `feature/modal-gestionar-categorias`.
   - Quitar políticas globales de `products` (INSERT/UPDATE/DELETE "authenticated").
   - SELECT de productos restringido a tenants del usuario vía `product_stock`.
   - Las mutaciones siguen por service role (ya es así en toda la app).
-- [x] **1.2 Eliminar consulta directa de categorías en cliente** — `src/app/codigos/page.tsx:46-52`
+- [x] **1.2 Eliminar consulta directa de categorías en cliente** — `src/app/qr-codes/page.tsx:46-52`
   - Reemplazar `supabase.from('categories')` por `GET /api/categories`.
 - [x] **1.3 Restringir `__all__` a rol owner** — `src/lib/api-auth.ts:29-30`
   - El header `x-active-tenant-id: __all__` solo habilita `allTenants` si el usuario es `owner` en al menos una sucursal. Test actualizado.
