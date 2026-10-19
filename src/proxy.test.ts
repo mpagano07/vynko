@@ -189,6 +189,12 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
       '/auth/callback',
       '/accept-invite',
       '/sin-acceso',
+      // Legales: tienen que servirse sin sesión (son link obligatorio en el
+      // footer y Paddle las revisa durante el Domain Review).
+      '/terminos',
+      '/privacidad',
+      '/cookies',
+      '/reembolsos',
       // Landings SEO: deben servirse sin sesión para que los crawlers las vean.
       '/control-de-stock',
       '/ventas-y-caja',

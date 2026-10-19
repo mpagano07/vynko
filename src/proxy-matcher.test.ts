@@ -31,6 +31,7 @@ describe('proxy matcher', () => {
       '/auth/callback',
       '/privacidad',
       '/terminos',
+      '/reembolsos',
       '/codigos',
       '/documentos',
       '/sales/cash-register',

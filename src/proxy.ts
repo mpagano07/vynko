@@ -25,6 +25,7 @@ const publicPaths = [
   '/privacidad',
   '/terminos',
   '/cookies',
+  '/reembolsos',
   // Landings SEO publicas: deben servirse sin sesion, si no el gate de auth las
   // manda a /login y los crawlers (Googlebot, OAI-SearchBot) solo ven el login.
   '/control-de-stock',
