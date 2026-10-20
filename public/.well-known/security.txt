@@ -1,0 +1,5 @@
+Contact: mailto:security@vynko.dev
+Expires: 2027-10-20T23:59:59Z
+Preferred-Languages: es, en
+Policy: https://vynko.dev/privacidad
+Canonical: https://vynko.dev/.well-known/security.txt
