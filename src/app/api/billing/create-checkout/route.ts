@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { createCheckoutSession } from '@/lib/billing-service';
 import { isSameOriginRequest } from '@/lib/security/csrf';
+
+const CreateCheckoutSchema = z.object({
+  plan: z.enum(['starter', 'business']).nullable().optional(),
+});
 
 export async function POST(request: Request) {
   if (!isSameOriginRequest(request)) {
@@ -19,9 +24,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Cuerpo inválido' }, { status: 400 });
   }
 
+  const parsed = CreateCheckoutSchema.safeParse(body ?? {});
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Cuerpo inválido' }, { status: 400 });
+  }
+
   const result = await createCheckoutSession(
     user,
-    (body ?? {}) as { plan?: string | null },
+    parsed.data as { plan?: string | null },
     request
   );
   if (!result.ok) return NextResponse.json({ error: result.error, ...(result.needsSalesContact ? { needsSalesContact: true } : {}) }, { status: result.status });
