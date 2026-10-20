@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 
 const CONSENT_COOKIE = 'vynko_cookie_consent';
@@ -46,19 +46,36 @@ export function resetCookieConsent() {
   window.location.reload();
 }
 
+// `document.cookie` no dispara eventos de cambio, y el unico escritor de la
+// cookie de consentimiento es `saveConsent()` en este mismo componente, que ya
+// re-renderiza. La suscripcion es un no-op que igual cumple el contrato de
+// useSyncExternalStore (React re-checkea el snapshot en cada render).
+function subscribeToConsentCookie() {
+  return () => {};
+}
+
+function consentCookieSnapshot() {
+  return getCookieConsent() !== null;
+}
+
+// En SSR no hay `document`, asi que el server snapshot asume consentimiento
+// para que el HTML inicial no incluya el banner. Tras la hidratacion React
+// re-checkea el snapshot real en el cliente y re-renderiza si falta la cookie.
+function consentCookieServerSnapshot() {
+  return true;
+}
+
 export default function CookieConsent() {
-  const [visible, setVisible] = useState(false);
+  const consentExists = useSyncExternalStore(
+    subscribeToConsentCookie,
+    consentCookieSnapshot,
+    consentCookieServerSnapshot
+  );
+  const [saved, setSaved] = useState(false);
   const [showCustomize, setShowCustomize] = useState(false);
   const [functional, setFunctional] = useState(true);
   const [analytics, setAnalytics] = useState(false);
   const [marketing, setMarketing] = useState(false);
-
-  useEffect(() => {
-    const consent = getCookieConsent();
-    if (!consent) {
-      setVisible(true);
-    }
-  }, []);
 
   const saveConsent = (prefs: Partial<ConsentState>) => {
     const state: ConsentState = {
@@ -70,9 +87,11 @@ export default function CookieConsent() {
       updatedAt: new Date().toISOString(),
     };
     setCookie(CONSENT_COOKIE, encodeURIComponent(JSON.stringify(state)));
-    setVisible(false);
+    setSaved(true);
     setShowCustomize(false);
   };
+
+  const visible = !consentExists && !saved;
 
   if (!visible) return null;
 
