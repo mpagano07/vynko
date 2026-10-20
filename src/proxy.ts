@@ -68,7 +68,7 @@ const PROXY_IP_WINDOW_MS = 60_000;
 
 /**
  * Empaqueta la CSP con un nonce nuevo y la propaga a la request y a la
- * respuesta.
+ * respuesta, y agrega los headers de seguridad de la respuesta.
  *
  * El nonce va en la REQUEST para que Next lo extraiga durante el render y se
  * lo agregue a los scripts que genera; y en la RESPONSE para que el navegador
@@ -78,12 +78,6 @@ const PROXY_IP_WINDOW_MS = 60_000;
  * `next()` conserva los request headers, asi que el nonce sigue disponible
  * para los Server Components aunque despues se devuelva una redireccion.
  */
-function withSecurityHeaders(response: NextResponse, nonce: string): NextResponse {
-  const csp = buildCsp(nonce);
-  response.headers.set('Content-Security-Policy', csp);
-  return response;
-}
-
 function withSecurityHeaders(response: NextResponse, nonce: string): NextResponse {
   const csp = buildCsp(nonce);
   // Añadir frame-ancestors si no existe (defensa adicional anti-clickjacking)
