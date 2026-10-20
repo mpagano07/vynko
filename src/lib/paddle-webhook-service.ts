@@ -80,6 +80,11 @@ export async function processPaddleWebhook(event: PaddleEvent): Promise<PaddleWe
 
   try {
     const data = event.data ?? {};
+    // Identifica la transaccion que origino el evento (solo la trae
+    // `transaction.completed`). Es la unica prueba de que el pago del cambio de
+    // plan se completo: un renewal de la suscripcion vigente NO debe limpiar el
+    // pendiente ni aplicar el plan destino.
+    const eventTransactionId = eventType === 'transaction.completed' ? data.id ?? null : null;
 
     let subscriptionId: string | null = null;
     let status: string | null = null;
@@ -149,20 +154,32 @@ export async function processPaddleWebhook(event: PaddleEvent): Promise<PaddleWe
     const pendingPlan = tenantRow?.paddle_pending_plan ?? null;
     const hasPending = Boolean(pendingTx);
 
+    // Confirmacion del cambio de plan pendiente. La transaccion tiene que ser
+    // exactamente la que guardo el checkout. Para eventos de suscripcion (sin
+    // id de transaccion) se acepta una suscripcion DISTINTA de la vigente, que
+    // es la que crea el cambio de plan. Esto evita el bug de creer confirmado
+    // el pendiente con la simple renovacion de la suscripcion actual.
+    const pendingConfirmed =
+      hasPending &&
+      (eventTransactionId !== null
+        ? eventTransactionId === pendingTx
+        : subscriptionId !== currentSubId);
+    const canAdoptSubscription = !hasPending || pendingConfirmed;
+
     if (status === 'active' || status === 'trialing') {
       // Ignora eventos de una suscripción que ya no es la vigente, salvo que
-      // haya un cambio de plan en curso (que crea una suscripción nueva).
-      if (currentSubId && currentSubId !== subscriptionId && !hasPending) {
+      // sea el evento que confirma un cambio de plan en curso.
+      if (currentSubId && currentSubId !== subscriptionId && !pendingConfirmed) {
         logOutcome('ignored', 'Suscripción que ya no es la vigente');
         return { ok: true, data: { received: true } };
       }
 
-      const effectivePlan = pendingPlan ?? plan;
+      const effectivePlan = pendingConfirmed && pendingPlan ? pendingPlan : plan;
       const transitionData: Record<string, unknown> = {
         subscription_status: 'active',
         billing_provider: 'paddle',
-        paddle_subscription_id: subscriptionId,
       };
+      if (canAdoptSubscription) transitionData.paddle_subscription_id = subscriptionId;
       if (effectivePlan) transitionData.subscription_plan = effectivePlan;
       if (customerId) transitionData.paddle_customer_id = customerId;
 
@@ -178,9 +195,9 @@ export async function processPaddleWebhook(event: PaddleEvent): Promise<PaddleWe
       // Nivel: el período se refresca en cada entrega (renovación incluida),
       // aunque no haya cambio de estado.
       const periodData: Record<string, unknown> = {
-        paddle_subscription_id: subscriptionId,
         billing_provider: 'paddle',
       };
+      if (canAdoptSubscription) periodData.paddle_subscription_id = subscriptionId;
       if (periodEnd) periodData.subscription_current_period_end = periodEnd;
       if (customerId) periodData.paddle_customer_id = customerId;
       const { error: periodError } = await supabaseAdmin
@@ -189,10 +206,10 @@ export async function processPaddleWebhook(event: PaddleEvent): Promise<PaddleWe
         .in('id', ownerBranchIds);
       if (periodError) throw periodError;
 
-      // Si el evento corresponde a un cambio de plan pendiente, se aplica el
-      // plan destino, se limpia el pendiente y se cancela la suscripción vieja.
+      // Solo cuando el pago del cambio se confirmo: se aplica el plan destino,
+      // se limpia el pendiente y se cancela la suscripción vieja.
       let planApplied = false;
-      if (hasPending && (pendingPlan || plan)) {
+      if (pendingConfirmed && (pendingPlan || plan)) {
         const { error: pendingError } = await supabaseAdmin
           .from('tenants')
           .update({

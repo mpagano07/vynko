@@ -9,7 +9,9 @@ import { processMercadoPagoWebhook } from '@/lib/mercadopago-webhook-service';
  * a su API. Recorrer todos los tenants suscritos en cada pasada es rapido
  * today y un problema en cuanto haya cientos. El limite hace que la corrida sea
  * acotada y, si quedan pendientes, la siguiente pasada continues desde donde
- * quedo en vez de reprocesar los mismos.
+ * quedo en vez de reprocesar los mismos. El cursor es `reconcile_checked_at`
+ * (NULLS FIRST): `updated_at` no sirve porque ninguna escritura de billing lo
+ * mueve, asi que los mismos 100 tenants quedaban siempre al frente.
  */
 const DEFAULT_LIMIT = 100;
 
@@ -87,7 +89,7 @@ export async function reconcileSubscriptions(
     .from('tenants')
     .select('id, subscription_status, mercadopago_preapproval_id')
     .not('mercadopago_preapproval_id', 'is', null)
-    .order('updated_at', { ascending: true })
+    .order('reconcile_checked_at', { ascending: true, nullsFirst: true })
     .limit(limit);
 
   if (error) {
@@ -110,6 +112,8 @@ export async function reconcileSubscriptions(
     details: [],
   };
 
+  const checkedTenantIds: string[] = [];
+
   for (const tenant of tenants ?? []) {
     const preapprovalId = tenant.mercadopago_preapproval_id as string;
     const tenantId = tenant.id as string;
@@ -117,6 +121,9 @@ export async function reconcileSubscriptions(
     // `checked` cuenta todo tenant examinado, incluidos los que no se pudieron
     // resolver, para que inSync + repaired + unreachable cuadre con el total.
     report.checked += 1;
+    // Se marca incluso si la API no respondio: el cursor es de rotacion, no de
+    // exito. Un tenant inalcanzable se reintenta en la proxima vuelta completa.
+    checkedTenantIds.push(tenantId);
 
     let mpStatus: string;
     try {
@@ -158,6 +165,15 @@ export async function reconcileSubscriptions(
       report.deferred.push(preapprovalId);
       report.details.push({ tenantId, preapprovalId, outcome: 'unreachable' });
     }
+  }
+
+  // Avance del cursor de rotacion. Best-effort: si falla, estos tenants se
+  // vuelven a revisar en la proxima pasada (NULLS FIRST los deja al frente).
+  if (checkedTenantIds.length > 0) {
+    await supabaseAdmin
+      .from('tenants')
+      .update({ reconcile_checked_at: new Date().toISOString() })
+      .in('id', checkedTenantIds);
   }
 
   return report;
