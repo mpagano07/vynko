@@ -43,7 +43,7 @@ export default function ReembolsosPage() {
 
         <div className="space-y-6 text-gray-300">
           <section className="bg-gray-900/50 border border-gray-800 rounded-xl p-6">
-            <h2 className="text-xl font-semibold text-white mb-3">1. Ámbito</h2>
+            <h2 className="text-xl font-semibold text-white mb-3">1. ÁÁmbito</h2>
             <p className="leading-relaxed">
               Esta política regula los reembolsos y la cancelación de las suscripciones de Vynko.
               Los cobros se procesan con <strong>Mercado Pago</strong> para usuarios de Argentina y
