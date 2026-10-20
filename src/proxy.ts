@@ -78,9 +78,26 @@ const PROXY_IP_WINDOW_MS = 60_000;
  * `next()` conserva los request headers, asi que el nonce sigue disponible
  * para los Server Components aunque despues se devuelva una redireccion.
  */
-function withCsp(response: NextResponse, nonce: string): NextResponse {
+function withSecurityHeaders(response: NextResponse, nonce: string): NextResponse {
   const csp = buildCsp(nonce);
   response.headers.set('Content-Security-Policy', csp);
+  return response;
+}
+
+function withSecurityHeaders(response: NextResponse, nonce: string): NextResponse {
+  const csp = buildCsp(nonce);
+  // Añadir frame-ancestors si no existe (defensa adicional anti-clickjacking)
+  if (!csp.includes('frame-ancestors')) {
+    response.headers.set('Content-Security-Policy', `${csp}; frame-ancestors 'none'`);
+  } else {
+    response.headers.set('Content-Security-Policy', csp);
+  }
+  response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+  response.headers.set('X-Frame-Options', 'DENY');
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)');
+  response.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
   return response;
 }
 
@@ -128,7 +145,7 @@ export async function proxy(request: NextRequest) {
       // Las cookies de país/monedas son best-effort: si fallan, los headers ya
       // quedaron seteados.
     }
-    return withCsp(res, nonce);
+    return withSecurityHeaders(res, nonce);
   };
 
   // Renombres de rutas: va antes del gate de auth y de publicPaths para que
@@ -138,7 +155,7 @@ export async function proxy(request: NextRequest) {
   if (legacyRedirect) {
     const url = request.nextUrl.clone();
     url.pathname = legacyRedirect;
-    return withCsp(NextResponse.redirect(url, 308), nonce);
+    return withSecurityHeaders(NextResponse.redirect(url, 308), nonce);
   }
 
   if (pathname === '/') return next();
@@ -162,7 +179,7 @@ export async function proxy(request: NextRequest) {
   };
 
   const redirectWithCookies = (url: URL) =>
-    withCsp(carryingCookies(NextResponse.redirect(url)), nonce);
+    withSecurityHeaders(carryingCookies(NextResponse.redirect(url)), nonce);
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -213,7 +230,7 @@ export async function proxy(request: NextRequest) {
   );
 
   if (!ipLimit.ok) {
-    return withCsp(
+    return withSecurityHeaders(
       NextResponse.json(
         { error: 'Demasiadas peticiones desde esta conexión. Esperá unos segundos y volvé a intentar.' },
         { status: 429, headers: { 'Retry-After': String(ipLimit.retryAfterSeconds) } }
