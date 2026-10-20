@@ -31,6 +31,11 @@ export async function createTenant(
   // Crear una sucursal implica heredar el plan del owner y quedar como `owner`
   // de la nueva: sin este chequeo, un simple 'member' podía abrir sucursales
   // sobre el plan pagado de la empresa.
+  // `auth.tenantIds` incluye TODOS los tenants del usuario, incluso donde solo
+  // es 'member' (empresas de terceros). Solo los tenants que puede administrar
+  // (`canManageTenant`) cuentan para heredar plan y para el limite de sucursales:
+  // si no, un 'member' podia colgar su sucursal del plan de otra empresa.
+  let ownedTenantIds: string[] = auth.tenantIds;
   if (auth.tenantIds.length > 0) {
     const { data: memberships } = await supabaseAdmin
       .from('tenant_users')
@@ -46,6 +51,10 @@ export async function createTenant(
         status: 403,
       };
     }
+
+    ownedTenantIds = (memberships ?? [])
+      .filter((m) => canManageTenant(m.role))
+      .map((m) => m.tenant_id as string);
   }
 
   const tenantId = crypto.randomUUID();
@@ -54,11 +63,11 @@ export async function createTenant(
   let inheritPlan = NEW_ACCOUNT_PLAN;
   let inheritStatus = 'free';
   let inheritPeriodEnd: string | null = null;
-  if (auth.tenantIds.length > 0) {
+  if (ownedTenantIds.length > 0) {
     const { data: allUserTenants } = await supabaseAdmin
       .from('tenants')
       .select('subscription_plan, subscription_status, subscription_current_period_end')
-      .in('id', auth.tenantIds);
+      .in('id', ownedTenantIds);
     if (allUserTenants && allUserTenants.length > 0) {
       const planRank: Record<string, number> = { enterprise: 4, business: 3, starter: 2, free: 1 };
       const statusRank: Record<string, number> = { active: 5, incomplete: 4, past_due: 3, canceled: 2, free: 1 };
@@ -78,7 +87,7 @@ export async function createTenant(
   }
 
   const maxBranches = PLAN_LIMITS[inheritPlan as PlanId]?.branches ?? 1;
-  if (auth.tenantIds.length >= maxBranches) {
+  if (ownedTenantIds.length >= maxBranches) {
     return {
       ok: false,
       error: `Tu plan actual (${inheritPlan}) permite hasta ${maxBranches} sucursal${maxBranches !== 1 ? 'es' : ''}.`,

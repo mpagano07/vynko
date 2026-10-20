@@ -31,6 +31,7 @@ import {
 import { buildArcaQrUrl, generateQrImageDataUrl } from '@/lib/arca/qr';
 import { toArgentinaDate, toArgentinaDateCompact } from '@/lib/arca/date';
 import { canUseFacturacionForUser } from '@/lib/arca/access-server';
+import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
 import { logger } from '@/lib/logger';
 
 interface ServiceResult<T> {
@@ -170,6 +171,22 @@ export async function saveArcaConfig(
   }
 ): Promise<ServiceResult<{ success: boolean }>> {
   try {
+    // Escribir la config de ARCA incluye subir/reemplazar la clave privada RSA y
+    // el certificado de la empresa: es una accion administrativa. Sin este
+    // chequeo cualquier `member` podia sobreescribir la identidad fiscal del
+    // tenant (CUIT, punto de venta, entorno) y sus credenciales.
+    if (!(await canManageTenant(await getRoleInTenant(auth.userId, auth.tenantId)))) {
+      return { ok: false, error: 'No tenés permisos para configurar la facturación electrónica', status: 403 };
+    }
+
+    if (!(await canUseFacturacionForUser(auth.userId, auth.tenantId))) {
+      return {
+        ok: false,
+        error: 'La facturación electrónica no está habilitada para esta cuenta',
+        status: 403,
+      };
+    }
+
     const cleanCuit = input.cuit.replace(/\D/g, '');
     if (cleanCuit.length !== 11) {
       return { ok: false, error: 'El CUIT debe tener exactamente 11 dígitos numéricos', status: 400 };
@@ -350,6 +367,20 @@ export async function testArcaConnection(auth: AuthInfo): Promise<
   }>
 > {
   try {
+    // Autenticarse contra ARCA con la clave privada guardada es parte de la
+    // administracion fiscal: no puede gatillarlo cualquier `member`.
+    if (!(await canManageTenant(await getRoleInTenant(auth.userId, auth.tenantId)))) {
+      return { ok: false, error: 'No tenés permisos para operar la facturación electrónica', status: 403 };
+    }
+
+    if (!(await canUseFacturacionForUser(auth.userId, auth.tenantId))) {
+      return {
+        ok: false,
+        error: 'La facturación electrónica no está habilitada para esta cuenta',
+        status: 403,
+      };
+    }
+
     const { data: config } = await supabaseAdmin
       .from('tenant_arca_config')
       .select('*')

@@ -154,27 +154,40 @@ export async function addCollaborator(
     const { data: existingProfile } = await supabaseAdmin
       .from('profiles')
       .select('id, email')
-      .eq('email', email)
+      .eq('email', email.toLowerCase())
       .maybeSingle();
 
     if (existingProfile) {
-      // `profiles` es global: esa fila pertenece a la persona, no a la
-      // empresa. Renombrarla desde el panel de A significa escribir identidad de
-      // un usuario que solo trabaja en B, asi que el nombre solo se acepta si
-      // la persona ya es miembro de alguno de los tenants de este owner.
+      // `profiles` es global: esa fila pertenece a la persona, no a la empresa.
+      // Saber si ya es de la casa no alcanza para poder agregarla: solo se
+      // agrega directo a quien YA es miembro de alguno de los tenants de este
+      // owner (o sea, ya consintio trabajar con el). A un desconocido registrado
+      // en la plataforma hay que invitarlo y esperar que acepte, igual que a uno
+      // sin cuenta: agregarlo por la fuerza metia su identidad y su acceso en
+      // manos de un tercero sin que lo haya pedido.
+      const { data: memberships } = await supabaseAdmin
+        .from('tenant_users')
+        .select('tenant_id')
+        .eq('user_id', existingProfile.id);
+      const isKnown = (memberships ?? []).some((m) =>
+        ownerTenantIds.includes(m.tenant_id as string)
+      );
+
+      if (!isKnown) {
+        // No se devuelve ningun dato de la persona (ni nombre ni avatar): seria
+        // un oraculo de existencia y una fuga de PII para cualquiera que pruebe
+        // emails. La invitacion se resuelve por el email, del lado del invitado.
+        return inviteByEmail(auth, email.toLowerCase(), assignRole, origin);
+      }
+
+      // Es alguien de la casa: `profiles` es su identidad global, asi que solo
+      // se permite cargarle un nombre si no trabaja tambien en otra empresa.
       if (assignName) {
-        const { data: memberships } = await supabaseAdmin
-          .from('tenant_users')
-          .select('tenant_id')
-          .eq('user_id', existingProfile.id);
         const foreignMemberships = (memberships ?? []).filter(
           (m) => !ownerTenantIds.includes(m.tenant_id as string)
         );
 
-        // Si la persona solo trabaja en otra empresa, su nombre no se toca:
-        // `profiles` es global y ese nombre es identidad de la persona.
-        // Si es nueva en la plataforma o ya es colaborador nuestro, el owner
-        // sigue pudiendo cargarlo al invitarla.
+        // Si la persona solo trabaja en otra empresa, su nombre no se toca.
         if (foreignMemberships.length === 0) {
           await supabaseAdmin
             .from('profiles')
@@ -227,98 +240,70 @@ export async function addCollaborator(
       };
     }
 
-    const { data: profileForEmail } = await supabaseAdmin
-      .from('profiles')
-      .select('id, email')
-      .eq('email', email.toLowerCase())
-      .maybeSingle();
-    const authUser = profileForEmail ? { id: profileForEmail.id, email: profileForEmail.email } : null;
-
-    if (authUser) {
-      const profileData: Record<string, unknown> = { id: authUser.id, email: authUser.email, tenant_id: ownerTenantIds[0] };
-      if (assignName) profileData.full_name = assignName;
-      await supabaseAdmin.from('profiles').upsert(profileData, { onConflict: 'id' });
-
-      for (const tid of targetTenantIds) {
-        const { data: existingMember } = await supabaseAdmin
-          .from('tenant_users')
-          .select('id')
-          .eq('tenant_id', tid)
-          .eq('user_id', authUser.id)
-          .maybeSingle();
-
-        if (!existingMember) {
-          const limitError = await enforceUserLimit(tid);
-          if (limitError) {
-            return { ok: false, error: limitError, status: 403 };
-          }
-          await supabaseAdmin
-            .from('tenant_users')
-            .insert({ tenant_id: tid, user_id: authUser.id, role: assignRole });
-        }
-      }
-
-      const { data: profile } = await supabaseAdmin
-        .from('profiles')
-        .select('email, full_name, avatar_url')
-        .eq('id', authUser.id)
-        .single();
-
-      return {
-        ok: true,
-        status: 201,
-        body: {
-          collaborator: {
-            user_id: authUser.id,
-            role: assignRole,
-            email: profile?.email || email,
-            full_name: profile?.full_name || '',
-            avatar_url: profile?.avatar_url || null,
-            tenants: [],
-          },
-        },
-      };
-    }
-
-    const inviteTenantId = ownerTenantIds[0];
-    const limitError = await enforceUserLimit(inviteTenantId);
-    if (limitError) {
-      return { ok: false, error: limitError, status: 403 };
-    }
-
-    const { error: inviteError } = await supabaseAdmin.from('invitations').upsert(
-      {
-        tenant_id: inviteTenantId,
-        email: email.toLowerCase(),
-        role: assignRole,
-        invited_by: auth.userId,
-      },
-      { onConflict: 'tenant_id,email' }
-    );
-
-    if (inviteError) {
-      logger.error('DB error:', { error: inviteError });
-      return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
-    }
-
-    await supabaseAdmin.auth.admin.inviteUserByEmail(
-      email.toLowerCase(),
-      { redirectTo: `${origin}/accept-invite` }
-    );
-
-    return {
-      ok: true,
-      status: 201,
-      body: {
-        invited: true,
-        email: email.toLowerCase(),
-        message: 'Invitación enviada por email.',
-      },
-    };
+    return inviteByEmail(auth, email.toLowerCase(), assignRole, origin);
   } catch (err) {
     logger.error('Error adding collaborator:', { error: err });
     return { ok: false, error: 'Internal server error', status: 500 };
   }
+}
+
+/**
+ * Crea la invitacion pendiente y manda el email. El invitado entra a
+ * `tenant_users` recien cuando acepta (`acceptInvitationsForUser`), que es lo
+ * que convierte el alta de un desconocido en algo que solo pasa con su venia.
+ *
+ * El nombre que cargo el owner NO se guarda: la persona lo escribe al aceptar
+ * (la pagina de aceptacion lo pide). Cargarle identidad a un desconocido por el
+ * email es justamente lo que este camino evita.
+ *
+ * No devuelve ningun dato del invitado: el owner solo ve que la invitacion se
+ * creo, nunca el nombre/avatar de la persona detras del email.
+ */
+async function inviteByEmail(
+  auth: AuthInfo,
+  email: string,
+  role: string,
+  origin: string
+): Promise<CollaboratorResult> {
+  const ownerTenantIds = await getOwnerTenantIds(auth.userId);
+  if (!ownerTenantIds) {
+    return { ok: false, error: 'Only owners can manage collaborators', status: 403 };
+  }
+
+  const inviteTenantId = ownerTenantIds[0];
+  const limitError = await enforceUserLimit(inviteTenantId);
+  if (limitError) {
+    return { ok: false, error: limitError, status: 403 };
+  }
+
+  const { error: inviteError } = await supabaseAdmin.from('invitations').upsert(
+    {
+      tenant_id: inviteTenantId,
+      email,
+      role,
+      invited_by: auth.userId,
+    },
+    { onConflict: 'tenant_id,email' }
+  );
+
+  if (inviteError) {
+    logger.error('DB error:', { error: inviteError });
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
+  }
+
+  await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+    redirectTo: `${origin}/accept-invite`,
+  });
+
+  return {
+    ok: true,
+    status: 201,
+    body: {
+      invited: true,
+      email,
+      message: 'Invitación enviada por email.',
+    },
+  };
 }
 
 export async function updateCollaborator(

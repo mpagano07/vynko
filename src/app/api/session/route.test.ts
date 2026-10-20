@@ -77,6 +77,40 @@ describe('GET /api/session', () => {
     expect(json.onboarding_pending).toBe(false);
   });
 
+  it('no expone los ids internos de cobro (select de columnas puntuales)', async () => {
+    supabaseMock.__queue('profiles', {
+      data: { id: 'user-1', full_name: 'Ana', email: 'user@tienda.com', onboarding_pending: false },
+    });
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 't1', role: 'owner' }] });
+    supabaseMock.__queue('tenants', {
+      data: [{ id: 't1', name: 'Central', subscription_plan: 'business' }],
+    });
+
+    const res = await GET(makeRequest('token'));
+    const json = await res.json();
+
+    // El mock no proyecta columnas, asi que la garantia se afirma sobre el
+    // `select`: si vuelve el `*`, los ids de los procesadores de pago viajan
+    // otra vez al navegador.
+    const selects = supabaseMock.__calls.flatMap((c) =>
+      c.table === 'tenants' && c.method === 'select' ? [String(c.args[0])] : []
+    );
+    const projection = selects.join(' ');
+    expect(projection).not.toContain('*');
+    expect(projection).toContain('subscription_plan');
+    expect(projection).not.toContain('mercadopago_preapproval_id');
+    expect(projection).not.toContain('paddle_customer_id');
+    expect(projection).not.toContain('stripe_customer_id');
+
+    const profileSelects = supabaseMock.__calls.flatMap((c) =>
+      c.table === 'profiles' && c.method === 'select' ? [String(c.args[0])] : []
+    );
+    expect(profileSelects.join(' ')).not.toContain('*');
+
+    // Aun asi el cliente recibe el plan para pintar la UI.
+    expect(json.tenant).toMatchObject({ subscription_plan: 'business' });
+  });
+
   it('baja onboarding_pending a FALSE vía self-healing si el usuario ya tiene empresa pero quedó pendiente', async () => {
     supabaseMock.__queue('profiles', {
       data: { id: 'user-1', full_name: 'Ana', email: 'user@tienda.com', onboarding_pending: true },
