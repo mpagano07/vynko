@@ -5,8 +5,9 @@ import { processPaddleWebhook, type PaddleEvent } from '@/lib/paddle-webhook-ser
 /**
  * Cuantos tenants comparar por corrida. Igual que MercadoPago: cada comparacion
  * es una llamada a la API de Paddle y la corrida tiene que ser acotada. Si
- * quedan pendientes, la siguiente pasada sigue desde donde quedo (`order by
- * updated_at`).
+ * quedan pendientes, la siguiente pasada sigue desde donde quedo: el cursor es
+ * `reconcile_checked_at` (NULLS FIRST), no `updated_at`, que ninguna escritura
+ * de billing mueve.
  */
 const DEFAULT_LIMIT = 100;
 
@@ -87,12 +88,13 @@ export async function reconcilePaddleSubscriptions(
     .from('tenants')
     .select('id, subscription_status, paddle_subscription_id')
     .not('paddle_subscription_id', 'is', null)
-    .order('updated_at', { ascending: true })
+    .order('reconcile_checked_at', { ascending: true, nullsFirst: true })
     .limit(limit);
 
   if (error) return emptyReport();
 
   const report = emptyReport();
+  const checkedTenantIds: string[] = [];
 
   for (const tenant of tenants ?? []) {
     const subscriptionId = tenant.paddle_subscription_id as string;
@@ -101,6 +103,9 @@ export async function reconcilePaddleSubscriptions(
     // `checked` cuenta todo tenant examinado, incluidos los que no se pudieron
     // resolver, para que inSync + repaired + unreachable cuadre con el total.
     report.checked += 1;
+    // El cursor es de rotacion, no de exito: un tenant inalcanzable se reintenta
+    // en la proxima vuelta completa.
+    checkedTenantIds.push(tenantId);
 
     let subscription: PaddleSubscription;
     try {
@@ -152,6 +157,14 @@ export async function reconcilePaddleSubscriptions(
       report.deferred.push(subscriptionId);
       report.details.push({ tenantId, subscriptionId, outcome: 'unreachable' });
     }
+  }
+
+  // Avance del cursor de rotacion, best-effort (si falla, se reintenta).
+  if (checkedTenantIds.length > 0) {
+    await supabaseAdmin
+      .from('tenants')
+      .update({ reconcile_checked_at: new Date().toISOString() })
+      .in('id', checkedTenantIds);
   }
 
   return report;

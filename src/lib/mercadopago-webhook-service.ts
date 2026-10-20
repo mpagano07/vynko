@@ -127,28 +127,27 @@ const ownerUserId = await resolveOwnerUserId(tenantId);
         // cambia `subscription_status`, asi que el webhook llega con la rama ya
         // active y el plan quedaba sin escribir (pago cobrado con el plan viejo).
         //
-        // Antes de aplicarlo se descarta el evento de una suscripcion que ya no es
-        // la vigente, con la misma regla que el branch de cancelacion: la renovacion
-        // de un preapproval viejo (el upgrade no cancela al anterior) reescribiria
-        // el plan recien pagado y el tenant bajaria de plan sin que nadie lo decida.
+        // Lectura unica del estado actual: la usan tanto la correccion de plan
+        // (rama ya activa) como la aplicacion de un cambio pendiente.
+        const { data: tenantRow, error: currentError } = await supabaseAdmin
+          .from('tenants')
+          .select('mercadopago_preapproval_id, subscription_plan, mercadopago_pending_preapproval_id, mercadopago_pending_plan')
+          .eq('id', tenantId)
+          .maybeSingle();
+        if (currentError) throw currentError;
+
+        const currentPreapprovalId = tenantRow?.mercadopago_preapproval_id ?? null;
+        const pendingId = tenantRow?.mercadopago_pending_preapproval_id ?? null;
+        const pendingPlan = tenantRow?.mercadopago_pending_plan ?? null;
+        const pendingMatches = Boolean(pendingId && pendingId === id);
+
+        if (pendingMatches && pendingPlan) {
+          planToSet = pendingPlan as 'starter' | 'business';
+        }
+
         let planApplied = false;
+
         if (!transitioned) {
-          const { data: tenantRow, error: currentError } = await supabaseAdmin
-            .from('tenants')
-            .select('mercadopago_preapproval_id, subscription_plan, mercadopago_pending_preapproval_id, mercadopago_pending_plan')
-            .eq('id', tenantId)
-            .maybeSingle();
-          if (currentError) throw currentError;
-
-          const currentPreapprovalId = tenantRow?.mercadopago_preapproval_id ?? null;
-          const pendingId = tenantRow?.mercadopago_pending_preapproval_id ?? null;
-          const pendingPlan = tenantRow?.mercadopago_pending_plan ?? null;
-          const pendingMatches = pendingId && pendingId === id;
-
-          if (pendingMatches && pendingPlan) {
-            planToSet = pendingPlan as 'starter' | 'business';
-          }
-
           if (currentPreapprovalId !== null && currentPreapprovalId !== id && !pendingMatches) {
             logOutcome('ignored', 'Plan de una suscripcion que ya no es la vigente');
             return { ok: true, data: { received: true } };
@@ -162,6 +161,32 @@ const ownerUserId = await resolveOwnerUserId(tenantId);
             if (planError) throw planError;
             planApplied = true;
           }
+        }
+
+        // Aplicar cambios de downgrade pendientes cuando este preapproval es el
+        // creado para el cambio (business->starter). TIENE que correr ANTES del
+        // refresco del periodo: ese update reescribe `mercadopago_preapproval_id`
+        // con el id nuevo, y si se leyera despues el "preapproval viejo" seria
+        // el mismo id nuevo y la suscripcion anterior nunca se cancelaria.
+        if (pendingMatches && pendingPlan) {
+          const { error: applyPendingError } = await supabaseAdmin
+            .from('tenants')
+            .update({
+              subscription_plan: pendingPlan,
+              mercadopago_pending_preapproval_id: null,
+              mercadopago_pending_plan: null,
+            })
+            .in('id', ownerBranchIds);
+          if (applyPendingError) throw applyPendingError;
+
+          if (currentPreapprovalId && currentPreapprovalId !== id) {
+            try {
+              await (await import('@/lib/mercadopago')).cancelPreApproval(currentPreapprovalId);
+            } catch (err) {
+              logger.error('Error cancelling old preapproval after downgrade:', { error: err });
+            }
+          }
+          planApplied = true;
         }
 
         // El periodo se refresca en cada entrega, incluido cada renewal: esto
@@ -204,38 +229,6 @@ const ownerUserId = await resolveOwnerUserId(tenantId);
             tenantId,
             metadata: { plan: planToSet ?? 'business', preapproval_id: id },
           });
-        }
-
-        // Aplicar cambios de downgrade pendientes cuando este preapproval es el
-        // creado para el cambio (business->starter). Esto hace efectivo el plan
-        // destino, cancela el preapproval viejo y limpia el pendiente.
-        const { data: pendingTenant } = await supabaseAdmin
-          .from('tenants')
-          .select('mercadopago_pending_preapproval_id, mercadopago_pending_plan, mercadopago_preapproval_id, subscription_plan')
-          .eq('id', tenantId)
-          .maybeSingle();
-        const pendingId = pendingTenant?.mercadopago_pending_preapproval_id ?? null;
-        const pendingPlan = pendingTenant?.mercadopago_pending_plan ?? null;
-        if (pendingId && pendingId === id && pendingPlan) {
-          const oldPreapprovalId = pendingTenant?.mercadopago_preapproval_id ?? null;
-          const updates: Record<string, unknown> = {
-            subscription_plan: pendingPlan,
-            mercadopago_pending_preapproval_id: null,
-            mercadopago_pending_plan: null,
-          };
-          const { error: applyPendingError } = await supabaseAdmin
-            .from('tenants')
-            .update(updates)
-            .in('id', ownerBranchIds);
-          if (applyPendingError) throw applyPendingError;
-          if (oldPreapprovalId && oldPreapprovalId !== id) {
-            try {
-              await (await import('@/lib/mercadopago')).cancelPreApproval(oldPreapprovalId);
-            } catch (err) {
-              logger.error('Error cancelling old preapproval after downgrade:', { error: err });
-            }
-          }
-          planApplied = true;
         }
 
         // `processed` = hubo arista (la rama no estaba activa o el plan cambio).

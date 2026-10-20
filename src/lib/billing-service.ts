@@ -51,7 +51,7 @@ export async function createCheckoutSession(
 
   const { data: tenant } = await supabaseAdmin
     .from('tenants')
-    .select('name, billing_email, billing_provider, paddle_customer_id, mercadopago_preapproval_id')
+    .select('name, billing_email, billing_provider, paddle_customer_id, mercadopago_preapproval_id, subscription_status')
     .eq('id', tenantId)
     .single();
 
@@ -153,6 +153,16 @@ export async function createCheckoutSession(
     }
   }
 
+  // Una suscripcion viva de MP no se puede reemplazar sin cobrar dos veces: el
+  // preapproval viejo sigue activo y cobrando hasta que se cancela. Si la cuenta
+  // ya tiene una suscripcion vigente, el checkout nuevo queda como PENDIENTE
+  // hasta que el webhook confirme el pago; recien ahi se aplica el plan y se
+  // cancela la anterior. Si la suscripcion ya no esta viva, la cancelamos antes
+  // de guardar la nueva para que no pueda cobrarse en el futuro.
+  const hasLiveMpSubscription =
+    Boolean(tenant?.mercadopago_preapproval_id) &&
+    (tenant?.subscription_status === 'active' || tenant?.subscription_status === 'past_due');
+
   try {
     const preapproval = await createPreApproval({
       payer_email: tenant?.billing_email || user.email!,
@@ -168,13 +178,34 @@ export async function createCheckoutSession(
       },
     });
 
-    await supabaseAdmin
-      .from('tenants')
-      .update({
-        mercadopago_preapproval_id: preapproval.id,
-        billing_provider: 'mercadopago',
-      })
-      .in('id', ownerBranchIds);
+    if (hasLiveMpSubscription) {
+      await supabaseAdmin
+        .from('tenants')
+        .update({
+          mercadopago_pending_preapproval_id: preapproval.id,
+          mercadopago_pending_plan: planConfig.id,
+          billing_provider: 'mercadopago',
+        })
+        .in('id', ownerBranchIds);
+    } else {
+      if (tenant?.mercadopago_preapproval_id) {
+        try {
+          await cancelPreApproval(tenant.mercadopago_preapproval_id);
+        } catch (err) {
+          logger.error('Error cancelling stale MercadoPago preapproval:', { error: err });
+        }
+      }
+
+      await supabaseAdmin
+        .from('tenants')
+        .update({
+          mercadopago_preapproval_id: preapproval.id,
+          billing_provider: 'mercadopago',
+          mercadopago_pending_preapproval_id: null,
+          mercadopago_pending_plan: null,
+        })
+        .in('id', ownerBranchIds);
+    }
 
     return { ok: true, data: { url: preapproval.init_point } };
   } catch (err) {

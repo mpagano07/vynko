@@ -349,7 +349,9 @@ describe('cambio de plan pendiente', () => {
     );
   });
 
-  it('no cancela la vieja si es la misma suscripcion que la vigente', async () => {
+  it('no aplica ni limpia el pendiente en una renovacion de la suscripcion vigente', async () => {
+    // Un renewal no es prueba de que el cambio de plan se pago: el pendiente
+    // tiene que sobrevivir hasta que llegue el evento de la transaccion nueva.
     queueOwnerResolution();
     queueTenantsSelect(
       tenantRow({
@@ -362,7 +364,73 @@ describe('cambio de plan pendiente', () => {
     await processPaddleWebhook(subEvent({ id: 'sub-1' }));
 
     expect(mockCancelPaddleSubscription).not.toHaveBeenCalled();
-    expect(tenantsWrites().paddle_pending_transaction_id).toBeNull();
+    expect(
+      tenantUpdates().filter(
+        (c) => 'paddle_pending_transaction_id' in (c.args[0] as Record<string, unknown>)
+      )
+    ).toHaveLength(0);
+    // El plan sigue siendo el de la suscripcion vigente, no el pendiente.
+    expect(tenantsWrites().subscription_plan).toBe('business');
+  });
+
+  it('aplica el pendiente cuando transaction.completed trae la transaccion del checkout', async () => {
+    mockGetPaddleSubscription.mockResolvedValue({
+      status: 'active',
+      customerId: 'ctm-1',
+      currentBillingPeriodEnd: '2027-01-01T00:00:00Z',
+      customData: { tenant_id: 'tenant-1', plan: 'business' },
+    });
+    queueOwnerResolution();
+    queueTenantsSelect(
+      tenantRow({
+        paddle_subscription_id: 'sub-old',
+        paddle_pending_transaction_id: 'tx-1',
+        paddle_pending_plan: 'starter',
+      })
+    );
+
+    const result = await processPaddleWebhook({
+      event_id: 'evt-tx',
+      event_type: 'transaction.completed',
+      data: { id: 'tx-1', subscription_id: 'sub-new' },
+    });
+
+    expect(result.ok).toBe(true);
+    const writes = tenantsWrites();
+    expect(writes.subscription_plan).toBe('starter');
+    expect(writes.paddle_pending_transaction_id).toBeNull();
+    expect(writes.paddle_pending_plan).toBeNull();
+    expect(writes.paddle_subscription_id).toBe('sub-new');
+    expect(mockCancelPaddleSubscription).toHaveBeenCalledWith('sub-old', false);
+  });
+
+  it('no aplica el pendiente si la transaccion no es la del checkout', async () => {
+    mockGetPaddleSubscription.mockResolvedValue({
+      status: 'active',
+      customerId: 'ctm-1',
+      currentBillingPeriodEnd: '2027-01-01T00:00:00Z',
+      customData: { tenant_id: 'tenant-1', plan: 'business' },
+    });
+    queueOwnerResolution();
+    queueTenantsSelect(
+      tenantRow({
+        paddle_subscription_id: null,
+        paddle_pending_transaction_id: 'tx-1',
+        paddle_pending_plan: 'starter',
+      })
+    );
+
+    await processPaddleWebhook({
+      event_id: 'evt-tx',
+      event_type: 'transaction.completed',
+      data: { id: 'tx-other', subscription_id: 'sub-new' },
+    });
+
+    const writes = tenantsWrites();
+    expect(writes.subscription_plan).toBe('business');
+    expect(writes).not.toHaveProperty('paddle_pending_transaction_id');
+    expect(writes).not.toHaveProperty('paddle_subscription_id');
+    expect(mockCancelPaddleSubscription).not.toHaveBeenCalled();
   });
 
   it('si el cambio de plan revienta al cancelar, la transicion ya quedo aplicada', async () => {
