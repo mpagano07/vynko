@@ -105,7 +105,7 @@ export default async function RootLayout({
           dangerouslySetInnerHTML={{ __html: structuredData }}
         />
       </head>
-      <body className={`${inter.variable} min-h-screen bg-gray-50 antialiased dark:bg-gray-950 font-sans`}>
+      <body suppressHydrationWarning className={`${inter.variable} min-h-screen bg-gray-50 antialiased dark:bg-gray-950 font-sans`}>
         <AppProviders>
           <AuthProvider>
             <NoTenantAccessGuard />
