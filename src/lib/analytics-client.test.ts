@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { saveCookieConsent, CONSENT_COOKIE } from '@/lib/cookie-consent';
 import { trackClientEvent } from '@/lib/analytics-client';
 
-const authFetchMock = vi.hoisted(() => vi.fn(async () => new Response('{}')));
+const authFetchMock = vi.hoisted(() => vi.fn<(...args: unknown[]) => Promise<Response>>(async () => new Response('{}')));
 
 vi.mock('@/lib/fetchWithTenant', () => ({
-  authFetch: (...args: unknown[]) => authFetchMock(...args),
+  authFetch: authFetchMock,
 }));
 
 function setConsent(prefs: { functional: boolean; analytics: boolean; marketing: boolean }) {
@@ -34,7 +34,7 @@ describe('trackClientEvent', () => {
     trackClientEvent('whatsapp_ticket', { saleId: 's1' });
 
     expect(authFetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = authFetchMock.mock.calls[0] as [string, { body: string }];
+    const [url, init] = authFetchMock.mock.calls[0] as unknown as [string, { body: string }];
     expect(url).toBe('/api/analytics/track');
     expect(JSON.parse(init.body)).toMatchObject({
       type: 'whatsapp_ticket',

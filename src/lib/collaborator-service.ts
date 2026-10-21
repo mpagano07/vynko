@@ -148,7 +148,7 @@ export async function addCollaborator(
     }
 
     const validRoles = ['manager', 'member'];
-    const assignRole = validRoles.includes(role ?? '') ? role : 'member';
+    const assignRole = validRoles.includes(role ?? '') ? (role as string) : 'member';
     const assignName = typeof full_name === 'string' && full_name.trim() ? full_name.trim() : null;
 
     const { data: existingProfile } = await supabaseAdmin

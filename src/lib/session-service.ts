@@ -89,11 +89,15 @@ export async function getSessionData(request: Request): Promise<{ ok: true; data
     return { ok: true, data: anonPayload() };
   }
 
-  const { data: profile } = await supabaseAdmin
+  const { data: profileData } = await supabaseAdmin
     .from('profiles')
     .select(PROFILE_SESSION_COLUMNS)
     .eq('id', user.id)
     .maybeSingle();
+  const profile = profileData as {
+    onboarding_pending?: boolean | null;
+    [key: string]: unknown;
+  } | null;
 
   const { data: tenantUsers } = await supabaseAdmin
     .from('tenant_users')
@@ -114,7 +118,7 @@ export async function getSessionData(request: Request): Promise<{ ok: true; data
       .select(TENANT_SESSION_COLUMNS)
       .in('id', tenantIds);
 
-    tenants = tenantsData || [];
+    tenants = (tenantsData as Record<string, unknown>[] | null) || [];
 
     let targetId = tenantUsers[0].tenant_id;
     if (activeTenantId === '__all__') {
