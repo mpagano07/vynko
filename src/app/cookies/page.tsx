@@ -2,6 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import type { Metadata } from 'next';
+import { ReviewCookiePreferences } from '@/components/cookies/ReviewCookiePreferences';
 
 export const metadata: Metadata = {
   title: 'Política de Cookies',
@@ -166,6 +167,12 @@ export default function CookiesPage() {
             <p className="mb-3">
               Puedes retirar o modificar tu consentimiento en cualquier momento borrando la clave <code className="text-cyan-400 font-mono text-sm">vynko_cookie_consent</code> de tu navegador (categoría &quot;Almacenamiento local&quot; o &quot;Local storage&quot; de las herramientas de desarrollo), o limpiando los datos del sitio. El aviso se mostrará nuevamente en tu próxima visita para que decidas de nuevo.
             </p>
+            <p className="mb-4">
+              También puedes reabrir el panel de preferencias ahora mismo:
+            </p>
+            <div className="mb-4">
+              <ReviewCookiePreferences />
+            </div>
             <p className="mb-3">
               También puedes configurar tu navegador para bloquear, rechazar o eliminar cookies y datos locales en cualquier momento. Ten en cuenta que si bloqueas las cookies esenciales de autenticación, no podrás acceder a tu panel de Vynko ni operar tu inventario.
             </p>
