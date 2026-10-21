@@ -132,7 +132,7 @@ export default function PrivacidadPage() {
           <section className="bg-gray-900/50 border border-gray-800 rounded-xl p-6">
             <h2 className="text-xl font-semibold text-white mb-3">6. Plazo de Conservación de Datos</h2>
             <p className="leading-relaxed">
-              Los datos se conservarán durante la vigencia de la suscripción y el uso activo de la cuenta. En caso de baja o cancelación voluntaria, podés solicitar la exportación o eliminación de tus registros escribiendo a <span className="text-cyan-400 font-mono">privacidad@vynko.dev</span>; la eliminación se procesará dentro de los plazos legales. Vynko conservará únicamente aquellos datos indispensables para responder ante obligaciones fiscales o legales vigentes por los plazos de prescripción aplicables.
+              Los datos se conservarán durante la vigencia de la suscripción y el uso activo de la cuenta. Podés <strong className="text-gray-300">exportar o eliminar tus datos en cualquier momento desde Configuración → Mi Cuenta</strong>, sin necesidad de solicitarlo por correo. Si preferís hacerlo por escrito, escribí a <span className="text-cyan-400 font-mono">privacidad@vynko.dev</span>; la eliminación se procesará dentro de los plazos legales. Vynko conservará únicamente aquellos datos indispensables para responder ante obligaciones fiscales o legales vigentes por los plazos de prescripción aplicables.
             </p>
           </section>
 
@@ -142,7 +142,7 @@ export default function PrivacidadPage() {
               De acuerdo con la <strong>Ley N° 25.326 de Protección de Datos Personales</strong>, los titulares de los datos tienen derecho a acceder a los mismos de forma gratuita a intervalos no inferiores a seis meses, salvo que se acredite un interés legítimo al efecto, así como a solicitar su actualización, rectificación o supresión.
             </p>
             <p className="mb-3 text-sm leading-relaxed">
-              Para ejercer cualquiera de tus derechos ARCO, enviá un correo electrónico a <span className="text-cyan-400 font-mono">privacidad@vynko.dev</span> con el asunto &quot;Derechos ARCO&quot;, adjuntando copia de tu documento de identidad para acreditar titularidad sobre la cuenta. Responderemos tu solicitud dentro del plazo legal de diez (10) días hábiles (art. 14, inc. 3, Ley N° 25.326).
+              Podés <strong className="text-gray-300">ejercer tu derecho de acceso y portabilidad descargando una copia de tus datos desde Configuración → Mi Cuenta</strong>, y tu derecho de supresión eliminando tu cuenta desde la misma sección (acción irreversible que borra tus empresas y sus registros). Para el resto de los derechos, o si preferís el canal escrito, enviá un correo a <span className="text-cyan-400 font-mono">privacidad@vynko.dev</span> con el asunto &quot;Derechos ARCO&quot;, adjuntando copia de tu documento de identidad para acreditar titularidad sobre la cuenta. Responderemos tu solicitud dentro del plazo legal de diez (10) días hábiles (art. 14, inc. 3, Ley N° 25.326).
             </p>
             <div className="p-3 bg-gray-950 border border-gray-800 rounded-lg text-xs text-gray-400">
               <strong className="text-gray-300">Aviso legal AAIP:</strong> &quot;La AGENCIA DE ACCESO A LA INFORMACIÓN PÚBLICA, en su carácter de Órgano de Control de la Ley N° 25.326, tiene la atribución de atender las denuncias y reclamos que interpongan quienes resulten afectados en sus derechos por incumplimiento de las normas vigentes en materia de protección de datos personales.&quot; (Sitio web:{' '}

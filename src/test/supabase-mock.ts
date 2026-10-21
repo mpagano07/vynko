@@ -205,6 +205,7 @@ function createSupabaseMock() {
       })),
       admin: {
         inviteUserByEmail: vi.fn(async () => ({ data: { user: {} }, error: null })),
+        deleteUser: vi.fn(async () => ({ data: { user: null }, error: null })),
       },
     },
     __queue(table: string, ...results: Result[]) {
