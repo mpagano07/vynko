@@ -151,6 +151,7 @@ describe('proveedores', () => {
 
 describe('categorias', () => {
   it('no borra una categoria de B', async () => {
+    supabaseMock.__queue('tenant_users', { data: { role: 'owner' }, error: null });
     supabaseMock.__queue('categories', rowOfB({ id: FOREIGN_ID, name: NAME_OF_B }));
 
     await deleteCategoryRoute(
@@ -165,6 +166,7 @@ describe('categorias', () => {
   });
 
   it('no renombra una categoria de B', async () => {
+    supabaseMock.__queue('tenant_users', { data: { role: 'owner' }, error: null });
     supabaseMock.__queue('categories', rowOfB({ id: FOREIGN_ID, name: NAME_OF_B }));
 
     const res = await updateCategoryRoute(

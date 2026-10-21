@@ -10,7 +10,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
 
 import { NetworkStatusNotifier } from '@/components/ui/NetworkStatusNotifier';
-import { CookieBanner } from '@/components/ui/CookieBanner';
+import CookieConsent from '@/components/cookies/CookieConsent';
 
 const LazyToaster = dynamic(() => import('@/components/ui/lazy-toaster'), { ssr: false });
 const LazyInstallAppBanner = dynamic(() => import('@/components/ui/lazy-install-app-banner'), { ssr: false });
@@ -139,7 +139,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
         <NetworkStatusNotifier />
         {mounted && <LazyToaster />}
         {mounted && <LazyInstallAppBanner />}
-        {mounted && <CookieBanner />}
+        {mounted && <CookieConsent />}
         {children}
       </>
     );
@@ -150,7 +150,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
       <NetworkStatusNotifier />
       {mounted && <LazyToaster />}
       {mounted && <LazyInstallAppBanner />}
-      {mounted && <CookieBanner />}
+      {mounted && <CookieConsent />}
       {/* Outer container: flex-row on desktop, flex-col on mobile */}
       <div className="flex flex-row flex-1 min-h-screen w-full">
         {/* Sidebar: on mobile it's an absolutely positioned drawer, on desktop it's in-flow */}

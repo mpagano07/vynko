@@ -4,6 +4,45 @@ import { logger } from '@/lib/logger';
 
 type SessionPayload = Record<string, unknown>;
 
+// Columnas que el cliente realmente consume. `select('*')` devolvia, ademas,
+// los ids internos de los procesadores de pago (`mercadopago_preapproval_id`,
+// `paddle_customer_id`, `paddle_price_id`, etc.): datos de infraestructura de
+// cobro que no tienen por que viajar al navegador.
+const TENANT_SESSION_COLUMNS = [
+  'id',
+  'name',
+  'slug',
+  'description',
+  'logo_url',
+  'company_name',
+  'subscription_plan',
+  'subscription_status',
+  'subscription_current_period_end',
+  'created_at',
+  'razon_social',
+  'cuit',
+  'punto_venta',
+  'iva_condition',
+  'ingresos_brutos',
+  'inicio_actividades',
+  'business_address',
+  'business_city',
+  'business_province',
+  'business_zip',
+  'business_phone',
+  'business_email',
+].join(', ');
+
+const PROFILE_SESSION_COLUMNS = [
+  'id',
+  'email',
+  'full_name',
+  'avatar_url',
+  'tenant_id',
+  'onboarding_pending',
+  'onboarding_checklist_dismissed_at',
+].join(', ');
+
 function anonPayload(): SessionPayload {
   // Las mismas claves que el payload autenticado, con `role` incluida. Antes el
   // payload anon la omitia, asi que un cliente que leyera `data.role` recibia
@@ -50,11 +89,15 @@ export async function getSessionData(request: Request): Promise<{ ok: true; data
     return { ok: true, data: anonPayload() };
   }
 
-  const { data: profile } = await supabaseAdmin
+  const { data: profileData } = await supabaseAdmin
     .from('profiles')
-    .select('*')
+    .select(PROFILE_SESSION_COLUMNS)
     .eq('id', user.id)
     .maybeSingle();
+  const profile = profileData as {
+    onboarding_pending?: boolean | null;
+    [key: string]: unknown;
+  } | null;
 
   const { data: tenantUsers } = await supabaseAdmin
     .from('tenant_users')
@@ -72,10 +115,10 @@ export async function getSessionData(request: Request): Promise<{ ok: true; data
 
     const { data: tenantsData } = await supabaseAdmin
       .from('tenants')
-      .select('*')
+      .select(TENANT_SESSION_COLUMNS)
       .in('id', tenantIds);
 
-    tenants = tenantsData || [];
+    tenants = (tenantsData as Record<string, unknown>[] | null) || [];
 
     let targetId = tenantUsers[0].tenant_id;
     if (activeTenantId === '__all__') {

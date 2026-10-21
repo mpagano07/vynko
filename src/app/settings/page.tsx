@@ -27,6 +27,7 @@ import {
 } from '@/lib/payment-methods';
 import { canUseFacturacion } from '@/lib/arca/access';
 import { ArcaConfigCard } from '@/components/settings/ArcaConfigCard';
+import { AccountDangerZone } from '@/components/settings/AccountDangerZone';
 
 interface Collaborator {
   user_id: string;
@@ -61,7 +62,7 @@ function formatPhone(value: string): string {
   return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6)}`;
 }
 
-const validTabs = ['perfil', 'empresa', 'facturacion', 'colaboradores', 'preferencias'];
+const validTabs = ['perfil', 'empresa', 'facturacion', 'colaboradores', 'preferencias', 'cuenta'];
 
 export default function SettingsPage() {
   return (
@@ -542,6 +543,7 @@ function SettingsContent() {
       : []),
     { id: 'colaboradores', label: 'Colaboradores', icon: <Users className="h-4 w-4" /> },
     { id: 'preferencias', label: 'Preferencias', icon: <Ticket className="h-4 w-4" /> },
+    { id: 'cuenta', label: 'Mi Cuenta', icon: <Shield className="h-4 w-4" /> },
   ];
 
   if (authLoading || role === 'member') return null;
@@ -1321,6 +1323,10 @@ function SettingsContent() {
               </Card>
             </div>
         </div>
+      </TabPanel>
+
+      <TabPanel id="cuenta" activeTab={activeTab}>
+        <AccountDangerZone />
       </TabPanel>
 
       <EditCollaboratorModal

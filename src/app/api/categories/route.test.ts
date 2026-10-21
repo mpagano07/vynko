@@ -84,6 +84,7 @@ describe('Categories API', () => {
     });
 
     it('creates category with valid name (201)', async () => {
+      supabaseMock.__queue('tenant_users', { data: { role: 'owner' } });
       supabaseMock.__queue('categories', {
         data: { id: 'c2', name: 'Golosinas', tenant_id: 'tenant-1' },
       });
@@ -102,6 +103,21 @@ describe('Categories API', () => {
         description: 'Dulces',
         tenant_id: 'tenant-1',
       });
+    });
+
+    it('rejects a member without manage role (403)', async () => {
+      supabaseMock.__queue('tenant_users', { data: { role: 'member' } });
+
+      const res = await POST(makeRequest('POST', { name: 'Golosinas' }));
+      expect(res.status).toBe(403);
+      const json = await res.json();
+      expect(json.error).toContain('permisos');
+
+      expect(
+        supabaseMock.__calls.some(
+          (c) => c.table === 'categories' && c.method === 'insert'
+        )
+      ).toBe(false);
     });
 
     it('rejects category without name (400)', async () => {
@@ -125,6 +141,7 @@ describe('Categories API', () => {
     });
 
     it('uses null for optional description/icon/color when omitted', async () => {
+      supabaseMock.__queue('tenant_users', { data: { role: 'owner' } });
       supabaseMock.__queue('categories', {
         data: { id: 'c3', name: 'Bebidas', tenant_id: 'tenant-1' },
       });
@@ -144,6 +161,7 @@ describe('Categories API', () => {
     });
 
     it('returns 400 when the insert fails', async () => {
+      supabaseMock.__queue('tenant_users', { data: { role: 'owner' } });
       supabaseMock.__queue('categories', {
         data: null,
         error: { message: 'duplicate name' },

@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import type { AuthInfo } from '@/lib/api-auth';
 import { logger } from '@/lib/logger';
+import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
 
 export type CategoryResult<T = unknown> =
   | { ok: true; data: T; status: number }
@@ -32,6 +33,10 @@ export async function createCategory(
       return { ok: false, error: 'El nombre de la categoría es requerido', status: 400 };
     }
 
+    if (!canManageTenant(await getRoleInTenant(auth.userId, auth.tenantId))) {
+      return { ok: false, error: 'No tenés permisos para crear categorías', status: 403 };
+    }
+
     const { data, error } = await supabaseAdmin
       .from('categories')
       .insert({
@@ -60,6 +65,10 @@ export async function updateCategory(
   body: Record<string, unknown>
 ): Promise<CategoryResult> {
   try {
+    if (!canManageTenant(await getRoleInTenant(auth.userId, auth.tenantId))) {
+      return { ok: false, error: 'No tenés permisos para editar categorías', status: 403 };
+    }
+
     const { data, error } = await supabaseAdmin
       .from('categories')
       .update({
@@ -86,6 +95,10 @@ export async function updateCategory(
 }
 
 export async function deleteCategory(auth: AuthInfo, id: string): Promise<CategoryResult> {
+  if (!canManageTenant(await getRoleInTenant(auth.userId, auth.tenantId))) {
+    return { ok: false, error: 'No tenés permisos para borrar categorías', status: 403 };
+  }
+
   const { error } = await supabaseAdmin
     .from('categories')
     .delete()

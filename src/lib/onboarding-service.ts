@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
+import { canManageTenant } from '@/lib/membership-role';
 import { trackEvent } from '@/lib/track-event';
 import { logger } from '@/lib/logger';
 
@@ -72,10 +73,15 @@ export async function completeOnboarding(
 
   const { data: existingMemberships } = await supabaseAdmin
     .from('tenant_users')
-    .select('tenant_id')
+    .select('tenant_id, role')
     .eq('user_id', user.id);
 
-  const existingTenantIds = (existingMemberships ?? []).map((m) => m.tenant_id);
+  // Solo cuentan las empresas que el usuario administra. Un 'member' invitado a
+  // la empresa de un tercero no deberia gastar cupo de sucursales ni bloquear
+  // que la persona abra su propia empresa.
+  const existingTenantIds = (existingMemberships ?? [])
+    .filter((m) => canManageTenant(m.role))
+    .map((m) => m.tenant_id);
 
   if (existingTenantIds.length > 0) {
     const { data: existingTenants } = await supabaseAdmin

@@ -1,10 +1,18 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { updateProfile } from '@/lib/settings-service';
+import { isSameOriginRequest } from '@/lib/security/csrf';
 import { logger } from '@/lib/logger';
 
 export async function PATCH(request: Request) {
   try {
+    // Mutacion del perfil: se rechaza si el navegador la dispara desde otro
+    // origen (CSRF). Las cookies de sesion son SameSite=Lax, asi que el POST
+    // cross-site ya viaja sin credenciales; esto es la segunda barrera.
+    if (!isSameOriginRequest(request)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const supabase = await createServerSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
 

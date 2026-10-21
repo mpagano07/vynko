@@ -2,49 +2,9 @@
 
 import { useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
+import { getCookieConsent, saveCookieConsent } from '@/lib/cookie-consent';
 
-const CONSENT_COOKIE = 'vynko_cookie_consent';
-const CONSENT_VERSION = '1.0';
-
-type ConsentState = {
-  version: string;
-  necessary: true;
-  functional: boolean;
-  analytics: boolean;
-  marketing: boolean;
-  updatedAt: string;
-};
-
-function getCookie(name: string): string | null {
-  if (typeof document === 'undefined') return null;
-  const value = `; ${document.cookie}`;
-  const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
-  return null;
-}
-
-function setCookie(name: string, value: string, days = 365) {
-  if (typeof document === 'undefined') return;
-  const date = new Date();
-  date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
-  document.cookie = `${name}=${value}; expires=${date.toUTCString()}; path=/; SameSite=Lax`;
-}
-
-export function getCookieConsent(): ConsentState | null {
-  const raw = getCookie(CONSENT_COOKIE);
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(decodeURIComponent(raw));
-    if (parsed?.version === CONSENT_VERSION) return parsed as ConsentState;
-  } catch {}
-  return null;
-}
-
-export function resetCookieConsent() {
-  if (typeof document === 'undefined') return;
-  document.cookie = `${CONSENT_COOKIE}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
-  window.location.reload();
-}
+export { getCookieConsent, resetCookieConsent } from '@/lib/cookie-consent';
 
 // `document.cookie` no dispara eventos de cambio, y el unico escritor de la
 // cookie de consentimiento es `saveConsent()` en este mismo componente, que ya
@@ -77,16 +37,12 @@ export default function CookieConsent() {
   const [analytics, setAnalytics] = useState(false);
   const [marketing, setMarketing] = useState(false);
 
-  const saveConsent = (prefs: Partial<ConsentState>) => {
-    const state: ConsentState = {
-      version: CONSENT_VERSION,
-      necessary: true,
+  const saveConsent = (prefs: { functional?: boolean; analytics?: boolean; marketing?: boolean }) => {
+    saveCookieConsent({
       functional: prefs.functional ?? functional,
       analytics: prefs.analytics ?? analytics,
       marketing: prefs.marketing ?? marketing,
-      updatedAt: new Date().toISOString(),
-    };
-    setCookie(CONSENT_COOKIE, encodeURIComponent(JSON.stringify(state)));
+    });
     setSaved(true);
     setShowCustomize(false);
   };
@@ -103,7 +59,7 @@ export default function CookieConsent() {
             <div className="space-y-2">
               <h2 className="text-base font-semibold text-white">Usamos cookies</h2>
               <p className="text-sm text-gray-400 leading-relaxed">
-                Utilizamos cookies esenciales para mantener tu sesión y el funcionamiento de la plataforma. También podemos usar cookies funcionales para recordar preferencias.{' '}
+                Utilizamos cookies esenciales para mantener tu sesión y el funcionamiento de la plataforma. También podemos usar cookies funcionales para recordar preferencias y analíticas para entender cómo se usa el producto.{' '}
                 <Link href="/cookies" className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2">
                   Política de Cookies
                 </Link>{' '}
@@ -128,13 +84,13 @@ export default function CookieConsent() {
               </button>
               <button
                 onClick={() => saveConsent({ functional: true, analytics: false, marketing: false })}
-                className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-gray-950 hover:bg-cyan-400 transition-colors"
+                className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-medium text-gray-300 hover:bg-gray-900 transition-colors"
               >
-                Aceptar esenciales
+                Aceptar solo esenciales
               </button>
               <button
-                onClick={() => saveConsent({ functional: true, analytics: false, marketing: false })}
-                className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-gray-950 hover:bg-gray-100 transition-colors"
+                onClick={() => saveConsent({ functional: true, analytics: true, marketing: true })}
+                className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-gray-950 hover:bg-cyan-400 transition-colors"
               >
                 Aceptar todas
               </button>
@@ -169,7 +125,7 @@ export default function CookieConsent() {
               <div className="flex items-start justify-between gap-4 rounded-xl border border-gray-800 p-4">
                 <div>
                   <p className="text-sm font-medium text-white">Analíticas</p>
-                  <p className="text-xs text-gray-400 mt-1">Medición anónima para mejorar el producto. Actualmente no activas.</p>
+                  <p className="text-xs text-gray-400 mt-1">Medición de uso del producto (eventos propios, sin terceros) para mejorarlo. Si la desactivás, no se envía ningún evento.</p>
                 </div>
                 <label className="inline-flex items-center cursor-pointer">
                   <input type="checkbox" checked={analytics} onChange={(e) => setAnalytics(e.target.checked)} className="sr-only peer" />

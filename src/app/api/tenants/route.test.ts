@@ -34,7 +34,7 @@ describe('POST /api/tenants', () => {
 
   // Crear sucursales exige owner/manager en al menos un tenant del usuario.
   function queueManagerRole(role = 'owner') {
-    supabaseMock.__queue('tenant_users', { data: [{ role }], error: null });
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1', role }], error: null });
   }
 
   it('devuelve 401 sin autenticación', async () => {
@@ -68,6 +68,44 @@ describe('POST /api/tenants', () => {
     expect(res.status).toBe(403);
     const inserts = supabaseMock.__calls.filter((c) => c.table === 'tenants' && c.method === 'insert');
     expect(inserts).toHaveLength(0);
+  });
+
+  it('no hereda el plan de un tenant donde solo es member', async () => {
+    // El usuario es owner de un tenant 'business' pero member de uno
+    // 'enterprise'. Antes, el buscador del mejor plan miraba TODOS sus tenants,
+    // incluido el ajeno, y le regalaba la sucursal en plan enterprise.
+    vi.mocked(getAuth).mockResolvedValueOnce({
+      ...mockAuth,
+      tenantIds: ['tenant-propio', 'tenant-ajeno'],
+    });
+
+    supabaseMock.__queue('tenant_users', {
+      data: [
+        { tenant_id: 'tenant-propio', role: 'owner' },
+        { tenant_id: 'tenant-ajeno', role: 'member' },
+      ],
+      error: null,
+    });
+    // Solo se consulta el tenant propio.
+    supabaseMock.__queue('tenants', {
+      data: [{ subscription_plan: 'business', subscription_status: 'active', subscription_current_period_end: null }],
+    });
+    supabaseMock.__queue('tenants', { data: null, error: null });
+    supabaseMock.__queue('tenant_users', { data: null, error: null });
+    supabaseMock.__queue('tenants', { data: { id: 't-2', name: 'Sucursal 2' }, error: null });
+
+    const res = await POST(makeRequest({ name: 'Sucursal 2' }));
+    expect(res.status).toBe(200);
+
+    const tenantQuery = supabaseMock.__calls.find(
+      (c) => c.table === 'tenants' && c.method === 'in'
+    );
+    expect(tenantQuery?.args[1]).toEqual(['tenant-propio']);
+
+    const tenantInsert = supabaseMock.__calls.find(
+      (c) => c.table === 'tenants' && c.method === 'insert'
+    );
+    expect(tenantInsert?.args[0]).toMatchObject({ subscription_plan: 'business' });
   });
 
   it('crea una sucursal heredando el plan del usuario', async () => {
