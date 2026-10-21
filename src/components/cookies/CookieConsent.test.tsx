@@ -10,13 +10,13 @@ describe('CookieConsent', () => {
 
   it('muestra el banner cuando no hay consentimiento previo', () => {
     render(<CookieConsent />);
-    expect(screen.getByText('Usamos cookies')).toBeInTheDocument();
+    expect(screen.getByText(/Usamos cookies esenciales/)).toBeInTheDocument();
   });
 
-  it('"Rechazar opcionales" guarda todo opcional en false', () => {
+  it('"Rechazar" guarda todo opcional en false', () => {
     render(<CookieConsent />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Rechazar opcionales' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rechazar' }));
 
     expect(getCookieConsent()).toMatchObject({
       necessary: true,

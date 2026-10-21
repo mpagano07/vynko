@@ -39,6 +39,7 @@ const PROFILE_SESSION_COLUMNS = [
   'full_name',
   'avatar_url',
   'tenant_id',
+  'is_admin',
   'onboarding_pending',
   'onboarding_checklist_dismissed_at',
 ].join(', ');

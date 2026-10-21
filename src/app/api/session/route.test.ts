@@ -106,6 +106,9 @@ describe('GET /api/session', () => {
       c.table === 'profiles' && c.method === 'select' ? [String(c.args[0])] : []
     );
     expect(profileSelects.join(' ')).not.toContain('*');
+    // `is_admin` SI debe viajar: el sidebar gatea Admin/Analytics y Facturación
+    // con este flag en el cliente. Ocultarlo dejaba al admin sin sus secciones.
+    expect(profileSelects.join(' ')).toContain('is_admin');
 
     // Aun asi el cliente recibe el plan para pintar la UI.
     expect(json.tenant).toMatchObject({ subscription_plan: 'business' });
