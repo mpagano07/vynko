@@ -53,5 +53,5 @@ export async function authFetch(input: RequestInfo | URL, init?: RequestInit): P
   for (const [key, value] of new Headers(init?.headers)) {
     headers.set(key, value);
   }
-  return fetch(input, { ...init, headers });
+  return fetch(input, { ...init, headers, credentials: init?.credentials ?? 'include' });
 }
