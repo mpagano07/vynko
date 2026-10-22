@@ -68,7 +68,10 @@ function withSecurityHeaders(response: NextResponse, nonce: string): NextRespons
   response.headers.set('X-Frame-Options', 'DENY');
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-  response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)');
+  // `camera=(self)` es obligatorio: el escaner de codigos usa getUserMedia. Si
+  // se deja `camera=()`, el navegador bloquea la camara incluso cuando la
+  // persona concede el permiso y el escaner solo muestra "permisos denegados".
+  response.headers.set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)');
   response.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
 
   // Los deploys de preview no deben entrar al indice de los buscadores: son
