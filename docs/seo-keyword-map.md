@@ -18,7 +18,7 @@ no estamos compitiendo con nuestra propia landing.
 | `/ventas-y-caja` | Sistema de ventas y caja para pequeños comercios \| Vynko | Sistema de ventas y caja para pequeños comercios | "programa para controlar ventas y caja", "sistema de ventas" | Publicada |
 | `/alternativa-a-excel` | Sistema de gestión para reemplazar Excel \| Vynko | Dejá Excel: un sistema de gestión que se actualiza solo | "cómo llevar inventario sin Excel", "alternativa a Excel" | Publicada |
 | `/software-gestion-argentina` | Sistema de gestión para pequeños comercios en Argentina \| Vynko | Sistema de gestión para pequeños comercios en Argentina | "sistema de gestión para pequeños comercios en Argentina" | Publicada |
-| `/importar-productos-mercadolibre-tiedenube` | Importar productos de Mercado Libre o Tiendanube \| Vynko | Importá tu catálogo de Mercado Libre o Tiendanube | "importar productos de Mercado Libre", "migrar catálogo Tiendanube" | Publicada |
+| `/importar-productos-mercadolibre-tiendanube` | Importar productos de Mercado Libre o Tiendanube \| Vynko | Importá tu catálogo de Mercado Libre o Tiendanube | "importar productos de Mercado Libre", "migrar catálogo Tiendanube" | Publicada |
 | `/control-de-compras` | Control de compras y proveedores para tu negocio \| Vynko | Registrá compras, ventas y stock en un solo lugar | "cómo registrar compras, ventas y stock en un solo lugar" | Nueva |
 
 ## Consultas cubiertas por cada landing
@@ -51,7 +51,7 @@ tienen de entrar en el bloque de respuesta de Google.
 - cómo controlar varias sucursales
 - precios en pesos y soporte en español
 
-### `/importar-productos-mercadolibre-tiedenube`
+### `/importar-productos-mercadolibre-tiendanube`
 - cómo importar productos de Mercado Libre
 - cómo pasar el catálogo de Tiendanube a otro sistema
 - cómo cargar productos con código de barras sin tipear
