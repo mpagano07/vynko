@@ -98,3 +98,54 @@ propio CTA.
 - `src/lib/marketing/seo-landing-content.test.ts` verifica que toda landing del
   registro tenga los textos completos, la guía con pasos, la comparativa con
   filas y los enlaces internos apuntando a landings reales.
+
+## Diagnóstico de indexación (2026-10-22)
+
+Search Console reportó "Descubierta: actualmente sin indexar" con motivo
+"Excluida por una etiqueta 'noindex'" para las landings, las legales, `/login` y
+`/auth/signup`, **todas con "Último rastreo: N/D"**. "N/D" significa que Google
+**nunca las rastreó**: la URL fue descubierta (por enlaces internos o por el
+sitemap) pero nunca llegó a rastrearse. Para una URL nunca rastreada, Google no
+puede leer el `<meta name="robots">` de esa página, así que el motivo que
+muestra es el agregado del sitio, no una directiva real de esa URL.
+
+**Verificado contra producción (`vynko.dev`):**
+
+- Las 6 landings, la home y las 4 legales devuelven `200`, con `<title>`,
+  `canonical` y `description` propios, y **sin** `<meta name="robots">` ni
+  `X-Robots-Tag`.
+- `/login` y `/auth/signup` devuelven `noindex, follow`: es intencional.
+- Googlebot recibe exactamente el mismo HTML que un navegador (verificado con
+  seis user-agents distintos).
+- El sitio **no está indexado en ningún motor**: ni Google, ni Bing, ni
+  DuckDuckGo, ni Common Crawl devuelven resultados para `site:vynko.dev`.
+- El dominio `vynko.dev` se registró el 2026-09-02: tiene 7 semanas.
+
+Conclusión: el bloqueo **no es un `noindex` en el código** (no existe en
+ninguna versión del repo salvo `/login` y `/auth/signup`); es que **Google
+todavía no rastrea el sitio**. La etiqueta `noindex` del reporte es la de las
+dos únicas páginas con `noindex` que hay en el sitio, que es lo único que
+Google pudo leer.
+
+**Acciones:**
+
+1. Mergear el PR de SEO y reenviar el sitemap desde Search Console.
+2. Pedir la indexación de la home y de las landings desde la URL Inspection.
+3. Revisar en Vercel que no haya un Firewall con Bot Protection bloqueando a
+   Googlebot.
+4. Conseguir backlinks: un dominio nuevo sin enlaces entrantes no recibe
+   presupuesto de rastreo.
+
+**Guardas agregadas en código** (para que esto no se repita en silencio):
+
+- `robotsForPath()` decide el `robots` de cada ruta y se declara **siempre**
+  (también `index: true` en las indexables): ya no queda en manos de un default
+  silencioso de Next.
+- El `X-Robots-Tag` del proxy solo se aplica con `VERCEL_ENV === 'preview'`.
+  Con `!== 'production'`, cualquier entorno donde esa variable no estuviera
+  definida (self-host, `next start` propio) dejaba **todo el sitio** con
+  `noindex`.
+- Las landings declaran `robots: { index: true, follow: true }` explícito.
+- Tests que atan sitemap, robots.txt y la clasificación de rutas: ninguna URL
+  publicada en el sitemap puede ser noindexable ni estar bloqueada por
+  robots.txt.

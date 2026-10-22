@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import robots from './robots';
+import sitemap from './sitemap';
 import { PRIVATE_ROUTE_PREFIXES } from '@/lib/marketing/public-routes';
+import { SITE_URL } from '@/lib/site-url';
 
 /**
  * El rastreo de ChatGPT depende de que `OAI-SearchBot` tenga un bloque
@@ -70,5 +72,21 @@ describe('robots', () => {
 
   it('declara el sitemap', () => {
     expect(result.sitemap).toMatch(/\/sitemap\.xml$/);
+  });
+
+  it('NO bloquea ninguna URL que este en el sitemap', () => {
+    // Si robots.txt bloquea una URL publicada en el sitemap, Google la
+    // descubre pero no la puede rastrear: nunca lee su contenido ni su
+    // `noindex`. Es la contradiccion clasica entre los dos archivos.
+    const wildcard = rules.find((r) => userAgentsOf(r).includes('*'));
+    const disallow = disallowOf(wildcard!);
+
+    for (const entry of sitemap()) {
+      const path = entry.url === SITE_URL ? '/' : entry.url.slice(SITE_URL.length);
+      for (const prefix of disallow) {
+        const blocked = path === prefix || path.startsWith(prefix + '/');
+        expect(blocked, `${path} esta en el sitemap pero robots.txt la bloquea`).toBe(false);
+      }
+    }
   });
 });

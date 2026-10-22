@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { proxy } from '@/proxy';
 import { createServerClient } from '@supabase/ssr';
@@ -458,5 +458,67 @@ describe('proxy: rate limit global de paginas (F1-6)', () => {
     expect(res.status).toBe(307);
     expect(res.headers.get('location')).toContain('/login');
     expect(rateLimitMock).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * El `X-Robots-Tag: noindex` del proxy es la decision mas peligrosa del codigo:
+ * si se aplica por un error de condicion, deja el sitio ENTERO fuera del
+ * indice de Google, y el error no se ve hasta semanas despues, en el reporte
+ * de Search Console.
+ */
+describe('proxy: X-Robots-Tag y robots de indexacion', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    adminQueue = [];
+    subscriptionMock.mockReturnValue({ blocked: false });
+    makeServerClient({ id: 'user-1' });
+    makeAdminClient();
+    rateLimitMock.mockResolvedValue({ ok: true, retryAfterSeconds: 0 });
+    getClientIpMock.mockReturnValue('203.0.113.5');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('NO bloquea el indexado en produccion', async () => {
+    vi.stubEnv('VERCEL_ENV', 'production');
+
+    const res = await proxy(request('/control-de-stock'));
+
+    expect(res.headers.get('x-robots-tag')).toBeNull();
+  });
+
+  it('NO bloquea el indexado cuando VERCEL_ENV no esta definido', async () => {
+    // Un `next start` propio, un contenedor self-hosted o un runtime que no
+    // inyecte las variables de sistema de Vercel NO deben dejar el sitio
+    // entero con `noindex`. Por eso la condicion es `=== 'preview'` y no
+    // `!== 'production'`.
+    vi.stubEnv('VERCEL_ENV', undefined);
+
+    const res = await proxy(request('/control-de-stock'));
+
+    expect(res.headers.get('x-robots-tag')).toBeNull();
+  });
+
+  it('bloquea el indexado en los deploys de preview', async () => {
+    vi.stubEnv('VERCEL_ENV', 'preview');
+
+    const res = await proxy(request('/control-de-stock'));
+
+    expect(res.headers.get('x-robots-tag')).toBe('noindex, nofollow');
+  });
+
+  it('no resuelve la indexacion de la ruta: eso es del layout raiz', async () => {
+    // El `noindex` de las rutas noindexables se decide en el layout raiz
+    // (`robotsForPath`), no con el header: el header aplica a la respuesta
+    // entera y el meta a la pagina. Este test deja explicito que el proxy no
+    // se lleva esa decision.
+    vi.stubEnv('VERCEL_ENV', 'production');
+
+    const res = await proxy(request('/login'));
+
+    expect(res.headers.get('x-robots-tag')).toBeNull();
   });
 });

@@ -182,6 +182,20 @@ export function isIndexablePath(pathname: string): boolean {
   return isPublicPath(pathname) && !matchesPath(pathname, NOINDEX_PATHS);
 }
 
+/**
+ * Directivas de robots para una ruta.
+ *
+ * Se devuelven SIEMPRE (tambien para las rutas indexables) en vez de omitir
+ * el campo: asi el valor se puede auditar leyendo el codigo, en lugar de
+ * depender de un default silencioso que puede cambiar entre versiones de
+ * Next. `follow` queda en `true` en todos los casos: `noindex, follow` deja a
+ * Google recorrer los enlaces de la pagina (util para que descubra el resto
+ * del sitio) sin listar esa pagina en el indice.
+ */
+export function robotsForPath(pathname: string): { index: boolean; follow: true } {
+  return { index: isIndexablePath(pathname), follow: true };
+}
+
 /** ¿La ruta se renderiza fuera del shell de la app? */
 export function isShelllessPath(pathname: string): boolean {
   return matchesPath(pathname, SHELLLESS_PATHS);

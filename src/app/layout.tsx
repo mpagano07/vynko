@@ -10,7 +10,7 @@ import { TenantHeaderProvider } from '@/components/TenantHeaderProvider';
 import { AppProviders } from '@/components/AppProviders';
 import { AppReturnTracker } from '@/components/analytics/app-return-tracker';
 import { buildSiteStructuredData, serializeJsonLd } from '@/lib/marketing/structured-data';
-import { isIndexablePath } from '@/lib/marketing/public-routes';
+import { robotsForPath } from '@/lib/marketing/public-routes';
 import { SITE_URL } from '@/lib/site-url';
 import { getTrialDays } from '@/lib/plans';
 import type { Metadata, Viewport } from 'next';
@@ -88,13 +88,18 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     ...BASE_METADATA,
     alternates: { canonical: pathname },
+    // `robots` se declara SIEMPRE y de forma explicita, en vez de omitirlo
+    // cuando la ruta es indexable. Asi el valor se puede auditar con una
+    // lectura del codigo, y no queda en manos de un default silencioso de
+    // Next que cambia segun la version.
+    //
     // Las rutas publicas que no van al indice (login, signup, reset de
     // contrasena, aceptacion de invitacion, "sin acceso") se marcan `noindex`
     // aca y no con `Disallow` en robots.txt: si Google no puede rastrear la
     // URL, tampoco puede leer el `noindex` que la saca del indice. El `Disallow`
     // queda para las rutas privadas de la app, donde no hay nada que
     // desindexar porque nunca son publicas.
-    ...(isIndexablePath(pathname) ? {} : { robots: { index: false, follow: true } }),
+    robots: robotsForPath(pathname),
   };
 }
 

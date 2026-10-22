@@ -73,6 +73,13 @@ describe('buildSeoMetadata', () => {
     expect(metadata.keywords).toContain('control de stock');
     expect(metadata.openGraph).toBeDefined();
   });
+
+  it('declara que la landing se indexa', () => {
+    // Una landing con `noindex` es una landing inexistente para Google, y el
+    // error sale caro y en silencio. Se declara explicito para que ningun
+    // `noindex` heredado pueda alcanzarla.
+    expect(metadata.robots).toEqual({ index: true, follow: true });
+  });
 });
 
 describe('buildSeoJsonLd', () => {

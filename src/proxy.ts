@@ -71,11 +71,19 @@ function withSecurityHeaders(response: NextResponse, nonce: string): NextRespons
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)');
   response.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
 
-  // Los deploys de preview (y el entorno local) no deben entrar al indice de
-  // los buscadores: son versiones de prueba que cuelgan del mismo dominio y
-  // compiten con las landings de produccion. `VERCEL_ENV` vale `production`,
-  // `preview` o `development`; solo el primero queda indexable.
-  if (process.env.VERCEL_ENV !== 'production') {
+  // Los deploys de preview no deben entrar al indice de los buscadores: son
+  // versiones de prueba que compiten con las landings de produccion.
+  //
+  // La condicion es `=== 'preview'` y NO `!== 'production'` a proposito. Con la
+  // negacion, cualquier entorno donde `VERCEL_ENV` no este definido (un
+  // `next start` propio, un contenedor self-hosted, un runtime que no inyecte
+  // las variables de sistema de Vercel) caeria en el `noindex` y dejaria el
+  // sitio ENTERO fuera del indice de Google. Un error asi no se ve en el codigo
+  // ni en los tests: se ve semanas despues, en el reporte de Search Console.
+  //
+  // Ademas Vercel ya agrega `X-Robots-Tag: noindex` a los Preview Deployments
+  // por su cuenta, asi que esta guarda es una red extra, no el unico escudo.
+  if (process.env.VERCEL_ENV === 'preview') {
     response.headers.set('X-Robots-Tag', 'noindex, nofollow');
   }
 

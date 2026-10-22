@@ -127,6 +127,12 @@ export function buildSeoMetadata(content: SeoLandingContent): Metadata {
     description: content.metaDescription,
     keywords: content.keywords,
     alternates: { canonical: path },
+    // Las landings SIEMPRE se indexan. Se declara de forma explicita para que
+    // un `noindex` heredado (del layout raiz o de un layout de segmento) no
+    // pueda dejarlas fuera del indice sin que se note en el codigo. Una landing
+    // fuera del indice es una landing inexistente para Google: el error sale
+    // caro y en silencio.
+    robots: { index: true, follow: true },
     openGraph: {
       title: content.metaTitle,
       description: content.metaDescription,
