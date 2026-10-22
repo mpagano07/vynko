@@ -68,7 +68,7 @@ function ScanningPageContent() {
     setScanState('scanning');
 
     try {
-      const res = await fetch(`/api/products/barcode/${encodeURIComponent(code)}`);
+      const res = await authFetch(`/api/products/barcode/${encodeURIComponent(code)}`);
       if (!res.ok) {
         setScanState('error');
         toast.error('Error al buscar producto');
