@@ -40,17 +40,40 @@
  * todos los `lastmod` serian siempre "hoy" y la señal no valdria nada).
  */
 export const SEO_LANDING_PAGES = [
-  { slug: 'control-de-stock', label: 'Control de stock', lastModified: '2026-10-22' },
-  { slug: 'ventas-y-caja', label: 'Ventas y caja', lastModified: '2026-10-22' },
-  { slug: 'alternativa-a-excel', label: 'Alternativa a Excel', lastModified: '2026-10-22' },
+  {
+    slug: 'control-de-stock',
+    label: 'Control de stock',
+    summary: 'Sabé cuántas unidades tenés en cada depósito, con avisos antes de quedarte sin stock.',
+    lastModified: '2026-10-22',
+  },
+  {
+    slug: 'ventas-y-caja',
+    label: 'Ventas y caja',
+    summary: 'Cobrá escaneando el código de barras y cerrá el día con el arqueo ya hecho.',
+    lastModified: '2026-10-22',
+  },
+  {
+    slug: 'alternativa-a-excel',
+    label: 'Alternativa a Excel',
+    summary: 'Dejá la planilla: un sistema que se actualiza solo y no depende de fórmulas.',
+    lastModified: '2026-10-22',
+  },
   {
     slug: 'software-gestion-argentina',
     label: 'Gestión en Argentina',
+    summary: 'Stock, caja y varias sucursales en pesos, con soporte en español.',
     lastModified: '2026-10-22',
   },
   {
     slug: 'importar-productos-mercadolibre-tiendanube',
     label: 'Importar productos',
+    summary: 'Subí tu catálogo de Mercado Libre o Tiendanube y empezá a vender el mismo día.',
+    lastModified: '2026-10-22',
+  },
+  {
+    slug: 'control-de-compras',
+    label: 'Control de compras',
+    summary: 'Pedidos al proveedor, remitos de ingreso y stock que se suma solo.',
     lastModified: '2026-10-22',
   },
 ] as const;

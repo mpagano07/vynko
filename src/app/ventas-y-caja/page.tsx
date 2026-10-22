@@ -2,11 +2,11 @@ import type { Metadata } from 'next';
 import SeoLandingPage from '@/components/marketing/SeoLandingPage';
 import { buildSeoMetadata, type SeoLandingContent } from '@/lib/marketing/seo-landing';
 
-const content: SeoLandingContent = {
+export const content: SeoLandingContent = {
   slug: 'ventas-y-caja',
-  metaTitle: 'Sistema de ventas con lector de código de barras',
+  metaTitle: 'Sistema de ventas y caja para pequeños comercios',
   metaDescription:
-    'Programa de caja para comercio con lector de código de barras: registrá ventas, cobrá y actualizá el stock automáticamente. Probá Vynko gratis.',
+    'Programa para controlar ventas y caja: cobrá escaneando el código de barras, actualizá el stock al instante y cerrá el día con arqueo. Probá Vynko gratis.',
   keywords: [
     'sistema de ventas',
     'programa de caja para comercio',
@@ -15,7 +15,7 @@ const content: SeoLandingContent = {
     'software de ventas Argentina',
   ],
   badge: 'Ventas y caja',
-  h1: 'Sistema de ventas y caja con lector de código de barras',
+  h1: 'Sistema de ventas y caja para pequeños comercios',
   intro:
     'Cobrá más rápido, sin errores de tipeo y con el stock actualizado en el mismo momento en que cerrás la venta.',
   problemsTitle: 'Cuando la caja y el stock van por separado',
@@ -36,6 +36,27 @@ const content: SeoLandingContent = {
     {
       problem: 'Tenés que sumar la caja del día a mano y siempre hay diferencias.',
       solution: 'Abrí y cerrá la caja con los movimientos registrados y un arqueo claro.',
+    },
+  ],
+  howToTitle: 'Cómo controlar las ventas y la caja de tu negocio',
+  howToIntro:
+    'Así se registra una venta con Vynko, de punta a punta. El stock se actualiza solo: no hay una segunda carga de datos que se pueda olvidar.',
+  howTo: [
+    {
+      title: 'Abrí la caja al empezar el día',
+      desc: 'Indicás el monto inicial con el que arrancás. Queda registrado y sirve de punto de comparación para el cierre.',
+    },
+    {
+      title: 'Escaneá el producto',
+      desc: 'Pasás la cámara por el código de barras. El producto entra a la venta con su precio y su stock se descuenta solo.',
+    },
+    {
+      title: 'Elegí cómo paga el cliente',
+      desc: 'Efectivo, tarjeta o transferencia. Cada medio de pago queda separado, así el arqueo del cierre no tiene sorpresas.',
+    },
+    {
+      title: 'Cerrá la caja y compará',
+      desc: 'Al terminar el día, Vynko te muestra cuánto esperabas, cuánto entró y dónde está la diferencia, si la hay.',
     },
   ],
   featuresTitle: 'Funcionalidades de ventas y caja',
@@ -72,6 +93,44 @@ const content: SeoLandingContent = {
       desc: 'Mirá ventas por día, mes y producto para tomar mejores decisiones.',
     },
   ],
+  comparisonTitle: 'Cobrar con una caja propia vs. con Vynko',
+  comparisonIntro:
+    'El punto de venta no es solo cobrar: es dejar el stock y los números del día ordenados sin trabajo extra.',
+  comparison: [
+    {
+      label: 'Cargo de cada venta',
+      excel: 'Anotás la venta en un papel',
+      vynko: 'Queda registrada con hora y medio de pago',
+    },
+    {
+      label: 'Descuento de stock',
+      excel: 'Lo hacés aparte y a veces te olvidás',
+      vynko: 'Se descuenta con la venta, en el mismo momento',
+    },
+    {
+      label: 'Arqueo del día',
+      excel: 'Sumás a mano y no cierra',
+      vynko: 'Esperado contra real, con la diferencia señalada',
+    },
+    {
+      label: 'Ventas por vendedor',
+      excel: 'No sabés quién vendió qué',
+      vynko: 'Cada usuario con su acceso y sus ventas',
+    },
+    {
+      label: 'Reporte del mes',
+      excel: 'Lo armás a mano con la planilla',
+      vynko: 'Sale listo por día, mes y producto',
+    },
+    {
+      label: 'Errores de tipeo',
+      excel: 'Pagas un código mal y no te enterás',
+      vynko: 'El escaneo no se equivoca',
+    },
+  ],
+  roiTitle: '¿Cuánto tiempo perdés cobrando a mano?',
+  roiIntro:
+    'Cada minuto por venta se multiplica por todas las ventas del día. Movés los números y ves cuánto te cuesta no automatizar el cobro.',
   audienceTitle: '¿Para quién es este sistema de ventas y caja?',
   audienceIntro: 'Para comercios que venden en mostrador y necesitan cobrar rápido sin perder el stock.',
   audience: [
@@ -82,6 +141,9 @@ const content: SeoLandingContent = {
     'Bazares y ferreterías',
     'Comercios con más de un vendedor',
   ],
+  pricingTitle: 'Planes para vender y llevar la caja',
+  pricingIntro:
+    'Elegí el plan que te sirve hoy. Si más adelante necesitás sucursales o más usuarios, cambiás sin perder tus datos.',
   faqTitle: 'Preguntas frecuentes sobre ventas y caja',
   faq: [
     {
@@ -105,6 +167,26 @@ const content: SeoLandingContent = {
       a: 'Sí. Las ventas descuentan stock y las compras lo suman, todo dentro del mismo sistema.',
     },
   ],
+  related: [
+    {
+      slug: 'control-de-stock',
+      title: 'Control de stock',
+      desc: 'Sabé cuántas unidades tenés en cada depósito, con avisos antes de quedarte sin stock.',
+    },
+    {
+      slug: 'control-de-compras',
+      title: 'Control de compras',
+      desc: 'Pedidos al proveedor, remitos de ingreso y stock que se suma solo.',
+    },
+    {
+      slug: 'software-gestion-argentina',
+      title: 'Gestión en Argentina',
+      desc: 'Stock, caja y varias sucursales en pesos, con soporte en español.',
+    },
+  ],
+  guaranteeTitle: 'Probá Vynko sin riesgo',
+  guaranteeIntro:
+    'Empezá hoy y decidí después. Para arrancar no te pedimos nada.',
   finalCtaTitle: 'Cobrá más rápido y sin errores',
   finalCtaText: 'Empezá a vender con Vynko y mantené el stock y la caja siempre en orden.',
 };

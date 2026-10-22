@@ -35,6 +35,32 @@ export type SeoFaq = {
   a: string;
 };
 
+/** Un paso de una guia "como hacer X". */
+export type SeoStep = {
+  title: string;
+  desc: string;
+};
+
+/** Una fila de la tabla comparativa contra la planilla. */
+export type SeoComparisonRow = {
+  label: string;
+  excel: string;
+  vynko: string;
+};
+
+/**
+ * Enlace interno a otra landing.
+ *
+ * Se referencia por `slug` (no por href) para que el enlace se resuelva
+ * contra el registro de landings y no quede una URL escrita a mano que se
+ * pueda romper en silencio.
+ */
+export type SeoRelatedLink = {
+  slug: SeoPageSlug;
+  title: string;
+  desc: string;
+};
+
 export type SeoLandingContent = {
   slug: SeoPageSlug;
   /** Título de la pestaña. Sin el sufijo "| Vynko": lo agrega el template del layout. */
@@ -48,14 +74,37 @@ export type SeoLandingContent = {
   problemsTitle: string;
   problemsIntro: string;
   problems: SeoProblem[];
+  /**
+   * H2 + pasos de la guia "como hacer X".
+   *
+   * Es la seccion que responde las busquedas informativas ("como controlar el
+   * stock", "como llevar el inventario sin Excel"). Antes la plantilla tenia
+   * una seccion "Empezá en 3 pasos" con el MISMO texto en las cinco landings:
+   * no leia como una guia y Google no la podia asociar a ninguna consulta.
+   */
+  howToTitle: string;
+  howToIntro: string;
+  howTo: SeoStep[];
   featuresTitle: string;
   featuresIntro: string;
   features: SeoFeature[];
+  /** H2 + filas de la comparativa contra la planilla. */
+  comparisonTitle: string;
+  comparisonIntro: string;
+  comparison: SeoComparisonRow[];
+  roiTitle: string;
+  roiIntro: string;
   audienceTitle: string;
   audienceIntro: string;
   audience: string[];
+  pricingTitle: string;
+  pricingIntro: string;
   faqTitle: string;
   faq: SeoFaq[];
+  /** Landings relacionadas, con anchor contextual. */
+  related: SeoRelatedLink[];
+  guaranteeTitle: string;
+  guaranteeIntro: string;
   finalCtaTitle: string;
   finalCtaText: string;
 };
@@ -85,6 +134,14 @@ export function buildSeoMetadata(content: SeoLandingContent): Metadata {
       siteName: 'Vynko',
       locale: 'es_AR',
       type: 'website',
+    },
+    // El `twitter` del layout raiz se pierde con el merge superficial cuando la
+    // landing define su propio `openGraph`, asi que se declara aca: sin esto la
+    // card de X/Twitter muestra el titulo de la home en todas las landings.
+    twitter: {
+      card: 'summary_large_image',
+      title: content.metaTitle,
+      description: content.metaDescription,
     },
   };
 }
