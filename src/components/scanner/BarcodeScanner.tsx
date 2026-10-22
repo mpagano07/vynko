@@ -12,6 +12,32 @@ interface BarcodeScannerProps {
 
 const SCAN_THROTTLE_MS = 2000;
 
+const PERMISSION_HINT =
+  'Abrí los ajustes del sitio en tu navegador (el candado o el ícono de ajustes junto a la dirección) y habilitá la cámara. En el celular también podés revisar Ajustes del sistema → tu navegador → Cámara.';
+
+function describeCameraError(err: unknown): { message: string; hint?: string } {
+  const name = err instanceof Error ? err.name : '';
+
+  if (name === 'NotAllowedError' || name === 'SecurityError') {
+    return {
+      message: 'El acceso a la cámara está bloqueado para este sitio.',
+      hint: PERMISSION_HINT,
+    };
+  }
+  if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+    return { message: 'No encontramos una cámara disponible en este dispositivo.' };
+  }
+  if (name === 'NotReadableError' || name === 'AbortError') {
+    return {
+      message: 'No pudimos iniciar la cámara.',
+      hint: 'Puede estar siendo usada por otra aplicación. Cerrala y volvé a intentar.',
+    };
+  }
+
+  const message = err instanceof Error && err.message ? err.message : 'Error al acceder a la cámara';
+  return { message, hint: 'Revisá que el navegador tenga permiso para usar la cámara en este sitio.' };
+}
+
 let audioCtxSingleton: AudioContext | null = null;
 
 function getBeepContext(): AudioContext | null {
@@ -38,6 +64,7 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
   const lastScanRef = useRef<{ code: string; time: number } | null>(null);
   const [status, setStatus] = useState<'initializing' | 'scanning' | 'error' | 'idle'>('initializing');
   const [statusMessage, setStatusMessage] = useState('Inicializando cámara...');
+  const [errorHint, setErrorHint] = useState<string | null>(null);
 
   useEffect(() => {
     onResultRef.current = onResult;
@@ -108,6 +135,7 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
     try {
       setStatus('initializing');
       setStatusMessage('Iniciando cámara...');
+      setErrorHint(null);
 
       lastScanRef.current = null;
 
@@ -126,10 +154,11 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
       setStatus('scanning');
       setStatusMessage('');
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error al acceder a la cámara';
+      const { message, hint } = describeCameraError(err);
       setStatus('error');
-      setStatusMessage(msg);
-      onErrorRef.current?.(msg);
+      setStatusMessage(message);
+      setErrorHint(hint ?? null);
+      onErrorRef.current?.(hint ? `${message} ${hint}` : message);
     }
   }, [handleDecode, handleError]);
 
@@ -167,9 +196,10 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
       )}
 
       {status === 'error' && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-          <div className="text-center text-white px-4">
-            <p className="text-sm mb-3">{statusMessage}</p>
+        <div className="absolute inset-0 flex items-center justify-center bg-black/60 p-4">
+          <div className="max-h-full overflow-y-auto text-center text-white">
+            <p className="text-sm font-medium mb-2">{statusMessage}</p>
+            {errorHint && <p className="text-xs text-white/80 mb-3">{errorHint}</p>}
             <button
               onClick={start}
               className="rounded-md bg-white px-4 py-2 text-sm font-medium text-black hover:bg-gray-200"

@@ -96,6 +96,18 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
     expect(res.headers.get('x-tenant-id')).toBe('t1');
   });
 
+  it('permite la cámara en el documento (el escáner usa getUserMedia)', async () => {
+    adminQueue.push({ data: [{ tenant_id: 't1' }], error: null });
+    adminQueue.push({ data: { onboarding_pending: false }, error: null });
+    adminQueue.push({ data: [{ subscription_status: 'active' }], error: null });
+
+    const res = await proxy(request('/scanning'));
+
+    const policy = res.headers.get('Permissions-Policy');
+    expect(policy).toContain('camera=(self)');
+    expect(policy).not.toContain('camera=()');
+  });
+
   it('NO redirige a onboarding cuando la query de membresías falla (fail open)', async () => {
     // Ej: token en pleno refresh / error transitorio de RLS en el arranque.
     adminQueue.push({ data: null, error: { message: 'auth/invalid JWT' } });
