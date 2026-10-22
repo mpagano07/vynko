@@ -154,6 +154,7 @@ export default function LandingPage() {
                 <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="128px" className="h-10 w-auto object-contain" />
               </Link>
               <div className="hidden md:flex items-center gap-6">
+                <Link href="#soluciones" className="text-sm text-gray-400 hover:text-white transition-colors">Soluciones</Link>
                 <Link href="#features" className="text-sm text-gray-400 hover:text-white transition-colors">Características</Link>
                 <Link href="#how-it-works" className="text-sm text-gray-400 hover:text-white transition-colors">Cómo funciona</Link>
                 <Link href="#pricing" className="text-sm text-gray-400 hover:text-white transition-colors">Precios</Link>
@@ -212,12 +213,12 @@ export default function LandingPage() {
                 Gestión de stock
               </div>
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight tracking-tight">
-                Sabé qué tenés, qué vendés y{' '}
-                <span className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">cuánto perdés</span>.
-                {' '}En todas tus sucursales.
+                Sistema de gestión de{' '}
+                <span className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">stock y ventas</span>{' '}
+                para comercios
               </h1>
               <p className="mt-6 text-lg text-gray-400 leading-relaxed max-w-lg">
-                Vynko reemplaza tus planillas con una sola herramienta: caja, stock, compras, clientes y documentos, con datos en tiempo real. Escaneá con el celular, vendé en segundos y enterate a tiempo cuando algo falta o se pierde.
+                Sabé qué tenés, qué vendés y cuánto perdés, en todas tus sucursales. Vynko reemplaza tus planillas con una sola herramienta: caja, stock, compras, clientes y documentos, con datos en tiempo real. Escaneá con el celular, vendé en segundos y enterate a tiempo cuando algo falta o se pierde.
               </p>
               <form onSubmit={handleWaitlist} noValidate className="mt-8 max-w-md">
                 <div className="flex gap-3">
@@ -632,6 +633,36 @@ export default function LandingPage() {
               Fuera de Argentina el cobro se procesa en la moneda que ves, a través de nuestra pasarela internacional (Paddle), que actúa como Merchant of Record y liquida los impuestos locales. Si tu país no tiene una moneda habilitada, el cobro se realiza en dólares (USD). El importe y la moneda definitivos se muestran antes de confirmar el pago.
             </p>
           )}
+        </div>
+      </section>
+
+      {/* Soluciones por problema */}
+      <section className="py-20 bg-gray-900/30" id="soluciones">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl sm:text-4xl font-bold">Soluciones para cada problema del día a día</h2>
+            <p className="mt-4 text-gray-400 max-w-2xl mx-auto">
+              Entrá por el problema que te trae. Cada página explica en detalle cómo lo resolvés y cuánto te cuesta no resolverlo.
+            </p>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
+            {SEO_PAGES.map((page) => (
+              <Link
+                key={page.slug}
+                href={seoPath(page.slug)}
+                className="group bg-gray-950 border border-gray-800 rounded-2xl p-6 hover:border-cyan-500/30 transition-colors"
+              >
+                <h3 className="text-base font-bold mb-3 group-hover:text-cyan-400 transition-colors">
+                  {page.label}
+                </h3>
+                <p className="text-sm text-gray-400 leading-relaxed">{page.summary}</p>
+                <span className="mt-4 inline-flex items-center gap-1 text-sm text-cyan-400">
+                  Ver más
+                  <span aria-hidden="true">&rarr;</span>
+                </span>
+              </Link>
+            ))}
+          </div>
         </div>
       </section>
 
