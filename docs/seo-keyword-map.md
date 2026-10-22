@@ -129,12 +129,28 @@ Google pudo leer.
 
 **Acciones:**
 
-1. Mergear el PR de SEO y reenviar el sitemap desde Search Console.
-2. Pedir la indexación de la home y de las landings desde la URL Inspection.
-3. Revisar en Vercel que no haya un Firewall con Bot Protection bloqueando a
-   Googlebot.
-4. Conseguir backlinks: un dominio nuevo sin enlaces entrantes no recibe
-   presupuesto de rastreo.
+1. ~~Mergear el PR de SEO y reenviar el sitemap desde Search Console.~~
+   Hecho (PR #125 y #126 mergeados; sitemap reenviado el 2026-10-22).
+2. ~~Pedir la indexación de la home y de las landings desde la URL Inspection.~~
+   Hecho para la home (validación "Iniciada" el 2026-10-22). **Falta pedirla
+   landing por landing**: la URL Inspection es una URL por vez, y las 6 landings
+   son las que van a posicionar.
+3. ~~Revisar en Vercel que no haya un Firewall con Bot Protection bloqueando a
+   Googlebot.~~ Descartado empíricamente: `HEAD https://vynko.dev/` devuelve
+   `200` sin `X-Robots-Tag` ni `x-vercel-protection-bypass`, y un `GET` con
+   `User-Agent: Googlebot` recibe el HTML completo (no un 403 ni un challenge).
+   El Firewall de Vercel bloquea bots de IA, no buscadores, y por diseño no
+   bloquea a Googlebot.
+4. **Pendiente:** revisar en Search Console → *Estadísticas de rastreo* que
+   Googlebot no esté recibiendo errores o 5xx.
+5. **Pendiente:** tener la propiedad de Search Console registrada también como
+   tipo **Dominio** (`vynko.dev`), no solo como prefijo de URL. Cubre todos los
+   subdominios y los dos protocolos.
+6. **Pendiente:** conseguir backlinks. Un dominio de 7 semanas sin enlaces
+   entrantes no recibe presupuesto de rastreo. Es la causa probable más fuerte
+   de que Google no rastree el sitio todavía.
+7. **Pendiente:** validar las consultas de la sección "Consultas pendientes"
+   antes de abrir cualquier landing nueva.
 
 **Guardas agregadas en código** (para que esto no se repita en silencio):
 
