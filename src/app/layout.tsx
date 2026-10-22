@@ -10,6 +10,9 @@ import { TenantHeaderProvider } from '@/components/TenantHeaderProvider';
 import { AppProviders } from '@/components/AppProviders';
 import { AppReturnTracker } from '@/components/analytics/app-return-tracker';
 import { buildSiteStructuredData, serializeJsonLd } from '@/lib/marketing/structured-data';
+import { isIndexablePath } from '@/lib/marketing/public-routes';
+import { SITE_URL } from '@/lib/site-url';
+import { getTrialDays } from '@/lib/plans';
 import type { Metadata, Viewport } from 'next';
 
 const inter = Inter({
@@ -18,13 +21,37 @@ const inter = Inter({
   display: 'swap',
 });
 
+/**
+ * Titulo de la home.
+ *
+ * `title.default` lo usan la home (que es un Client Component y no puede
+ * exportar `metadata`) y las paginas privadas. Las landings SEO definen su
+ * propio `title` y el `template` de abajo les agrega el sufijo " | Vynko".
+ */
+const HOME_TITLE = 'Vynko | Sistema de gestión de stock y ventas para comercios';
+
+/**
+ * Descripcion por defecto.
+ *
+ * Los dias de prueba salen de `getTrialDays()` y no de un numero escrito a
+ * mano: la promo se cambia editando `PROMOS` en `@/lib/plans` y el texto
+ * publico del sitio se actualiza solo, sin quedar desfasado.
+ */
+function buildDescription(): string {
+  const trialDays = getTrialDays();
+  const trial = trialDays > 0 ? ` ${trialDays} días gratis.` : '';
+  return `Sistema de gestión de stock y ventas para comercios: caja, compras, multi-sucursal y control de mermas en tiempo real. Reemplazá el Excel.${trial}`;
+}
+
+const DESCRIPTION = buildDescription();
+
 const BASE_METADATA: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://vynko.dev'),
+  metadataBase: new URL(SITE_URL),
   title: {
-    default: 'Vynko | Gestión de Stock y Ventas',
+    default: HOME_TITLE,
     template: '%s | Vynko',
   },
-  description: 'Sistema de gestión para comercios: stock en tiempo real, caja, compras, multi-sucursal y control de mermas. Reemplazá el Excel. 45 días gratis.',
+  description: DESCRIPTION,
   generator: 'Next.js',
   applicationName: 'Vynko',
   referrer: 'origin-when-cross-origin',
@@ -34,17 +61,17 @@ const BASE_METADATA: Metadata = {
     apple: '/icons/icon-512.png',
   },
   openGraph: {
-    title: 'Vynko | Gestión de Stock y Ventas',
-    description: 'Sistema de gestión para comercios: stock en tiempo real, caja, compras, multi-sucursal y control de mermas. Reemplazá el Excel. 45 días gratis.',
-    url: 'https://vynko.dev',
+    title: HOME_TITLE,
+    description: DESCRIPTION,
+    url: SITE_URL,
     siteName: 'Vynko',
     locale: 'es_AR',
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Vynko | Gestión de Stock y Ventas',
-    description: 'Sistema de gestión para comercios: stock en tiempo real, caja, compras, multi-sucursal y control de mermas. 45 días gratis.',
+    title: HOME_TITLE,
+    description: DESCRIPTION,
   },
 };
 
@@ -57,7 +84,18 @@ const BASE_METADATA: Metadata = {
  */
 export async function generateMetadata(): Promise<Metadata> {
   const pathname = (await headers()).get('x-pathname') ?? '/';
-  return { ...BASE_METADATA, alternates: { canonical: pathname } };
+
+  return {
+    ...BASE_METADATA,
+    alternates: { canonical: pathname },
+    // Las rutas publicas que no van al indice (login, signup, reset de
+    // contrasena, aceptacion de invitacion, "sin acceso") se marcan `noindex`
+    // aca y no con `Disallow` en robots.txt: si Google no puede rastrear la
+    // URL, tampoco puede leer el `noindex` que la saca del indice. El `Disallow`
+    // queda para las rutas privadas de la app, donde no hay nada que
+    // desindexar porque nunca son publicas.
+    ...(isIndexablePath(pathname) ? {} : { robots: { index: false, follow: true } }),
+  };
 }
 
 export const viewport: Viewport = {

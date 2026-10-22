@@ -14,32 +14,10 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { getPaddleConfiguredCurrencies } from '@/lib/paddle-price-ids';
 import { PADDLE_CURRENCIES_COOKIE } from '@/lib/pricing/configured-currencies';
+import { PUBLIC_PATHS } from '@/lib/marketing/public-routes';
 
 const COUNTRY_COOKIE = 'vynko_country';
 
-const publicPaths = [
-  '/login',
-  '/auth',
-  '/accept-invite',
-  '/no-access',
-  '/privacidad',
-  '/terminos',
-  '/cookies',
-  '/reembolsos',
-  // Landings SEO publicas: deben servirse sin sesion, si no el gate de auth las
-  // manda a /login y los crawlers (Googlebot, OAI-SearchBot) solo ven el login.
-  '/control-de-stock',
-  '/ventas-y-caja',
-  '/alternativa-a-excel',
-  '/software-gestion-argentina',
-  '/importar-productos-mercadolibre-tiendanube',
-  // Imagenes Open Graph/Twitter generadas (next/og). No tienen punto en la ruta,
-  // asi que el matcher las incluiria y el gate de auth las mandaria a /login:
-  // los crawlers de redes sociales (WhatsApp, LinkedIn, X) reciben HTML en vez
-  // del PNG. Son publicas por definicion.
-  '/opengraph-image',
-  '/twitter-image',
-];
 const onboardingPath = '/onboarding';
 const billingPath = '/billing';
 
@@ -92,6 +70,15 @@ function withSecurityHeaders(response: NextResponse, nonce: string): NextRespons
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)');
   response.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+
+  // Los deploys de preview (y el entorno local) no deben entrar al indice de
+  // los buscadores: son versiones de prueba que cuelgan del mismo dominio y
+  // compiten con las landings de produccion. `VERCEL_ENV` vale `production`,
+  // `preview` o `development`; solo el primero queda indexable.
+  if (process.env.VERCEL_ENV !== 'production') {
+    response.headers.set('X-Robots-Tag', 'noindex, nofollow');
+  }
+
   return response;
 }
 
@@ -156,7 +143,11 @@ export async function proxy(request: NextRequest) {
 
   const isOnboarding = pathname === onboardingPath || pathname.startsWith(`${onboardingPath}/`);
 
-  if (publicPaths.some(p => pathname === p || pathname.startsWith(p + '/'))) {
+  // Las landings SEO publicas deben servirse sin sesion, si no el gate de auth
+  // las manda a /login y los crawlers (Googlebot, OAI-SearchBot) solo ven el
+  // login. La lista vive en `@/lib/marketing/public-routes` para que el proxy,
+  // el robots.txt y el layout raiz no puedan desincronizarse.
+  if (PUBLIC_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))) {
     return next();
   }
 

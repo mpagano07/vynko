@@ -11,6 +11,7 @@ import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
 
 import { NetworkStatusNotifier } from '@/components/ui/NetworkStatusNotifier';
 import CookieConsent from '@/components/cookies/CookieConsent';
+import { isShelllessPath } from '@/lib/marketing/public-routes';
 
 const LazyToaster = dynamic(() => import('@/components/ui/lazy-toaster'), { ssr: false });
 const LazyInstallAppBanner = dynamic(() => import('@/components/ui/lazy-install-app-banner'), { ssr: false });
@@ -44,21 +45,11 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
     setMounted(true);
   }, []);
 
-  const isPublicRoute = 
-    pathname === '/' ||
-    pathname?.startsWith('/privacidad') ||
-    pathname?.startsWith('/terminos') ||
-    pathname?.startsWith('/reembolsos') ||
-    pathname?.startsWith('/cookies') ||
-    pathname?.startsWith('/login') ||
-    pathname?.startsWith('/auth') ||
-    pathname?.startsWith('/onboarding') ||
-    pathname?.startsWith('/accept-invite') ||
-    pathname?.startsWith('/control-de-stock') ||
-    pathname?.startsWith('/ventas-y-caja') ||
-    pathname?.startsWith('/alternativa-a-excel') ||
-    pathname?.startsWith('/software-gestion-argentina') ||
-    pathname?.startsWith('/importar-productos-mercadolibre-tiendanube');
+  // Paginas que se dibujan fuera del shell de la app (sin sidebar ni header):
+  // las publicas mas `/onboarding`. La lista vive en
+  // `@/lib/marketing/public-routes`, compartida con el gate de auth del proxy
+  // y el robots.txt, para que las tres no se desincronicen.
+  const isPublicRoute = isShelllessPath(pathname ?? '');
 
   const isBillingRoute = pathname?.startsWith('/billing');
 

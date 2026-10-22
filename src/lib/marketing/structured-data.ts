@@ -1,5 +1,6 @@
 import { PLANS, getEffectivePrice } from '@/lib/plans';
 import { SALES_EMAIL } from '@/lib/tenant-config';
+import { SITE_URL } from '@/lib/site-url';
 
 /**
  * Datos estructurados (schema.org) que describen a Vynko como producto.
@@ -16,7 +17,11 @@ import { SALES_EMAIL } from '@/lib/tenant-config';
  * Ojo: no se inventa `aggregateRating` ni reseñas. Google penaliza el marcado
  * de valoraciones que no existen o que no están visibles en la página.
  */
-export const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://vynko.dev';
+/**
+ * URL publica de la app. Sale de `@/lib/site-url` para que el JSON-LD use la
+ * misma base que los canonicals, el sitemap y el robots.txt.
+ */
+export const APP_URL = SITE_URL;
 
 export const ORGANIZATION_ID = `${APP_URL}/#organization`;
 export const WEBSITE_ID = `${APP_URL}/#website`;

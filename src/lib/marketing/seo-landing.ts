@@ -1,24 +1,21 @@
 import type { Metadata } from 'next';
 import { APP_URL, serializeJsonLd } from './structured-data';
+import { SEO_LANDING_PAGES, type SeoPageSlug } from './public-routes';
 
 export { serializeJsonLd };
 
 /**
- * Registro central de las landings SEO orientadas a intención de búsqueda.
+ * Registro central de las landings SEO orientadas a intencion de busqueda.
  *
- * Se mantiene acá para que el nav, el footer, el sitemap y los enlaces internos
- * compartan la misma fuente y no aparezcan rutas nuevas sueltas. El `slug` es la
- * ruta pública (`/control-de-stock`), y `label` la etiqueta corta para menús.
+ * Vive en `@/lib/marketing/public-routes` junto con la clasificacion de rutas
+ * (publicas, privadas, indexables), para que el nav, el footer, el sitemap y el gate
+ * de auth del proxy compartan la misma fuente y no aparezcan rutas nuevas sueltas.
+ * El `slug` es la ruta publica (`/control-de-stock`), y `label` la etiqueta
+ * corta para menus.
  */
-export const SEO_PAGES = [
-  { slug: 'control-de-stock', label: 'Control de stock' },
-  { slug: 'ventas-y-caja', label: 'Ventas y caja' },
-  { slug: 'alternativa-a-excel', label: 'Alternativa a Excel' },
-  { slug: 'software-gestion-argentina', label: 'Gestión en Argentina' },
-  { slug: 'importar-productos-mercadolibre-tiendanube', label: 'Importar productos' },
-] as const;
+export const SEO_PAGES = SEO_LANDING_PAGES;
 
-export type SeoPageSlug = (typeof SEO_PAGES)[number]['slug'];
+export type { SeoPageSlug };
 
 export type SeoProblem = {
   /** El dolor concreto que hoy vive el comercio. */

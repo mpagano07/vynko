@@ -1,33 +1,31 @@
 import { MetadataRoute } from 'next';
+import { PRIVATE_ROUTE_PREFIXES } from '@/lib/marketing/public-routes';
+import { SITE_URL } from '@/lib/site-url';
 
 /**
  * Rutas privadas de la app: no aportan nada al indice y quedan detras del gate
  * de auth (redirect a /login), asi que se excluyen del rastreo para todos los
  * agentes. Se comparten entre el bloque de OAI-SearchBot y el generico para que
  * no se puedan desincronizar.
+ *
+ * La lista sale de `PRIVATE_ROUTE_PREFIXES` (`@/lib/marketing/public-routes`),
+ * que es la misma fuente de verdad que usa el gate de auth del proxy: si se
+ * agrega una ruta privada a la app, queda fuera del indice automaticamente.
+ *
+ * Los prefijos van SIN barra final a proposito: en robots.txt
+ * `Disallow: /dashboard/` NO bloquea `https://site/dashboard` (la ruta
+ * plana), solo sus subrutas. Con el prefijo sin barra se bloquean las dos
+ * formas.
+ *
+ * Las rutas publicas que no deben indexarse (login, signup, reset de
+ * contrasena, invitacion, "sin acceso") NO van aqui: se sirven con
+ * `noindex` desde el layout raiz. Si Google no puede rastrear la URL, tampoco
+ * puede leer el `noindex` que la saca del indice.
  */
-const DISALLOW = [
-  '/api/',
-  '/dashboard/',
-  '/settings/',
-  '/onboarding/',
-  '/products/',
-  '/sales/',
-  '/customers/',
-  '/providers/',
-  '/documents/',
-  '/billing/',
-  '/reports/',
-  '/scanning/',
-  '/transfers/',
-  '/loss-prevention/',
-  '/collaborators/',
-  '/accept-invite/',
-  '/reset-password',
-];
-
 export default function robots(): MetadataRoute.Robots {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://vynko.dev';
+  // Next tipa `disallow` como `string[]` mutable, asi que se copia la lista
+  // readonly del registro en vez de exponerla.
+  const disallow = [...PRIVATE_ROUTE_PREFIXES];
 
   return {
     rules: [
@@ -40,14 +38,14 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: 'OAI-SearchBot',
         allow: '/',
-        disallow: DISALLOW,
+        disallow,
       },
       {
         userAgent: '*',
         allow: '/',
-        disallow: DISALLOW,
+        disallow,
       },
     ],
-    sitemap: `${baseUrl}/sitemap.xml`,
+    sitemap: `${SITE_URL}/sitemap.xml`,
   };
 }

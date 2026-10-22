@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import robots from './robots';
+import { PRIVATE_ROUTE_PREFIXES } from '@/lib/marketing/public-routes';
 
 /**
  * El rastreo de ChatGPT depende de que `OAI-SearchBot` tenga un bloque
@@ -30,9 +31,41 @@ describe('robots', () => {
     const disallow = disallowOf(wildcard!);
 
     expect(wildcard).toBeDefined();
-    expect(disallow).toContain('/api/');
-    expect(disallow).toContain('/dashboard/');
-    expect(disallow).toContain('/reset-password');
+    expect(disallow).toContain('/api');
+    expect(disallow).toContain('/dashboard');
+  });
+
+  it('usa los mismos Disallow para todos los agentes', () => {
+    const oai = rules.find((r) => userAgentsOf(r).includes('OAI-SearchBot'));
+    const wildcard = rules.find((r) => userAgentsOf(r).includes('*'));
+
+    expect(disallowOf(oai!)).toEqual(disallowOf(wildcard!));
+    expect(disallowOf(wildcard!)).toEqual([...PRIVATE_ROUTE_PREFIXES]);
+  });
+
+  it('bloquea las rutas privadas SIN barra final', () => {
+    // `Disallow: /dashboard/` NO bloquea `https://site/dashboard`: en robots.txt
+    // el prefijo con barra solo matchea las subrutas. Con el prefijo plano se
+    // bloquean las dos formas.
+    const wildcard = rules.find((r) => userAgentsOf(r).includes('*'));
+    const disallow = disallowOf(wildcard!);
+
+    expect(disallow.length).toBeGreaterThan(0);
+    for (const prefix of disallow) {
+      expect(prefix.endsWith('/'), `no deberia terminar en "/": ${prefix}`).toBe(false);
+    }
+  });
+
+  it('NO bloquea las rutas publicas que se sirven con noindex', () => {
+    // Si Google no puede rastrear la URL, tampoco puede leer el `noindex` que
+    // la saca del indice. Estas se rastrean y se marcan en el layout raiz.
+    const wildcard = rules.find((r) => userAgentsOf(r).includes('*'));
+    const disallow = disallowOf(wildcard!);
+
+    expect(disallow).not.toContain('/login');
+    expect(disallow).not.toContain('/auth');
+    expect(disallow).not.toContain('/accept-invite');
+    expect(disallow).not.toContain('/no-access');
   });
 
   it('declara el sitemap', () => {
