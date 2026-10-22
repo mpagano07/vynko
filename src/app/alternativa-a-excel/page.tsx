@@ -2,11 +2,11 @@ import type { Metadata } from 'next';
 import SeoLandingPage from '@/components/marketing/SeoLandingPage';
 import { buildSeoMetadata, type SeoLandingContent } from '@/lib/marketing/seo-landing';
 
-const content: SeoLandingContent = {
+export const content: SeoLandingContent = {
   slug: 'alternativa-a-excel',
-  metaTitle: 'Alternativa a Excel para administrar tu negocio',
+  metaTitle: 'Sistema de gestión para reemplazar Excel',
   metaDescription:
-    'Cómo dejar de controlar el stock en Excel: pasá a un sistema que se actualiza solo, con alertas y reportes, e importá tu planilla en minutos. Probá gratis.',
+    'Cómo llevar el inventario sin Excel: importá tu planilla y pasá a un sistema que se actualiza solo, con alertas de reposición y reportes listos. Probá gratis.',
   keywords: [
     'alternativa a Excel',
     'dejar de usar Excel para el stock',
@@ -15,7 +15,7 @@ const content: SeoLandingContent = {
     'administrar negocio sin Excel',
   ],
   badge: 'Alternativa a Excel',
-  h1: 'La alternativa a Excel para administrar el stock de tu negocio',
+  h1: 'Dejá Excel: un sistema de gestión que se actualiza solo',
   intro:
     'Excel funciona hasta que dos personas editan la planilla, una fórmula se rompe o se te pasa un recuento. Vynko reemplaza esa planilla por un sistema que mantiene los números solos.',
   problemsTitle: 'Por qué Excel deja de alcanzar',
@@ -40,6 +40,27 @@ const content: SeoLandingContent = {
     {
       problem: 'Migrar asusta porque toda tu información está en Excel.',
       solution: 'Importás tu planilla actual de productos y precios en minutos.',
+    },
+  ],
+  howToTitle: 'Cómo llevar el inventario sin Excel',
+  howToIntro:
+    'Migrar no es empezar de cero: subís la planilla que ya tenés y seguís trabajando con los mismos datos. Esto es lo que cambia.',
+  howTo: [
+    {
+      title: 'Exportá tu planilla a Excel o CSV',
+      desc: 'Si venís de Mercado Libre o Tiendanube, exportás el catálogo. Si es tu propia planilla, no tenés que tocar nada.',
+    },
+    {
+      title: 'Subila a Vynko',
+      desc: 'Detectamos las columnas de producto, código de barras, precio y stock. No hay que mapear nada a mano.',
+    },
+    {
+      title: 'Dejá de actualizar la planilla',
+      desc: 'Cada venta y cada compra se registran en el sistema. La planilla queda como respaldo, no como fuente de verdad.',
+    },
+    {
+      title: 'Usá los reportes en lugar de las tablas dinámicas',
+      desc: 'Ventas, márgenes y productos críticos salen listos para mirar, sin copiar datos de una hoja a otra.',
     },
   ],
   featuresTitle: 'Lo que ganás al dejar Excel',
@@ -76,6 +97,49 @@ const content: SeoLandingContent = {
       desc: 'Tus datos accesibles desde cualquier dispositivo, sin archivos perdidos.',
     },
   ],
+  comparisonTitle: 'Excel o un sistema de gestión',
+  comparisonIntro:
+    'La planilla no falla por falta de esfuerzo: falla porque depende de que alguien la mantenga al día todo el tiempo.',
+  comparison: [
+    {
+      label: 'Stock actualizado',
+      excel: 'Lo actualiza quien se acuerde',
+      vynko: 'Se actualiza con cada venta',
+    },
+    {
+      label: 'Cálculos',
+      excel: 'Fórmulas que se rompen al agregar filas',
+      vynko: 'Totales y márgenes siempre correctos',
+    },
+    {
+      label: 'Varios usuarios',
+      excel: 'Una copia por persona, se pisan',
+      vynko: 'Un solo lugar, con permisos por rol',
+    },
+    {
+      label: 'Avisos de reposición',
+      excel: 'No hay, o los tenés anotados aparte',
+      vynko: 'Automáticos cuando el stock baja del mínimo',
+    },
+    {
+      label: 'Historial',
+      excel: 'Se pierde al sobrescribir la hoja',
+      vynko: 'Queda guardado movimiento por movimiento',
+    },
+    {
+      label: 'Reportes',
+      excel: 'Media hora de tablas dinámicas',
+      vynko: 'Listos en un clic',
+    },
+    {
+      label: 'Migrar',
+      excel: 'No hay migración: ya estás ahí',
+      vynko: 'Subís el Excel y seguís con los mismos datos',
+    },
+  ],
+  roiTitle: '¿Cuánto te cuesta trabajar con planillas?',
+  roiIntro:
+    'El costo real de Excel no es la licencia: son las horas de carga, los errores de tipeo y las ventas que se pierden por un dato desactualizado.',
   audienceTitle: '¿A quién le sirve dejar Excel atrás?',
   audienceIntro: 'Si tu negocio ya no entra en una planilla, este es el momento.',
   audience: [
@@ -86,6 +150,9 @@ const content: SeoLandingContent = {
     'Quienes necesitan saber el stock real al instante',
     'Negocios que prefieren alertas antes que recuentos',
   ],
+  pricingTitle: 'Planes para reemplazar tu planilla',
+  pricingIntro:
+    'Elegí el plan que te sirve hoy. Si más adelante necesitás sucursales o más usuarios, cambiás sin perder tus datos.',
   faqTitle: 'Preguntas frecuentes sobre dejar Excel',
   faq: [
     {
@@ -113,6 +180,26 @@ const content: SeoLandingContent = {
       a: 'No. Funciona desde el navegador y desde el celular, sin instalar programas.',
     },
   ],
+  related: [
+    {
+      slug: 'control-de-stock',
+      title: 'Control de stock',
+      desc: 'Sabé cuántas unidades tenés en cada depósito, con avisos antes de quedarte sin stock.',
+    },
+    {
+      slug: 'ventas-y-caja',
+      title: 'Ventas y caja',
+      desc: 'Cobrá escaneando el código de barras y cerrá el día con el arqueo ya hecho.',
+    },
+    {
+      slug: 'control-de-compras',
+      title: 'Control de compras',
+      desc: 'Pedidos al proveedor, remitos de ingreso y stock que se suma solo.',
+    },
+  ],
+  guaranteeTitle: 'Probá Vynko sin riesgo',
+  guaranteeIntro:
+    'Empezá hoy y decidí después. Para arrancar no te pedimos nada.',
   finalCtaTitle: 'Pasá de la planilla al sistema',
   finalCtaText: 'Importá tu Excel actual y comprobá lo que es tener el stock bajo control.',
 };

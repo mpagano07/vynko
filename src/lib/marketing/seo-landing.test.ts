@@ -22,14 +22,27 @@ const content: SeoLandingContent = {
   featuresTitle: 'Funcionalidades',
   featuresIntro: 'Intro',
   features: [{ icon: '📦', title: 'Stock', desc: 'Desc' }],
+  howToTitle: 'Cómo hacerlo',
+  howToIntro: 'Intro',
+  howTo: [{ title: 'Paso 1', desc: 'Desc' }],
+  comparisonTitle: 'Comparativa',
+  comparisonIntro: 'Intro',
+  comparison: [{ label: 'Stock', excel: 'Manual', vynko: 'Automático' }],
+  roiTitle: 'Ahorro',
+  roiIntro: 'Intro',
   audienceTitle: 'Para quién',
   audienceIntro: 'Intro',
   audience: ['Almacenes'],
+  pricingTitle: 'Planes',
+  pricingIntro: 'Intro',
   faqTitle: 'FAQ',
   faq: [
     { q: '¿Pregunta 1?', a: 'Respuesta 1' },
     { q: '¿Pregunta 2?', a: 'Respuesta 2' },
   ],
+  related: [{ slug: 'ventas-y-caja', title: 'Ventas y caja', desc: 'Desc' }],
+  guaranteeTitle: 'Sin riesgo',
+  guaranteeIntro: 'Intro',
   finalCtaTitle: 'Empezá',
   finalCtaText: 'Texto',
 };
@@ -59,6 +72,13 @@ describe('buildSeoMetadata', () => {
   it('carga keywords y open graph', () => {
     expect(metadata.keywords).toContain('control de stock');
     expect(metadata.openGraph).toBeDefined();
+  });
+
+  it('declara que la landing se indexa', () => {
+    // Una landing con `noindex` es una landing inexistente para Google, y el
+    // error sale caro y en silencio. Se declara explicito para que ningun
+    // `noindex` heredado pueda alcanzarla.
+    expect(metadata.robots).toEqual({ index: true, follow: true });
   });
 });
 

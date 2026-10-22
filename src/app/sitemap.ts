@@ -1,48 +1,54 @@
 import { MetadataRoute } from 'next';
 import { SEO_PAGES, seoPath } from '@/lib/marketing/seo-landing';
+import { SITE_URL } from '@/lib/site-url';
 
+/**
+ * Sitemap de las URLs publicas e indexables.
+ *
+ * `lastModified` sale del registro de landings (`SEO_PAGES`) y de la fecha real
+ * del ultimo cambio de cada pagina legal. Antes se usaba `new Date()`, que
+ * cambia en cada request: Google veia un `lastmod` siempre fresco y dejaba de
+ * usar la señal para decidir a que conviene volver.
+ *
+ * Las fechas se actualizan a mano cuando cambia el contenido de la pagina.
+ */
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://vynko.dev';
-  const lastModified = new Date();
-
-  // Landings SEO orientadas a intencion de busqueda. Se derivan del registro
-  // central para que una pagina nueva no quede fuera del sitemap sin querer.
   const seoLandings: MetadataRoute.Sitemap = SEO_PAGES.map((page) => ({
-    url: `${baseUrl}${seoPath(page.slug)}`,
-    lastModified,
+    url: `${SITE_URL}${seoPath(page.slug)}`,
+    lastModified: page.lastModified,
     changeFrequency: 'monthly',
     priority: 0.8,
   }));
 
   return [
     {
-      url: baseUrl,
-      lastModified,
+      url: SITE_URL,
+      lastModified: '2026-10-22',
       changeFrequency: 'weekly',
       priority: 1,
     },
     ...seoLandings,
     {
-      url: `${baseUrl}/privacidad`,
-      lastModified,
+      url: `${SITE_URL}/privacidad`,
+      lastModified: '2026-10-21',
       changeFrequency: 'monthly',
       priority: 0.3,
     },
     {
-      url: `${baseUrl}/terminos`,
-      lastModified,
+      url: `${SITE_URL}/terminos`,
+      lastModified: '2026-10-19',
       changeFrequency: 'monthly',
       priority: 0.3,
     },
     {
-      url: `${baseUrl}/reembolsos`,
-      lastModified,
+      url: `${SITE_URL}/reembolsos`,
+      lastModified: '2026-10-20',
       changeFrequency: 'monthly',
       priority: 0.3,
     },
     {
-      url: `${baseUrl}/cookies`,
-      lastModified,
+      url: `${SITE_URL}/cookies`,
+      lastModified: '2026-10-21',
       changeFrequency: 'monthly',
       priority: 0.3,
     },

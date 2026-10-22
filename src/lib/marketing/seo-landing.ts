@@ -1,24 +1,21 @@
 import type { Metadata } from 'next';
 import { APP_URL, serializeJsonLd } from './structured-data';
+import { SEO_LANDING_PAGES, type SeoPageSlug } from './public-routes';
 
 export { serializeJsonLd };
 
 /**
- * Registro central de las landings SEO orientadas a intención de búsqueda.
+ * Registro central de las landings SEO orientadas a intencion de busqueda.
  *
- * Se mantiene acá para que el nav, el footer, el sitemap y los enlaces internos
- * compartan la misma fuente y no aparezcan rutas nuevas sueltas. El `slug` es la
- * ruta pública (`/control-de-stock`), y `label` la etiqueta corta para menús.
+ * Vive en `@/lib/marketing/public-routes` junto con la clasificacion de rutas
+ * (publicas, privadas, indexables), para que el nav, el footer, el sitemap y el gate
+ * de auth del proxy compartan la misma fuente y no aparezcan rutas nuevas sueltas.
+ * El `slug` es la ruta publica (`/control-de-stock`), y `label` la etiqueta
+ * corta para menus.
  */
-export const SEO_PAGES = [
-  { slug: 'control-de-stock', label: 'Control de stock' },
-  { slug: 'ventas-y-caja', label: 'Ventas y caja' },
-  { slug: 'alternativa-a-excel', label: 'Alternativa a Excel' },
-  { slug: 'software-gestion-argentina', label: 'Gestión en Argentina' },
-  { slug: 'importar-productos-mercadolibre-tiendanube', label: 'Importar productos' },
-] as const;
+export const SEO_PAGES = SEO_LANDING_PAGES;
 
-export type SeoPageSlug = (typeof SEO_PAGES)[number]['slug'];
+export type { SeoPageSlug };
 
 export type SeoProblem = {
   /** El dolor concreto que hoy vive el comercio. */
@@ -38,6 +35,32 @@ export type SeoFaq = {
   a: string;
 };
 
+/** Un paso de una guia "como hacer X". */
+export type SeoStep = {
+  title: string;
+  desc: string;
+};
+
+/** Una fila de la tabla comparativa contra la planilla. */
+export type SeoComparisonRow = {
+  label: string;
+  excel: string;
+  vynko: string;
+};
+
+/**
+ * Enlace interno a otra landing.
+ *
+ * Se referencia por `slug` (no por href) para que el enlace se resuelva
+ * contra el registro de landings y no quede una URL escrita a mano que se
+ * pueda romper en silencio.
+ */
+export type SeoRelatedLink = {
+  slug: SeoPageSlug;
+  title: string;
+  desc: string;
+};
+
 export type SeoLandingContent = {
   slug: SeoPageSlug;
   /** Título de la pestaña. Sin el sufijo "| Vynko": lo agrega el template del layout. */
@@ -51,14 +74,37 @@ export type SeoLandingContent = {
   problemsTitle: string;
   problemsIntro: string;
   problems: SeoProblem[];
+  /**
+   * H2 + pasos de la guia "como hacer X".
+   *
+   * Es la seccion que responde las busquedas informativas ("como controlar el
+   * stock", "como llevar el inventario sin Excel"). Antes la plantilla tenia
+   * una seccion "Empezá en 3 pasos" con el MISMO texto en las cinco landings:
+   * no leia como una guia y Google no la podia asociar a ninguna consulta.
+   */
+  howToTitle: string;
+  howToIntro: string;
+  howTo: SeoStep[];
   featuresTitle: string;
   featuresIntro: string;
   features: SeoFeature[];
+  /** H2 + filas de la comparativa contra la planilla. */
+  comparisonTitle: string;
+  comparisonIntro: string;
+  comparison: SeoComparisonRow[];
+  roiTitle: string;
+  roiIntro: string;
   audienceTitle: string;
   audienceIntro: string;
   audience: string[];
+  pricingTitle: string;
+  pricingIntro: string;
   faqTitle: string;
   faq: SeoFaq[];
+  /** Landings relacionadas, con anchor contextual. */
+  related: SeoRelatedLink[];
+  guaranteeTitle: string;
+  guaranteeIntro: string;
   finalCtaTitle: string;
   finalCtaText: string;
 };
@@ -81,6 +127,12 @@ export function buildSeoMetadata(content: SeoLandingContent): Metadata {
     description: content.metaDescription,
     keywords: content.keywords,
     alternates: { canonical: path },
+    // Las landings SIEMPRE se indexan. Se declara de forma explicita para que
+    // un `noindex` heredado (del layout raiz o de un layout de segmento) no
+    // pueda dejarlas fuera del indice sin que se note en el codigo. Una landing
+    // fuera del indice es una landing inexistente para Google: el error sale
+    // caro y en silencio.
+    robots: { index: true, follow: true },
     openGraph: {
       title: content.metaTitle,
       description: content.metaDescription,
@@ -88,6 +140,14 @@ export function buildSeoMetadata(content: SeoLandingContent): Metadata {
       siteName: 'Vynko',
       locale: 'es_AR',
       type: 'website',
+    },
+    // El `twitter` del layout raiz se pierde con el merge superficial cuando la
+    // landing define su propio `openGraph`, asi que se declara aca: sin esto la
+    // card de X/Twitter muestra el titulo de la home en todas las landings.
+    twitter: {
+      card: 'summary_large_image',
+      title: content.metaTitle,
+      description: content.metaDescription,
     },
   };
 }

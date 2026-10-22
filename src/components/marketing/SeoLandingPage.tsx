@@ -58,6 +58,15 @@ export default async function SeoLandingPage({ content }: Props) {
   const configuredCurrencies = new Set(getPaddleConfiguredCurrencies());
   const trialDays = getTrialDays();
 
+  // La guia tiene un numero de pasos distinto en cada landing, asi que el grid
+  // se acomoda en vez de dejar una fila de cards desbalanceada.
+  const stepColumns =
+    content.howTo.length >= 5
+      ? 'md:grid-cols-2 lg:grid-cols-5'
+      : content.howTo.length === 4
+        ? 'md:grid-cols-2 lg:grid-cols-4'
+        : 'md:grid-cols-3';
+
   return (
     <div className="min-h-screen bg-gray-950 text-white">
       <script type="application/ld+json" nonce={nonce} dangerouslySetInnerHTML={{ __html: serializeJsonLd(buildSeoJsonLd(content)) }} />
@@ -234,6 +243,29 @@ export default async function SeoLandingPage({ content }: Props) {
         </div>
       </section>
 
+      {/* Guia "como hacer X" */}
+      <section className="py-20" id="como-funciona">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl sm:text-4xl font-bold">{content.howToTitle}</h2>
+            <p className="mt-4 text-gray-400 max-w-2xl mx-auto">{content.howToIntro}</p>
+          </div>
+          <div className={`grid gap-8 max-w-5xl mx-auto ${stepColumns}`}>
+            {content.howTo.map((item, index) => (
+              <div key={item.title} className="text-center">
+                <div className="w-16 h-16 mx-auto rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mb-6">
+                  <span className="text-xl font-extrabold text-cyan-400">
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
+                </div>
+                <h3 className="text-lg font-bold mb-3">{item.title}</h3>
+                <p className="text-sm text-gray-400 leading-relaxed">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Funcionalidades */}
       <section className="py-20" id="funcionalidades">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -253,57 +285,12 @@ export default async function SeoLandingPage({ content }: Props) {
         </div>
       </section>
 
-      {/* Cómo funciona */}
-      <section className="py-20 bg-gray-900/30" id="como-funciona">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold">
-              Empezá en <span className="text-cyan-400">3 pasos</span>
-            </h2>
-            <p className="mt-4 text-gray-400 max-w-2xl mx-auto">
-              En minutos tenés el negocio ordenado. Sin instalar nada ni saber de tecnología.
-            </p>
-          </div>
-          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {[
-              {
-                step: '01',
-                title: 'Cargá tu catálogo',
-                desc: 'Importá tu planilla de Excel, Mercado Libre o Tiendanube y tus productos quedan listos.',
-              },
-              {
-                step: '02',
-                title: 'Escaneá y vendé',
-                desc: 'Con la cámara del celular escaneás el código de barras y registrás la venta en segundos.',
-              },
-              {
-                step: '03',
-                title: 'Mantené todo al día',
-                desc: 'Cada venta, compra o transferencia actualiza el stock solo. Vos solo mirás el resultado.',
-              },
-            ].map((item) => (
-              <div key={item.step} className="text-center">
-                <div className="w-16 h-16 mx-auto rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mb-6">
-                  <span className="text-xl font-extrabold text-cyan-400">{item.step}</span>
-                </div>
-                <h3 className="text-lg font-bold mb-3">{item.title}</h3>
-                <p className="text-sm text-gray-400 leading-relaxed">{item.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* Comparativa */}
       <section className="py-20" id="comparativa">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold">
-              Excel y papel vs <span className="text-cyan-400">Vynko</span>
-            </h2>
-            <p className="mt-4 text-gray-400 max-w-2xl mx-auto">
-              Lo que cambia el día que dejás de anotar todo a mano.
-            </p>
+            <h2 className="text-3xl sm:text-4xl font-bold">{content.comparisonTitle}</h2>
+            <p className="mt-4 text-gray-400 max-w-2xl mx-auto">{content.comparisonIntro}</p>
           </div>
           <div className="overflow-x-auto rounded-2xl border border-gray-800">
             <table className="w-full min-w-[640px] text-left text-sm">
@@ -315,14 +302,7 @@ export default async function SeoLandingPage({ content }: Props) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800">
-                {[
-                  { label: 'Stock actualizado', excel: 'A mano, con errores', vynko: 'En tiempo real y automático' },
-                  { label: 'Velocidad de venta', excel: 'Buscás en la planilla', vynko: 'Escaneás y cobrás en segundos' },
-                  { label: 'Alertas de reposición', excel: 'Depende de tu memoria', vynko: 'Automáticas por stock crítico' },
-                  { label: 'Varias sucursales', excel: 'Planillas separadas', vynko: 'Todo centralizado' },
-                  { label: 'Reportes de ventas', excel: 'Los armás vos cada mes', vynko: 'Listos al instante' },
-                  { label: 'Trabajo en equipo', excel: 'Una sola persona', vynko: 'Usuarios y roles por sucursal' },
-                ].map((row) => (
+                {content.comparison.map((row) => (
                   <tr key={row.label} className="bg-gray-950">
                     <td className="px-6 py-4 font-medium text-gray-200">{row.label}</td>
                     <td className="px-6 py-4 text-gray-500">
@@ -349,12 +329,8 @@ export default async function SeoLandingPage({ content }: Props) {
       <section className="py-20 bg-gray-900/30" id="roi">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <h2 className="text-3xl sm:text-4xl font-bold">
-              ¿Cuánto <span className="text-cyan-400">podés ahorrar</span>?
-            </h2>
-            <p className="mt-4 text-gray-400 max-w-2xl mx-auto">
-              Movés los números y en segundos ves cuánto tiempo y plata te cuesta hoy el desorden.
-            </p>
+            <h2 className="text-3xl sm:text-4xl font-bold">{content.roiTitle}</h2>
+            <p className="mt-4 text-gray-400 max-w-2xl mx-auto">{content.roiIntro}</p>
           </div>
           <div className="max-w-4xl mx-auto">
             <ROICalculator />
@@ -384,12 +360,13 @@ export default async function SeoLandingPage({ content }: Props) {
       <section className="py-20 bg-gray-900/30" id="precios">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold">Planes simples y transparentes</h2>
-            <p className="mt-4 text-gray-400">
-              {trialDays
-                ? `Empezá hoy y no pagues nada por los primeros ${trialDays} días.`
-                : 'Elegí el plan que mejor se adapte a tu negocio.'}
-            </p>
+            <h2 className="text-3xl sm:text-4xl font-bold">{content.pricingTitle}</h2>
+            <p className="mt-4 text-gray-400 max-w-2xl mx-auto">{content.pricingIntro}</p>
+            {trialDays > 0 && (
+              <p className="mt-3 text-sm font-semibold text-cyan-400">
+                Empezá hoy y no pagues nada por los primeros {trialDays} días.
+              </p>
+            )}
           </div>
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto md:items-center">
             {PLAN_ORDER.map((id) => {
@@ -537,16 +514,44 @@ export default async function SeoLandingPage({ content }: Props) {
         </div>
       </section>
 
+      {/* Enlaces internos a landings relacionadas */}
+      {content.related.length > 0 && (
+        <section className="py-20" id="relacionadas">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-16">
+              <h2 className="text-3xl sm:text-4xl font-bold">Otras soluciones de Vynko</h2>
+              <p className="mt-4 text-gray-400 max-w-2xl mx-auto">
+                Si tu problema es otro, estos son los módulos donde lo resolvés.
+              </p>
+            </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
+              {content.related.map((item) => (
+                <Link
+                  key={item.slug}
+                  href={seoPath(item.slug)}
+                  className="group bg-gray-950 border border-gray-800 rounded-2xl p-6 hover:border-cyan-500/30 transition-colors"
+                >
+                  <h3 className="text-base font-bold mb-3 group-hover:text-cyan-400 transition-colors">
+                    {item.title}
+                  </h3>
+                  <p className="text-sm text-gray-400 leading-relaxed">{item.desc}</p>
+                  <span className="mt-4 inline-flex items-center gap-1 text-sm text-cyan-400">
+                    Ver más
+                    <span aria-hidden="true">&rarr;</span>
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Confianza y garantía */}
       <section className="py-20 bg-gray-900/30" id="garantia">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold">
-              Probá Vynko <span className="text-cyan-400">sin riesgo</span>
-            </h2>
-            <p className="mt-4 text-gray-400 max-w-2xl mx-auto">
-              Empezá hoy y decidí después. Para arrancar no te pedimos nada.
-            </p>
+            <h2 className="text-3xl sm:text-4xl font-bold">{content.guaranteeTitle}</h2>
+            <p className="mt-4 text-gray-400 max-w-2xl mx-auto">{content.guaranteeIntro}</p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
             {[

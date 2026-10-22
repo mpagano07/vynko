@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import SeoLandingPage from '@/components/marketing/SeoLandingPage';
 import { buildSeoMetadata, type SeoLandingContent } from '@/lib/marketing/seo-landing';
 
-const content: SeoLandingContent = {
+export const content: SeoLandingContent = {
   slug: 'importar-productos-mercadolibre-tiendanube',
   metaTitle: 'Importar productos de Mercado Libre o Tiendanube',
   metaDescription:
@@ -39,6 +39,27 @@ const content: SeoLandingContent = {
       solution: 'Volvés a importar el archivo actualizado y Vynko reconoce los productos que ya tenías.',
     },
   ],
+  howToTitle: 'Cómo importar tu catálogo paso a paso',
+  howToIntro:
+    'No hace falta conectar Vynko con Mercado Libre ni con Tiendanube: exportás el archivo de cada plataforma y lo subís. Esto es todo lo que tenés que hacer.',
+  howTo: [
+    {
+      title: 'Exportá tu catálogo',
+      desc: 'En Mercado Libre y en Tiendanube exportás tus productos a Excel o CSV. Bajás el archivo tal como te lo da la plataforma.',
+    },
+    {
+      title: 'Subilo a Vynko',
+      desc: 'Elegís el archivo y Vynko reconoce las columnas: título, SKU, código de barras, precio, stock e imágenes.',
+    },
+    {
+      title: 'Revisá la previsualización',
+      desc: 'Antes de confirmar ves cuántas columnas se detectaron y cuántos productos se van a cargar. Si algo no está, lo ajustás en el archivo.',
+    },
+    {
+      title: 'Confirmá y empezá a vender',
+      desc: 'Los productos quedan con su código de barras, su precio y su stock. Ya podés escanearlos en la caja.',
+    },
+  ],
   featuresTitle: 'Qué incluye la importación',
   featuresIntro: 'El archivo que ya tenés, leído y ordenado.',
   features: [
@@ -73,6 +94,44 @@ const content: SeoLandingContent = {
       desc: 'Antes de confirmar ves qué columnas se detectaron y qué productos se van a cargar.',
     },
   ],
+  comparisonTitle: 'Cargar productos a mano vs. importar el catálogo',
+  comparisonIntro:
+    'Con cientos de productos, la diferencia entre tipear y subir un archivo no es de horas: es de días.',
+  comparison: [
+    {
+      label: 'Carga inicial',
+      excel: 'Un producto por fila, a mano',
+      vynko: 'Subís el archivo y se cargan todos',
+    },
+    {
+      label: 'Códigos de barras',
+      excel: 'Los tipeás uno por uno',
+      vynko: 'Se leen de la columna del archivo',
+    },
+    {
+      label: 'Precios',
+      excel: 'Copiados de la planilla',
+      vynko: 'Se toman del archivo, sin errores',
+    },
+    {
+      label: 'Fotos y descripciones',
+      excel: 'Cargás una por una',
+      vynko: 'Se importan si el archivo las trae',
+    },
+    {
+      label: 'Reimportar cuando cambia el catálogo',
+      excel: 'Volver a cargar todo',
+      vynko: 'Actualiza los productos que ya tenías',
+    },
+    {
+      label: 'Productos duplicados',
+      excel: 'No los detectás',
+      vynko: 'Se comparan por SKU y código de barras',
+    },
+  ],
+  roiTitle: '¿Cuánto tiempo te lleva cargar productos a mano?',
+  roiIntro:
+    'Con 200 productos a dos minutos cada uno, la carga manual son casi siete horas. Movés los números y ves cuánto te cuesta esperar.',
   audienceTitle: '¿Para quién es esta importación?',
   audienceIntro: 'Si ya tenés tu catálogo en una de estas plataformas, te ahorra la carga manual.',
   audience: [
@@ -83,6 +142,9 @@ const content: SeoLandingContent = {
     'Quienes quieren evitar tipear códigos de barras',
     'Equipos que necesitan arrancar el mismo día',
   ],
+  pricingTitle: 'Planes para importar tu catálogo',
+  pricingIntro:
+    'Elegí el plan que te sirve hoy. La importación viene incluida en todos: no hace falta contratar nada para empezar.',
   faqTitle: 'Preguntas frecuentes',
   faq: [
     {
@@ -106,6 +168,26 @@ const content: SeoLandingContent = {
       a: 'Las columnas de imagen y descripción se importan cuando el archivo las trae.',
     },
   ],
+  related: [
+    {
+      slug: 'control-de-stock',
+      title: 'Control de stock',
+      desc: 'Sabé cuántas unidades tenés en cada depósito, con avisos antes de quedarte sin stock.',
+    },
+    {
+      slug: 'alternativa-a-excel',
+      title: 'Alternativa a Excel',
+      desc: 'Dejá la planilla: un sistema que se actualiza solo y no depende de fórmulas.',
+    },
+    {
+      slug: 'ventas-y-caja',
+      title: 'Ventas y caja',
+      desc: 'Cobrá escaneando el código de barras y cerrá el día con el arqueo ya hecho.',
+    },
+  ],
+  guaranteeTitle: 'Probá Vynko sin riesgo',
+  guaranteeIntro:
+    'Empezá hoy y decidí después. Para arrancar no te pedimos nada.',
   finalCtaTitle: 'Traé tu catálogo en minutos',
   finalCtaText: 'Exportá tus productos de Mercado Libre o Tiendanube, subí el archivo y empezá a gestionar el stock en Vynko.',
 };
