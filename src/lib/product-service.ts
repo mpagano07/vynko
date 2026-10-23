@@ -1484,65 +1484,126 @@ export async function getStockAnalysis(auth: AuthInfo): Promise<StockAnalysisRes
   }
 }
 
-export async function lookupProductByCode(auth: AuthInfo, code: string): Promise<LookupProductResult> {
-  const lookupByBarcode = async () => {
-    return supabaseAdmin
-      .from('products')
-      .select('*')
-      .eq('barcode', code)
-      .maybeSingle();
-  };
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-  const lookupById = async () => {
-    return supabaseAdmin
-      .from('products')
-      .select('*')
-      .eq('id', code)
-      .maybeSingle();
-  };
+function isUuidLike(value: string): boolean {
+  return UUID_RE.test(value);
+}
 
-  let { data, error } = await lookupByBarcode();
+type ProductRow = Record<string, unknown> & { id: string; price_cents?: number | null };
+
+/**
+ * Dado un conjunto de filas de `products` (catalogo global), devuelve la que
+ * tiene stock activo en la empresa del usuario, junto con sus datos de stock.
+ *
+ * `products` es global: la fila existe para toda la aplicacion apenas hay stock
+ * en *alguna* empresa. Lo que decide si A puede verla es la fila de
+ * `product_stock` de A. Sin ella, el producto no fue adoptado por A y
+ * devolverlo filtraria nombre, precio y costo de otra empresa.
+ */
+async function pickProductWithTenantStock(
+  auth: AuthInfo,
+  candidates: ProductRow[]
+): Promise<{ ok: true; product: Record<string, unknown> | null } | { ok: false }> {
+  if (candidates.length === 0) return { ok: true, product: null };
+
+  const stockQuery = supabaseAdmin
+    .from('product_stock')
+    .select('product_id, stock, min_stock, max_stock, active')
+    .in('product_id', candidates.map((candidate) => candidate.id));
+
+  const scopedStockQuery = auth.allTenants
+    ? stockQuery.in('tenant_id', auth.tenantIds)
+    : stockQuery.eq('tenant_id', auth.tenantId);
+
+  const { data: stockRows, error } = await scopedStockQuery.eq('active', true);
   if (error) {
     logger.error('DB error:', { error });
+    return { ok: false };
+  }
+
+  const stockByProduct = new Map<string, Record<string, unknown>>();
+  for (const row of stockRows ?? []) {
+    const record = row as Record<string, unknown>;
+    stockByProduct.set(String(record.product_id), record);
+  }
+
+  for (const product of candidates) {
+    const stock = stockByProduct.get(String(product.id));
+    if (!stock) continue;
+
+    return {
+      ok: true,
+      product: {
+        ...product,
+        price: product.price_cents != null ? product.price_cents / 100 : 0,
+        stock: stock.stock ?? 0,
+        min_stock: stock.min_stock ?? 0,
+        max_stock: stock.max_stock ?? 0,
+      },
+    };
+  }
+
+  return { ok: true, product: null };
+}
+
+export async function lookupProductByCode(auth: AuthInfo, code: string): Promise<LookupProductResult> {
+  const normalizedCode = code.trim();
+  if (!normalizedCode) return { ok: true, product: null };
+
+  // `barcode` NO es unico a nivel global: la migracion 016 quito el UNIQUE para
+  // que el catalogo `products` pueda compartirse entre empresas, asi que el
+  // mismo codigo puede tener una fila por empresa. Con `maybeSingle()` PostgREST
+  // responde PGRST116 cuando hay mas de una coincidencia y el escaner mostraba
+  // "Error al buscar producto" para productos que existian. Traemos todas las
+  // coincidencias y elegimos la que tiene stock en la empresa activa.
+  const { data: barcodeMatches, error: barcodeError } = await supabaseAdmin
+    .from('products')
+    .select('*')
+    .eq('barcode', normalizedCode);
+
+  if (barcodeError) {
+    logger.error('DB error:', { error: barcodeError });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
   }
-  if (!data) {
-    const result = await lookupById();
-    data = result.data;
-    error = result.error;
-    if (error) {
-      logger.error('DB error:', { error });
-      return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
-    }
+
+  const barcodeResult = await pickProductWithTenantStock(
+    auth,
+    (barcodeMatches ?? []) as ProductRow[]
+  );
+  if (!barcodeResult.ok) {
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
+  }
+  if (barcodeResult.product) {
+    return { ok: true, product: barcodeResult.product };
   }
 
-  if (!data) {
+  // Compatibilidad con el endpoint viejo, que tambien aceptaba un id. Solo se
+  // consulta si el valor tiene forma de UUID: mandar un codigo de barras a una
+  // columna `uuid` hace que Postgres falle con 22P02 y convertia cualquier
+  // codigo desconocido en un 500 en vez de "producto no encontrado".
+  if (!isUuidLike(normalizedCode)) {
     return { ok: true, product: null };
   }
 
-  const { data: stockData } = await supabaseAdmin
-    .from('product_stock')
-    .select('stock, min_stock, max_stock, active')
-    .eq('product_id', data.id)
-    .eq('tenant_id', auth.tenantId)
+  const { data: byId, error: idError } = await supabaseAdmin
+    .from('products')
+    .select('*')
+    .eq('id', normalizedCode)
     .maybeSingle();
 
-  // `products` es un catalogo global: la fila existe para toda la aplicacion
-  // apenas hay stock en *alguna* empresa. Lo que decide si A puede verla es la
-  // fila de `product_stock` de A. Sin ella, este producto no fue adoptado por
-  // A y devolverlo filtraria nombre, precio y costo de otra empresa.
-  if (!stockData || stockData.active === false) {
-    return { ok: true, product: null };
+  if (idError) {
+    logger.error('DB error:', { error: idError });
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
   }
 
-  return {
-    ok: true,
-    product: {
-      ...data,
-      price: data.price_cents != null ? data.price_cents / 100 : 0,
-      stock: stockData.stock ?? 0,
-      min_stock: stockData.min_stock ?? 0,
-      max_stock: stockData.max_stock ?? 0,
-    },
-  };
+  const byIdRow = (Array.isArray(byId) ? byId[0] : byId) as ProductRow | null | undefined;
+  if (!byIdRow) return { ok: true, product: null };
+
+  const idResult = await pickProductWithTenantStock(auth, [byIdRow]);
+  if (!idResult.ok) {
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
+  }
+
+  return { ok: true, product: idResult.product };
 }
