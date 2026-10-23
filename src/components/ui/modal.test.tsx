@@ -56,4 +56,38 @@ describe('Modal', () => {
     expect(screen.getByText('Header panel')).toBeInTheDocument();
     expect(screen.getByText('Contenido')).toBeInTheDocument();
   });
+
+  it('deja scrollear el overlay cuando el contenido no entra en la pantalla', () => {
+    render(
+      <Modal open onClose={vi.fn()} title="Mi modal">
+        <p>Contenido</p>
+      </Modal>
+    );
+
+    expect(screen.getByRole('dialog')).toHaveClass('overflow-y-auto');
+  });
+
+  it('cierra al hacer click en el fondo cuando backdropClose está activo', () => {
+    const onClose = vi.fn();
+    render(
+      <Modal open onClose={onClose} backdropClose title="Mi modal">
+        <p>Contenido</p>
+      </Modal>
+    );
+
+    fireEvent.mouseDown(screen.getByRole('dialog'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('no cierra al hacer click dentro del contenido', () => {
+    const onClose = vi.fn();
+    render(
+      <Modal open onClose={onClose} backdropClose title="Mi modal">
+        <p>Contenido</p>
+      </Modal>
+    );
+
+    fireEvent.mouseDown(screen.getByText('Contenido'));
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });
