@@ -35,10 +35,15 @@ const reasonOptions = [
   { value: 'stolen', label: 'Robado', color: 'text-rose-600 bg-rose-50 dark:bg-rose-950/30', hex: '#e11d48' },
   { value: 'expired', label: 'Vencido', color: 'text-orange-600 bg-orange-50 dark:bg-orange-950/30', hex: '#f97316' },
   { value: 'found', label: 'Encontrado', color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30', hex: '#10b981' },
+  { value: 'stock_in', label: 'Ingreso de mercadería', color: 'text-teal-600 bg-teal-50 dark:bg-teal-950/30', hex: '#14b8a6' },
   { value: 'correction', label: 'Corrección', color: 'text-blue-600 bg-blue-50 dark:bg-blue-950/30', hex: '#3b82f6' },
 ];
 
 const reasonMap = Object.fromEntries(reasonOptions.map(r => [r.value, r]));
+
+// Motivos que suman stock; el resto resta. Centralizado para que agregar un
+// motivo nuevo no deje el formulario y el envio con criterios distintos.
+const POSITIVE_REASONS = new Set(['found', 'stock_in', 'correction']);
 
 interface StockAdjustment {
   id: string;
@@ -108,7 +113,7 @@ export default function LossPreventionPage() {
     if (!form.productId) { toast.error('Seleccioná un producto'); return; }
     if (!form.quantity || form.quantity === 0) { toast.error('Ingresá una cantidad'); return; }
 
-    const qty = form.reason === 'found' || form.reason === 'correction' ? Math.abs(form.quantity) : -Math.abs(form.quantity);
+    const qty = POSITIVE_REASONS.has(form.reason) ? Math.abs(form.quantity) : -Math.abs(form.quantity);
 
     setSubmitting(true);
     try {
@@ -429,7 +434,7 @@ export default function LossPreventionPage() {
                   onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })}
                 />
                 <p className="text-[10px] text-gray-400 mt-1">
-                  {form.reason === 'found' || form.reason === 'correction'
+                  {POSITIVE_REASONS.has(form.reason)
                     ? 'Se sumará al stock actual'
                     : 'Se restará del stock actual'}
                 </p>

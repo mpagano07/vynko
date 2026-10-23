@@ -46,6 +46,7 @@ type ScanAction = 'add' | 'remove' | 'sell';
 
 const ADD_REASONS = [
   { value: 'found', label: 'Inventario encontrado' },
+  { value: 'stock_in', label: 'Ingreso de mercadería' },
   { value: 'correction', label: 'Corrección de stock' },
 ];
 
