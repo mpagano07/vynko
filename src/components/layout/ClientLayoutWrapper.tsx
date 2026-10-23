@@ -64,9 +64,35 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
 
   // Register the service worker so mobile browsers (Chrome/Android) treat the
   // site as an installable PWA and show the "Add to Home Screen" banner.
+  //
+  // En desarrollo NO se registra: Turbopack cambia el nombre de los chunks en
+  // cada rebuild y `sw.js` los cachea con cache-first. Un chunk viejo servido
+  // desde el cache deja al cliente de HMR desincronizado con el servidor, y
+  // Next responde pidiendo un reload en cada conexión: la pagina recarga en
+  // loop. Además desregistramos cualquier SW que haya quedado de una sesión
+  // anterior (y borramos sus caches) para cortar ese loop.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (!('serviceWorker' in navigator)) return;
+
+    if (process.env.NODE_ENV !== 'production') {
+      const clearDevServiceWorker = async () => {
+        try {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(registrations.map((registration) => registration.unregister()));
+          if ('caches' in window) {
+            const keys = await caches.keys();
+            await Promise.all(
+              keys.filter((key) => key.startsWith('vynko-assets-')).map((key) => caches.delete(key))
+            );
+          }
+        } catch (err) {
+          console.warn('No se pudo limpiar el service worker de desarrollo', err);
+        }
+      };
+      void clearDevServiceWorker();
+      return;
+    }
 
     const registerSW = async () => {
       try {

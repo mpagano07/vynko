@@ -1122,7 +1122,7 @@ export async function adjustProductStock(auth: AuthInfo, id: string, body: {
 }): Promise<AdjustProductStockResult> {
   const { quantity, reason, notes } = body as {
     quantity: number;
-    reason: 'damaged' | 'lost' | 'stolen' | 'expired' | 'found' | 'correction';
+    reason: 'damaged' | 'lost' | 'stolen' | 'expired' | 'found' | 'stock_in' | 'correction';
     notes?: string;
   };
 
