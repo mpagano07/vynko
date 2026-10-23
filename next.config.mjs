@@ -4,6 +4,12 @@ import bundleAnalyzer from '@next/bundle-analyzer';
 const nextConfig = {
   reactStrictMode: true,
   productionBrowserSourceMaps: false,
+  // En desarrollo Next bloquea los recursos dev (HMR incluido) cuando se
+  // accede con un host distinto al de arranque. Sin esto, abrir la app por
+  // 127.0.0.1 deja el WebSocket de HMR rechazado y el cliente reintenta hasta
+  // recargar la página solo. `localhost`, `*.localhost` y el host de arranque
+  // ya están permitidos por Next.
+  allowedDevOrigins: ['127.0.0.1'],
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: '*.supabase.co' },
