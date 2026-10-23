@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -351,27 +351,31 @@ export default function SalesPage() {
     }
   };
 
-  const addToCart = (product: ProductOption) => {
+  const addToCart = useCallback((product: ProductOption, quantity = 1) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.product_id === product.id);
+      if (product.stock <= 0) {
+        toast.error(`"${product.name}" no tiene stock disponible`);
+        return prev;
+      }
+      const currentQuantity = existing?.quantity ?? 0;
+      if (currentQuantity >= product.stock) {
+        toast.error(`Stock insuficiente para "${product.name}"`);
+        return prev;
+      }
+      // El escáner puede pedir más de una unidad: se agrega lo que permita el
+      // stock disponible sin superar el máximo.
+      const toAdd = Math.max(1, Math.min(quantity, product.stock - currentQuantity));
       if (existing) {
-        if (existing.quantity >= product.stock) {
-          toast.error(`Stock insuficiente para "${product.name}"`);
-          return prev;
-        }
         return prev.map((item) =>
           item.product_id === product.id
             ? {
                 ...item,
-                quantity: item.quantity + 1,
-                subtotal: (item.quantity + 1) * item.price,
+                quantity: currentQuantity + toAdd,
+                subtotal: (currentQuantity + toAdd) * item.price,
               }
             : item
         );
-      }
-      if (product.stock <= 0) {
-        toast.error(`"${product.name}" no tiene stock disponible`);
-        return prev;
       }
       return [
         ...prev,
@@ -379,13 +383,37 @@ export default function SalesPage() {
           product_id: product.id,
           name: product.name,
           price: product.price,
-          quantity: 1,
-          subtotal: product.price,
+          quantity: toAdd,
+          subtotal: toAdd * product.price,
           stock: product.stock,
         },
       ];
     });
-  };
+  }, []);
+
+  // Deep-link desde el escáner: /sales?add=<id>&qty=N agrega el producto al
+  // carrito una sola vez y limpia la URL para que un refresh no lo duplique.
+  const deepLinkHandledRef = useRef(false);
+  useEffect(() => {
+    if (loadingData || products.length === 0 || deepLinkHandledRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const productId = params.get('add');
+    if (!productId) return;
+    deepLinkHandledRef.current = true;
+    const target = products.find((p) => p.id === productId);
+    if (!target) {
+      toast.error('El producto escaneado ya no está disponible');
+      return;
+    }
+    const qty = Math.max(1, Math.floor(Number(params.get('qty')) || 1));
+    // El carrito depende del catálogo ya cargado; no hay estado inicial posible.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    addToCart(target, qty);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('add');
+    url.searchParams.delete('qty');
+    window.history.replaceState({}, '', url.pathname + url.search);
+  }, [loadingData, products, addToCart]);
 
   const handleAddToCart = (product: ProductOption, e: React.MouseEvent<HTMLButtonElement>) => {
     const btn = e.currentTarget;

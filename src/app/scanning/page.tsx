@@ -15,8 +15,18 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { FormLabel } from '@/components/ui/form-label';
-import { Package, Scan, Loader2, CheckCircle2, PackagePlus } from 'lucide-react';
+import {
+  Package,
+  PackageMinus,
+  PackagePlus,
+  Pencil,
+  Scan,
+  ShoppingCart,
+  Loader2,
+  CheckCircle2,
+} from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
+import { cn } from '@/lib/utils/cn';
 import toast from 'react-hot-toast';
 
 interface ScannedProduct {
@@ -32,12 +42,24 @@ interface ScannedProduct {
 }
 
 type ScanState = 'scanning' | 'found' | 'not_found' | 'creating' | 'created' | 'error';
+type ScanAction = 'add' | 'remove' | 'sell';
 
-const STOCK_REASONS: { value: string; label: string; sign: 1 | -1 }[] = [
-  { value: 'found', label: 'Inventario encontrado', sign: 1 },
-  { value: 'correction', label: 'Corrección de stock', sign: 1 },
-  { value: 'damaged', label: 'Producto dañado (restar)', sign: -1 },
-  { value: 'lost', label: 'Producto perdido (restar)', sign: -1 },
+const ADD_REASONS = [
+  { value: 'found', label: 'Inventario encontrado' },
+  { value: 'correction', label: 'Corrección de stock' },
+];
+
+const REMOVE_REASONS = [
+  { value: 'damaged', label: 'Producto dañado' },
+  { value: 'lost', label: 'Producto perdido' },
+  { value: 'stolen', label: 'Producto robado' },
+  { value: 'expired', label: 'Producto vencido' },
+];
+
+const ACTIONS: { value: ScanAction; label: string; icon: typeof Package }[] = [
+  { value: 'add', label: 'Sumar stock', icon: PackagePlus },
+  { value: 'sell', label: 'Vender', icon: ShoppingCart },
+  { value: 'remove', label: 'Descontar', icon: PackageMinus },
 ];
 
 export default function ScanningPage() {
@@ -57,11 +79,11 @@ function ScanningPageContent() {
   const [scanState, setScanState] = useState<ScanState>('scanning');
   const [scannedCode, setScannedCode] = useState('');
   const [product, setProduct] = useState<ScannedProduct | null>(null);
-  const [addQuantity, setAddQuantity] = useState(1);
+  const [activeAction, setActiveAction] = useState<ScanAction>('add');
+  const [quantity, setQuantity] = useState(1);
   const [addReason, setAddReason] = useState('found');
-  const [isAddingStock, setIsAddingStock] = useState(false);
-
-  const reasons = stockinMode ? STOCK_REASONS.filter((r) => r.sign === 1) : STOCK_REASONS;
+  const [removeReason, setRemoveReason] = useState('damaged');
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleScan = useCallback(async (code: string) => {
     setScannedCode(code);
@@ -78,8 +100,10 @@ function ScanningPageContent() {
 
       if (data.product) {
         setProduct(data.product);
-        setAddQuantity(1);
+        setActiveAction('add');
+        setQuantity(1);
         setAddReason('found');
+        setRemoveReason('damaged');
         setScanState('found');
       } else {
         setScanState('not_found');
@@ -95,21 +119,25 @@ function ScanningPageContent() {
     setScanState('scanning');
     setScannedCode('');
     setProduct(null);
-    setAddQuantity(1);
+    setActiveAction('add');
+    setQuantity(1);
+    setAddReason('found');
+    setRemoveReason('damaged');
   }, []);
 
-  const handleAddStock = async () => {
-    if (!product || addQuantity <= 0) return;
+  const handleAdjust = async () => {
+    if (!product || quantity <= 0) return;
 
-    setIsAddingStock(true);
+    setIsSaving(true);
     try {
-      const reason = reasons.find((r) => r.value === addReason);
-      const quantity = reason?.sign === -1 ? -Math.abs(addQuantity) : addQuantity;
+      const isRemove = activeAction === 'remove';
+      const reason = isRemove ? removeReason : addReason;
+      const delta = isRemove ? -Math.abs(quantity) : Math.abs(quantity);
 
       const res = await authFetch(`/api/products/${product.id}/adjust`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quantity, reason: addReason }),
+        body: JSON.stringify({ quantity: delta, reason }),
       });
 
       const data = await res.json();
@@ -121,9 +149,22 @@ function ScanningPageContent() {
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al ajustar stock');
     } finally {
-      setIsAddingStock(false);
+      setIsSaving(false);
     }
   };
+
+  const handleSell = () => {
+    if (!product) return;
+    const stock = product.stock ?? 0;
+    if (stock <= 0) {
+      toast.error('No hay stock disponible para vender');
+      return;
+    }
+    const qty = Math.min(Math.max(1, quantity), stock);
+    router.push(`/sales?add=${encodeURIComponent(product.id)}&qty=${qty}`);
+  };
+
+  const availableStock = product?.stock ?? 0;
 
   return (
     <div className="space-y-6">
@@ -139,15 +180,15 @@ function ScanningPageContent() {
         title={stockinMode ? 'Carga de Inventario' : 'Escáner de Códigos'}
         subtitle={
           stockinMode
-            ? 'Escaneá un código de barras para sumar stock a tu inventario.'
-            : 'Apunta la cámara a un código de barras para buscar o registrar un producto.'
+            ? 'Escaneá un producto para sumar stock, venderlo o ajustarlo.'
+            : 'Apunta la cámara a un código de barras para buscar, vender o ajustar un producto.'
         }
       />
 
       {stockinMode && (
         <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800 text-sm text-teal-700 dark:text-teal-400">
           <PackagePlus className="h-4 w-4 shrink-0" />
-          Modo carga de inventario: cada escaneo suma stock al producto.
+          Modo carga de inventario: al escanear se abre el producto con la opción de sumar stock preseleccionada.
         </div>
       )}
 
@@ -193,7 +234,7 @@ function ScanningPageContent() {
               <div className="grid grid-cols-2 gap-3 mb-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg text-sm">
                 <div>
                   <span className="text-gray-500">Stock actual</span>
-                  <p className="font-semibold text-lg">{product.stock ?? 0}</p>
+                  <p className="font-semibold text-lg">{availableStock}</p>
                 </div>
                 <div>
                   <span className="text-gray-500">Precio</span>
@@ -203,35 +244,79 @@ function ScanningPageContent() {
 
               <div className="space-y-4">
                 <div>
-                  <FormLabel>
-                    {stockinMode ? 'Cantidad a cargar' : 'Cantidad a ajustar'}
-                  </FormLabel>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={addQuantity}
-                    onChange={(e) => setAddQuantity(Math.max(1, Number(e.target.value)))}
-                  />
+                  <FormLabel>¿Qué querés hacer?</FormLabel>
+                  <div className="grid grid-cols-3 gap-2">
+                    {ACTIONS.map((action) => {
+                      const Icon = action.icon;
+                      const active = activeAction === action.value;
+                      return (
+                        <button
+                          key={action.value}
+                          type="button"
+                          onClick={() => setActiveAction(action.value)}
+                          aria-pressed={active}
+                          className={cn(
+                            'flex flex-col items-center gap-1 rounded-lg border px-2 py-2.5 text-xs font-medium transition-colors',
+                            active
+                              ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-indigo-400 dark:bg-indigo-950/40 dark:text-indigo-300'
+                              : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800'
+                          )}
+                        >
+                          <Icon className="h-4 w-4" />
+                          {action.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div>
                   <FormLabel>
-                    Motivo
+                    {activeAction === 'add' && 'Cantidad a sumar'}
+                    {activeAction === 'remove' && 'Cantidad a descontar'}
+                    {activeAction === 'sell' && 'Cantidad a vender'}
                   </FormLabel>
-                  <Select
-                    value={addReason}
-                    onChange={(e) => setAddReason(e.target.value)}
-                  >
-                    {reasons.map((r) => (
-                      <option key={r.value} value={r.value}>{r.label}</option>
-                    ))}
-                  </Select>
-                  {!stockinMode && (addReason === 'damaged' || addReason === 'lost') && (
-                    <p className="text-xs text-amber-600 mt-1">Esta opción restará stock</p>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={activeAction === 'sell' ? Math.max(1, availableStock) : undefined}
+                    value={quantity}
+                    onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))}
+                  />
+                  {activeAction === 'sell' && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Stock disponible: {availableStock}
+                    </p>
                   )}
                 </div>
 
-                <div className="flex gap-2 pt-2">
+                {activeAction !== 'sell' && (
+                  <div>
+                    <FormLabel>Motivo</FormLabel>
+                    <Select
+                      value={activeAction === 'remove' ? removeReason : addReason}
+                      onChange={(e) => {
+                        if (activeAction === 'remove') setRemoveReason(e.target.value);
+                        else setAddReason(e.target.value);
+                      }}
+                    >
+                      {(activeAction === 'remove' ? REMOVE_REASONS : ADD_REASONS).map((r) => (
+                        <option key={r.value} value={r.value}>{r.label}</option>
+                      ))}
+                    </Select>
+                    {activeAction === 'remove' && (
+                      <p className="text-xs text-amber-600 mt-1">Esta opción restará stock</p>
+                    )}
+                  </div>
+                )}
+
+                {activeAction === 'sell' && (
+                  <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300">
+                    Se va a abrir el punto de venta con este producto en el carrito.
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-2 pt-2">
                   <Button
                     variant="outline"
                     onClick={handleReset}
@@ -241,22 +326,38 @@ function ScanningPageContent() {
                     Escanear otro
                   </Button>
                   <Button
-                    onClick={handleAddStock}
-                    disabled={isAddingStock || addQuantity <= 0}
+                    variant="outline"
+                    onClick={() => router.push(`/products?edit=${encodeURIComponent(product.id)}`)}
                     className="flex items-center gap-1"
                   >
-                    {isAddingStock ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Package className="h-4 w-4" />
-                    )}
-                    {stockinMode
-                      ? `Cargar ${addQuantity}`
-                      : addReason === 'damaged' || addReason === 'lost'
-                        ? `Quitar ${addQuantity}`
-                        : `Agregar ${addQuantity}`
-                    }
+                    <Pencil className="h-4 w-4" />
+                    Editar
                   </Button>
+                  {activeAction === 'sell' ? (
+                    <Button
+                      onClick={handleSell}
+                      disabled={availableStock <= 0 || quantity <= 0}
+                      className="flex items-center gap-1"
+                    >
+                      <ShoppingCart className="h-4 w-4" />
+                      Vender {Math.min(quantity, Math.max(1, availableStock))}
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={handleAdjust}
+                      disabled={isSaving || quantity <= 0}
+                      className="flex items-center gap-1"
+                    >
+                      {isSaving ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : activeAction === 'remove' ? (
+                        <PackageMinus className="h-4 w-4" />
+                      ) : (
+                        <PackagePlus className="h-4 w-4" />
+                      )}
+                      {activeAction === 'remove' ? `Descontar ${quantity}` : `Sumar ${quantity}`}
+                    </Button>
+                  )}
                 </div>
               </div>
             </Card>
