@@ -6,6 +6,7 @@ import { PLANS, PLAN_ORDER, getActivePromoPlan, getPlanBadge, getTrialDays, getT
 import { SALES_EMAIL } from '@/lib/tenant-config';
 import { getCountryFromHeaders, formatPriceByCountry, getDisplayPrice, type PlanId } from '@/lib/pricing';
 import { getPaddleConfiguredCurrencies } from '@/lib/paddle-price-ids';
+import { INSTAGRAM_URL } from '@/lib/marketing/social';
 import PromoCountdown from '@/components/landing/PromoCountdown';
 import ROICalculator from '@/components/landing/ROICalculator';
 import {
@@ -608,6 +609,19 @@ export default async function SeoLandingPage({ content }: Props) {
                 <Link href="/terminos" className="hover:text-gray-200 transition-colors">Términos</Link>
                 <Link href="/reembolsos" className="hover:text-gray-200 transition-colors">Reembolsos</Link>
                 <Link href="/cookies" className="hover:text-gray-200 transition-colors">Cookies</Link>
+                <a
+                  href={INSTAGRAM_URL}
+                  target="_blank"
+                  rel="me noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 hover:text-gray-200 transition-colors"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                    <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+                  </svg>
+                  Instagram
+                </a>
               </div>
               <span className="text-xs text-gray-400">
                 © {new Date().getFullYear()} Vynko. Todos los derechos reservados.
