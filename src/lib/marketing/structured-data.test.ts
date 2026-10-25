@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getEffectivePrice } from '@/lib/plans';
+import { INSTAGRAM_URL } from './social';
 import {
   ORGANIZATION_ID,
   SOFTWARE_APPLICATION_ID,
@@ -27,6 +28,10 @@ describe('buildSiteStructuredData', () => {
   it('enlaza el sitio y el producto con la organización por @id', () => {
     expect((byType('WebSite').publisher as Node)['@id']).toBe(ORGANIZATION_ID);
     expect((byType('SoftwareApplication').publisher as Node)['@id']).toBe(ORGANIZATION_ID);
+  });
+
+  it('declara el perfil oficial de Instagram para asociar la cuenta con la marca', () => {
+    expect(byType('Organization').sameAs).toContain(INSTAGRAM_URL);
   });
 });
 

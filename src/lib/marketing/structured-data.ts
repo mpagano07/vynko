@@ -1,6 +1,7 @@
 import { PLANS, getEffectivePrice } from '@/lib/plans';
 import { SALES_EMAIL } from '@/lib/tenant-config';
 import { SITE_URL } from '@/lib/site-url';
+import { SOCIAL_PROFILE_URLS } from './social';
 
 /**
  * Datos estructurados (schema.org) que describen a Vynko como producto.
@@ -40,6 +41,7 @@ export function buildOrganizationJsonLd(): Record<string, unknown> {
     url: APP_URL,
     logo: `${APP_URL}/icons/icon-512.png`,
     email: SALES_EMAIL,
+    sameAs: SOCIAL_PROFILE_URLS,
     areaServed: AREA_SERVED,
   };
 }
