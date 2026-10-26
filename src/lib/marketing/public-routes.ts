@@ -76,6 +76,24 @@ export const SEO_LANDING_PAGES = [
     summary: 'Pedidos al proveedor, remitos de ingreso y stock que se suma solo.',
     lastModified: '2026-10-22',
   },
+  {
+    slug: 'sistema-para-kiosco',
+    label: 'Sistema para kiosco',
+    summary: 'Stock, ventas y caja para kioscos y maxikioscos, sin recuentos diarios.',
+    lastModified: '2026-10-26',
+  },
+  {
+    slug: 'software-para-ferreteria',
+    label: 'Software para ferretería',
+    summary: 'Miles de artículos, precios al día y reposición por proveedor en un solo panel.',
+    lastModified: '2026-10-26',
+  },
+  {
+    slug: 'sistema-para-distribuidora',
+    label: 'Sistema para distribuidora',
+    summary: 'Compras, depósitos y ventas mayoristas con stock real en cada sucursal.',
+    lastModified: '2026-10-26',
+  },
 ] as const;
 
 export type SeoPageSlug = (typeof SEO_LANDING_PAGES)[number]['slug'];
@@ -101,6 +119,7 @@ export const PUBLIC_PATHS: readonly string[] = [
   '/auth',
   '/accept-invite',
   '/no-access',
+  '/precios',
   ...LEGAL_PATHS,
   ...SEO_LANDING_PATHS,
   '/opengraph-image',

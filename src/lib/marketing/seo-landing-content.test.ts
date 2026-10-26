@@ -7,6 +7,9 @@ import { content as ventasYCaja } from '@/app/ventas-y-caja/page';
 import { content as alternativaAExcel } from '@/app/alternativa-a-excel/page';
 import { content as gestionArgentina } from '@/app/software-gestion-argentina/page';
 import { content as importarProductos } from '@/app/importar-productos-mercadolibre-tiendanube/page';
+import { content as sistemaParaKiosco } from '@/app/sistema-para-kiosco/page';
+import { content as softwareParaFerreteria } from '@/app/software-para-ferreteria/page';
+import { content as sistemaParaDistribuidora } from '@/app/sistema-para-distribuidora/page';
 
 /**
  * Todas las landings, para verificar el contenido de cada una contra las
@@ -21,6 +24,9 @@ const LANDINGS: Record<string, SeoLandingContent> = {
   'alternativa-a-excel': alternativaAExcel,
   'software-gestion-argentina': gestionArgentina,
   'importar-productos-mercadolibre-tiendanube': importarProductos,
+  'sistema-para-kiosco': sistemaParaKiosco,
+  'software-para-ferreteria': softwareParaFerreteria,
+  'sistema-para-distribuidora': sistemaParaDistribuidora,
 };
 
 const REGISTRY_SLUGS = new Set<string>(SEO_PAGES.map((page) => page.slug));
