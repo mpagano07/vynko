@@ -2,17 +2,9 @@
 
 import { useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
-import { getCookieConsent, saveCookieConsent } from '@/lib/cookie-consent';
+import { getCookieConsent, saveCookieConsent, subscribeToConsent } from '@/lib/cookie-consent';
 
 export { getCookieConsent, resetCookieConsent } from '@/lib/cookie-consent';
-
-// `document.cookie` no dispara eventos de cambio, y el unico escritor de la
-// cookie de consentimiento es `saveConsent()` en este mismo componente, que ya
-// re-renderiza. La suscripcion es un no-op que igual cumple el contrato de
-// useSyncExternalStore (React re-checkea el snapshot en cada render).
-function subscribeToConsentCookie() {
-  return () => {};
-}
 
 function consentCookieSnapshot() {
   return getCookieConsent() !== null;
@@ -27,7 +19,7 @@ function consentCookieServerSnapshot() {
 
 export default function CookieConsent() {
   const consentExists = useSyncExternalStore(
-    subscribeToConsentCookie,
+    subscribeToConsent,
     consentCookieSnapshot,
     consentCookieServerSnapshot
   );
@@ -112,7 +104,7 @@ export default function CookieConsent() {
               <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-800 px-3 py-2">
                 <div>
                   <p className="text-xs font-medium text-white">Analíticas</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">Medición de uso propia. Si la desactivás, no se envía nada.</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">Medición de uso propia y de Vercel Analytics. Si la desactivás, no se cargan.</p>
                 </div>
                 <label className="inline-flex items-center cursor-pointer flex-shrink-0">
                   <input type="checkbox" checked={analytics} onChange={(e) => setAnalytics(e.target.checked)} className="sr-only peer" />

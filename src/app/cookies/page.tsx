@@ -52,17 +52,17 @@ export default function CookiesPage() {
           <section className="bg-gray-900/50 border border-gray-800 rounded-xl p-6">
             <h2 className="text-xl font-semibold text-white mb-3">2. Nuestro principio: Sin cookies publicitarias ni rastreo cruzado</h2>
             <p>
-              En Vynko <strong>no utilizamos cookies de publicidad comportamental, ni vendemos datos de navegación, ni usamos rastreadores invasivos de terceros</strong> para perfilar tu actividad en otros sitios web. Solo utilizamos mecanismos estrictamente necesarios para que la plataforma funcione de forma segura y personalizada.
+              En Vynko <strong>no utilizamos cookies de publicidad comportamental, ni vendemos datos de navegación, ni usamos rastreadores invasivos de terceros</strong> para perfilar tu actividad en otros sitios web. Usamos mecanismos necesarios para que la plataforma funcione de forma segura y, solo si lo aceptás, analítica agregada de Vercel Web Analytics para entender qué páginas se visitan y de dónde llega el tráfico.
             </p>
           </section>
 
           <section className="bg-gray-900/50 border border-gray-800 rounded-xl p-6">
             <h2 className="text-xl font-semibold text-white mb-3">3. Tu consentimiento</h2>
             <p className="mb-3">
-              Al ingresar por primera vez, el aviso de cookies te permite <strong>aceptar</strong> o <strong>rechazar</strong> el uso de estas tecnologías. Como todas las que utilizamos son esenciales o funcionales y no existen opciones publicitarias ni de rastreo, tu decisión solo determina si preferís que guardemos tus preferencias en tu dispositivo.
+              Al ingresar por primera vez, el aviso de cookies te permite <strong>aceptar</strong> o <strong>rechazar</strong> el uso de tecnologías funcionales y analíticas. Las analíticas incluyen Vercel Web Analytics y <strong>solo se cargan si las aceptás</strong>.
             </p>
             <p className="text-sm text-gray-400">
-              En ambos casos el servicio sigue funcionando. Si rechazás el uso de cookies, el aviso podrá volver a mostrarse en tu próxima visita.
+              En ambos casos el servicio sigue funcionando. Si rechazás las analíticas, no se envía ninguna medición. Podés cambiar tu decisión desde esta página o borrando la cookie de consentimiento.
             </p>
           </section>
 
@@ -111,8 +111,20 @@ export default function CookiesPage() {
                   </tr>
                   <tr>
                     <td className="py-3 pr-4 font-mono text-xs text-cyan-400">vynko_cookie_consent</td>
-                    <td className="py-3 pr-4">LocalStorage</td>
+                    <td className="py-3 pr-4">Cookie técnica</td>
                     <td className="py-3 pr-4">Guardar tu decisión sobre el aviso de cookies (aceptar/rechazar) para no volver a mostrarlo en cada visita.</td>
+                    <td className="py-3">1 año</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-4 font-mono text-xs text-cyan-400">_vercel/insights/*</td>
+                    <td className="py-3 pr-4">Script de analítica (Vercel)</td>
+                    <td className="py-3 pr-4">Medir visitas y eventos de uso de forma agregada. Se carga solo si aceptás la categoría analítica.</td>
+                    <td className="py-3">Sesión</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-4 font-mono text-xs text-cyan-400">__va_attribution</td>
+                    <td className="py-3 pr-4">LocalStorage</td>
+                    <td className="py-3 pr-4">Recordar la fuente de la visita para la atribución agregada de Vercel Analytics.</td>
                     <td className="py-3">Persistente</td>
                   </tr>
                   <tr>
@@ -165,7 +177,7 @@ export default function CookiesPage() {
           <section className="bg-gray-900/50 border border-gray-800 rounded-xl p-6">
             <h2 className="text-xl font-semibold text-white mb-3">5. Cómo gestionar, deshabilitar o retirar tu consentimiento</h2>
             <p className="mb-3">
-              Puedes retirar o modificar tu consentimiento en cualquier momento borrando la clave <code className="text-cyan-400 font-mono text-sm">vynko_cookie_consent</code> de tu navegador (categoría &quot;Almacenamiento local&quot; o &quot;Local storage&quot; de las herramientas de desarrollo), o limpiando los datos del sitio. El aviso se mostrará nuevamente en tu próxima visita para que decidas de nuevo.
+              Puedes retirar o modificar tu consentimiento en cualquier momento borrando la cookie <code className="text-cyan-400 font-mono text-sm">vynko_cookie_consent</code> desde las herramientas de desarrollo de tu navegador, o limpiando los datos del sitio. El aviso se mostrará nuevamente en tu próxima visita para que decidas de nuevo.
             </p>
             <p className="mb-4">
               También puedes reabrir el panel de preferencias ahora mismo:

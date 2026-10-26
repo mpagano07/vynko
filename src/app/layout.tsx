@@ -9,6 +9,7 @@ import { NoTenantAccessGuard } from '@/components/auth/no-tenant-access-guard';
 import { TenantHeaderProvider } from '@/components/TenantHeaderProvider';
 import { AppProviders } from '@/components/AppProviders';
 import { AppReturnTracker } from '@/components/analytics/app-return-tracker';
+import { ConsentAnalytics } from '@/components/analytics/consent-analytics';
 import { buildSiteStructuredData, serializeJsonLd } from '@/lib/marketing/structured-data';
 import { robotsForPath } from '@/lib/marketing/public-routes';
 import { SITE_URL } from '@/lib/site-url';
@@ -160,6 +161,7 @@ export default async function RootLayout({
             </TenantHeaderProvider>
           </AuthProvider>
         </AppProviders>
+        <ConsentAnalytics />
       </body>
     </html>
   );
