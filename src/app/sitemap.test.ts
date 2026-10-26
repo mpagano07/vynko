@@ -27,6 +27,13 @@ describe('sitemap', () => {
     expect(urls.some((url) => url.endsWith('/auth/signup'))).toBe(false);
   });
 
+  it('publica la pagina de precios', () => {
+    // `/precios` es la URL que compite por "cuanto cuesta": si queda fuera del
+    // sitemap, la consulta de mayor intencion de compra se queda sin puerta de
+    // entrada desde el buscador.
+    expect(urls).toContain(`${SITE_URL}/precios`);
+  });
+
   it('publica un lastmod real y no la fecha del request', () => {
     // Con `new Date()` cada respuesta traia un `lastmod` distinto y Google
     // dejaba de usar la senal. Ademas, dos `lastmod` del mismo dia para

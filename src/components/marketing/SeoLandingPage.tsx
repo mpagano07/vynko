@@ -487,6 +487,18 @@ export default async function SeoLandingPage({ content }: Props) {
               );
             })}
           </div>
+          <div className="mt-10 text-center">
+            {/* Link interno a la pagina de precios: consolida la senal de la
+                consulta "cuanto cuesta" en una URL propia en vez de repartirla
+                entre nueve landings con un ancla. */}
+            <Link
+              href="/precios"
+              className="inline-flex items-center gap-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
+            >
+              Ver la comparativa completa de planes
+              <span aria-hidden="true">&rarr;</span>
+            </Link>
+          </div>
           {country !== 'AR' && (
             <p className="mt-8 text-center text-xs text-gray-500 max-w-2xl mx-auto">
               Fuera de Argentina el cobro se procesa en la moneda que ves, a través de nuestra pasarela internacional (Paddle), que actúa como Merchant of Record y liquida los impuestos locales. Si tu país no tiene una moneda habilitada, el cobro se realiza en dólares (USD). El importe y la moneda definitivos se muestran antes de confirmar el pago.
@@ -605,6 +617,7 @@ export default async function SeoLandingPage({ content }: Props) {
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-sm text-gray-400">
               <div className="flex items-center gap-6">
+                <Link href="/precios" className="hover:text-gray-200 transition-colors">Precios</Link>
                 <Link href="/privacidad" className="hover:text-gray-200 transition-colors">Privacidad</Link>
                 <Link href="/terminos" className="hover:text-gray-200 transition-colors">Términos</Link>
                 <Link href="/reembolsos" className="hover:text-gray-200 transition-colors">Reembolsos</Link>

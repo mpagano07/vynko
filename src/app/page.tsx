@@ -703,6 +703,7 @@ export default function LandingPage() {
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-sm text-gray-400">
               <div className="flex items-center gap-6">
+                <Link href="/precios" className="hover:text-gray-200 transition-colors">Precios</Link>
                 <Link href="/terminos" className="hover:text-gray-200 transition-colors">Términos</Link>
                 <Link href="/privacidad" className="hover:text-gray-200 transition-colors">Privacidad</Link>
                 <Link href="/reembolsos" className="hover:text-gray-200 transition-colors">Reembolsos</Link>

@@ -35,6 +35,12 @@ describe('clasificacion de rutas', () => {
     }
   });
 
+  it('la pagina de precios es publica e indexable', () => {
+    expect(isPublicPath('/precios')).toBe(true);
+    expect(isIndexablePath('/precios')).toBe(true);
+    expect(robotsForPath('/precios')).toEqual({ index: true, follow: true });
+  });
+
   it('las rutas de auth se sirven pero no se indexan', () => {
     for (const path of ['/login', '/auth/signup', '/auth/forgot-password', '/auth/reset-password']) {
       expect(isPublicPath(path)).toBe(true);

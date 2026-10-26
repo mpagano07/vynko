@@ -29,6 +29,15 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
     ...seoLandings,
     {
+      // Precios es la pagina que compite por "precio software de stock" y
+      // "cuanto cuesta un sistema de gestion": una consulta de alta intencion
+      // que un ancla (`/#pricing`) no puede posicionar por no ser una URL.
+      url: `${SITE_URL}/precios`,
+      lastModified: '2026-10-26',
+      changeFrequency: 'monthly',
+      priority: 0.9,
+    },
+    {
       url: `${SITE_URL}/privacidad`,
       lastModified: '2026-10-21',
       changeFrequency: 'monthly',

@@ -80,7 +80,7 @@ export function buildSoftwareApplicationJsonLd(
       price: priceFrom,
       priceCurrency: 'ARS',
       availability: 'https://schema.org/InStock',
-      url: `${APP_URL}/#pricing`,
+      url: `${APP_URL}/precios`,
     },
     publisher: { '@id': ORGANIZATION_ID },
   };
