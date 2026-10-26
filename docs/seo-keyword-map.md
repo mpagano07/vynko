@@ -165,3 +165,37 @@ Google pudo leer.
 - Tests que atan sitemap, robots.txt y la clasificación de rutas: ninguna URL
   publicada en el sitemap puede ser noindexable ni estar bloqueada por
   robots.txt.
+
+## Re-verificación (2026-10-26)
+
+Search Console volvió a notificar "Excluida por una etiqueta 'noindex'", ahora
+con **2 páginas**. No es una regresión: son exactamente las dos únicas páginas
+noindexables que Google ya rastreó.
+
+Verificado contra producción (`vynko.dev`):
+
+| URL | Estado | `robots` |
+| --- | --- | --- |
+| `/login` | 200 | `noindex, follow` (intencional) |
+| `/auth/signup` | 200 | `noindex, follow` (intencional) |
+| `/` | 200 | `index, follow` |
+| `/control-de-stock` (y las otras 5 landings) | 200 | `index, follow` |
+| `/privacidad`, `/terminos`, `/reembolsos`, `/cookies` | 200 | `index, follow` |
+
+El resto del reporte también es esperable en un dominio de 8 semanas:
+
+- **Página con redirección (3):** `/dashboard`, `/onboarding` y `/settings`
+  devuelven `307 → /login?redirect_to=...`. Van `Disallow` en robots.txt y solo
+  son alcanzables con sesión; el redirect es el gate de auth, no un error SEO.
+- **Descubierta: actualmente sin indexar (7):** URLs del sitemap que Google
+  todavía no rastreó. Se resuelve con tiempo, sitemap reenviado y backlinks.
+- **Rastreada: actualmente sin indexar (0):** ninguna página indexable está
+  siendo rechazada. Es la señal de que el contenido publicado sí es indexable.
+
+Regla para leer este reporte: el motivo "Excluida por noindex" solo es un
+problema si aparece en una URL que está en `sitemap.xml` o que debería
+posicionar. Para `/login` y `/auth/signup` el estado es correcto y el aviso va a
+seguir apareciendo mientras esas páginas conserven el `noindex`: no hay un botón
+de "marcar como intencional" que lo silencie. Lo que importa es que crezca el
+número de páginas indexadas: el reporte suma 12 páginas no indexadas (3 + 2 + 7)
+y ninguna de ellas es una landing ni una legal.
