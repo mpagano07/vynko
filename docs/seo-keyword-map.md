@@ -20,6 +20,10 @@ no estamos compitiendo con nuestra propia landing.
 | `/software-gestion-argentina` | Sistema de gestión para pequeños comercios en Argentina \| Vynko | Sistema de gestión para pequeños comercios en Argentina | "sistema de gestión para pequeños comercios en Argentina" | Publicada |
 | `/importar-productos-mercadolibre-tiendanube` | Importar productos de Mercado Libre o Tiendanube \| Vynko | Importá tu catálogo de Mercado Libre o Tiendanube | "importar productos de Mercado Libre", "migrar catálogo Tiendanube" | Publicada |
 | `/control-de-compras` | Control de compras y proveedores para tu negocio \| Vynko | Registrá compras, ventas y stock en un solo lugar | "cómo registrar compras, ventas y stock en un solo lugar" | Nueva |
+| `/precios` | Precios: planes de gestión de stock y ventas \| Vynko | Precios claros, sin permanencia | "precio software de stock", "cuánto cuesta un sistema de gestión" | Publicada |
+| `/sistema-para-kiosco` | Sistema para kiosco: stock, ventas y caja \| Vynko | Sistema para kiosco: stock, ventas y caja sin contar a mano | "sistema para kiosco", "programa para kiosco", "control de stock kiosco" | Publicada |
+| `/software-para-ferreteria` | Software para ferretería: stock, ventas y compras \| Vynko | Software para ferretería: miles de artículos con stock real | "software para ferretería", "sistema para ferretería", "stock ferretería" | Publicada |
+| `/sistema-para-distribuidora` | Sistema para distribuidora: stock y ventas mayoristas \| Vynko | Sistema para distribuidora: stock real en cada depósito | "sistema para distribuidora", "sistema para mayorista", "stock por depósito" | Publicada |
 
 ## Consultas cubiertas por cada landing
 
@@ -61,6 +65,33 @@ tienen de entrar en el bloque de respuesta de Google.
 - cómo llevar el control de compras y stock
 - cómo saber cuánto le compré a cada proveedor
 - cómo actualizar el stock cuando llega la mercadería
+
+### `/precios`
+- cuánto cuesta un sistema de gestión
+- precio de software de stock
+- plan de sistema de inventario para comercios
+- diferencia entre plan Starter y Business
+
+### `/sistema-para-kiosco`
+- sistema para kiosco
+- programa para kiosco
+- control de stock para kiosco
+- cómo cerrar la caja de un kiosco
+- cómo saber qué reponer en un kiosco
+
+### `/software-para-ferreteria`
+- software para ferretería
+- sistema para ferretería
+- control de stock de ferretería
+- cómo actualizar precios de una ferretería
+- cómo cargar artículos sin código de barras
+
+### `/sistema-para-distribuidora`
+- sistema para distribuidora
+- software para mayorista
+- control de stock por depósito
+- cómo transferir stock entre sucursales
+- cómo registrar pedidos a proveedores
 
 ## Consultas pendientes (no crear página sin validar)
 
@@ -111,9 +142,9 @@ muestra es el agregado del sitio, no una directiva real de esa URL.
 
 **Verificado contra producción (`vynko.dev`):**
 
-- Las 6 landings, la home y las 4 legales devuelven `200`, con `<title>`,
-  `canonical` y `description` propios, y **sin** `<meta name="robots">` ni
-  `X-Robots-Tag`.
+- Las 6 landings que existían en ese momento, la home y las 4 legales devuelven
+  `200`, con `<title>`, `canonical` y `description` propios, y **sin**
+  `<meta name="robots">` ni `X-Robots-Tag`.
 - `/login` y `/auth/signup` devuelven `noindex, follow`: es intencional.
 - Googlebot recibe exactamente el mismo HTML que un navegador (verificado con
   seis user-agents distintos).
@@ -199,3 +230,39 @@ seguir apareciendo mientras esas páginas conserven el `noindex`: no hay un bot�
 de "marcar como intencional" que lo silencie. Lo que importa es que crezca el
 número de páginas indexadas: el reporte suma 12 páginas no indexadas (3 + 2 + 7)
 y ninguna de ellas es una landing ni una legal.
+
+## Expansión por rubro (2026-10-26)
+
+Las landings genéricas ("control de stock", "ventas y caja") compiten en
+consultas amplias y de alta competencia. Un comerciante, en cambio, busca con
+el nombre de su rubro. Se agregaron tres landings verticales y una página de
+precios:
+
+| Ruta | Intención | Por qué |
+| --- | --- | --- |
+| `/sistema-para-kiosco` | "sistema/programa para kiosco" | Rotación alta, miles de SKU chicos, decisión rápida |
+| `/software-para-ferreteria` | "software/sistema para ferretería" | Catálogo grande, artículos sin código de barras |
+| `/sistema-para-distribuidora` | "sistema para distribuidora/mayorista" | Varios depósitos y transferencias |
+| `/precios` | "cuánto cuesta / precio" | Un ancla (`/#pricing`) no rankea: hace falta URL propia |
+
+Reglas que se respetaron (y que hay que mantener al agregar más rubros):
+
+- **Copy específico, no plantilla con la palabra cambiada.** Cada vertical
+  tiene problemas, guía, features y FAQ propios del rubro. Si una sección se
+  puede copiar a otra landing sin cambiar nada, no aporta.
+- **Nada inventado.** No se declaran funciones que el producto no tiene
+  (listas de precios por cliente, ventas por kilo, app de preventistas). Los
+  FAQ que caen en esos casos lo dicen y ofrecen evaluarlo con el cliente.
+- **Sin prueba social falsa.** Todavía no hay clientes: no hay testimonios,
+  logos ni `aggregateRating`. Google penaliza el marcado inventado.
+- **El plan se recomienda con honestidad.** Una ferretería con miles de
+  artículos no entra en Starter (100 productos): la landing lo dice y propone
+  Business.
+
+**Siguiente lote sugerido** (validar volumen en GSC antes de escribir):
+
+1. `/sistema-para-almacen` y `/sistema-para-carniceria`.
+2. Comparativas con intención de compra: `/alternativa-a-tango`,
+   `/alternativa-a-bejerman`, `/alternativa-a-colppy`.
+3. Herramientas gratuitas que atraen enlaces: plantilla de inventario Excel y
+   calculadora de punto de reposición.
