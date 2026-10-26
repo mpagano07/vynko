@@ -4,7 +4,8 @@
 // logica de lectura/escritura de la cookie entre consumidores.
 
 export const CONSENT_COOKIE = 'vynko_cookie_consent';
-export const CONSENT_VERSION = '1.0';
+export const CONSENT_VERSION = '1.1';
+export const CONSENT_CHANGED_EVENT = 'vynko:consent-changed';
 
 export type ConsentState = {
   version: string;
@@ -54,11 +55,23 @@ export function saveCookieConsent(prefs: {
     updatedAt: new Date().toISOString(),
   };
   setCookie(CONSENT_COOKIE, encodeURIComponent(JSON.stringify(state)));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(CONSENT_CHANGED_EVENT));
+  }
   return state;
+}
+
+export function subscribeToConsent(onStoreChange: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  window.addEventListener(CONSENT_CHANGED_EVENT, onStoreChange);
+  return () => window.removeEventListener(CONSENT_CHANGED_EVENT, onStoreChange);
 }
 
 export function resetCookieConsent() {
   if (typeof document === 'undefined') return;
   document.cookie = `${CONSENT_COOKIE}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
-  window.location.reload();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(CONSENT_CHANGED_EVENT));
+    window.location.reload();
+  }
 }

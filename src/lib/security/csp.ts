@@ -45,7 +45,7 @@ export function buildCsp(nonce: string): string {
 
   const directives = [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}'${strictDynamic}${isDev ? " 'unsafe-eval'" : ''} https://cdn.paddle.com`,
+    `script-src 'self' 'nonce-${nonce}'${strictDynamic}${isDev ? " 'unsafe-eval' https://va.vercel-scripts.com" : ''} https://cdn.paddle.com`,
     // Los handlers inline (onclick=, onload=, ...) quedan en 'none'. React no los
     // emite nunca (usa delegacion), asi que no se rompe nada y se cierra la via
     // de ejecutar codigo desde un atributo inyectado.

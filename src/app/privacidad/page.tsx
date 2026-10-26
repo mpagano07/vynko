@@ -71,7 +71,10 @@ export default function PrivacidadPage() {
                 <strong>Ubicación Aproximada (a nivel país):</strong> A partir de tu dirección IP estimamos el país desde el que te conectás. No accedemos a tu ubicación precisa ni a datos de GPS. Este dato se utiliza únicamente para mostrar precios y contenido adaptados a tu región.
               </li>
               <li>
-                <strong>Cookies y Tecnologías de Almacenamiento:</strong> Empleamos almacenamiento local y cookies técnicas estrictamente necesarias para sostener tu sesión autenticada y tus preferencias visuales. Podés consultar el detalle en nuestra{' '}
+                <strong>Datos de Uso del Sitio:</strong> Páginas visitadas, fuente de referencia, país aproximado, tipo de dispositivo, sistema operativo y navegador, medidos de forma agregada con Vercel Web Analytics únicamente si aceptás la categoría analítica.
+              </li>
+              <li>
+                <strong>Cookies y Tecnologías de Almacenamiento:</strong> Empleamos almacenamiento local y cookies técnicas estrictamente necesarias para sostener tu sesión autenticada y tus preferencias visuales, y cargamos Vercel Web Analytics solo con tu consentimiento analítico. Podés consultar el detalle en nuestra{' '}
                 <Link href="/cookies" className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2">
                   Política de Cookies
                 </Link>.
@@ -91,6 +94,7 @@ export default function PrivacidadPage() {
               <li>Procesar el cobro recurrente de suscripciones a través de pasarelas de pago homologadas (Mercado Pago y Paddle). Vynko no almacena datos sensibles de tarjetas de crédito o débito.</li>
               <li>Proveer soporte técnico asistido y responder a consultas o requerimientos operativos.</li>
               <li>Estimar tu país de conexión a partir de tu dirección IP con el fin de mostrar precios, moneda y contenido adaptados a tu región.</li>
+              <li>Medir de forma agregada el uso del sitio (páginas visitadas y fuente del tráfico) con Vercel Web Analytics, únicamente si aceptás la categoría analítica del aviso de cookies.</li>
               <li>Cumplir con requerimientos legales, contables o regulatorios aplicables.</li>
             </ul>
           </section>
@@ -105,7 +109,7 @@ export default function PrivacidadPage() {
                 <strong>Supabase Inc. / Amazon Web Services (AWS):</strong> Alojamiento de bases de datos PostgreSQL con cifrado en reposo y en tránsito, autenticación y almacenamiento en la nube bajo estándares ISO 27001 y SOC 2.
               </li>
               <li>
-                <strong>Vercel Inc.:</strong> Infraestructura de despliegue, entrega y balanceo de carga de la aplicación web.
+                <strong>Vercel Inc.:</strong> Infraestructura de despliegue, entrega y balanceo de carga de la aplicación web, y analítica web agregada mediante Vercel Web Analytics cuando otorgás consentimiento analítico.
               </li>
               <li>
                 <strong>Mercado Pago:</strong> Pasarela de pagos certificada PCI-DSS para el procesamiento seguro de transacciones monetarias y suscripciones.
