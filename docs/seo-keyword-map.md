@@ -266,3 +266,25 @@ Reglas que se respetaron (y que hay que mantener al agregar más rubros):
    `/alternativa-a-bejerman`, `/alternativa-a-colppy`.
 3. Herramientas gratuitas que atraen enlaces: plantilla de inventario Excel y
    calculadora de punto de reposición.
+
+## Verificación de buscadores (2026-10-26)
+
+Bing Webmaster Tools pide demostrar que el sitio es propio. Se usa el archivo
+XML, que no depende del DNS ni de tocar el `<head>` del layout:
+
+- El archivo vive en `public/BingSiteAuth.xml` y se sirve como
+  `https://vynko.dev/BingSiteAuth.xml` (raíz del dominio, sin prefijo).
+- El contenido lo genera Bing por cuenta: `<users><user>CODIGO</user></users>`
+  con un código de 32 caracteres hexadecimales. No se puede inventar ni
+  reutilizar el de otro sitio.
+- El matcher del proxy excluye cualquier ruta con punto, así que el gate de auth
+  no redirige el archivo a `/login`. `src/proxy-matcher.test.ts` lo deja
+  congelado.
+- `src/lib/marketing/verification-files.test.ts` verifica que el archivo exista
+  y tenga el formato válido. Nada del código lo importa: sin ese test, un
+  refactor lo borra sin que falle el build y el síntoma aparece recién en Bing.
+
+Para agregar otro buscador (Google, Yandex, Pinterest) se repite el patrón: el
+archivo va en `public/` con el nombre exacto que pida el proveedor, y se suma al
+test si el formato es fijo.
+

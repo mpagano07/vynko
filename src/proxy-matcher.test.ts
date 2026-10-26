@@ -51,6 +51,7 @@ describe('proxy matcher', () => {
       '/favicon.ico',
       '/robots.txt',
       '/sitemap.xml',
+      '/BingSiteAuth.xml',
       '/icon.png',
     ];
     for (const path of excluded) {
