@@ -166,7 +166,7 @@ function LoginContent() {
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center p-8">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-8">
         <div className="w-full max-w-sm">
           <div className="lg:hidden flex justify-center mb-8">
             <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="96px" className="h-8 w-auto object-contain" />
@@ -239,7 +239,7 @@ function LoginContent() {
             <Button
               type="submit"
               disabled={loading}
-              className="w-full"
+              className="w-full whitespace-normal text-center h-auto py-2.5 leading-tight"
             >
               {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
             </Button>

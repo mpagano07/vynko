@@ -904,8 +904,8 @@ export default function SalesPage() {
                 })}
                 </div>
               ) : (
-                <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-                  <table className="w-full text-left border-collapse">
+                <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+                  <table className="w-full min-w-[360px] text-left border-collapse">
                     <thead>
                       <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         <th className="py-2.5 px-3">Producto</th>
@@ -1382,7 +1382,7 @@ export default function SalesPage() {
                                     </div>
                                     <div>
                                       {sale.items && sale.items.length > 0 ? (
-                                        <table className="w-full text-sm">
+                                        <div className="overflow-x-auto"><table className="w-full min-w-[320px] text-sm">
                                           <thead>
                                             <tr className="text-xs text-gray-500 border-b border-gray-200 dark:border-gray-700">
                                               <th className="text-left py-1.5">Descripción</th>
@@ -1398,10 +1398,10 @@ export default function SalesPage() {
                                                 <td className="py-1.5 text-right text-gray-600 dark:text-gray-400">{item.quantity}</td>
                                                 <td className="py-1.5 text-right text-gray-600 dark:text-gray-400">{formatARS(item.unit_price_cents / 100)}</td>
                                                 <td className="py-1.5 text-right font-medium text-gray-900 dark:text-gray-100">{formatARS(item.subtotal_cents / 100)}</td>
-                                              </tr>
-                                            ))}
-                                          </tbody>
-                                        </table>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table></div>
                                       ) : (
                                         <p className="text-sm text-gray-400">Sin items</p>
                                       )}

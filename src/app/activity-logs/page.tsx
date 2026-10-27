@@ -333,7 +333,7 @@ function TransfersHistoryTab() {
                                     </tr>
                                   ))}
                                 </tbody>
-                              </table>
+                              </table></div>
                             ) : (
                               <p className="text-sm text-gray-400">Sin items</p>
                             )}
@@ -686,7 +686,7 @@ export default function ActivityLogsPage() {
                                 {log.entity_type === 'sale' ? (
                                   <div>
                                     {saleDetails[log.id] ? (
-                                      <table className="w-full text-sm">
+                              <div className="overflow-x-auto"><table className="w-full min-w-[320px] text-sm">
                                         <thead>
                                           <tr className="text-xs text-gray-500 border-b border-gray-200 dark:border-gray-700">
                                             <th className="text-left py-1.5">Descripción</th>
