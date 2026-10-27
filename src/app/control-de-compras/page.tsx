@@ -6,7 +6,7 @@ export const content: SeoLandingContent = {
   slug: 'control-de-compras',
   metaTitle: 'Control de compras y proveedores para tu negocio',
   metaDescription:
-    'Cómo registrar compras, ventas y stock en un solo lugar: armá pedidos al proveedor, generá el remito de ingreso y el stock se actualiza solo. Probá Vynko gratis.',
+    'Cómo registrar compras, ventas y stock en un solo lugar: armá pedidos al proveedor, generá el remito y el stock se actualiza solo. Probá gratis.',
   keywords: [
     'control de compras',
     'sistema de compras para comercios',

@@ -6,7 +6,7 @@ export const content: SeoLandingContent = {
   slug: 'control-de-stock',
   metaTitle: 'Control de stock e inventario en tiempo real',
   metaDescription:
-    'Cómo controlar el stock de tu negocio sin planillas: escaneá con el celular, recibí alertas de reposición y mirá el inventario real en tiempo real. Probá gratis.',
+    'Cómo controlar el stock sin planillas: escaneá con el celular, recibí alertas de reposición y mirá el inventario real en tiempo real. Probá gratis.',
   keywords: [
     'control de stock',
     'sistema de control de stock',

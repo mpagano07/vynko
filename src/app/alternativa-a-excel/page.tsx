@@ -6,7 +6,7 @@ export const content: SeoLandingContent = {
   slug: 'alternativa-a-excel',
   metaTitle: 'Sistema de gestión para reemplazar Excel',
   metaDescription:
-    'Cómo llevar el inventario sin Excel: importá tu planilla y pasá a un sistema que se actualiza solo, con alertas de reposición y reportes listos. Probá gratis.',
+    'Cómo dejar Excel sin perder el inventario: importá tu planilla y pasá a un sistema que se actualiza solo, con alertas de reposición. Probá gratis.',
   keywords: [
     'alternativa a Excel',
     'dejar de usar Excel para el stock',
