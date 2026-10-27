@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, ChevronDown, ChevronUp, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { IconAction } from '@/components/ui/icon-action';
@@ -90,9 +91,16 @@ export const Select = React.forwardRef<HTMLDivElement, SelectProps>(
     const [open, setOpen] = useState(false);
     const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
     const [query, setQuery] = useState('');
+    const [mounted, setMounted] = useState(false);
     const triggerRef = useRef<HTMLButtonElement>(null);
     const searchRef = useRef<HTMLInputElement>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
     const { layout, visual } = splitLayout(className);
+
+    useEffect(() => {
+      setMounted(true);
+      return () => setMounted(false);
+    }, []);
 
     const current = controlled ? String(value ?? '') : internal;
     const selected = options.find((o) => o.value === current);
@@ -129,11 +137,13 @@ export const Select = React.forwardRef<HTMLDivElement, SelectProps>(
           setOpen(false);
           return;
         }
+        const target = e.target as Node | null;
+        if (target && panelRef.current && panelRef.current.contains(target)) {
+          return;
+        }
         // Solo el scroll de la página puede descolocar el panel (es `fixed`).
         // Se escuchan los scrolls en fase de captura, así que también llegan los
-        // de otros elementos (p.ej. el input de búsqueda al enfocarse, que al
-        // abrir el panel tras una búsqueda disparaba su scroll y lo cerraba).
-        const target = e.target;
+        // de otros elementos.
         const esScrollDePagina =
           target === document ||
           target === document.documentElement ||
@@ -141,11 +151,20 @@ export const Select = React.forwardRef<HTMLDivElement, SelectProps>(
           target === window;
         if (esScrollDePagina) setOpen(false);
       };
+      const clickOutside = (e: MouseEvent) => {
+        const target = e.target as Node | null;
+        if (!target) return;
+        if (triggerRef.current?.contains(target)) return;
+        if (panelRef.current?.contains(target)) return;
+        setOpen(false);
+      };
       window.addEventListener('scroll', dismiss, true);
       window.addEventListener('resize', dismiss);
+      document.addEventListener('mousedown', clickOutside);
       return () => {
         window.removeEventListener('scroll', dismiss, true);
         window.removeEventListener('resize', dismiss);
+        document.removeEventListener('mousedown', clickOutside);
       };
     }, [open]);
 
@@ -221,18 +240,19 @@ export const Select = React.forwardRef<HTMLDivElement, SelectProps>(
           )}
         </button>
 
-        {open && pos && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-            <div
-              role="listbox"
-              style={{ top: pos.top, left: pos.left, width: pos.width }}
-              className={cn(
-                'fixed z-20 max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-800',
-                darkPanel && 'border-gray-700 bg-gray-800',
-                panelClassName
-              )}
-            >
+        {open && pos && mounted &&
+          createPortal(
+            <>
+              <div
+                ref={panelRef}
+                role="listbox"
+                style={{ top: pos.top, left: pos.left, width: pos.width }}
+                className={cn(
+                  'fixed z-[9999] max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-800',
+                  darkPanel && 'border-gray-700 bg-gray-800',
+                  panelClassName
+                )}
+              >
               {searchable && (
                 <div
                   className={cn(
@@ -297,9 +317,10 @@ export const Select = React.forwardRef<HTMLDivElement, SelectProps>(
                   )}
                 </button>
               ))}
-            </div>
-          </>
-        )}
+              </div>
+            </>,
+            document.body
+          )}
       </div>
     );
   }
