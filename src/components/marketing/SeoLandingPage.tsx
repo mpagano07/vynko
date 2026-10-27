@@ -74,17 +74,17 @@ export default async function SeoLandingPage({ content }: Props) {
 
       {/* Navbar */}
       <nav className="fixed top-0 left-0 right-0 z-50 border-b border-gray-800/50 bg-gray-950/80 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-20">
-            <div className="flex items-center gap-8">
-              <Link href="/" className="flex items-center">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16 sm:h-20">
+            <div className="flex items-center gap-4 sm:gap-8 min-w-0">
+              <Link href="/" className="flex items-center flex-shrink-0">
                 <Image
                   src="/icons/vynkoLogout.png?v=3"
                   alt="Vynko"
                   width={1530}
                   height={590}
                   sizes="128px"
-                  className="h-10 w-auto object-contain"
+                  className="h-8 sm:h-10 w-auto object-contain"
                 />
               </Link>
               <div className="hidden md:flex items-center gap-6">
@@ -105,16 +105,16 @@ export default async function SeoLandingPage({ content }: Props) {
                 </Link>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
               <Link
                 href="/login"
-                className="text-sm font-medium text-gray-300 hover:text-white transition-colors px-4 py-2"
+                className="text-xs sm:text-sm font-medium text-gray-300 hover:text-white transition-colors px-1.5 sm:px-4 py-1.5 sm:py-2 whitespace-nowrap"
               >
                 Iniciar sesión
               </Link>
               <Link
                 href="/auth/signup"
-                className="text-sm font-medium bg-cyan-500 hover:bg-cyan-400 text-black px-4 py-2 rounded-lg transition-colors"
+                className="text-xs sm:text-sm font-medium bg-cyan-500 hover:bg-cyan-400 text-black px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg transition-colors whitespace-nowrap"
               >
                 Comenzar gratis
               </Link>
@@ -149,16 +149,16 @@ export default async function SeoLandingPage({ content }: Props) {
               </h1>
               <p className="mt-6 text-lg text-gray-400 leading-relaxed max-w-lg">{content.intro}</p>
 
-              <div className="mt-8 flex flex-col sm:flex-row gap-3">
+              <div className="mt-8 flex flex-col sm:flex-row gap-2 sm:gap-3">
                 <Link
                   href="/auth/signup"
-                  className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl transition-colors"
+                  className="inline-flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl transition-colors text-sm sm:text-base"
                 >
-                  Comenzar gratis{trialDays ? ` — ${trialDays} días de prueba` : ''}
+                  <span className="text-center leading-tight">Comenzar gratis{trialDays ? ` — ${trialDays} días de prueba` : ''}</span>
                 </Link>
                 <Link
                   href="/#demo"
-                  className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 hover:bg-gray-800 text-gray-200 font-semibold rounded-xl border border-gray-800 transition-colors"
+                  className="inline-flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-gray-900 hover:bg-gray-800 text-gray-200 font-semibold rounded-xl border border-gray-800 transition-colors text-sm sm:text-base"
                 >
                   Ver demo interactiva
                 </Link>
@@ -590,7 +590,7 @@ export default async function SeoLandingPage({ content }: Props) {
           <p className="text-gray-400 mb-8 max-w-lg mx-auto">{content.finalCtaText}</p>
           <Link
             href="/auth/signup"
-            className="inline-flex items-center gap-2 px-8 py-4 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl text-lg transition-colors"
+            className="inline-flex items-center gap-2 px-6 sm:px-8 py-3 sm:py-4 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl text-base sm:text-lg transition-colors"
           >
             Comenzar gratis
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -601,22 +601,22 @@ export default async function SeoLandingPage({ content }: Props) {
       </section>
 
       {/* Footer */}
-      <footer className="py-6 border-t border-gray-800/50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 pb-6 mb-6 border-b border-gray-800/50 text-sm text-gray-400">
+      <footer className="py-6 border-t border-gray-800/50 pb-24 md:pb-6">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="flex flex-wrap items-center justify-center gap-x-4 sm:gap-x-6 gap-y-2 pb-6 mb-6 border-b border-gray-800/50 text-sm text-gray-400">
             <span className="text-xs uppercase tracking-wider text-gray-500">Soluciones</span>
             {SEO_PAGES.map((page) => (
-              <Link key={page.slug} href={seoPath(page.slug)} className="hover:text-gray-200 transition-colors">
+              <Link key={page.slug} href={seoPath(page.slug)} className="hover:text-gray-200 transition-colors text-center">
                 {page.label}
               </Link>
             ))}
           </div>
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-2">
-              <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="128px" className="h-12 w-auto object-contain" />
+              <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="128px" className="h-10 sm:h-12 w-auto object-contain" />
             </div>
-            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-sm text-gray-400">
-              <div className="flex items-center gap-6">
+            <div className="flex flex-col items-center gap-4 text-sm text-gray-400 w-full md:w-auto">
+              <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 sm:gap-6 max-w-full">
                 <Link href="/precios" className="hover:text-gray-200 transition-colors">Precios</Link>
                 <Link href="/privacidad" className="hover:text-gray-200 transition-colors">Privacidad</Link>
                 <Link href="/terminos" className="hover:text-gray-200 transition-colors">Términos</Link>
@@ -636,7 +636,7 @@ export default async function SeoLandingPage({ content }: Props) {
                   Instagram
                 </a>
               </div>
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-gray-400 text-center px-2">
                 © {new Date().getFullYear()} Vynko. Todos los derechos reservados.
                 <span className="hidden sm:inline"> Logotipo e imágenes: propiedad de Vynko.</span>
               </span>
@@ -647,15 +647,15 @@ export default async function SeoLandingPage({ content }: Props) {
 
       {/* Sticky Mobile CTA */}
       <div
-        className="fixed bottom-0 left-0 right-0 z-50 md:hidden border-t border-gray-800/50 bg-gray-950/95 backdrop-blur-xl px-4 py-3"
-        style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+        className="fixed bottom-0 left-0 right-0 z-50 md:hidden border-t border-gray-800/50 bg-gray-950/95 backdrop-blur-xl px-3 sm:px-4 py-2.5 sm:py-3"
+        style={{ paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom))' }}
       >
         <Link
           href="/auth/signup"
-          className="flex items-center justify-center gap-2 w-full py-3.5 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl text-sm transition-colors shadow-lg shadow-cyan-500/20"
+          className="flex items-center justify-center gap-2 w-full max-w-full py-3 px-3 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl text-xs sm:text-sm transition-colors shadow-lg shadow-cyan-500/20 text-center leading-tight whitespace-normal break-words"
         >
-          Comenzar gratis{trialDays ? ` — ${trialDays} días de prueba` : ''}
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+          <span>Comenzar gratis{trialDays ? ` — ${trialDays} días de prueba` : ''}</span>
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
           </svg>
         </Link>
