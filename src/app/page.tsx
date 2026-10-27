@@ -678,7 +678,7 @@ export default function LandingPage() {
           </p>
           <Link
             href="/auth/signup"
-            className="inline-flex items-center gap-2 px-8 py-4 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl text-lg transition-colors"
+            className="inline-flex items-center gap-2 px-6 sm:px-8 py-3 sm:py-4 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl text-base sm:text-lg transition-colors"
           >
             Comenzar gratis
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
