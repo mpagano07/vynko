@@ -6,7 +6,7 @@ export const content: SeoLandingContent = {
   slug: 'importar-productos-mercadolibre-tiendanube',
   metaTitle: 'Importar productos de Mercado Libre o Tiendanube',
   metaDescription:
-    'Pasá tu catálogo de Mercado Libre o Tiendanube a Vynko: exportás el Excel o CSV y lo importás en minutos, con stock, precios y códigos de barras. Probá gratis.',
+    'Pasá tu catálogo de Mercado Libre o Tiendanube: exportás el Excel o CSV y lo importás en minutos, con stock, precios y códigos de barras. Probá gratis.',
   keywords: [
     'importar productos mercadolibre',
     'importar productos tiendanube',

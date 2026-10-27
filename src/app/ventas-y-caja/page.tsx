@@ -6,7 +6,7 @@ export const content: SeoLandingContent = {
   slug: 'ventas-y-caja',
   metaTitle: 'Sistema de ventas y caja para pequeños comercios',
   metaDescription:
-    'Programa para controlar ventas y caja: cobrá escaneando el código de barras, actualizá el stock al instante y cerrá el día con arqueo. Probá Vynko gratis.',
+    'Programa para controlar ventas y caja: cobrá escaneando el código de barras, actualizá el stock al instante y cerrá el día con arqueo. Probá gratis.',
   keywords: [
     'sistema de ventas',
     'programa de caja para comercio',

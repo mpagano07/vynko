@@ -24,7 +24,7 @@ const PATH = '/precios';
 
 const TITLE = 'Precios de Vynko: planes y qué incluye cada uno';
 const DESCRIPTION =
-  'Precios de Vynko en pesos: Starter para comercios chicos, Business con productos y usuarios ilimitados y Enterprise a medida. 45 días de prueba gratis, sin tarjeta.';
+  'Precios de Vynko en pesos: Starter para comercios chicos, Business con productos y usuarios ilimitados y Enterprise a medida. 45 días gratis, sin tarjeta.';
 
 export const metadata: Metadata = {
   title: 'Precios: planes de gestión de stock y ventas',

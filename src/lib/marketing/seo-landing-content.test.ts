@@ -76,8 +76,15 @@ describe('landings SEO', () => {
       });
 
       it('el titulo entra en el limite que muestra Google', () => {
-        // El template del layout agrega " | Vynko" (8 caracteres).
-        expect(content.metaTitle.length + 8).toBeLessThanOrEqual(70);
+        // El template del layout agrega " | Vynko" (8 caracteres). Google corta
+        // alrededor de los 60: con 70 el final del titulo desaparece del SERP.
+        expect(content.metaTitle.length + 8).toBeLessThanOrEqual(60);
+      });
+
+      it('la descripcion entra en el snippet sin cortarse', () => {
+        // Google muestra ~155-160 caracteres en escritorio. Si la propuesta de
+        // valor ("Probá gratis") queda despues del corte, no se lee.
+        expect(content.metaDescription.length).toBeLessThanOrEqual(158);
       });
 
       it('el H1 describe el problema, no solo el nombre del producto', () => {

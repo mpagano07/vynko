@@ -4,7 +4,7 @@ import { buildSeoMetadata, type SeoLandingContent } from '@/lib/marketing/seo-la
 
 export const content: SeoLandingContent = {
   slug: 'software-gestion-argentina',
-  metaTitle: 'Sistema de gestión para pequeños comercios en Argentina',
+  metaTitle: 'Sistema de gestión para comercios en Argentina',
   metaDescription:
     'Sistema de gestión para pequeños comercios en Argentina: stock en tiempo real, ventas y caja, varias sucursales y precios en pesos. Probá Vynko gratis.',
   keywords: [

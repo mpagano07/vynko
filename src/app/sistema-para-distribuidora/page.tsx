@@ -4,7 +4,7 @@ import { buildSeoMetadata, type SeoLandingContent } from '@/lib/marketing/seo-la
 
 export const content: SeoLandingContent = {
   slug: 'sistema-para-distribuidora',
-  metaTitle: 'Sistema para distribuidora: stock y ventas mayoristas',
+  metaTitle: 'Sistema para distribuidora mayorista: stock y ventas',
   metaDescription:
     'Sistema de gestión para distribuidoras y mayoristas: compras, depósitos, transferencias y ventas con stock real en cada sucursal. Probá Vynko gratis.',
   keywords: [
