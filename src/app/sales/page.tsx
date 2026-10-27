@@ -1401,8 +1401,9 @@ export default function SalesPage() {
                                             </tr>
                                           ))}
                                         </tbody>
-                                      </table></div>
-                                      ) : (
+                                      </table>
+                                      </div>
+                                    ) : (
                                         <p className="text-sm text-gray-400">Sin items</p>
                                       )}
                                     </div>

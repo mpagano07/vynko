@@ -1025,7 +1025,8 @@ export default function DocumentosPage() {
                                           </tr>
                                         ))}
                                       </tbody>
-                                    </table></div>
+                                    </table>
+                                    </div>
                                   ) : (
                                     <p className="text-sm text-gray-400">Sin items</p>
                                   )}
@@ -1226,7 +1227,8 @@ export default function DocumentosPage() {
                                           </tr>
                                         ))}
                                       </tbody>
-                                    </table></div>
+                                    </table>
+                                    </div>
                                   ) : (
                                     <p className="text-sm text-gray-400">Sin items</p>
                                   )}
