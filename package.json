@@ -15,6 +15,7 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "update-prices": "node scripts/update-prices.mjs",
+    "indexnow": "node scripts/indexnow.mjs",
     "load-test:sales": "node scripts/load-test-sales.mjs"
   },
   "dependencies": {

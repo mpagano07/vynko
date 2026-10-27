@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
@@ -30,5 +30,18 @@ describe('archivos de verificacion de buscadores', () => {
     // el problema es el contenido.
     expect(xml).toMatch(/<users>\s*<user>[0-9A-F]{32}<\/user>\s*<\/users>/);
     expect(xml.match(/<user>/g)).toHaveLength(1);
+  });
+
+  it('publica la clave de IndexNow con el nombre y el contenido correctos', () => {
+    // IndexNow no tiene registro central: la prueba de propiedad es un archivo
+    // `<clave>.txt` en la raiz cuyo CONTENIDO sea la clave. Si el nombre y el
+    // contenido no coinciden, Bing responde 403 sin explicar por que.
+    const keys = readdirSync(PUBLIC_DIR).filter((name) => /^[0-9a-f]{32}\.txt$/.test(name));
+
+    expect(keys).toHaveLength(1);
+
+    const [file] = keys;
+    const expected = file.replace(/\.txt$/, '');
+    expect(readFileSync(join(PUBLIC_DIR, file), 'utf8').trim()).toBe(expected);
   });
 });

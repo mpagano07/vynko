@@ -288,3 +288,22 @@ Para agregar otro buscador (Google, Yandex, Pinterest) se repite el patrón: el
 archivo va en `public/` con el nombre exacto que pida el proveedor, y se suma al
 test si el formato es fijo.
 
+### IndexNow (Bing, Yandex, Seznam, Naver)
+
+IndexNow avisa a los buscadores que una URL cambió, sin esperar a que el crawler
+vuelva. **Google no lo usa**: para Google sigue siendo Search Console.
+
+- La clave es autogenerada y se prueba publicando `public/<clave>.txt` con la
+  clave como contenido. El archivo vive en `public/` y se sirve en la raíz.
+- No es un secreto: está pensada para ser pública. La clave usada es
+  `f81ba3226fa04ce99179ec7c47c5668a`.
+- `npm run indexnow` lee el sitemap y envía todas las URLs; también acepta URLs
+  sueltas como argumentos. `--dry-run` muestra el payload sin enviar nada, y
+  `--base http://localhost:3000` valida contra un server local.
+- El script hace un preflight del `.txt` antes del POST. Si el archivo no está
+  deployado, IndexNow responde `403` sin explicar el motivo, y esa es la causa
+  más común del "no funciona".
+- Conviene enviar solo lo que cambió. Mandar el sitemap completo en cada deploy
+  no acelera nada y gasta la cuota de cortesía.
+
+
