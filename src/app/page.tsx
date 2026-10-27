@@ -148,11 +148,11 @@ export default function LandingPage() {
     <div className="min-h-screen bg-gray-950 text-white">
       {/* Navbar */}
       <nav className="fixed top-0 left-0 right-0 z-50 border-b border-gray-800/50 bg-gray-950/80 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-20">
-            <div className="flex items-center gap-8">
-              <Link href="/" className="flex items-center">
-                <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="128px" className="h-10 w-auto object-contain" />
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16 sm:h-20">
+            <div className="flex items-center gap-4 sm:gap-8 min-w-0">
+              <Link href="/" className="flex items-center flex-shrink-0">
+                <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="128px" className="h-8 sm:h-10 w-auto object-contain" />
               </Link>
               <div className="hidden md:flex items-center gap-6">
                 <Link href="#soluciones" className="text-sm text-gray-400 hover:text-white transition-colors">Soluciones</Link>
@@ -163,35 +163,35 @@ export default function LandingPage() {
                 <Link href="#roi" className="text-sm text-gray-400 hover:text-white transition-colors">Calculá cuánto podés ahorrar</Link>
               </div>
             </div>
-            {isMounted && (<div className="flex items-center gap-3">
+            {isMounted && (<div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
               {user || hasSession ? (
                 <>
                   <Link
                     href="/dashboard"
-                    className="text-sm font-medium text-gray-300 hover:text-white transition-colors px-4 py-2"
+                    className="text-xs sm:text-sm font-medium text-gray-300 hover:text-white transition-colors px-2 sm:px-4 py-1.5 sm:py-2 truncate max-w-[100px] xs:max-w-[120px] sm:max-w-none"
                   >
                     {profile?.full_name || user?.email || 'Mi cuenta'}
                   </Link>
                   <button
                     onClick={async () => { await logout(); router.push('/'); }}
-                    className="text-sm font-medium bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-lg border border-gray-700 transition-colors"
+                    className="text-xs sm:text-sm font-medium bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-gray-700 transition-colors whitespace-nowrap"
                   >
                     Cerrar sesión
                   </button>
                 </>
               ) : authLoading ? (
-                <div className="h-8 w-32 rounded-lg bg-gray-800/60 animate-pulse" />
+                <div className="h-7 w-20 sm:h-8 sm:w-32 rounded-lg bg-gray-800/60 animate-pulse" />
               ) : (
                 <>
                   <Link
                     href="/login"
-                    className="text-sm font-medium text-gray-300 hover:text-white transition-colors px-4 py-2"
+                    className="text-xs sm:text-sm font-medium text-gray-300 hover:text-white transition-colors px-1.5 sm:px-4 py-1.5 sm:py-2 whitespace-nowrap"
                   >
                     Iniciar sesión
                   </Link>
                   <Link
                     href="/auth/signup"
-                    className="text-sm font-medium bg-cyan-500 hover:bg-cyan-400 text-black px-4 py-2 rounded-lg transition-colors"
+                    className="text-xs sm:text-sm font-medium bg-cyan-500 hover:bg-cyan-400 text-black px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg transition-colors whitespace-nowrap"
                   >
                     Comenzar gratis
                   </Link>
@@ -222,21 +222,21 @@ export default function LandingPage() {
                 Sabé qué tenés, qué vendés y cuánto perdés, en todas tus sucursales. Vynko reemplaza tus planillas con una sola herramienta: caja, stock, compras, clientes y documentos, con datos en tiempo real. Escaneá con el celular, vendé en segundos y enterate a tiempo cuando algo falta o se pierde.
               </p>
               <form onSubmit={handleWaitlist} noValidate className="mt-8 max-w-md">
-                <div className="flex gap-3">
-                  <div className="flex-1">
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                  <div className="flex-1 min-w-0">
                     <input
                       type="email"
                       value={email}
                       onChange={e => { setEmail(e.target.value); setEmailError(''); }}
                       placeholder="tu@email.com"
-                      className="w-full px-4 py-3 bg-gray-900 border border-gray-800 rounded-lg text-white placeholder:text-gray-400 focus:outline-none focus:border-cyan-500/50 text-sm"
+                      className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-gray-900 border border-gray-800 rounded-lg text-white placeholder:text-gray-400 focus:outline-none focus:border-cyan-500/50 text-sm"
                     />
                     {emailError && <p className="text-xs text-red-400 mt-1.5">{emailError}</p>}
                   </div>
                   <button
                     type="submit"
                     disabled={waitlistLoading}
-                    className="px-6 py-3 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-colors text-sm disabled:opacity-50 h-fit"
+                    className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-3 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-colors text-sm disabled:opacity-50 whitespace-nowrap"
                   >
                     {waitlistLoading ? 'Enviando...' : 'Comenzar gratis'}
                   </button>
@@ -687,22 +687,22 @@ export default function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="py-6 border-t border-gray-800/50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 pb-6 mb-6 border-b border-gray-800/50 text-sm text-gray-400">
+      <footer className="py-6 border-t border-gray-800/50 pb-24 md:pb-6">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="flex flex-wrap items-center justify-center gap-x-4 sm:gap-x-6 gap-y-2 pb-6 mb-6 border-b border-gray-800/50 text-sm text-gray-400">
             <span className="text-xs uppercase tracking-wider text-gray-500">Soluciones</span>
             {SEO_PAGES.map((page) => (
-              <Link key={page.slug} href={seoPath(page.slug)} className="hover:text-gray-200 transition-colors">
+              <Link key={page.slug} href={seoPath(page.slug)} className="hover:text-gray-200 transition-colors text-center">
                 {page.label}
               </Link>
             ))}
           </div>
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-2">
-              <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="128px" className="h-12 w-auto object-contain" />
+              <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="128px" className="h-10 sm:h-12 w-auto object-contain" />
             </div>
-            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-sm text-gray-400">
-              <div className="flex items-center gap-6">
+            <div className="flex flex-col items-center gap-4 text-sm text-gray-400 w-full md:w-auto">
+              <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 sm:gap-6 max-w-full">
                 <Link href="/precios" className="hover:text-gray-200 transition-colors">Precios</Link>
                 <Link href="/terminos" className="hover:text-gray-200 transition-colors">Términos</Link>
                 <Link href="/privacidad" className="hover:text-gray-200 transition-colors">Privacidad</Link>
@@ -723,7 +723,7 @@ export default function LandingPage() {
                   Instagram
                 </a>
               </div>
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-gray-400 text-center px-2">
                 © {new Date().getFullYear()} Vynko. Todos los derechos reservados.
                 <span className="hidden sm:inline"> Logotipo e imágenes: propiedad de Vynko.</span>
               </span>
@@ -734,13 +734,13 @@ export default function LandingPage() {
 
       {/* Sticky Mobile CTA */}
       {isMounted && !user && !hasSession && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden border-t border-gray-800/50 bg-gray-950/95 backdrop-blur-xl px-4 py-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+        <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden border-t border-gray-800/50 bg-gray-950/95 backdrop-blur-xl px-3 sm:px-4 py-2.5 sm:py-3" style={{ paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom))' }}>
           <Link
             href="/auth/signup"
-            className="flex items-center justify-center gap-2 w-full py-3.5 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl text-sm transition-colors shadow-lg shadow-cyan-500/20"
+            className="flex items-center justify-center gap-2 w-full max-w-full py-3 px-3 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl text-xs sm:text-sm transition-colors shadow-lg shadow-cyan-500/20 text-center leading-tight whitespace-normal break-words"
           >
-            Comenzar gratis — {getTrialDays() || 0} días de prueba
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+            <span>Comenzar gratis — {getTrialDays() || 0} días de prueba</span>
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
           </Link>
         </div>
       )}
