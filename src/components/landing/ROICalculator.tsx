@@ -60,25 +60,25 @@ export default function ROICalculator() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-gray-950/60 border border-gray-800/50 rounded-xl p-4 text-center">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
+        <div className="bg-gray-950/60 border border-gray-800/50 rounded-xl p-3 sm:p-4 text-center">
           <Clock className="h-5 w-5 text-cyan-400 mx-auto mb-2" />
-          <p className="text-2xl font-extrabold text-cyan-400">{results.monthlyHours}h</p>
+          <p className="text-xl sm:text-2xl font-extrabold text-cyan-400">{results.monthlyHours}h</p>
           <p className="text-[11px] text-gray-400 mt-1">Ahorrás al mes</p>
         </div>
-        <div className="bg-gray-950/60 border border-gray-800/50 rounded-xl p-4 text-center">
+        <div className="bg-gray-950/60 border border-gray-800/50 rounded-xl p-3 sm:p-4 text-center">
           <AlertTriangle className="h-5 w-5 text-amber-400 mx-auto mb-2" />
-          <p className="text-2xl font-extrabold text-amber-400">${results.monthlyLostFromStockouts.toLocaleString('es-AR')}</p>
+          <p className="text-xl sm:text-2xl font-extrabold text-amber-400 break-words">${results.monthlyLostFromStockouts.toLocaleString('es-AR')}</p>
           <p className="text-[11px] text-gray-400 mt-1">Pérdidas por quiebres/mes</p>
         </div>
-        <div className="bg-gray-950/60 border border-gray-800/50 rounded-xl p-4 text-center">
+        <div className="bg-gray-950/60 border border-gray-800/50 rounded-xl p-3 sm:p-4 text-center">
           <TrendingUp className="h-5 w-5 text-green-400 mx-auto mb-2" />
-          <p className="text-2xl font-extrabold text-green-400">${results.monthlySaved.toLocaleString('es-AR')}</p>
+          <p className="text-xl sm:text-2xl font-extrabold text-green-400 break-words">${results.monthlySaved.toLocaleString('es-AR')}</p>
           <p className="text-[11px] text-gray-400 mt-1">Ahorro mensual total</p>
         </div>
         <div className="bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 rounded-xl p-4 text-center">
           <TrendingUp className="h-5 w-5 text-cyan-300 mx-auto mb-2" />
-          <p className="text-2xl font-extrabold text-white">${results.annualSaved.toLocaleString('es-AR')}</p>
+          <p className="text-xl sm:text-2xl font-extrabold text-white break-words">${results.annualSaved.toLocaleString('es-AR')}</p>
           <p className="text-[11px] text-gray-400 mt-1">Proyección anual</p>
         </div>
       </div>
