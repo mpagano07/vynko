@@ -318,22 +318,24 @@ function TransfersHistoryTab() {
                           </div>
                           <div>
                             {t.items.length > 0 ? (
-                              <table className="w-full text-sm">
-                                <thead>
-                                  <tr className="text-xs text-gray-500 border-b border-gray-200 dark:border-gray-700">
-                                    <th className="text-left py-1.5">Descripción</th>
-                                    <th className="text-right py-1.5">Cant.</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {t.items.map((item) => (
-                                    <tr key={item.id} className="border-t border-gray-100 dark:border-gray-800">
-                                      <td className="py-1.5 text-gray-900 dark:text-gray-100">{item.product_name || 'Producto'}</td>
-                                      <td className="py-1.5 text-right text-gray-600 dark:text-gray-400">{item.quantity}</td>
+                              <div className="overflow-x-auto">
+                                <table className="w-full min-w-[260px] text-sm">
+                                  <thead>
+                                    <tr className="text-xs text-gray-500 border-b border-gray-200 dark:border-gray-700">
+                                      <th className="text-left py-1.5">Descripción</th>
+                                      <th className="text-right py-1.5">Cant.</th>
                                     </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                                  </thead>
+                                  <tbody>
+                                    {t.items.map((item) => (
+                                      <tr key={item.id} className="border-t border-gray-100 dark:border-gray-800">
+                                        <td className="py-1.5 text-gray-900 dark:text-gray-100">{item.product_name || 'Producto'}</td>
+                                        <td className="py-1.5 text-right text-gray-600 dark:text-gray-400">{item.quantity}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
                             ) : (
                               <p className="text-sm text-gray-400">Sin items</p>
                             )}
@@ -686,7 +688,8 @@ export default function ActivityLogsPage() {
                                 {log.entity_type === 'sale' ? (
                                   <div>
                                     {saleDetails[log.id] ? (
-                                      <table className="w-full text-sm">
+                                      <div className="overflow-x-auto">
+                                        <table className="w-full min-w-[320px] text-sm">
                                         <thead>
                                           <tr className="text-xs text-gray-500 border-b border-gray-200 dark:border-gray-700">
                                             <th className="text-left py-1.5">Descripción</th>
@@ -713,7 +716,8 @@ export default function ActivityLogsPage() {
                                             </td>
                                           </tr>
                                         </tfoot>
-                                      </table>
+                                        </table>
+                                      </div>
                                     ) : (
                                       <div className="flex items-center gap-2 text-sm text-gray-400">
                                         <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />

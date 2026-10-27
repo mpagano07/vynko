@@ -1299,8 +1299,8 @@ function ProductsPageContent() {
                     {importResults.filter(r => r.status === 'skipped').length} omitidos
                   </StatusBadge>
                 </div>
-                <div className="max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
-                  <table className="w-full text-sm">
+                <div className="max-h-64 overflow-x-auto overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+                  <table className="w-full min-w-[600px] text-sm">
                     <Thead>
                       <Th>Fila</Th>
                       <Th>Producto</Th>
@@ -1342,8 +1342,8 @@ function ProductsPageContent() {
                     Cambiar archivo
                   </label>
                 </div>
-                <div className="max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
-                  <table className="w-full text-sm">
+                <div className="max-h-64 overflow-x-auto overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+                  <table className="w-full min-w-[600px] text-sm">
                     <Thead>
                       <Th>#</Th>
                       {importColumns.map(col => (

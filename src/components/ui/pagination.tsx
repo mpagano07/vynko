@@ -25,42 +25,46 @@ export function Pagination({ currentPage, totalPages, onPageChange, resultInfo, 
     }, []);
 
   return (
-    <div className={cn('flex items-center justify-between border-t border-gray-100 dark:border-gray-800 px-6 py-4', className)}>
-      <div className="flex items-center gap-4 mr-4">
+    <div className={cn('flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-t border-gray-100 dark:border-gray-800 px-3 py-3 sm:px-6 sm:py-4', className)}>
+      <div className="flex flex-wrap items-center gap-2 sm:gap-4">
         {resultInfo && <span className="text-xs text-gray-500">{resultInfo}</span>}
         <span className="text-xs text-gray-500">
           Página <strong>{currentPage}</strong> de <strong>{totalPages}</strong>
         </span>
       </div>
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center justify-center gap-1 sm:justify-end">
         <Button
           variant="outline"
           size="sm"
           disabled={currentPage === 1}
           onClick={() => goToPage(currentPage - 1)}
+          className="px-2 sm:px-3"
         >
           Anterior
         </Button>
-        {pageNumbers.map((p, i) =>
-          p === '...' ? (
-            <span key={`dots-${i}`} className="px-1 text-gray-400 text-xs">…</span>
-          ) : (
-            <Button
-              key={p}
-              variant={currentPage === p ? 'primary' : 'outline'}
-              size="sm"
-              onClick={() => goToPage(p)}
-              className="min-w-[28px] px-1"
-            >
-              {p}
-            </Button>
-          )
-        )}
+        <div className="flex items-center gap-1 overflow-x-auto max-w-full">
+          {pageNumbers.map((p, i) =>
+            p === '...' ? (
+              <span key={`dots-${i}`} className="px-1 text-gray-400 text-xs">…</span>
+            ) : (
+              <Button
+                key={p}
+                variant={currentPage === p ? 'primary' : 'outline'}
+                size="sm"
+                onClick={() => goToPage(p)}
+                className="min-w-[32px] px-1 sm:min-w-[28px]"
+              >
+                {p}
+              </Button>
+            )
+          )}
+        </div>
         <Button
           variant="outline"
           size="sm"
           disabled={currentPage === totalPages}
           onClick={() => goToPage(currentPage + 1)}
+          className="px-2 sm:px-3"
         >
           Siguiente
         </Button>
