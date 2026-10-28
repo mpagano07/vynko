@@ -327,7 +327,7 @@ function ProductsPageContent() {
     }
   };
 
-  const handleExport = async ({ platform, format }: { platform: ExportPlatform; format: ExportFormat }) => {
+  const handleExport = async ({ platform, format, destination = 'download' }: { platform: ExportPlatform; format: ExportFormat; destination?: 'download' | 'drive' }) => {
     if (filteredProducts.length === 0) {
       toast.error('No hay productos para exportar');
       return;
@@ -335,16 +335,52 @@ function ProductsPageContent() {
 
     await run(async () => {
       try {
+        if (destination === 'drive') {
+          const { generateExportBlob } = await import('@/lib/excel-export');
+          const { blob, fileName } = await generateExportBlob({
+            products: filteredProducts,
+            categories,
+            platform,
+            format,
+          });
+
+          const formData = new FormData();
+          formData.append('file', blob, fileName);
+          formData.append('fileName', fileName);
+
+          const res = await authFetch('/api/google/drive/upload', {
+            method: 'POST',
+            body: formData,
+          });
+
+          const data = await res.json();
+          if (!res.ok) {
+            if (data.needsAuth) {
+              const authRes = await fetch('/api/google/drive/auth-url?origin=/products');
+              const authData = await authRes.json();
+              if (authData.url) {
+                window.location.href = authData.url;
+                return;
+              }
+            }
+            throw new Error(data.error || 'Error al guardar en Drive');
+          }
+
+          toast.success('Archivo guardado en Google Drive');
+          setIsExportModalOpen(false);
+          return;
+        }
+
         await exportProductsFile({
           products: filteredProducts,
           categories,
           platform,
           format,
         });
-        toast.success(`${filteredProducts.length} producto(s) exportados`);
         setIsExportModalOpen(false);
-      } catch {
-        toast.error('Error al exportar');
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Error al exportar productos');
+        throw new Error('export failed');
       }
     });
   };
@@ -726,13 +762,13 @@ function ProductsPageContent() {
                     <Scan className="h-4 w-4 text-teal-500 shrink-0" />
                     Carga de inventario
                   </button>
-                  <button
-                    onClick={() => { setIsImportModalOpen(true); setIsActionsMenuOpen(false); }}
-                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                  >
-                    <FileSpreadsheet className="h-4 w-4 text-emerald-500 shrink-0" />
-                    Importar
-                  </button>
+                    <button
+                      onClick={() => { setIsImportModalOpen(true); setIsActionsMenuOpen(false); }}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+                    >
+                      <Upload className="h-4 w-4" />
+                      Importar
+                    </button>
                   <button
                     onClick={() => { openExportModal(); setIsActionsMenuOpen(false); }}
                     disabled={busy}
@@ -1278,13 +1314,80 @@ function ProductsPageContent() {
               <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl">
                 <FileSpreadsheet className="h-12 w-12 text-gray-400 mb-4" />
                 <p className="text-sm text-gray-500 mb-4">Seleccioná un archivo Excel o CSV para comenzar</p>
-                <label className="cursor-pointer">
-                  <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
-                  <span className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg text-sm transition-colors">
-                    <Upload className="h-4 w-4" />
-                    Seleccionar archivo
-                  </span>
-                </label>
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  <label className="cursor-pointer">
+                    <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
+                    <span className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg text-sm transition-colors">
+                      <Upload className="h-4 w-4" />
+                      Seleccionar archivo
+                    </span>
+                  </label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        const authRes = await fetch('/api/google/drive/auth-url?origin=/products');
+                        const authData = await authRes.json().catch(() => ({}));
+                        if (!authRes.ok || !authData.url) {
+                          toast.error(authData.error || 'No se pudo conectar con Google Drive');
+                          return;
+                        }
+                        const gapiRes = await fetch('/api/auth/session', { credentials: 'include' });
+                        const gapiData = await gapiRes.json().catch(() => ({}));
+                        const token =
+                          (gapiData as { session?: { provider_token?: string }; provider_token?: string })?.session?.provider_token ||
+                          (gapiData as { provider_token?: string })?.provider_token;
+                        if (!token) {
+                          window.location.href = authData.url;
+                          return;
+                        }
+                        const { openDrivePicker } = await import('@/lib/google/picker');
+                        openDrivePicker(token, async (fileId, fileName) => {
+                          toast.loading('Descargando archivo desde Google Drive...', { id: 'drive-import-modal' });
+                          try {
+                            const dlRes = await authFetch('/api/google/drive/download', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ fileId }),
+                            });
+                            const dlData = await dlRes.json();
+                            if (!dlRes.ok) {
+                              if (dlData.needsAuth) {
+                                toast.dismiss('drive-import-modal');
+                                window.location.href = authData.url;
+                                return;
+                              }
+                              throw new Error(dlData.error);
+                            }
+                            const binaryString = atob(dlData.data);
+                            const bytes = new Uint8Array(binaryString.length);
+                            for (let i = 0; i < binaryString.length; i++) {
+                              bytes[i] = binaryString.charCodeAt(i);
+                            }
+                            const buf = bytes.buffer;
+                            const { parseWorkbookFile } = await import('@/lib/excel-import-parse');
+                            const parsed = await parseWorkbookFile(buf, { fileName: dlData.fileName || fileName });
+                            if (!parsed.ok) {
+                              toast.error(parsed.error, { id: 'drive-import-modal' });
+                              return;
+                            }
+                            setImportColumns(parsed.columns);
+                            setImportRows(parsed.rows);
+                            toast.success(`${parsed.rows.length} producto(s) leídos desde Google Drive`, { id: 'drive-import-modal' });
+                          } catch (err) {
+                            toast.error(err instanceof Error ? err.message : 'Error al importar desde Drive', { id: 'drive-import-modal' });
+                          }
+                        });
+                      } catch {
+                        toast.error('Error al conectar con Google Drive');
+                      }
+                    }}
+                  >
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Seleccionar desde Google Drive
+                  </Button>
+                </div>
               </div>
             ) : importResults ? (
               <div className="space-y-4">

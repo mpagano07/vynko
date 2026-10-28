@@ -175,18 +175,18 @@ function downloadBlob(blob: Blob, fileName: string): void {
 }
 
 /**
- * Genera y descarga la planilla. Para XLS se escribe un BIFF8 real (la
- * extension .xls es la que aceptan los importadores de TN y ML); para CSV se
- * serializa con separador coma y comillas donde hace falta (SheetJS se encarga
- * de escapar), que es el dialecto que leen ambas plataformas.
+ * Genera el Blob de la planilla sin descargarla.
+ * Para XLS se escribe un BIFF8 real (la extension .xls es la que aceptan los
+ * importadores de TN y ML); para CSV se serializa con separador coma y
+ * comillas donde hace falta.
  */
-export async function exportProductsFile(options: {
+export async function generateExportBlob(options: {
   products: Product[];
   categories: Category[];
   platform: ExportPlatform;
   format: ExportFormat;
   now?: Date;
-}): Promise<void> {
+}): Promise<{ blob: Blob; fileName: string }> {
   const { products, categories, platform, format, now = new Date() } = options;
   const rows = buildExportRows(products, categories, platform);
   const XLSX = await import('xlsx');
@@ -196,13 +196,28 @@ export async function exportProductsFile(options: {
   if (format === 'csv') {
     const ws = XLSX.utils.json_to_sheet(rows);
     const csv = XLSX.utils.sheet_to_csv(ws);
-    downloadBlob(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }), fileName);
-    return;
+    const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' });
+    return { blob, fileName };
   }
 
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
   const data = XLSX.write(wb, { type: 'array', bookType: 'xls' }) as ArrayBuffer;
-  downloadBlob(new Blob([data], { type: 'application/vnd.ms-excel' }), fileName);
+  const blob = new Blob([data], { type: 'application/vnd.ms-excel' });
+  return { blob, fileName };
+}
+
+/**
+ * Genera y descarga la planilla.
+ */
+export async function exportProductsFile(options: {
+  products: Product[];
+  categories: Category[];
+  platform: ExportPlatform;
+  format: ExportFormat;
+  now?: Date;
+}): Promise<void> {
+  const { blob, fileName } = await generateExportBlob(options);
+  downloadBlob(blob, fileName);
 }
