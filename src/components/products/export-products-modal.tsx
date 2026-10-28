@@ -4,13 +4,13 @@ import React, { useState } from 'react';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
-import { Loader2, Download, Store, ShoppingBag, FileSpreadsheet } from 'lucide-react';
+import { Loader2, Download, Store, ShoppingBag, FileSpreadsheet, Cloud } from 'lucide-react';
 import type { ExportFormat, ExportPlatform } from '@/lib/excel-export';
 
 export interface ExportProductsModalProps {
   open: boolean;
   onClose: () => void;
-  onExport: (options: { platform: ExportPlatform; format: ExportFormat }) => void | Promise<void>;
+  onExport: (options: { platform: ExportPlatform; format: ExportFormat; destination?: 'download' | 'drive' }) => void | Promise<void>;
   exporting: boolean;
   count: number;
 }
@@ -90,7 +90,8 @@ export function ExportProductsModal({ open, onClose, onExport, exporting, count 
       aria-label="Exportar productos"
     >
       <p className="text-sm text-gray-500 mb-5">
-        Descargá los {count} producto(s) de la lista actual. Si solo querés un Excel, andá directo con
+        Descargá los {count} producto(s) de la lista actual o guardalos directamente en Google Drive.
+        Si solo querés un Excel, andá directo con
         <span className="font-medium text-gray-700 dark:text-gray-300"> Genérico</span>.
       </p>
 
@@ -127,14 +128,28 @@ export function ExportProductsModal({ open, onClose, onExport, exporting, count 
         </div>
       </div>
 
-      <div className="flex justify-end gap-2 mt-6">
+      <div className="flex flex-col sm:flex-row sm:justify-end gap-2 mt-6">
         <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={exporting}>
           Cancelar
         </Button>
         <Button
           type="button"
+          variant="outline"
           size="sm"
-          onClick={() => onExport({ platform, format })}
+          onClick={() => onExport({ platform, format, destination: 'drive' })}
+          disabled={exporting}
+        >
+          {exporting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Cloud className="h-4 w-4" />
+          )}
+          {exporting ? 'Guardando...' : 'Guardar en Google Drive'}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => onExport({ platform, format, destination: 'download' })}
           disabled={exporting}
         >
           {exporting ? (
@@ -142,7 +157,7 @@ export function ExportProductsModal({ open, onClose, onExport, exporting, count 
           ) : (
             <Download className="h-4 w-4" />
           )}
-          {exporting ? 'Exportando...' : 'Exportar'}
+          {exporting ? 'Exportando...' : 'Descargar'}
         </Button>
       </div>
     </Modal>
