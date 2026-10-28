@@ -14,7 +14,7 @@ export async function loadGooglePickerScript(): Promise<void> {
     script.src = 'https://apis.google.com/js/api.js';
     script.onload = () => {
       if (window.gapi) {
-        (window.gapi.load as any)('picker', () => resolve());
+        (window.gapi.load as (api: string, callback: () => void) => void)('picker', () => resolve());
       } else {
         reject(new Error('No se pudo cargar Google API'));
       }

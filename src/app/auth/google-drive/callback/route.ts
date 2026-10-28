@@ -43,8 +43,6 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL('/products?drive_error=token_failed', request.url));
     }
 
-    const tokens = await tokenRes.json();
-    
     // Note: For full integration with Supabase, we might need to store tokens
     // For now, redirect back - user can try again if session has provider token
     return NextResponse.redirect(new URL(`${origin}?drive_connected=true`, request.url));

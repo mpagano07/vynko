@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
-import { createServerSupabaseClient } from '@/lib/supabase';
 
 export async function GET(request: Request) {
   const auth = await getAuth(request);
@@ -17,11 +16,6 @@ export async function GET(request: Request) {
   if (!clientId || !clientSecret || clientId === 'dummy' || clientSecret === 'dummy') {
     return NextResponse.json({ error: 'Google OAuth no configurado' }, { status: 500 });
   }
-
-  const supabase = await createServerSupabaseClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
 
   // Build OAuth URL with Drive scopes
   const redirectUri = `${new URL(request.url).origin}/auth/google-drive/callback`;

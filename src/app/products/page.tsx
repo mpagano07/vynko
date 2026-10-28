@@ -1335,7 +1335,9 @@ function ProductsPageContent() {
                         }
                         const gapiRes = await fetch('/api/auth/session', { credentials: 'include' });
                         const gapiData = await gapiRes.json().catch(() => ({}));
-                        const token = gapiData?.session?.provider_token || (gapiData as any)?.provider_token;
+                        const token =
+                          (gapiData as { session?: { provider_token?: string }; provider_token?: string })?.session?.provider_token ||
+                          (gapiData as { provider_token?: string })?.provider_token;
                         if (!token) {
                           window.location.href = authData.url;
                           return;

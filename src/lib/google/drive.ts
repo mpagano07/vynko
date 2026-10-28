@@ -10,7 +10,7 @@ export async function getGoogleAccessToken(): Promise<string | null> {
     if (!session) return null;
 
     // Try to get provider token from session
-    const providerToken = (session as any).provider_token;
+    const providerToken = (session as { provider_token?: string | null } | null)?.provider_token;
     if (providerToken) {
       return providerToken;
     }
