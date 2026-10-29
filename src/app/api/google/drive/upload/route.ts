@@ -17,7 +17,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Archivo requerido' }, { status: 400 });
     }
 
-    const accessToken = await getGoogleAccessToken();
+    const accessToken = await getGoogleAccessToken(auth.userId);
     if (!accessToken) {
       return NextResponse.json(
         { error: 'Conectá tu cuenta de Google con permisos de Drive', needsAuth: true },

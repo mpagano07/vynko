@@ -35,6 +35,10 @@
  *   'strict-dynamic', cae en el host list. `style-src`/`connect-src`/`frame-src`
  *   usan `*.paddle.com` porque el checkout real corre en subdominios distintos
  *   segun el entorno (`sandbox-buy`, `sandbox-cdn`, `sandbox-create-checkout`).
+ * - Google Picker: el loader de `gapi` vive en `apis.google.com` y el diálogo
+ *   se monta en un iframe de `docs.google.com`/`drive.google.com`. En produccion
+ *   `'strict-dynamic'` ya habilita el script cargado por el bundle; el host list
+ *   queda para desarrollo, donde `'strict-dynamic'` no se aplica.
  *
  * Ver `scripts/verify-csp.mjs`, que comprueba contra el server real que todo
  * script inline de la pagina lleva el nonce vigente.
@@ -45,7 +49,7 @@ export function buildCsp(nonce: string): string {
 
   const directives = [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}'${strictDynamic}${isDev ? " 'unsafe-eval' https://va.vercel-scripts.com" : ''} https://cdn.paddle.com`,
+    `script-src 'self' 'nonce-${nonce}'${strictDynamic}${isDev ? " 'unsafe-eval' https://va.vercel-scripts.com" : ''} https://cdn.paddle.com https://apis.google.com`,
     // Los handlers inline (onclick=, onload=, ...) quedan en 'none'. React no los
     // emite nunca (usa delegacion), asi que no se rompe nada y se cierra la via
     // de ejecutar codigo desde un atributo inyectado.
@@ -53,8 +57,9 @@ export function buildCsp(nonce: string): string {
     "style-src 'self' 'unsafe-inline' https://*.paddle.com",
     "img-src 'self' blob: data: https://*.supabase.co https://*.supabase.in https://*.mercadopago.com https://http2.mlstatic.com https://*.gravatar.com https://images.unsplash.com",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.paddle.com",
-    "frame-src https://*.mercadopago.com https://*.paddle.com",
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.paddle.com https://apis.google.com https://*.googleapis.com",
+    // Google Picker se monta en un iframe de docs.google.com/drive.google.com.
+    "frame-src https://*.mercadopago.com https://*.paddle.com https://docs.google.com https://drive.google.com",
     "media-src 'self' blob:",
     "worker-src 'self' blob:",
     "object-src 'none'",

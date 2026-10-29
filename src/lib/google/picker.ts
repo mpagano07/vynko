@@ -30,8 +30,10 @@ export async function openDrivePicker(
 ): Promise<void> {
   await loadGooglePickerScript();
 
-  if (!window.google?.picker || !GOOGLE_API_KEY) {
-    throw new Error('Google Picker no está configurado');
+  if (!window.google?.picker || !GOOGLE_API_KEY || GOOGLE_API_KEY === 'dummy') {
+    throw new Error(
+      'Google Picker no está configurado: falta NEXT_PUBLIC_GOOGLE_API_KEY'
+    );
   }
 
   const view = new window.google.picker.DocsView(

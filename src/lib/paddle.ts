@@ -133,6 +133,53 @@ export interface PaddleSubscription {
   customData: Record<string, unknown> | null;
 }
 
+export interface PaddleTransaction {
+  id: string;
+  status: 'draft' | 'ready' | 'billed' | 'paid' | 'completed' | 'canceled' | 'past_due';
+  origin: string | null;
+  subscriptionId: string | null;
+}
+
+type PaddleTransactionResponse = {
+  data?: {
+    id?: string;
+    status?: PaddleTransaction['status'];
+    origin?: string | null;
+    subscription_id?: string | null;
+  };
+};
+
+function mapTransaction(data: PaddleTransactionResponse['data']): PaddleTransaction {
+  if (!data?.id || !data.status) {
+    throw new Error('Paddle devolvió una transacción inválida');
+  }
+  return {
+    id: data.id,
+    status: data.status,
+    origin: data.origin ?? null,
+    subscriptionId: data.subscription_id ?? null,
+  };
+}
+
+export async function getPaddleTransaction(transactionId: string): Promise<PaddleTransaction> {
+  const res = await paddleRequest<PaddleTransactionResponse>(`/transactions/${transactionId}`);
+  return mapTransaction(res.data);
+}
+
+/**
+ * Cancela una transacción de checkout que todavía no se completó. Paddle sólo
+ * permite cancelar transacciones `draft`/`ready` (y algunas manuales); las que
+ * ya generaron una suscripción se cancelan desde el dashboard. Por eso este
+ * camino es best-effort: el cobro recurrente se corta con la suscripción.
+ */
+export async function cancelPaddleTransaction(transactionId: string): Promise<PaddleTransaction> {
+  const res = await paddleRequest<PaddleTransactionResponse>(`/transactions/${transactionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: 'canceled' }),
+  });
+  return mapTransaction(res.data);
+}
+
 type PaddleSubscriptionResponse = {
   data?: {
     id?: string;

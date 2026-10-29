@@ -1,24 +1,8 @@
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { getGoogleDriveAccessToken } from './token-store';
 
-export async function getGoogleAccessToken(): Promise<string | null> {
-  try {
-    const supabase = await createServerSupabaseClient();
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session) return null;
-
-    // Try to get provider token from session
-    const providerToken = (session as { provider_token?: string | null } | null)?.provider_token;
-    if (providerToken) {
-      return providerToken;
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
+export async function getGoogleAccessToken(userId: string): Promise<string | null> {
+  const token = await getGoogleDriveAccessToken(userId);
+  return token?.accessToken ?? null;
 }
 
 export async function downloadDriveFile(

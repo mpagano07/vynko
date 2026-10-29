@@ -167,6 +167,65 @@ export async function uploadImage(auth: AuthInfo, request: Request): Promise<Upl
   };
 }
 
+/**
+ * Borra todas las imágenes de producto de una empresa antes de eliminar la
+ * cuenta. Las filas de `products` se van por cascada, pero los objetos del
+ * bucket no: sin esto quedaban archivos huérfanos, accesibles por service role
+ * y sin dueño en la base.
+ */
+export async function deleteTenantProductImages(
+  tenantId: string
+): Promise<{ ok: true; deleted: number } | { ok: false; error: string }> {
+  const paths: string[] = [];
+  const limit = 1000;
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await supabaseAdmin.storage
+      .from(PRODUCT_IMAGE_BUCKET)
+      .list(tenantId, { limit, offset });
+
+    if (error) {
+      logger.error('Error listing product images for deletion:', {
+        error,
+        tenantId,
+      });
+      return { ok: false, error: 'No se pudieron eliminar las imágenes de tus productos.' };
+    }
+
+    const entries = data ?? [];
+    for (const entry of entries) {
+      // Las carpetas virtuales no tienen `id`; nuestros uploads siempre viven
+      // planos en `tenantId/uuid.ext`, así que no hay nada que borrar ahí.
+      if (!entry.id) continue;
+      paths.push(`${tenantId}/${entry.name}`);
+    }
+
+    if (entries.length < limit) break;
+    offset += limit;
+  }
+
+  const uniquePaths = [...new Set(paths)];
+  const chunkSize = 100;
+
+  for (let index = 0; index < uniquePaths.length; index += chunkSize) {
+    const chunk = uniquePaths.slice(index, index + chunkSize);
+    const { error } = await supabaseAdmin.storage
+      .from(PRODUCT_IMAGE_BUCKET)
+      .remove(chunk);
+
+    if (error) {
+      logger.error('Error removing product images for deletion:', {
+        error,
+        tenantId,
+      });
+      return { ok: false, error: 'No se pudieron eliminar las imágenes de tus productos.' };
+    }
+  }
+
+  return { ok: true, deleted: uniquePaths.length };
+}
+
 export async function signProductImageUrls(
   products: Array<Record<string, unknown>>,
   tenantId: string

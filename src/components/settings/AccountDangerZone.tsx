@@ -102,6 +102,11 @@ export function AccountDangerZone() {
           Esta acción es <strong>permanente e irreversible</strong>. Se eliminan tu cuenta,
           las empresas que administrás y todos sus datos (inventario, ventas, documentos).
         </p>
+        <p className="text-xs text-gray-400 mb-2">
+          Si tenés una suscripción activa, se cancela de inmediato para que no se sigan
+          generando cobros. No se reintegran períodos ya pagados. También se revoca el acceso
+          a Google Drive.
+        </p>
         <p className="text-xs text-gray-400 mb-4">
           En empresas donde solo sos colaborador, únicamente se elimina tu acceso; los datos
           de esas empresas pertenecen a su titular.
