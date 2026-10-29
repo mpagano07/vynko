@@ -138,19 +138,21 @@ export function ExportProductsModal({ open, onClose, onExport, exporting, count 
           size="sm"
           onClick={() => onExport({ platform, format, destination: 'drive' })}
           disabled={exporting}
+          className="gap-2"
         >
           {exporting ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
             <Cloud className="h-4 w-4" />
           )}
-          {exporting ? 'Guardando...' : 'Guardar en Google Drive'}
+          {exporting ? 'Guardando...' : 'Guardar en Drive'}
         </Button>
         <Button
           type="button"
           size="sm"
           onClick={() => onExport({ platform, format, destination: 'download' })}
           disabled={exporting}
+          className="gap-2"
         >
           {exporting ? (
             <Loader2 className="h-4 w-4 animate-spin" />

@@ -123,6 +123,7 @@ function createSupabaseMock() {
     upload: { error: null as unknown },
     createSignedUrl: { data: { signedUrl: 'https://signed.example/image.png' } as unknown, error: null as unknown },
     createSignedUrls: { data: [] as unknown, error: null as unknown },
+    list: { data: [] as unknown, error: null as unknown },
     remove: { error: null as unknown },
   };
 
@@ -182,6 +183,10 @@ function createSupabaseMock() {
       storageCalls.push({ method: 'createSignedUrls', args });
       return storageResults.createSignedUrls;
     }),
+    list: vi.fn(async (...args: unknown[]) => {
+      storageCalls.push({ method: 'list', args });
+      return storageResults.list;
+    }),
     remove: vi.fn(async (...args: unknown[]) => {
       storageCalls.push({ method: 'remove', args });
       return { error: storageResults.remove.error };
@@ -233,6 +238,7 @@ function createSupabaseMock() {
       storageResults.upload.error = null;
       storageResults.createSignedUrl = { data: { signedUrl: 'https://signed.example/image.png' }, error: null };
       storageResults.createSignedUrls = { data: [], error: null };
+      storageResults.list = { data: [], error: null };
       storageResults.remove.error = null;
       rpcResults.rate_limit_hit = { data: [{ ok: true, retry_after_seconds: 0 }], error: null };
       rpcResults.create_sale_atomic = { data: { id: 'sale-1' }, error: null };

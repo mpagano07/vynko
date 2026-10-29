@@ -28,6 +28,7 @@ import {
 import { canUseFacturacion } from '@/lib/arca/access';
 import { ArcaConfigCard } from '@/components/settings/ArcaConfigCard';
 import { AccountDangerZone } from '@/components/settings/AccountDangerZone';
+import { GoogleDriveConnectionCard } from '@/components/settings/GoogleDriveConnectionCard';
 
 interface Collaborator {
   user_id: string;
@@ -1326,7 +1327,10 @@ function SettingsContent() {
       </TabPanel>
 
       <TabPanel id="cuenta" activeTab={activeTab}>
-        <AccountDangerZone />
+        <div className="space-y-6">
+          <GoogleDriveConnectionCard />
+          <AccountDangerZone />
+        </div>
       </TabPanel>
 
       <EditCollaboratorModal

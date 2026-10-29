@@ -1,6 +1,9 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import type { AuthInfo } from '@/lib/api-auth';
 import { logger } from '@/lib/logger';
+import { cancelAccountSubscriptions } from '@/lib/account-subscriptions';
+import { deleteTenantProductImages } from '@/lib/upload-service';
+import { revokeGoogleDriveConnection } from '@/lib/google/token-store';
 
 export type AccountResult<T = unknown> =
   | { ok: true; data: T; status: number }
@@ -42,10 +45,13 @@ const EXPORT_TABLES = [
  * son de otra persona, no suyos, y no puede ni exportarlos ni borrarlos.
  */
 async function getOwnedTenantIds(userId: string): Promise<string[]> {
-  const { data } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from('tenant_users')
     .select('tenant_id, role')
     .eq('user_id', userId);
+  // No se puede degradar a []: en el borrado eso saltearía la cancelación de
+  // la suscripción y dejaría la tarjeta cobrando una cuenta que ya no existe.
+  if (error) throw error;
   return (data ?? [])
     .filter((r) => r.role === 'owner')
     .map((r) => r.tenant_id as string);
@@ -127,6 +133,9 @@ export async function exportAccountData(
  *    solo se remueve su membresia. Sus datos de negocio son de otro titular.
  *  - Requiere confirmacion explicita (`confirm: 'ELIMINAR'`) para no dejar un
  *    borrado irreversible detras de un solo clic.
+ *  - Antes de borrar los datos se cancelan las suscripciones y se limpian los
+ *    archivos del bucket. Si el cobro no se puede cancelar, se aborta: una
+ *    cuenta borrada con la tarjeta siguiendo el débito es peor que un error.
  *  - Al final se borra el `auth.user`, que cascada a `profiles` y a cualquier
  *    `tenant_users`/`invitations` remanentes.
  */
@@ -144,6 +153,33 @@ export async function deleteAccount(
     }
 
     const ownedTenantIds = await getOwnedTenantIds(auth.userId);
+
+    // Primero el dinero: si hay una suscripción viva, se corta antes de que el
+    // usuario pierda acceso a la cuenta y ya no pueda cancelarla.
+    const subscriptionResult = await cancelAccountSubscriptions(auth.userId, ownedTenantIds);
+    if (!subscriptionResult.ok) {
+      return { ok: false, error: subscriptionResult.error, status: subscriptionResult.status };
+    }
+
+    // Revocar el permiso de Google es externo al borrado local. Si Google no
+    // responde, no bloqueamos el derecho de supresión: la fila local se va por
+    // cascada con el auth.user y el usuario puede revocar el permiso desde su
+    // Cuenta de Google.
+    try {
+      await revokeGoogleDriveConnection(auth.userId);
+    } catch (err) {
+      logger.warn('No se pudo revocar Google Drive al eliminar la cuenta:', { error: err });
+    }
+
+    // Los objetos del bucket no se borran por cascada. Se limpian antes de las
+    // empresas para no dejarlos huérfanos si el borrado de la base falla.
+    for (const tenantId of ownedTenantIds) {
+      const images = await deleteTenantProductImages(tenantId);
+      if (!images.ok) {
+        logger.error('Error deleting product images before deleting account:', { tenantId });
+        return { ok: false, error: images.error, status: 500 };
+      }
+    }
 
     if (ownedTenantIds.length > 0) {
       const { error: tenantError } = await supabaseAdmin

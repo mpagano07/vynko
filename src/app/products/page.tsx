@@ -64,6 +64,18 @@ type ImportStreamResult = {
   summary: { created: number; updated: number; skipped: number; total: number };
 };
 
+const DRIVE_ERROR_MESSAGES: Record<string, string> = {
+  missing_drive_scope:
+    'No se otorgó el permiso de archivos de Drive. Reconectá y dejá tildado el permiso de Drive.',
+  cancelled: 'Cancelaste la conexión con Google Drive.',
+  token_failed: 'Google rechazó la conexión. Probá de nuevo.',
+  invalid_state: 'La conexión expiró. Intentá de nuevo.',
+  not_configured: 'Google Drive no está configurado.',
+  no_refresh_token: 'Google no devolvió acceso permanente. Reconectá.',
+  missing_code: 'La conexión no devolvió un código. Intentá de nuevo.',
+  session_expired: 'Tu sesión expiró. Volvé a iniciar sesión.',
+};
+
 /**
  * Lee el NDJSON que streamea /api/products/import.
  *
@@ -433,6 +445,25 @@ function ProductsPageContent() {
       setProductForm((prev) => ({ ...prev, barcode }));
       setIsProductModalOpen(true);
     }
+  }, []);
+
+  // Resultado del OAuth de Google Drive: el callback vuelve con un flag.
+  // Mostramos el aviso y limpiamos la query para que no se repita al recargar.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get('drive_connected');
+    const driveError = params.get('drive_error');
+    if (!connected && !driveError) return;
+
+    if (connected) toast.success('Google Drive conectado');
+    else if (driveError) {
+      toast.error(DRIVE_ERROR_MESSAGES[driveError] ?? 'No se pudo conectar con Google Drive');
+    }
+
+    params.delete('drive_connected');
+    params.delete('drive_error');
+    const qs = params.toString();
+    window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
   }, []);
 
   // Close actions menu on outside click
@@ -1327,23 +1358,27 @@ function ProductsPageContent() {
                     variant="outline"
                     onClick={async () => {
                       try {
-                        const authRes = await fetch('/api/google/drive/auth-url?origin=/products');
-                        const authData = await authRes.json().catch(() => ({}));
-                        if (!authRes.ok || !authData.url) {
-                          toast.error(authData.error || 'No se pudo conectar con Google Drive');
-                          return;
-                        }
-                        const gapiRes = await fetch('/api/auth/session', { credentials: 'include' });
-                        const gapiData = await gapiRes.json().catch(() => ({}));
-                        const token =
-                          (gapiData as { session?: { provider_token?: string }; provider_token?: string })?.session?.provider_token ||
-                          (gapiData as { provider_token?: string })?.provider_token;
-                        if (!token) {
+                        const startDriveAuth = async () => {
+                          const authRes = await fetch('/api/google/drive/auth-url?origin=/products');
+                          const authData = await authRes.json().catch(() => ({}));
+                          if (!authRes.ok || !authData.url) {
+                            toast.error(authData.error || 'No se pudo conectar con Google Drive');
+                            return;
+                          }
                           window.location.href = authData.url;
+                        };
+
+                        const tokenRes = await authFetch('/api/google/drive/token');
+                        const tokenData = (await tokenRes.json().catch(() => ({}))) as {
+                          accessToken?: string;
+                        };
+                        if (!tokenRes.ok || typeof tokenData.accessToken !== 'string') {
+                          await startDriveAuth();
                           return;
                         }
+
                         const { openDrivePicker } = await import('@/lib/google/picker');
-                        openDrivePicker(token, async (fileId, fileName) => {
+                        openDrivePicker(tokenData.accessToken, async (fileId, fileName) => {
                           toast.loading('Descargando archivo desde Google Drive...', { id: 'drive-import-modal' });
                           try {
                             const dlRes = await authFetch('/api/google/drive/download', {
@@ -1355,7 +1390,7 @@ function ProductsPageContent() {
                             if (!dlRes.ok) {
                               if (dlData.needsAuth) {
                                 toast.dismiss('drive-import-modal');
-                                window.location.href = authData.url;
+                                await startDriveAuth();
                                 return;
                               }
                               throw new Error(dlData.error);
@@ -1385,7 +1420,7 @@ function ProductsPageContent() {
                     }}
                   >
                     <FileSpreadsheet className="h-4 w-4 mr-2" />
-                    Seleccionar desde Google Drive
+                    Importar desde Drive
                   </Button>
                 </div>
               </div>
