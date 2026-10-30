@@ -30,6 +30,7 @@ describe('ExportProductsModal', () => {
         driveResult={{
           fileName: 'vynko-productos.xls',
           webViewLink: 'https://drive.google.com/file/d/123/view',
+          accountEmail: 'duena@example.com',
         }}
         onExportAnother={onExportAnother}
       />
@@ -37,6 +38,7 @@ describe('ExportProductsModal', () => {
 
     expect(screen.getByLabelText('Archivo guardado en Google Drive')).toBeInTheDocument();
     expect(screen.getByText('vynko-productos.xls')).toBeInTheDocument();
+    expect(screen.getByText('duena@example.com')).toBeInTheDocument();
 
     const openLink = screen.getByRole('link', { name: /Abrir en Drive/ });
     expect(openLink).toHaveAttribute('href', 'https://drive.google.com/file/d/123/view');
@@ -59,6 +61,29 @@ describe('ExportProductsModal', () => {
 
     expect(screen.queryByRole('link', { name: /Abrir en Drive/ })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Listo' })).toBeInTheDocument();
+  });
+
+  it('reabre con las opciones pendientes al retomar un export', () => {
+    const onExport = vi.fn();
+
+    render(
+      <ExportProductsModal
+        {...baseProps}
+        onExport={onExport}
+        initialPlatform="mercadolibre"
+        initialFormat="csv"
+      />
+    );
+
+    expect(screen.getByText(/plantilla de publicación masiva de MercadoLibre/i)).toBeInTheDocument();
+    expect(screen.getByText(/Texto separado por comas/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar en Drive' }));
+    expect(onExport).toHaveBeenCalledWith({
+      platform: 'mercadolibre',
+      format: 'csv',
+      destination: 'drive',
+    });
   });
 
   it('no cierra el modal mientras se está subiendo el archivo', () => {

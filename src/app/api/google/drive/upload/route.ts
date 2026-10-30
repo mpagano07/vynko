@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
-import { uploadToDrive, getGoogleAccessToken } from '@/lib/google/drive';
+import { uploadToDrive, getGoogleAccessToken, getDriveAccount } from '@/lib/google/drive';
 
 export async function POST(request: Request) {
   const auth = await getAuth(request);
@@ -33,10 +33,16 @@ export async function POST(request: Request) {
       blob,
     });
 
+    // Se devuelve la cuenta vinculada para que el usuario pueda confirmar que
+    // el archivo quedó en el Drive que está mirando.
+    const account = await getDriveAccount(accessToken).catch(() => null);
+
     return NextResponse.json({
       success: true,
       id: result.id,
+      name: result.name,
       webViewLink: result.webViewLink,
+      accountEmail: account?.emailAddress ?? null,
     });
   } catch (error) {
     return NextResponse.json(

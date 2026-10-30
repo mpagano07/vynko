@@ -19,6 +19,7 @@ import type { ExportFormat, ExportPlatform } from '@/lib/excel-export';
 export interface DriveExportResult {
   fileName: string;
   webViewLink?: string;
+  accountEmail?: string | null;
 }
 
 export interface ExportProductsModalProps {
@@ -29,6 +30,9 @@ export interface ExportProductsModalProps {
   count: number;
   driveResult?: DriveExportResult | null;
   onExportAnother?: () => void;
+  /** Opciones con las que se reabre el modal al retomar un export pendiente. */
+  initialPlatform?: ExportPlatform;
+  initialFormat?: ExportFormat;
 }
 
 const PLATFORM_OPTIONS = [
@@ -99,9 +103,11 @@ export function ExportProductsModal({
   count,
   driveResult,
   onExportAnother,
+  initialPlatform = 'generico',
+  initialFormat = 'xls',
 }: ExportProductsModalProps) {
-  const [platform, setPlatform] = useState<ExportPlatform>('generico');
-  const [format, setFormat] = useState<ExportFormat>('xls');
+  const [platform, setPlatform] = useState<ExportPlatform>(initialPlatform);
+  const [format, setFormat] = useState<ExportFormat>(initialFormat);
 
   const selectedPlatform = PLATFORM_OPTIONS.find((option) => option.value === platform)!;
 
@@ -137,6 +143,16 @@ export function ExportProductsModal({
         <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
           Lo vas a encontrar en tu Drive. También podés abrirlo directamente desde acá.
         </p>
+
+        {driveResult.accountEmail && (
+          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            Guardado en la cuenta{' '}
+            <span className="font-medium text-gray-700 dark:text-gray-200">
+              {driveResult.accountEmail}
+            </span>
+            . Si no lo ves en «Mi unidad», revisá que estés mirando esa cuenta.
+          </p>
+        )}
 
         <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
           {onExportAnother && (
