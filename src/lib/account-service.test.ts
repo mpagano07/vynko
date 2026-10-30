@@ -4,6 +4,21 @@ import { deleteAccount, exportAccountData } from '@/lib/account-service';
 
 vi.mock('@/lib/supabaseAdmin', () => ({ supabaseAdmin: supabaseMock }));
 
+const mockCancelAccountSubscriptions = vi.fn();
+vi.mock('@/lib/account-subscriptions', () => ({
+  cancelAccountSubscriptions: (...args: unknown[]) => mockCancelAccountSubscriptions(...args),
+}));
+
+const mockDeleteTenantProductImages = vi.fn();
+vi.mock('@/lib/upload-service', () => ({
+  deleteTenantProductImages: (...args: unknown[]) => mockDeleteTenantProductImages(...args),
+}));
+
+const mockRevokeGoogleDriveConnection = vi.fn();
+vi.mock('@/lib/google/token-store', () => ({
+  revokeGoogleDriveConnection: (...args: unknown[]) => mockRevokeGoogleDriveConnection(...args),
+}));
+
 const auth = { tenantId: 'tenant-1', userId: 'user-1', allTenants: false, tenantIds: ['tenant-1'] };
 
 describe('exportAccountData', () => {
@@ -64,6 +79,19 @@ describe('exportAccountData', () => {
 describe('deleteAccount', () => {
   beforeEach(() => {
     supabaseMock.__reset();
+    mockCancelAccountSubscriptions.mockReset();
+    mockDeleteTenantProductImages.mockReset();
+    mockRevokeGoogleDriveConnection.mockReset();
+    mockCancelAccountSubscriptions.mockResolvedValue({
+      ok: true,
+      data: {
+        canceledPaddleSubscriptions: 0,
+        canceledMercadoPagoPreapprovals: 0,
+        canceledPaddleTransactions: 0,
+      },
+    });
+    mockDeleteTenantProductImages.mockResolvedValue({ ok: true, deleted: 0 });
+    mockRevokeGoogleDriveConnection.mockResolvedValue(undefined);
   });
 
   it('exige la confirmación escrita', async () => {
@@ -72,6 +100,7 @@ describe('deleteAccount', () => {
     if (result.ok) return;
     expect(result.status).toBe(400);
     expect(supabaseMock.auth.admin.deleteUser).not.toHaveBeenCalled();
+    expect(mockCancelAccountSubscriptions).not.toHaveBeenCalled();
   });
 
   it('borra las empresas propias, las membresías y el usuario auth', async () => {
@@ -83,10 +112,78 @@ describe('deleteAccount', () => {
     expect(result.ok).toBe(true);
     expect(supabaseMock.auth.admin.deleteUser).toHaveBeenCalledWith('user-1');
 
+    expect(mockCancelAccountSubscriptions).toHaveBeenCalledWith('user-1', ['tenant-1']);
+    expect(mockRevokeGoogleDriveConnection).toHaveBeenCalledWith('user-1');
+    expect(mockDeleteTenantProductImages).toHaveBeenCalledWith('tenant-1');
+
     const tenantDelete = supabaseMock.__calls.find(
       (c) => c.table === 'tenants' && c.method === 'delete'
     );
     expect(tenantDelete).toBeTruthy();
+  });
+
+  it('aborta si no puede leer las empresas propias', async () => {
+    supabaseMock.__queue('tenant_users', {
+      data: null,
+      error: { message: 'db down' },
+    });
+
+    const result = await deleteAccount(auth, { confirm: 'ELIMINAR' });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.status).toBe(500);
+
+    expect(mockCancelAccountSubscriptions).not.toHaveBeenCalled();
+    expect(supabaseMock.auth.admin.deleteUser).not.toHaveBeenCalled();
+  });
+
+  it('aborta sin borrar nada si no se puede cancelar la suscripción', async () => {
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1', role: 'owner' }] });
+    mockCancelAccountSubscriptions.mockResolvedValueOnce({
+      ok: false,
+      error: 'No se pudo cancelar tu suscripción.',
+      status: 502,
+    });
+
+    const result = await deleteAccount(auth, { confirm: 'ELIMINAR' });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.status).toBe(502);
+
+    expect(
+      supabaseMock.__calls.some((c) => c.table === 'tenants' && c.method === 'delete')
+    ).toBe(false);
+    expect(mockDeleteTenantProductImages).not.toHaveBeenCalled();
+    expect(supabaseMock.auth.admin.deleteUser).not.toHaveBeenCalled();
+  });
+
+  it('aborta sin borrar la base si falla la limpieza de imágenes', async () => {
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1', role: 'owner' }] });
+    mockDeleteTenantProductImages.mockResolvedValueOnce({
+      ok: false,
+      error: 'No se pudieron eliminar las imágenes de tus productos.',
+    });
+
+    const result = await deleteAccount(auth, { confirm: 'ELIMINAR' });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.status).toBe(500);
+
+    expect(
+      supabaseMock.__calls.some((c) => c.table === 'tenants' && c.method === 'delete')
+    ).toBe(false);
+    expect(supabaseMock.auth.admin.deleteUser).not.toHaveBeenCalled();
+  });
+
+  it('no bloquea el borrado si Google Drive no responde', async () => {
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1', role: 'owner' }] });
+    supabaseMock.__queue('tenants', { data: null, error: null });
+    supabaseMock.__queue('tenant_users', { data: null, error: null });
+    mockRevokeGoogleDriveConnection.mockRejectedValueOnce(new Error('network'));
+
+    const result = await deleteAccount(auth, { confirm: 'ELIMINAR' });
+    expect(result.ok).toBe(true);
+    expect(supabaseMock.auth.admin.deleteUser).toHaveBeenCalledWith('user-1');
   });
 
   it('no borra empresas de terceros donde solo es member', async () => {
@@ -97,6 +194,8 @@ describe('deleteAccount', () => {
     const result = await deleteAccount(auth, { confirm: 'ELIMINAR' });
     expect(result.ok).toBe(true);
 
+    expect(mockCancelAccountSubscriptions).toHaveBeenCalledWith('user-1', []);
+    expect(mockDeleteTenantProductImages).not.toHaveBeenCalled();
     expect(
       supabaseMock.__calls.some((c) => c.table === 'tenants' && c.method === 'delete')
     ).toBe(false);

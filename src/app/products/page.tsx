@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useProducts } from '@/lib/hooks/useProducts';
 import { useCategories } from '@/lib/hooks/useCategories';
@@ -51,7 +51,8 @@ import { filterProducts } from '@/lib/product-search';
 import { IMPORT_FILE_ERROR, parseWorkbookFile, validateSpreadsheetFile } from '@/lib/excel-import-parse';
 import { exportProductsFile } from '@/lib/excel-export';
 import type { ExportFormat, ExportPlatform } from '@/lib/excel-export';
-import { ExportProductsModal } from '@/components/products/export-products-modal';
+import { ExportProductsModal, type DriveExportResult } from '@/components/products/export-products-modal';
+import { rememberDriveIntent, takeDriveIntent, clearDriveIntent, type DriveIntent } from '@/lib/google/drive-intent';
 import { matchesQuery } from '@/lib/utils/text';
 import { TransferInbox } from '@/components/transfers/TransferInbox';
 import { SortableTh, SortDir } from '@/components/ui/sortable-th';
@@ -62,6 +63,18 @@ type ImportProgressState = { processed: number; total: number };
 type ImportStreamResult = {
   results: { row: number; status: string; name?: string; error?: string }[];
   summary: { created: number; updated: number; skipped: number; total: number };
+};
+
+const DRIVE_ERROR_MESSAGES: Record<string, string> = {
+  missing_drive_scope:
+    'No se otorgó el permiso de archivos de Drive. Reconectá y dejá tildado el permiso de Drive.',
+  cancelled: 'Cancelaste la conexión con Google Drive.',
+  token_failed: 'Google rechazó la conexión. Probá de nuevo.',
+  invalid_state: 'La conexión expiró. Intentá de nuevo.',
+  not_configured: 'Google Drive no está configurado.',
+  no_refresh_token: 'Google no devolvió acceso permanente. Reconectá.',
+  missing_code: 'La conexión no devolvió un código. Intentá de nuevo.',
+  session_expired: 'Tu sesión expiró. Volvé a iniciar sesión.',
 };
 
 /**
@@ -149,7 +162,7 @@ export default function ProductsPage() {
 }
 
 function ProductsPageContent() {
-  const { tenant, tenants } = useAuth();
+  const { tenant, tenants, loading: authLoading } = useAuth();
   const tenantId = tenant?.id ?? null;
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -164,6 +177,21 @@ function ProductsPageContent() {
     const s = searchParams?.get('stock');
     return s === 'critical' || s === 'low' || s === 'normal' ? s : 'all';
   });
+
+  /**
+   * Lista filtrada de productos. Se calcula acá arriba (y no junto al resto
+   * del filtrado) porque `handleExport` la usa y ahora también la referencia
+   * el efecto que retoma un export pendiente tras el OAuth de Drive.
+   */
+  const filteredProducts = useMemo(
+    () =>
+      filterProducts(products || [], {
+        searchTerm,
+        categoryId: selectedCategoryId,
+        stockFilter,
+      }),
+    [products, searchTerm, selectedCategoryId, stockFilter]
+  );
 
   // Product Modal State
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -227,6 +255,13 @@ function ProductsPageContent() {
   // Export State
   const { exporting, busy, run } = useExport();
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [driveExportResult, setDriveExportResult] = useState<DriveExportResult | null>(null);
+  const [exportOptions, setExportOptions] = useState<{ platform: ExportPlatform; format: ExportFormat }>({
+    platform: 'generico',
+    format: 'xls',
+  });
+  // Acción que quedó pendiente al mandar a autorizar Drive (ver drive-intent).
+  const [resumeDriveIntent, setResumeDriveIntent] = useState<DriveIntent | null>(null);
 
   // Transfer State
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -327,35 +362,190 @@ function ProductsPageContent() {
     }
   };
 
-  const handleExport = async ({ platform, format }: { platform: ExportPlatform; format: ExportFormat }) => {
+  /**
+   * Manda a autorizar Drive recordando qué acción estaba en curso. Al volver,
+   * el callback trae `drive_connected=true` y el efecto de reanudación la
+   * retoma con los mismos parámetros.
+   */
+  const startDriveAuth = useCallback(async (intent: DriveIntent) => {
+    rememberDriveIntent(intent);
+    try {
+      const authRes = await fetch('/api/google/drive/auth-url?origin=/products');
+      const authData = (await authRes.json().catch(() => ({}))) as {
+        url?: string;
+        error?: string;
+      };
+      if (!authRes.ok || !authData.url) {
+        clearDriveIntent();
+        toast.error(authData.error || 'No se pudo conectar con Google Drive');
+        return;
+      }
+      window.location.href = authData.url;
+    } catch {
+      clearDriveIntent();
+      toast.error('No se pudo conectar con Google Drive');
+    }
+  }, []);
+
+  const handleExport = useCallback(async ({ platform, format, destination = 'download' }: { platform: ExportPlatform; format: ExportFormat; destination?: 'download' | 'drive' }) => {
     if (filteredProducts.length === 0) {
       toast.error('No hay productos para exportar');
       return;
     }
 
+    setExportOptions({ platform, format });
+
     await run(async () => {
       try {
+        if (destination === 'drive') {
+          const { generateExportBlob } = await import('@/lib/excel-export');
+          const { blob, fileName } = await generateExportBlob({
+            products: filteredProducts,
+            categories,
+            platform,
+            format,
+          });
+
+          const formData = new FormData();
+          formData.append('file', blob, fileName);
+          formData.append('fileName', fileName);
+
+          const res = await authFetch('/api/google/drive/upload', {
+            method: 'POST',
+            body: formData,
+          });
+
+          const data = (await res.json()) as {
+            error?: string;
+            needsAuth?: boolean;
+            name?: string;
+            webViewLink?: string;
+            accountEmail?: string | null;
+          };
+          if (!res.ok) {
+            if (data.needsAuth) {
+              await startDriveAuth({ kind: 'export', platform, format });
+              return;
+            }
+            throw new Error(data.error || 'Error al guardar en Drive');
+          }
+
+          setDriveExportResult({
+            fileName: typeof data.name === 'string' ? data.name : fileName,
+            webViewLink: typeof data.webViewLink === 'string' ? data.webViewLink : undefined,
+            accountEmail: typeof data.accountEmail === 'string' ? data.accountEmail : null,
+          });
+          return;
+        }
+
         await exportProductsFile({
           products: filteredProducts,
           categories,
           platform,
           format,
         });
-        toast.success(`${filteredProducts.length} producto(s) exportados`);
+        setDriveExportResult(null);
         setIsExportModalOpen(false);
-      } catch {
-        toast.error('Error al exportar');
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Error al exportar productos');
+        throw new Error('export failed');
       }
     });
-  };
+  }, [filteredProducts, categories, run, startDriveAuth]);
 
   const openExportModal = () => {
     if (filteredProducts.length === 0) {
       toast.error('No hay productos para exportar');
       return;
     }
+    setDriveExportResult(null);
     setIsExportModalOpen(true);
   };
+
+  const closeExportModal = () => {
+    setIsExportModalOpen(false);
+    setDriveExportResult(null);
+  };
+
+  /**
+   * Abre Google Picker para importar. Si todavía no hay conexión, manda a
+   * autorizar y deja la intención guardada para reabrir el Picker al volver.
+   */
+  const handleImportFromDrive = useCallback(async () => {
+    try {
+      const tokenRes = await authFetch('/api/google/drive/token');
+      const tokenData = (await tokenRes.json().catch(() => ({}))) as {
+        accessToken?: string;
+      };
+      if (!tokenRes.ok || typeof tokenData.accessToken !== 'string') {
+        await startDriveAuth({ kind: 'import' });
+        return;
+      }
+
+      const { openDrivePicker } = await import('@/lib/google/picker');
+      openDrivePicker(tokenData.accessToken, async (fileId, fileName) => {
+        toast.loading('Descargando archivo desde Google Drive...', { id: 'drive-import-modal' });
+        try {
+          const dlRes = await authFetch('/api/google/drive/download', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileId }),
+          });
+          const dlData = await dlRes.json();
+          if (!dlRes.ok) {
+            if (dlData.needsAuth) {
+              toast.dismiss('drive-import-modal');
+              await startDriveAuth({ kind: 'import' });
+              return;
+            }
+            throw new Error(dlData.error);
+          }
+          const binaryString = atob(dlData.data);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          const buf = bytes.buffer;
+          const { parseWorkbookFile } = await import('@/lib/excel-import-parse');
+          const parsed = await parseWorkbookFile(buf, { fileName: dlData.fileName || fileName });
+          if (!parsed.ok) {
+            toast.error(parsed.error, { id: 'drive-import-modal' });
+            return;
+          }
+          setImportColumns(parsed.columns);
+          setImportRows(parsed.rows);
+          toast.success(`${parsed.rows.length} producto(s) leídos desde Google Drive`, { id: 'drive-import-modal' });
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : 'Error al importar desde Drive', { id: 'drive-import-modal' });
+        }
+      });
+    } catch {
+      toast.error('Error al conectar con Google Drive');
+    }
+  }, [startDriveAuth]);
+
+  // Retoma la acción interrumpida por el OAuth de Drive. El export espera a
+  // que `useProducts` termine de cargar; el import puede abrir el Picker ya.
+  useEffect(() => {
+    if (!resumeDriveIntent) return;
+    if (resumeDriveIntent.kind === 'export' && productsLoading) return;
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setResumeDriveIntent(null);
+
+    if (resumeDriveIntent.kind === 'export') {
+      setIsExportModalOpen(true);
+      toast.loading('Conexión lista. Guardando en Google Drive...', { id: 'drive-resume' });
+      void handleExport({ ...resumeDriveIntent, destination: 'drive' })
+        .catch(() => undefined)
+        .finally(() => toast.dismiss('drive-resume'));
+      return;
+    }
+
+    setIsImportModalOpen(true);
+    toast('Conexión lista. Elegí el archivo en Drive', { icon: '📄' });
+    void handleImportFromDrive();
+  }, [resumeDriveIntent, productsLoading, handleExport, handleImportFromDrive]);
 
   const handlePriceAdjust = async () => {
     const pct = parseFloat(priceAdjustPercentage);
@@ -399,6 +589,43 @@ function ProductsPageContent() {
     }
   }, []);
 
+  // Resultado del OAuth de Google Drive: el callback vuelve con un flag.
+  //
+  // Se espera a que `useAuth` termine (`authLoading === false`). Mientras la
+  // sesión carga, `ClientLayoutWrapper` monta esta página con `key="none"` y al
+  // resolver la sucursal la vuelve a montar con `key={tenant.id}`: si el efecto
+  // corriera en el primer montaje, consumiría la intención y limpiaría la URL,
+  // y el remount se llevaría el estado de reanudación sin dejar rastro.
+  useEffect(() => {
+    if (authLoading) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get('drive_connected');
+    const driveError = params.get('drive_error');
+    if (!connected && !driveError) return;
+
+    if (connected) {
+      // Si veníamos de un export/import, no alcanza con avisar que la conexión
+      // salió bien: el efecto de reanudación retoma la acción y muestra su
+      // propio mensaje.
+      const intent = takeDriveIntent();
+      if (intent) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setResumeDriveIntent(intent);
+      } else {
+        toast.success('Google Drive conectado');
+      }
+    } else if (driveError) {
+      clearDriveIntent();
+      toast.error(DRIVE_ERROR_MESSAGES[driveError] ?? 'No se pudo conectar con Google Drive');
+    }
+
+    params.delete('drive_connected');
+    params.delete('drive_error');
+    const qs = params.toString();
+    window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+  }, [authLoading]);
+
   // Close actions menu on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -416,13 +643,6 @@ function ProductsPageContent() {
 
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
-
-  // Filter Logic
-  const filteredProducts = filterProducts(products || [], {
-    searchTerm,
-    categoryId: selectedCategoryId,
-    stockFilter,
-  });
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -726,13 +946,13 @@ function ProductsPageContent() {
                     <Scan className="h-4 w-4 text-teal-500 shrink-0" />
                     Carga de inventario
                   </button>
-                  <button
-                    onClick={() => { setIsImportModalOpen(true); setIsActionsMenuOpen(false); }}
-                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                  >
-                    <FileSpreadsheet className="h-4 w-4 text-emerald-500 shrink-0" />
-                    Importar
-                  </button>
+                    <button
+                      onClick={() => { setIsImportModalOpen(true); setIsActionsMenuOpen(false); }}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+                    >
+                      <Upload className="h-4 w-4" />
+                      Importar
+                    </button>
                   <button
                     onClick={() => { openExportModal(); setIsActionsMenuOpen(false); }}
                     disabled={busy}
@@ -1218,10 +1438,14 @@ function ProductsPageContent() {
       {isExportModalOpen && (
         <ExportProductsModal
           open={isExportModalOpen}
-          onClose={() => setIsExportModalOpen(false)}
+          onClose={closeExportModal}
           onExport={handleExport}
           exporting={exporting}
           count={filteredProducts.length}
+          driveResult={driveExportResult}
+          onExportAnother={() => setDriveExportResult(null)}
+          initialPlatform={exportOptions.platform}
+          initialFormat={exportOptions.format}
         />
       )}
 
@@ -1278,13 +1502,23 @@ function ProductsPageContent() {
               <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl">
                 <FileSpreadsheet className="h-12 w-12 text-gray-400 mb-4" />
                 <p className="text-sm text-gray-500 mb-4">Seleccioná un archivo Excel o CSV para comenzar</p>
-                <label className="cursor-pointer">
-                  <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
-                  <span className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg text-sm transition-colors">
-                    <Upload className="h-4 w-4" />
-                    Seleccionar archivo
-                  </span>
-                </label>
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  <label className="cursor-pointer">
+                    <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
+                    <span className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg text-sm transition-colors">
+                      <Upload className="h-4 w-4" />
+                      Seleccionar archivo
+                    </span>
+                  </label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => { void handleImportFromDrive(); }}
+                  >
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Importar desde Drive
+                  </Button>
+                </div>
               </div>
             ) : importResults ? (
               <div className="space-y-4">

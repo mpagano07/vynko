@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { useProducts } from '@/lib/hooks/useProducts';
 import { useCategories } from '@/lib/hooks/useCategories';
 import type { Product } from '@/lib/types/product';
+import { rememberDriveIntent, takeDriveIntent } from '@/lib/google/drive-intent';
 
 const { searchParamsMock, replaceMock } = vi.hoisted(() => ({
   searchParamsMock: { get: vi.fn(() => null) },
@@ -167,5 +168,95 @@ describe('modal de producto: montos con separador de miles', () => {
     const second = await openEditModal('Horno Atma');
 
     await waitFor(() => expect(second.price).toHaveValue('5.000'));
+  });
+});
+
+describe('retomar el flujo de Google Drive al volver del OAuth', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    searchParamsMock.get.mockReturnValue(null);
+    window.sessionStorage.clear();
+    authMock.mockReturnValue({
+      tenant: { id: 't1', name: 'Central' },
+      tenants: [{ id: 't1', name: 'Central' }],
+    } as unknown as ReturnType<typeof useAuth>);
+    categoriesMock.mockReturnValue({
+      categories: [{ id: 'c1', name: 'Tv' }],
+      mutate: vi.fn(),
+    } as unknown as ReturnType<typeof useCategories>);
+  });
+
+  it('reabre el export con la plataforma y el formato que habían elegido', async () => {
+    window.history.replaceState({}, '', '/products?drive_connected=true');
+    rememberDriveIntent({ kind: 'export', platform: 'tiendanube', format: 'csv' });
+
+    renderPage();
+
+    expect(await screen.findByLabelText('Exportar productos')).toBeInTheDocument();
+    expect(screen.getByText(/encabezados que acepta la importación de productos de tiendanube/i)).toBeInTheDocument();
+    // La intención se consume: recargar no debe volver a exportar.
+    expect(takeDriveIntent()).toBeNull();
+  });
+
+  it('no retoma nada si el usuario conectó Drive desde otra pantalla', async () => {
+    window.history.replaceState({}, '', '/products?drive_connected=true');
+
+    renderPage();
+
+    expect(await screen.findByText('TV 100 Pulgadas')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Exportar productos')).not.toBeInTheDocument();
+  });
+
+  it('retoma el export aunque la página se remonte al resolver la sucursal', async () => {
+    // Reproduce lo que hace `ClientLayoutWrapper`: mientras la sesión carga, la
+    // página se monta con una key provisoria y al resolverse la sucursal se
+    // remonta con otra. Si el flag de OAuth se consume en el primer montaje, la
+    // acción se pierde.
+    window.history.replaceState({}, '', '/products?drive_connected=true');
+    rememberDriveIntent({ kind: 'export', platform: 'tiendanube', format: 'csv' });
+
+    productsMock.mockReturnValue({
+      products: [product()],
+      isLoading: false,
+      isError: false,
+      mutate: vi.fn(),
+    } as unknown as ReturnType<typeof useProducts>);
+
+    authMock.mockReturnValue({
+      tenant: null,
+      tenants: [],
+      loading: true,
+    } as unknown as ReturnType<typeof useAuth>);
+
+    const { rerender } = render(
+      <div key="none">
+        <ProductsPage />
+      </div>
+    );
+
+    authMock.mockReturnValue({
+      tenant: { id: 't1', name: 'Central' },
+      tenants: [{ id: 't1', name: 'Central' }],
+      loading: false,
+    } as unknown as ReturnType<typeof useAuth>);
+
+    rerender(
+      <div key="t1">
+        <ProductsPage />
+      </div>
+    );
+
+    expect(await screen.findByLabelText('Exportar productos')).toBeInTheDocument();
+  });
+
+  it('no reanuda si el OAuth terminó con error', async () => {
+    window.history.replaceState({}, '', '/products?drive_error=cancelled');
+    rememberDriveIntent({ kind: 'import' });
+
+    renderPage();
+
+    expect(await screen.findByText('TV 100 Pulgadas')).toBeInTheDocument();
+    // Se descarta la intención para que no se reanude en una próxima visita.
+    expect(takeDriveIntent()).toBeNull();
   });
 });

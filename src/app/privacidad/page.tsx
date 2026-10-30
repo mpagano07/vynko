@@ -120,6 +120,9 @@ export default function PrivacidadPage() {
               <li>
                 <strong>Google Generative AI (Google LLC):</strong> En los planes habilitados (Business y Enterprise) que utilizan voluntariamente funciones de análisis o asistencia por Inteligencia Artificial, se procesan únicamente las consultas puntuales generadas para dicho análisis. No se ceden datos personales a modelos públicos de terceros ni se comercializa tu información.
               </li>
+              <li>
+                <strong>Google LLC (Google Drive API):</strong> Utilizado únicamente para la funcionalidad opcional de importación y exportación de archivos con Google Drive, cuando el usuario lo solicita y autoriza expresamente mediante OAuth 2.0, Google Picker y el scope <code className="text-cyan-400 font-mono text-sm">https://www.googleapis.com/auth/drive.file</code>.
+              </li>
             </ul>
             <p className="mt-3 text-xs text-gray-400">
               Las transferencias internacionales de datos hacia estos proveedores se realizan bajo cláusulas contractuales tipo y estándares adecuados de seguridad contemplados en el art. 12 de la Ley 25.326, así como bajo la decisión de adecuación de la Unión Europea sobre Argentina para los usuarios del EEE.
@@ -179,7 +182,31 @@ export default function PrivacidadPage() {
           </section>
 
           <section className="bg-gray-900/50 border border-gray-800 rounded-xl p-6">
-            <h2 className="text-xl font-semibold text-white mb-3">11. Contacto</h2>
+            <h2 className="text-xl font-semibold text-white mb-3">12. Integración con Google Drive</h2>
+            <p className="leading-relaxed mb-3">
+              Vynko ofrece una funcionalidad opcional para importar y exportar archivos con Google Drive. Esta integración se realiza exclusivamente a petición del usuario y mediante autorización OAuth 2.0 con el siguiente alcance:
+            </p>
+            <ul className="list-disc list-inside space-y-2 text-gray-300 mb-3">
+              <li><code className="text-cyan-400 font-mono text-sm">https://www.googleapis.com/auth/drive.file</code></li>
+            </ul>
+            <p className="leading-relaxed mb-3">
+              Únicamente accedemos a los archivos que el usuario selecciona explícitamente a través del <strong>Google Picker</strong>. No solicitamos ni analizamos el resto de los archivos de su Google Drive.
+            </p>
+            <ul className="list-disc list-inside space-y-2 text-gray-300">
+              <li><strong>Uso limitado:</strong> El contenido de los archivos seleccionados se utiliza únicamente para importarlos al catálogo o a la funcionalidad para la que el usuario los haya elegido.</li>
+              <li><strong>Sin reventa ni publicidad:</strong> Los datos obtenidos a través de las APIs de Google no se utilizan para publicidad, perfilado comercial ni se venden a terceros.</li>
+              <li><strong>Sin entrenamiento de IA:</strong> Vynko no utiliza los datos obtenidos de Google APIs para entrenar modelos de inteligencia artificial propios o de terceros.</li>
+              <li><strong>Almacenamiento:</strong> Únicamente se almacena en Vynko la información que el usuario decide importar explícitamente. No guardamos de forma masiva el contenido de su Google Drive.</li>
+              <li><strong>Token de conexión:</strong> Para no pedir autorización en cada operación guardamos un token de actualización OAuth cifrado. No contiene archivos ni habilita el acceso a archivos que no hayas seleccionado, y podés revocarlo desde Configuración → Mi Cuenta o desde tu Cuenta de Google.</li>
+              <li><strong>Cumplimiento:</strong> El uso y la transferencia de la información recibida desde las APIs de Google cumplirán con la <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Política de Datos de Usuario de Google API Services</a>, incluyendo los requisitos de <em>Limited Use</em>.</li>
+            </ul>
+            <p className="mt-3 text-xs text-gray-400">
+              El usuario puede revocar el acceso de Vynko en cualquier momento desde Configuración → Mi Cuenta → Desconectar Google Drive, o desde su <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Cuenta de Google &gt; Seguridad &gt; Apps con acceso a tu cuenta</a>.
+            </p>
+          </section>
+
+          <section className="bg-gray-900/50 border border-gray-800 rounded-xl p-6">
+            <h2 className="text-xl font-semibold text-white mb-3">13. Contacto</h2>
             <p className="leading-relaxed">
               Ante cualquier duda sobre esta Política de Privacidad, podés escribirnos a <span className="text-cyan-400 font-mono">privacidad@vynko.dev</span>. Revisá también nuestra{' '}
               <Link href="/cookies" className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2">Política de Cookies</Link>{' '}

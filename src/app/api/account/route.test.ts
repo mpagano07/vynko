@@ -7,6 +7,22 @@ const mockAuth = { tenantId: 'tenant-1', userId: 'user-1', allTenants: false, te
 
 vi.mock('@/lib/api-auth', () => ({ getAuth: vi.fn(async () => mockAuth) }));
 vi.mock('@/lib/supabaseAdmin', () => ({ supabaseAdmin: supabaseMock }));
+vi.mock('@/lib/account-subscriptions', () => ({
+  cancelAccountSubscriptions: vi.fn(async () => ({
+    ok: true,
+    data: {
+      canceledPaddleSubscriptions: 0,
+      canceledMercadoPagoPreapprovals: 0,
+      canceledPaddleTransactions: 0,
+    },
+  })),
+}));
+vi.mock('@/lib/upload-service', () => ({
+  deleteTenantProductImages: vi.fn(async () => ({ ok: true, deleted: 0 })),
+}));
+vi.mock('@/lib/google/token-store', () => ({
+  revokeGoogleDriveConnection: vi.fn(async () => undefined),
+}));
 
 function makeRequest(body?: unknown): Request {
   return new Request('http://localhost/api/account', {
