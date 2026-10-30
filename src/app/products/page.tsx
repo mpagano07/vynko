@@ -51,7 +51,7 @@ import { filterProducts } from '@/lib/product-search';
 import { IMPORT_FILE_ERROR, parseWorkbookFile, validateSpreadsheetFile } from '@/lib/excel-import-parse';
 import { exportProductsFile } from '@/lib/excel-export';
 import type { ExportFormat, ExportPlatform } from '@/lib/excel-export';
-import { ExportProductsModal } from '@/components/products/export-products-modal';
+import { ExportProductsModal, type DriveExportResult } from '@/components/products/export-products-modal';
 import { matchesQuery } from '@/lib/utils/text';
 import { TransferInbox } from '@/components/transfers/TransferInbox';
 import { SortableTh, SortDir } from '@/components/ui/sortable-th';
@@ -239,6 +239,7 @@ function ProductsPageContent() {
   // Export State
   const { exporting, busy, run } = useExport();
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [driveExportResult, setDriveExportResult] = useState<DriveExportResult | null>(null);
 
   // Transfer State
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -365,7 +366,11 @@ function ProductsPageContent() {
             body: formData,
           });
 
-          const data = await res.json();
+          const data = (await res.json()) as {
+            error?: string;
+            needsAuth?: boolean;
+            webViewLink?: string;
+          };
           if (!res.ok) {
             if (data.needsAuth) {
               const authRes = await fetch('/api/google/drive/auth-url?origin=/products');
@@ -378,8 +383,10 @@ function ProductsPageContent() {
             throw new Error(data.error || 'Error al guardar en Drive');
           }
 
-          toast.success('Archivo guardado en Google Drive');
-          setIsExportModalOpen(false);
+          setDriveExportResult({
+            fileName,
+            webViewLink: typeof data.webViewLink === 'string' ? data.webViewLink : undefined,
+          });
           return;
         }
 
@@ -389,6 +396,7 @@ function ProductsPageContent() {
           platform,
           format,
         });
+        setDriveExportResult(null);
         setIsExportModalOpen(false);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Error al exportar productos');
@@ -402,7 +410,13 @@ function ProductsPageContent() {
       toast.error('No hay productos para exportar');
       return;
     }
+    setDriveExportResult(null);
     setIsExportModalOpen(true);
+  };
+
+  const closeExportModal = () => {
+    setIsExportModalOpen(false);
+    setDriveExportResult(null);
   };
 
   const handlePriceAdjust = async () => {
@@ -1285,10 +1299,12 @@ function ProductsPageContent() {
       {isExportModalOpen && (
         <ExportProductsModal
           open={isExportModalOpen}
-          onClose={() => setIsExportModalOpen(false)}
+          onClose={closeExportModal}
           onExport={handleExport}
           exporting={exporting}
           count={filteredProducts.length}
+          driveResult={driveExportResult}
+          onExportAnother={() => setDriveExportResult(null)}
         />
       )}
 
