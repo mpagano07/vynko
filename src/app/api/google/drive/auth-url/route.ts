@@ -38,7 +38,12 @@ export async function GET(request: Request) {
     response_type: 'code',
     scope: GOOGLE_DRIVE_SCOPE,
     access_type: 'offline',
-    prompt: 'consent',
+    // `select_account` obliga a elegir con qué cuenta de Google se conecta. Sin
+    // esto Google reusa la sesión abierta en el navegador: si el usuario tiene
+    // dos cuentas (p. ej. personal y de trabajo) el token puede quedar atado a
+    // la que no está mirando, y los archivos exportados no aparecen en "Mi
+    // unidad". `consent` sigue siendo necesario para recibir refresh_token.
+    prompt: 'select_account consent',
     state,
   });
 

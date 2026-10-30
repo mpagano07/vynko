@@ -4,8 +4,23 @@ import React, { useState } from 'react';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
-import { Loader2, Download, Store, ShoppingBag, FileSpreadsheet, Cloud } from 'lucide-react';
+import {
+  Loader2,
+  Download,
+  Store,
+  ShoppingBag,
+  FileSpreadsheet,
+  Cloud,
+  CheckCircle2,
+  ExternalLink,
+} from 'lucide-react';
 import type { ExportFormat, ExportPlatform } from '@/lib/excel-export';
+
+export interface DriveExportResult {
+  fileName: string;
+  webViewLink?: string;
+  accountEmail?: string | null;
+}
 
 export interface ExportProductsModalProps {
   open: boolean;
@@ -13,6 +28,11 @@ export interface ExportProductsModalProps {
   onExport: (options: { platform: ExportPlatform; format: ExportFormat; destination?: 'download' | 'drive' }) => void | Promise<void>;
   exporting: boolean;
   count: number;
+  driveResult?: DriveExportResult | null;
+  onExportAnother?: () => void;
+  /** Opciones con las que se reabre el modal al retomar un export pendiente. */
+  initialPlatform?: ExportPlatform;
+  initialFormat?: ExportFormat;
 }
 
 const PLATFORM_OPTIONS = [
@@ -75,16 +95,107 @@ function SegmentedControl<T extends string>({
   );
 }
 
-export function ExportProductsModal({ open, onClose, onExport, exporting, count }: ExportProductsModalProps) {
-  const [platform, setPlatform] = useState<ExportPlatform>('generico');
-  const [format, setFormat] = useState<ExportFormat>('xls');
+export function ExportProductsModal({
+  open,
+  onClose,
+  onExport,
+  exporting,
+  count,
+  driveResult,
+  onExportAnother,
+  initialPlatform = 'generico',
+  initialFormat = 'xls',
+}: ExportProductsModalProps) {
+  const [platform, setPlatform] = useState<ExportPlatform>(initialPlatform);
+  const [format, setFormat] = useState<ExportFormat>(initialFormat);
 
   const selectedPlatform = PLATFORM_OPTIONS.find((option) => option.value === platform)!;
+
+  // Mientras se sube el archivo no cerramos el modal: si el usuario lo cierra,
+  // la subida puede terminar igual y se perdería la confirmación.
+  const handleClose = () => {
+    if (!exporting) onClose();
+  };
+
+  if (driveResult) {
+    return (
+      <Modal
+        open={open}
+        onClose={handleClose}
+        title="Guardado en Google Drive"
+        icon={<CheckCircle2 className="h-6 w-6 text-emerald-500" />}
+        className="max-w-md"
+        aria-label="Archivo guardado en Google Drive"
+      >
+        <p className="text-sm text-gray-600 dark:text-gray-300">
+          Listo. Guardamos la planilla en tu Google Drive.
+        </p>
+
+        <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-700 dark:bg-gray-800/60">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+            Archivo
+          </p>
+          <p className="mt-0.5 break-words text-sm font-medium text-gray-900 dark:text-gray-100">
+            {driveResult.fileName}
+          </p>
+        </div>
+
+        <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+          Lo vas a encontrar en tu Drive. También podés abrirlo directamente desde acá.
+        </p>
+
+        {driveResult.accountEmail && (
+          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            Guardado en la cuenta{' '}
+            <span className="font-medium text-gray-700 dark:text-gray-200">
+              {driveResult.accountEmail}
+            </span>
+            . Si no lo ves en «Mi unidad», revisá que estés mirando esa cuenta.
+          </p>
+        )}
+
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+          {onExportAnother && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onExportAnother}
+              className="w-full sm:w-auto"
+            >
+              Exportar otra
+            </Button>
+          )}
+          {driveResult.webViewLink && (
+            <a
+              href={driveResult.webViewLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full sm:w-auto"
+            >
+              <Button type="button" variant="outline" size="sm" className="w-full gap-2">
+                <ExternalLink className="h-4 w-4" />
+                Abrir en Drive
+              </Button>
+            </a>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            onClick={onClose}
+            className="w-full sm:w-auto"
+          >
+            Listo
+          </Button>
+        </div>
+      </Modal>
+    );
+  }
 
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       title="Exportar productos"
       className="max-w-md"
       aria-label="Exportar productos"
@@ -129,7 +240,7 @@ export function ExportProductsModal({ open, onClose, onExport, exporting, count 
       </div>
 
       <div className="flex flex-col sm:flex-row sm:justify-end gap-2 mt-6">
-        <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={exporting}>
+        <Button type="button" variant="outline" size="sm" onClick={handleClose} disabled={exporting}>
           Cancelar
         </Button>
         <Button

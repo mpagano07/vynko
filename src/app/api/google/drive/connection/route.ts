@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
-import { isGoogleDriveConnected, revokeGoogleDriveConnection } from '@/lib/google/token-store';
+import { getGoogleDriveAccessToken, revokeGoogleDriveConnection } from '@/lib/google/token-store';
+import { getDriveAccount } from '@/lib/google/drive';
 import { logger } from '@/lib/logger';
 
 export async function GET(request: Request) {
@@ -9,9 +10,20 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
   }
 
-  const connected = await isGoogleDriveConnected(auth.userId);
+  // Además de "conectado", se devuelve la cuenta vinculada: es la única forma
+  // de que el usuario detecte que autorizó un Google distinto del que usa.
+  const token = await getGoogleDriveAccessToken(auth.userId);
+  if (!token) {
+    return NextResponse.json(
+      { connected: false, email: null },
+      { headers: { 'Cache-Control': 'no-store' } }
+    );
+  }
+
+  const account = await getDriveAccount(token.accessToken).catch(() => null);
+
   return NextResponse.json(
-    { connected },
+    { connected: true, email: account?.emailAddress ?? null },
     { headers: { 'Cache-Control': 'no-store' } }
   );
 }

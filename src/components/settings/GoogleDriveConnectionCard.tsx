@@ -18,6 +18,7 @@ import toast from 'react-hot-toast';
 export function GoogleDriveConnectionCard() {
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
+  const [email, setEmail] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
 
   useEffect(() => {
@@ -27,8 +28,14 @@ export function GoogleDriveConnectionCard() {
       try {
         const res = await authFetch('/api/google/drive/connection');
         if (!res.ok) return;
-        const data = (await res.json().catch(() => ({}))) as { connected?: boolean };
-        if (!cancelled) setConnected(Boolean(data.connected));
+        const data = (await res.json().catch(() => ({}))) as {
+          connected?: boolean;
+          email?: string | null;
+        };
+        if (!cancelled) {
+          setConnected(Boolean(data.connected));
+          setEmail(typeof data.email === 'string' ? data.email : null);
+        }
       } catch {
         if (!cancelled) setConnected(false);
       } finally {
@@ -78,6 +85,11 @@ export function GoogleDriveConnectionCard() {
         Vynko sólo accede a los archivos de Drive que elegís explícitamente al importar o
         exportar planillas.
       </p>
+      {connected && email && (
+        <p className="text-sm text-gray-600 dark:text-gray-300 mb-1">
+          Conectado como <span className="font-medium">{email}</span>
+        </p>
+      )}
       <p className="text-xs text-gray-400 mb-4">
         {connected
           ? 'Si desconectás, la próxima vez te vamos a pedir autorización de nuevo.'
