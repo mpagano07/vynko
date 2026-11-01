@@ -1,5 +1,11 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "brain": {
+      "path": "~/brain",
+      "description": "Índice y fichas del proyecto vynko. Lee brain/INDICE.md antes de empezar cualquier tarea y actualiza la ficha correspondiente al terminar."
+    }
+  },
   "mcp": {
     "paddle-sandbox": {
       "type": "http",

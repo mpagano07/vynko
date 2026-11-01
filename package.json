@@ -32,7 +32,7 @@
     "lucide-react": "^1.17.0",
     "mercadopago": "^3.1.0",
     "next": "^16.4.2",
-    "node-forge": "^1.4.0",
+    "node-forge": "^1.4.2",
     "qrcode": "^1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -74,6 +74,9 @@
     "@sentry/core": "11.8.0",
     "@sentry/nextjs": {
       "@sentry/core": "11.8.0"
+    },
+    "@sentry/bundler-plugins": {
+      "glob": "14.0.3"
     }
   },
   "browserslist": [
