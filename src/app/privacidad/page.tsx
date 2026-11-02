@@ -118,9 +118,6 @@ export default function PrivacidadPage() {
                 <strong>Paddle (Paddle.com Market Ltd.):</strong> Procesador de pagos internacional y Merchant of Record para las suscripciones contratadas fuera de Argentina. Gestiona el cobro recurrente, la facturación y la liquidación de impuestos locales.
               </li>
               <li>
-                <strong>Google Generative AI (Google LLC):</strong> En los planes habilitados (Business y Enterprise) que utilizan voluntariamente funciones de análisis o asistencia por Inteligencia Artificial, se procesan únicamente las consultas puntuales generadas para dicho análisis. No se ceden datos personales a modelos públicos de terceros ni se comercializa tu información.
-              </li>
-              <li>
                 <strong>Google LLC (Google Drive API):</strong> Utilizado únicamente para la funcionalidad opcional de importación y exportación de archivos con Google Drive, cuando el usuario lo solicita y autoriza expresamente mediante OAuth 2.0, Google Picker y el scope <code className="text-cyan-400 font-mono text-sm">https://www.googleapis.com/auth/drive.file</code>.
               </li>
             </ul>

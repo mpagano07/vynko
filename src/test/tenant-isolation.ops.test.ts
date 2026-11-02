@@ -37,7 +37,7 @@ import { GET as activityLogsRoute } from '@/app/api/activity-logs/route';
 import { POST as createTenantRoute } from '@/app/api/tenants/route';
 import { GET as criticalProductsRoute } from '@/app/api/products/critical/route';
 import { GET as stockAnalysisRoute } from '@/app/api/products/stock-analysis/route';
-import { GET as forecastRoute } from '@/app/api/ai/forecast/route';
+import { GET as forecastRoute } from '@/app/api/forecast/route';
 import { GET as dashboardRoute } from '@/app/api/dashboard/summary/route';
 
 const rowOfB = (extra: Record<string, unknown> = {}) => ({
@@ -138,7 +138,7 @@ describe('transferencias entre sucursales', () => {
   it('no acepta un producto que el tenant origen no maneja', async () => {
     // El producto es global; lo que lo ata a una empresa es `product_stock`. Sin
     // ese chequeo, A puede meter en su transfer un producto de B y el alta de
-    // stock en destino lo deja expuesto en forecast/IA.
+    // stock en destino lo deja expuesto en forecast.
     const { getAuth } = await import('@/lib/api-auth');
     vi.mocked(getAuth).mockResolvedValue({
       tenantId: TENANT_A,
@@ -264,7 +264,7 @@ describe('perdidas, pronostico y dashboard', () => {
     supabaseMock.__queue('sale_items', { data: [], error: null });
     supabaseMock.__queue('sales_daily_totals', { data: [], error: null });
 
-    const res = await forecastRoute(apiRequest('http://localhost/api/ai/forecast', 'GET'));
+    const res = await forecastRoute(apiRequest('http://localhost/api/forecast', 'GET'));
     const raw = await res.text();
 
     expect(raw).not.toContain('prod-b');

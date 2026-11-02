@@ -103,14 +103,7 @@ export default function TerminosPage() {
           </section>
 
           <section className="bg-gray-900/50 border border-gray-800 rounded-xl p-6">
-            <h2 className="text-xl font-semibold text-white mb-3">7. Funcionalidades Asistidas por Inteligencia Artificial</h2>
-            <p className="leading-relaxed">
-              Los planes que incorporan herramientas impulsadas por modelos de Inteligencia Artificial (Business y Enterprise) brindan sugerencias, resúmenes y pronósticos con fines puramente asistenciales y orientativos. El usuario reconoce y acepta que las proyecciones o sugerencias generadas por modelos algorítmicos no constituyen asesoramiento contable, fiscal, legal o de inversión vinculante, y que la decisión comercial final recae bajo la exclusiva responsabilidad del operador del negocio.
-            </p>
-          </section>
-
-          <section className="bg-gray-900/50 border border-gray-800 rounded-xl p-6">
-            <h2 className="text-xl font-semibold text-white mb-3">8. Propiedad Intelectual y Titularidad de Datos</h2>
+            <h2 className="text-xl font-semibold text-white mb-3">7. Propiedad Intelectual y Titularidad de Datos</h2>
             <p className="leading-relaxed mb-3">
               Todos los derechos de propiedad intelectual, marcas, logotipos, código fuente, diseños gráficos, imágenes, íconos y metodologías de software de Vynko son propiedad exclusiva de sus creadores y están amparados por las leyes de propiedad intelectual vigentes (Ley N° 11.723). Todas las imágenes y elementos visuales utilizados en la plataforma y en los materiales de marketing son originales o cuentan con la licencia correspondiente a favor de Vynko, y no podrán ser copiados, reproducidos ni redistribuidos sin autorización previa y escrita.
             </p>
@@ -120,21 +113,21 @@ export default function TerminosPage() {
           </section>
 
           <section className="bg-gray-900/50 border border-gray-800 rounded-xl p-6">
-            <h2 className="text-xl font-semibold text-white mb-3">9. Limitación de Responsabilidad</h2>
+            <h2 className="text-xl font-semibold text-white mb-3">8. Limitación de Responsabilidad</h2>
             <p className="leading-relaxed">
               El Servicio se brinda en el estado en que se encuentra (&quot;as is&quot;). En la máxima medida permitida por el ordenamiento legal, Vynko no se responsabiliza por daños indirectos, lucro cesante o pérdidas derivadas de fallas en redes de telecomunicaciones ajenas, cortes de suministro eléctrico general o situaciones de fuerza mayor.
             </p>
           </section>
 
           <section className="bg-gray-900/50 border border-gray-800 rounded-xl p-6">
-            <h2 className="text-xl font-semibold text-white mb-3">10. Ley Aplicable y Jurisdicción</h2>
+            <h2 className="text-xl font-semibold text-white mb-3">9. Ley Aplicable y Jurisdicción</h2>
             <p className="leading-relaxed">
               Estos Términos y Condiciones se regirán e interpretarán de acuerdo con las leyes de la <strong>República Argentina</strong>. Ante cualquier controversia derivada del presente contrato, las partes acuerdan someterse a la jurisdicción de los Tribunales Ordinarios competentes correspondientes al domicilio del consumidor o los tribunales ordinarios en lo Comercial de la Ciudad Autónoma de Buenos Aires, según corresponda por ley de orden público.
             </p>
           </section>
 
           <section className="bg-gray-900/50 border border-gray-800 rounded-xl p-6">
-            <h2 className="text-xl font-semibold text-white mb-3">11. Soporte y Notificaciones</h2>
+            <h2 className="text-xl font-semibold text-white mb-3">10. Soporte y Notificaciones</h2>
             <p>
               Para consultas legales, notificaciones contractuales o asistencia técnica, ponemos a disposición las siguientes vías oficiales:
             </p>

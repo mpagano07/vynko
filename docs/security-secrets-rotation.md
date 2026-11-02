@@ -20,7 +20,6 @@ los dumps del backup caen en `scripts/dumps/`, también ignorado. ggshield
 | Webhook secret de Mercado Pago | `MERCADOPAGO_WEBHOOK_SECRET` | Vercel env + `.env.local` | `mercadopago-webhook-service.ts` | Mercado Pago → Webhooks |
 | API key de Paddle | `PADDLE_API_KEY` | Vercel env + `.env.local` | `src/lib/paddle.ts` (checkout, suscripciones) | Paddle → Developer tools → Authentication |
 | Webhook secret de Paddle | `PADDLE_WEBHOOK_SECRET` | Vercel env + `.env.local` | `src/lib/paddle.ts` (firma `Paddle-Signature`) | Paddle → Developer tools → Notifications → destination `/api/webhooks/paddle` |
-| API key de Google AI | `GOOGLE_AI_API_KEY` | Vercel env + `.env.local` | `src/lib/ai-service.ts` | https://aistudio.google.com/apikey |
 | DSN de Sentry | `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN` | Vercel env | `instrumentation.ts`, `sentry.client.ts` | Sentry → Project → Client Keys |
 | Credenciales E2E | `E2E_USER_EMAIL`, `E2E_USER_PASSWORD`, `E2E_NEW_USER_*`, `E2E_MEMBER_USER_*` | `.env.local`, secreto de CI | Playwright, load test | cuenta Supabase dedicada |
 | Guard de secrets en CI | `GITGUARDIAN_API_KEY` | Secreto de GitHub Actions | ggshield-action | GitGuardian Dashboard |
@@ -32,7 +31,7 @@ los dumps del backup caen en `scripts/dumps/`, también ignorado. ggshield
 
 1. Las claves con prefijo `NEXT_PUBLIC_` NO son secretas (llegan al bundle del
    browser): que no sea necesario cambiarlas no las vuelve "públicas con
-   protección". Service role, access token, webhook secret y Google AI **nunca**
+   protección". Service role, access token y webhook secret **nunca**
    pueden usar el prefijo.
 2. `src/test/security-service-role-boundary.test.ts` falla si el service role
    aparece fuera de `supabaseAdmin.ts`, `proxy.ts` y los tests: si una rotación
@@ -62,7 +61,6 @@ los dumps del backup caen en `scripts/dumps/`, también ignorado. ggshield
    - cobro real de prueba (o endpoint de refund) contra producción puntual;
    - webhook: re-enviar un evento de prueba desde el panel de MP (o de Paddle,
      en `sandbox` o `production` según `PADDLE_ENVIRONMENT`);
-   - `GOOGLE_AI_API_KEY`: `POST /api/ai/suggest` manual o test spot;
    - run corto de `node scripts/load-test-sales.mjs` con `DURATION=10`.
 4. **Rotar la sign-session en Supabase** cuando se rote service role/anon:
    el viejo sigue válido si el proyecto lo permite en modo simultáneo; revocar

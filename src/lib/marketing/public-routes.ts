@@ -168,8 +168,6 @@ export const PRIVATE_ROUTE_PREFIXES: readonly string[] = [
   '/billing',
   '/onboarding',
   '/admin',
-  '/ai',
-  '/shelf-vision',
 ];
 
 /**

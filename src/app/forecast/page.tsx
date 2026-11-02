@@ -85,7 +85,7 @@ export default function ForecastPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await authFetch('/api/ai/forecast');
+        const res = await authFetch('/api/forecast');
         if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Error'); }
         setData(await res.json());
       } catch (err) {
