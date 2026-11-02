@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { authFetch } from '@/lib/fetchWithTenant';
 import { usePagination } from '@/lib/hooks/usePagination';
 import { Button } from '@/components/ui/button';
+import { ShortLabel } from '@/components/ui/short-label';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -804,9 +805,9 @@ export default function DocumentosPage() {
         title="Documentos Comerciales"
         subtitle="Gestión de remitos, presupuestos y órdenes"
         actions={
-          <Button onClick={handleNewDocument} className="flex items-center gap-2">
+          <Button onClick={handleNewDocument} className="flex items-center gap-2 whitespace-nowrap">
             <Plus className="h-4 w-4" />
-            Nuevo Documento
+            <ShortLabel short="Nuevo">Nuevo Documento</ShortLabel>
           </Button>
         }
       />

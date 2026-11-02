@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { ShortLabel } from '@/components/ui/short-label';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { FormLabel } from '@/components/ui/form-label';
@@ -450,35 +451,37 @@ export function ArcaConfigCard() {
             type="button"
             variant="outline"
             onClick={() => setShowGuide(!showGuide)}
-            className="text-xs flex items-center gap-1.5"
+            className="flex w-full items-center justify-center gap-1.5 text-xs sm:w-auto"
           >
-            <HelpCircle className="h-4 w-4 text-indigo-500" />
-            {showGuide ? 'Ocultar guía de ARCA' : '¿Cómo obtener estos certificados en ARCA?'}
-            {showGuide ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            <HelpCircle className="h-4 w-4 flex-shrink-0 text-indigo-500" />
+            {showGuide ? 'Ocultar guía de ARCA' : (
+              <ShortLabel short="Guía de ARCA">¿Cómo obtener estos certificados en ARCA?</ShortLabel>
+            )}
+            {showGuide ? <ChevronUp className="h-3.5 w-3.5 flex-shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 flex-shrink-0" />}
           </Button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             <Button
               type="button"
               variant="outline"
               disabled={testing || saving || (!config?.has_cert && !form.cert_pem)}
               onClick={handleTestConnection}
-              className="flex items-center gap-1.5"
+              className="flex w-full items-center justify-center gap-1.5 whitespace-nowrap sm:w-auto"
             >
               {testing ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />
+                  <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin text-indigo-500" />
                   Probando conexión...
                 </>
               ) : (
                 <>
-                  <RefreshCw className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  Probar Conexión con ARCA
+                  <RefreshCw className="h-4 w-4 flex-shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  <ShortLabel short="Probar">Probar Conexión con ARCA</ShortLabel>
                 </>
               )}
             </Button>
 
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving} className="w-full whitespace-nowrap sm:w-auto">
               {saving ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-1" />
@@ -487,7 +490,7 @@ export function ArcaConfigCard() {
               ) : (
                 <>
                   <Save className="h-4 w-4 mr-1" />
-                  Guardar Configuración
+                  <ShortLabel short="Guardar">Guardar Configuración</ShortLabel>
                 </>
               )}
             </Button>

@@ -7,6 +7,7 @@ import { useProducts } from '@/lib/hooks/useProducts';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { ShortLabel } from '@/components/ui/short-label';
 import { PageHeader } from '@/components/ui/page-header';
 import { StatCard } from '@/components/ui/stat-card';
 import { Input } from '@/components/ui/input';
@@ -269,7 +270,7 @@ export default function LossPreventionPage() {
                 <PieChartIcon className="h-4 w-4 text-rose-500" />
                 Pérdidas por motivo
               </h2>
-              <div className="flex items-center gap-6">
+              <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:gap-6">
                 <div className="h-44 w-44 flex-shrink-0">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -294,7 +295,7 @@ export default function LossPreventionPage() {
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="flex-1 space-y-2">
+                <div className="w-full min-w-0 flex-1 space-y-2">
                   {donutData.map((d) => {
                     const pct = totalLosses > 0 ? Math.round((d.value / totalLosses) * 100) : 0;
                     return (
@@ -451,7 +452,9 @@ export default function LossPreventionPage() {
               </div>
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
                 <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
-                <Button type="submit" disabled={submitting}>{submitting ? 'Guardando...' : 'Guardar ajuste'}</Button>
+                <Button type="submit" disabled={submitting}>
+                  {submitting ? 'Guardando...' : <ShortLabel short="Guardar">Guardar ajuste</ShortLabel>}
+                </Button>
               </div>
             </form>
         </Modal>

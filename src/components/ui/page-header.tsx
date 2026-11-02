@@ -23,14 +23,14 @@ export function PageHeader({
     <header
       className={cn(
         compact
-          ? 'flex items-center justify-between'
+          ? 'flex flex-col justify-between gap-2 sm:flex-row sm:items-center sm:gap-3'
           : 'flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4',
         className
       )}
       {...props}
     >
       <div className="min-w-0">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
           {icon}
           {title}
         </h1>
@@ -39,7 +39,7 @@ export function PageHeader({
         )}
         {children}
       </div>
-      {actions && <div className="flex items-center gap-2 flex-shrink-0">{actions}</div>}
+      {actions && <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap flex-shrink-0 self-start sm:self-auto">{actions}</div>}
     </header>
   );
 }

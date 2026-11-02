@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import { ShortLabel } from '@/components/ui/short-label';
 import { AlertTriangle } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 
@@ -9,6 +10,8 @@ interface ConfirmModalProps {
   title: string;
   message: string;
   confirmLabel?: string;
+  /** Versión corta del botón de confirmación para mobile. */
+  confirmLabelShort?: string;
   cancelLabel?: string;
   variant?: 'danger' | 'default';
   onConfirm: () => void;
@@ -21,6 +24,7 @@ export function ConfirmModal({
   title,
   message,
   confirmLabel = 'Confirmar',
+  confirmLabelShort,
   cancelLabel = 'Cancelar',
   variant = 'default',
   onConfirm,
@@ -64,7 +68,9 @@ export function ConfirmModal({
               disabled={loading}
               className={`flex-1 ${variant === 'danger' ? '!bg-red-600 hover:!bg-red-700' : ''}`}
             >
-              {loading ? 'Procesando...' : confirmLabel}
+              {loading ? 'Procesando...' : confirmLabelShort ? (
+                <ShortLabel short={confirmLabelShort}>{confirmLabel}</ShortLabel>
+              ) : confirmLabel}
             </Button>
           </div>
         </div>

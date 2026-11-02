@@ -55,7 +55,7 @@ export function SupportModal({ open, onClose }: SupportModalProps) {
             </Button>
             <a
               href={`mailto:${SUPPORT_EMAIL}`}
-              className="inline-flex items-center justify-center rounded-md font-medium transition-colors h-10 px-4 text-base bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600"
+              className="inline-flex min-h-10 items-center justify-center rounded-md px-4 py-2 text-base font-medium transition-colors bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600"
             >
               Abrir en mi correo
             </a>

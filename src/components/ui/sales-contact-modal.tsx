@@ -55,7 +55,7 @@ export function SalesContactModal({ open, onClose }: SalesContactModalProps) {
             </Button>
             <a
               href={`mailto:${SALES_EMAIL}?subject=${encodeURIComponent('Cotización Plan Enterprise - Vynko')}`}
-              className="inline-flex items-center justify-center rounded-md font-medium transition-colors h-10 px-4 text-base bg-amber-500 text-black hover:bg-amber-400"
+              className="inline-flex min-h-10 items-center justify-center rounded-md px-4 py-2 text-base font-medium transition-colors bg-amber-500 text-black hover:bg-amber-400"
             >
               <Mail className="h-4 w-4 mr-2" />
               Contactar ventas
