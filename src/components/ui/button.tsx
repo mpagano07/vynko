@@ -16,9 +16,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       outline: 'border border-gray-300 text-gray-900 hover:bg-gray-100 focus-visible:ring-gray-400 dark:border-gray-600 dark:text-gray-100 dark:hover:bg-gray-800 dark:focus-visible:ring-gray-500',
     }[variant];
     const sizeStyles = {
-      sm: 'h-8 px-3 text-sm',
-      md: 'h-10 px-4 text-base',
-      lg: 'h-12 px-6 text-lg',
+      sm: 'min-h-8 px-3 py-1.5 text-sm',
+      md: 'min-h-10 px-4 py-2 text-base',
+      lg: 'min-h-12 px-6 py-2.5 text-lg',
     }[size];
     return (
       <button

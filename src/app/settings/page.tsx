@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { authFetch } from '@/lib/fetchWithTenant';
 import { Button } from '@/components/ui/button';
+import { ShortLabel } from '@/components/ui/short-label';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
@@ -599,7 +600,7 @@ function SettingsContent() {
                     {savingProfile ? (
                       <><Loader2 className="h-4 w-4 animate-spin mr-1" />Guardando...</>
                     ) : (
-                      <><Save className="h-4 w-4 mr-1" />Guardar cambios</>
+                      <><Save className="h-4 w-4 mr-1" /><ShortLabel short="Guardar">Guardar cambios</ShortLabel></>
                     )}
                   </Button>
                 </form>
@@ -903,7 +904,7 @@ function SettingsContent() {
                 {savingTenant ? (
                   <><Loader2 className="h-4 w-4 animate-spin mr-1" />Guardando...</>
                 ) : (
-                  <><Save className="h-4 w-4 mr-1" />Guardar cambios</>
+                  <><Save className="h-4 w-4 mr-1" /><ShortLabel short="Guardar">Guardar cambios</ShortLabel></>
                 )}
               </Button>
             </form>
@@ -1274,7 +1275,7 @@ function SettingsContent() {
                     {savingCheckout ? (
                       <><Loader2 className="h-4 w-4 animate-spin mr-1" />Guardando...</>
                     ) : (
-                      <><Save className="h-4 w-4 mr-1" />Guardar cambios</>
+                      <><Save className="h-4 w-4 mr-1" /><ShortLabel short="Guardar">Guardar cambios</ShortLabel></>
                     )}
                   </Button>
                 </form>
@@ -1317,7 +1318,7 @@ function SettingsContent() {
                     {savingTicket ? (
                       <><Loader2 className="h-4 w-4 animate-spin mr-1" />Guardando...</>
                     ) : (
-                      <><Save className="h-4 w-4 mr-1" />Guardar cambios</>
+                      <><Save className="h-4 w-4 mr-1" /><ShortLabel short="Guardar">Guardar cambios</ShortLabel></>
                     )}
                   </Button>
                 </form>

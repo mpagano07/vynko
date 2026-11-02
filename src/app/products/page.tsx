@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { useExport } from '@/lib/hooks/useExport';
 import { usePagination } from '@/lib/hooks/usePagination';
 import { Button } from '@/components/ui/button';
+import { ShortLabel } from '@/components/ui/short-label';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -1426,7 +1427,7 @@ function ProductsPageContent() {
                       Guardando...
                     </>
                   ) : (
-                    'Guardar Cambios'
+                    <ShortLabel short="Guardar">Guardar Cambios</ShortLabel>
                   )}
                 </Button>
               </div>
@@ -1942,10 +1943,7 @@ function ProductsPageContent() {
             : '¿Deseas eliminar esta categoría? Los productos asociados se quedarán sin categoría.'
         }
         variant="danger"
-        confirmLabel={
-          confirmAction?.type === 'delete-product' ? 'Eliminar producto' :
-            'Eliminar categoría'
-        }
+        confirmLabel="Eliminar"
       />
 
       {isTransferModalOpen && (

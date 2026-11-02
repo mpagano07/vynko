@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { authFetch } from '@/lib/fetchWithTenant';
 import { Button } from '@/components/ui/button';
+import { ShortLabel } from '@/components/ui/short-label';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -443,7 +444,7 @@ export default function ProvidersPage() {
             </Button>
             <Button variant="outline" onClick={() => openSupplierModal(null)} className="flex items-center gap-2">
               <Plus className="h-4 w-4" />
-              Nuevo Proveedor
+              <ShortLabel short="Nuevo">Nuevo Proveedor</ShortLabel>
             </Button>
           </>
         }
@@ -744,7 +745,13 @@ export default function ProvidersPage() {
                   Cancelar
                 </Button>
                 <Button type="submit" disabled={isSubmittingSupplier}>
-                  {isSubmittingSupplier ? 'Guardando...' : editingSupplier ? 'Guardar Cambios' : 'Crear Proveedor'}
+                  {isSubmittingSupplier ? (
+                  <><Loader2 className="h-4 w-4 animate-spin mr-2" />Guardando...</>
+                ) : editingSupplier ? (
+                  <ShortLabel short="Guardar">Guardar Cambios</ShortLabel>
+                ) : (
+                  <ShortLabel short="Crear">Crear Proveedor</ShortLabel>
+                )}
                 </Button>
               </div>
             </form>

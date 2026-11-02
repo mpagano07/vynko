@@ -7,7 +7,7 @@ describe('Button', () => {
     render(<Button>Guardar</Button>);
     const button = screen.getByRole('button', { name: 'Guardar' });
     expect(button.className).toContain('bg-indigo-600');
-    expect(button.className).toContain('h-10');
+    expect(button.className).toContain('min-h-10');
   });
 
   it('applies the secondary variant', () => {
@@ -17,7 +17,7 @@ describe('Button', () => {
 
   it('applies the sm size', () => {
     render(<Button size="sm">Ok</Button>);
-    expect(screen.getByRole('button', { name: 'Ok' }).className).toContain('h-8');
+    expect(screen.getByRole('button', { name: 'Ok' }).className).toContain('min-h-8');
   });
 
   it('merges an extra className', () => {

@@ -319,41 +319,52 @@ function FunnelCard({ funnel }: { funnel: FunnelStep[] }) {
 
   return (
     <Card className="p-5">
-      <div className="flex items-baseline justify-between mb-4">
+      <div className="flex flex-col gap-1 mb-4 sm:flex-row sm:items-baseline sm:justify-between">
         <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300">Embudo de activación</h2>
         <p className="text-xs text-gray-500 dark:text-gray-400">
           {paying} de {total} llegaron a pagar ({total > 0 ? Math.round((paying / total) * 100) : 0}%)
         </p>
       </div>
 
-      <div className="space-y-1">
+      <div className="divide-y divide-gray-100 dark:divide-gray-800 sm:divide-y-0 sm:space-y-1">
         {funnel.map((step, i) => {
           const width = step.ofTotal;
+          const dropped =
+            i === 0 || step.dropped === 0 ? (
+              <span className="text-gray-400 dark:text-gray-600">—</span>
+            ) : (
+              <span className="text-red-500 dark:text-red-400">
+                −{step.dropped} (−{100 - step.ofPrevious}%)
+              </span>
+            );
           return (
-            <div key={step.step} className="flex items-center gap-3 py-1.5">
-              <div className="w-40 shrink-0 text-sm text-gray-600 dark:text-gray-300 truncate">
-                {step.label}
+            <div key={step.step} className="py-2.5 sm:flex sm:items-center sm:gap-3 sm:py-1.5">
+              <div className="flex items-baseline justify-between gap-3 sm:block sm:w-40 sm:shrink-0">
+                <div className="text-sm text-gray-600 dark:text-gray-300 sm:truncate">
+                  {step.label}
+                </div>
+                <div className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums sm:hidden">
+                  {step.users}
+                </div>
               </div>
-              <div className="flex-1 h-8 bg-gray-100 dark:bg-gray-800 rounded overflow-hidden">
+              <div className="mt-1.5 h-8 flex-1 overflow-hidden rounded bg-gray-100 dark:bg-gray-800 sm:mt-0">
                 <div
                   className="h-full bg-cyan-500 rounded transition-all"
                   style={{ width: `${Math.max(width, step.users > 0 ? 2 : 0)}%` }}
                 />
               </div>
-              <div className="w-12 shrink-0 text-right text-sm font-semibold text-gray-900 dark:text-white tabular-nums">
+              <div className="mt-1 flex items-center justify-between gap-3 text-xs tabular-nums sm:mt-0 sm:block sm:shrink-0">
+                <span className="text-gray-500 dark:text-gray-400 sm:hidden">{step.ofTotal}% del total</span>
+                <span className="sm:hidden">{dropped}</span>
+              </div>
+              <div className="hidden shrink-0 text-right text-sm font-semibold text-gray-900 tabular-nums sm:block sm:w-12 dark:text-white">
                 {step.users}
               </div>
-              <div className="w-14 shrink-0 text-right text-xs text-gray-500 dark:text-gray-400 tabular-nums">
+              <div className="hidden shrink-0 text-right text-xs text-gray-500 tabular-nums sm:block sm:w-14 dark:text-gray-400">
                 {step.ofTotal}%
               </div>
-              <div className="w-28 shrink-0 text-right text-xs tabular-nums">
-                {i === 0 || step.dropped === 0 ? (
-                  <span className="text-gray-400 dark:text-gray-600">—</span>
-                ) : (
-                  <span className="text-red-500 dark:text-red-400">
-                    −{step.dropped} (−{100 - step.ofPrevious}%)
-                  </span>
-                )}
+              <div className="hidden shrink-0 text-right text-xs tabular-nums sm:block sm:w-28">
+                {dropped}
               </div>
             </div>
           );

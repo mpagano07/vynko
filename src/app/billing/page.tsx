@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { ShortLabel } from '@/components/ui/short-label';
 import { IconAction } from '@/components/ui/icon-action';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { SupportModal } from '@/components/ui/support-modal';
@@ -418,8 +419,8 @@ function BillingContent() {
       {/* Current Plan */}
       {subscription && (
         <Card className="p-6 border-l-4 border-l-indigo-500">
-          <div className="flex items-start justify-between">
-            <div>
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            <div className="min-w-0">
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Plan actual</p>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{subscription.planName}</h2>
               <div className="flex items-center gap-2 mt-1">
@@ -440,8 +441,8 @@ function BillingContent() {
               </div>
             </div>
             {subscription.status === 'active' && (
-              <Button variant="outline" onClick={() => setShowCancelModal(true)} className="flex items-center gap-2 text-red-600 border-red-200 hover:bg-red-50">
-                Cancelar suscripción
+              <Button variant="outline" onClick={() => setShowCancelModal(true)} className="flex items-center gap-2 text-red-600 border-red-200 hover:bg-red-50 self-start whitespace-nowrap">
+                <ShortLabel short="Cancelar">Cancelar suscripción</ShortLabel>
               </Button>
             )}
           </div>
@@ -577,7 +578,7 @@ function BillingContent() {
 
               {isCurrent && subscription?.status === 'active' && (
                 <Button variant="outline" onClick={() => setShowCancelModal(true)} className="w-full text-red-600 border-red-200 hover:bg-red-50">
-                  Cancelar suscripción
+                  <ShortLabel short="Cancelar">Cancelar suscripción</ShortLabel>
                 </Button>
               )}
             </Card>
@@ -636,6 +637,7 @@ variant="danger"
         title="¿Cambiar a Starter?"
         message={`Al pasar al plan Starter vas a perder los beneficios de Business: los productos por encima de los primeros 100 quedan desactivados (se recuperan si volvés a Business), se quita el acceso a las sucursales excepto la primera, se eliminan los colaboradores y se desactivan las funciones avanzadas (pronóstico, visión de góndolas, IA). Se cancelará tu suscripción actual y se iniciará el pago de ${formatPriceByCountry({ amount: getDisplayPrice(country, 'starter', configuredCurrencies), country, configuredCurrencies })}/mes por el plan Starter. ¿Querés continuar?`}
         confirmLabel="Sí, cambiar a Starter"
+        confirmLabelShort="Cambiar"
         cancelLabel="Volver"
         variant="danger"
         loading={downgrading}

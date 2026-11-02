@@ -8,6 +8,7 @@ import { canUseFacturacion } from '@/lib/arca/access';
 import { authFetch } from '@/lib/fetchWithTenant';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { ShortLabel } from '@/components/ui/short-label';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
@@ -1075,7 +1076,9 @@ export default function FacturacionPage() {
                 ) : (
                   <>
                     <CheckCircle2 className="h-4 w-4" />
-                    {isCreditNote ? 'Emitir Nota de Crédito' : 'Emitir Factura con ARCA'}
+                    <ShortLabel short="Emitir">
+                      {isCreditNote ? 'Emitir Nota de Crédito' : 'Emitir Factura con ARCA'}
+                    </ShortLabel>
                   </>
                 )}
               </Button>
