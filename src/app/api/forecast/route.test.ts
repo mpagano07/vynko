@@ -11,7 +11,6 @@ const mockAuth = {
 };
 
 const rateLimitMock = vi.hoisted(() => vi.fn());
-const googleGenerativeAIMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/api-auth', () => ({
   getAuth: vi.fn(async () => mockAuth),
@@ -25,12 +24,8 @@ vi.mock('@/lib/rate-limit', () => ({
   rateLimit: rateLimitMock,
 }));
 
-vi.mock('@google/generative-ai', () => ({
-  GoogleGenerativeAI: googleGenerativeAIMock,
-}));
-
 function makeRequest(): Request {
-  return new Request('http://localhost/api/ai/forecast', { method: 'GET' });
+  return new Request('http://localhost/api/forecast', { method: 'GET' });
 }
 
 function saleItem(productId: string, quantity: number, day: string) {
@@ -73,10 +68,9 @@ function queueForecastData() {
   });
 }
 
-describe('GET /api/ai/forecast', () => {
+describe('GET /api/forecast', () => {
   beforeEach(() => {
     supabaseMock.__reset();
-    googleGenerativeAIMock.mockClear();
     vi.mocked(getAuth).mockResolvedValue(mockAuth);
     rateLimitMock.mockReturnValue({ ok: true, retryAfterSeconds: 0 });
   });
@@ -92,12 +86,6 @@ describe('GET /api/ai/forecast', () => {
     const res = await GET(makeRequest());
     expect(res.status).toBe(429);
     expect(res.headers.get('Retry-After')).toBe('5');
-  });
-
-  it('no llama a Gemini al consultar el pronóstico', async () => {
-    queueForecastData();
-    await GET(makeRequest());
-    expect(googleGenerativeAIMock).not.toHaveBeenCalled();
   });
 
   it('incluye TODOS los productos activos, incluso sin ventas, con campos en cero', async () => {

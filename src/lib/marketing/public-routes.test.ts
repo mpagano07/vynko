@@ -74,8 +74,6 @@ describe('clasificacion de rutas', () => {
       '/billing',
       '/onboarding',
       '/admin/analytics',
-      '/ai',
-      '/shelf-vision',
     ]) {
       expect(isPublicPath(path)).toBe(false);
       expect(isIndexablePath(path)).toBe(false);

@@ -86,7 +86,7 @@ async function rateLimitFailure(key: string, limit: number, windowMs: number) {
 export async function uploadImage(auth: AuthInfo, request: Request): Promise<UploadResult> {
   const tenantId = auth.tenantId;
 
-  // Igual que en el limite de IA: se consultan los dos contadores y se devuelve
+  // Se consultan los dos contadores y se devuelve
   // el primer fallo. Cortar en el primero dejaria sin decrementar el limite por
   // usuario, que es el que frena a alguien repartiendo subidas entre cuentas.
   const tenantLimit = await rateLimitFailure(`upload:tenant:${tenantId}`, 30, 60 * 60 * 1000);
