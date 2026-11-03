@@ -70,10 +70,24 @@ test.describe('Permisos y roles — Member', () => {
     expect(page.url()).toContain('/dashboard');
   });
 
-  test('member - /settings redirige a /dashboard', async ({ memberPage: page }) => {
+  test('member - /settings muestra solo las pestañas de autoservicio', async ({ memberPage: page }) => {
     await page.goto('/settings');
-    await page.waitForURL(/\/dashboard/, { timeout: 10_000 });
-    expect(page.url()).toContain('/dashboard');
+    await page.waitForLoadState('networkidle');
+    expect(page.url()).toContain('/settings');
+    await expect(page.locator('h1', { hasText: 'Configuración' })).toBeVisible({ timeout: 10_000 });
+
+    await expect(page.getByRole('tab', { name: 'Mi Perfil' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Preferencias' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Mi Cuenta' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Datos de Empresa' })).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: 'Colaboradores' })).toHaveCount(0);
+  });
+
+  test('member - /settings?tab=empresa cae en Mi Perfil', async ({ memberPage: page }) => {
+    await page.goto('/settings?tab=empresa');
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByRole('tab', { name: 'Mi Perfil' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByText('Cambiar contraseña')).toBeVisible({ timeout: 10_000 });
   });
 
   test('member - /activity-logs muestra "sin permisos"', async ({ memberPage: page }) => {

@@ -84,11 +84,10 @@ export default function AcceptInvitePage() {
           // servidor no permite fijar la contrasena sin la anterior. No es un
           // error de este formulario, asi que no se lo muestra como si lo fuera.
           //
-          // Va a /dashboard y no a /settings porque /settings expulsa a los
-          // `member` (hace replace a /dashboard), y el `member` con una
-          // invitacion nueva es justo quien cae en este 403. La sesion sigue
-          // viva: el servidor solo revoca cuando efectivamente toco la
-          // contrasena, que aca no ocurrio.
+          // Va a /dashboard directo: el objetivo de este camino es que la
+          // persona pueda empezar a operar, y ya tiene sesión válida. /settings
+          // también está disponible para todos los roles (Mi Perfil / Mi
+          // Cuenta), pero este flujo no necesita pasar por ahí.
           if (passRes.status === 403 && /ya tiene una contraseña/i.test(passData?.error ?? '')) {
             toast.error(passData.error, { duration: 8000 });
             router.replace('/dashboard');
