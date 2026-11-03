@@ -123,6 +123,57 @@ export default function DashboardPage() {
     (async () => {
       try {
         if (allTenants && tenants.length > 0) {
+          // Cada sucursal hace 5 requests independientes entre sí. Antes el
+          // `for` esperaba a que terminara una sucursal antes de arrancar la
+          // siguiente, así que el tiempo total crecía con la cantidad de
+          // sucursales. Con `Promise.all` las N sucursales corren en paralelo:
+          // el dashboard tarda lo que la sucursal más lenta, no la suma.
+          const perTenantRows = await Promise.all(
+            tenants.map(async (t) => {
+              const [sales, monthly, critical, pending, counters] = await Promise.all([
+                fetchWithTenant(`/api/sales?today=true&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, t.id),
+                fetchWithTenant('/api/sales/monthly', t.id),
+                fetchWithTenant('/api/products/critical', t.id),
+                fetchWithTenant('/api/purchase-orders/pending', t.id),
+                fetchWithTenant('/api/products/counters', t.id),
+              ]);
+              if (!sales || !monthly || !critical || !pending || !counters) failed = true;
+
+              const todayTotal = (sales as SalesEntry[] || []).reduce((sum, s) => sum + (s.total_cents || 0), 0);
+              const saleCount = (sales as SalesEntry[] || []).length;
+              const md = monthly as MonthlyData | null;
+              const cp = (critical as CriticalProduct[] || []);
+              const po = (pending as PendingOrder[] || []);
+              const countersData = counters as { count?: number; alertsConfigured?: boolean } | null;
+
+              const data: PerTenantData = {
+                todayTotal,
+                saleCount,
+                total: md?.total || 0,
+                saleCountMonth: md?.saleCount || 0,
+                prevTotal: md?.prevTotal || 0,
+                variationPercent: md?.variationPercent || null,
+                avgTicket: md?.avgTicket || 0,
+                criticalCount: cp.length,
+              };
+
+              return {
+                tenantId: t.id,
+                tenantName: t.name,
+                data,
+                todayTotal,
+                saleCount,
+                monthlyTotal: md?.total || 0,
+                monthlyCount: md?.saleCount || 0,
+                prevTotal: md?.prevTotal || 0,
+                critical: cp,
+                pending: po,
+                productCount: Number(countersData?.count) || 0,
+                alertsConfigured: Boolean(countersData?.alertsConfigured),
+              };
+            })
+          );
+
           const results: Record<string, PerTenantData> = {};
           let allSalesTotal = 0;
           let allSalesCount = 0;
@@ -134,44 +185,18 @@ export default function DashboardPage() {
           let totalProductCount = 0;
           let alertsConfiguredCount = 0;
 
-          for (const t of tenants) {
-            const [sales, monthly, critical, pending, products] = await Promise.all([
-              fetchWithTenant(`/api/sales?today=true&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, t.id),
-              fetchWithTenant('/api/sales/monthly', t.id),
-              fetchWithTenant('/api/products/critical', t.id),
-              fetchWithTenant('/api/purchase-orders/pending', t.id),
-              fetchWithTenant('/api/products', t.id),
-            ]);
-            if (!sales || !monthly || !critical || !pending) failed = true;
+          for (const row of perTenantRows) {
+            allSalesTotal += row.todayTotal;
+            allSalesCount += row.saleCount;
+            allMonthTotal += row.monthlyTotal;
+            allMonthCount += row.monthlyCount;
+            allPrevTotal += row.prevTotal;
+            allCritical = [...allCritical, ...row.critical];
+            allPending = [...allPending, ...row.pending.map((o) => ({ ...o, tenant_name: row.tenantName }))];
+            totalProductCount += row.productCount;
+            if (row.alertsConfigured) alertsConfiguredCount++;
 
-            const todayTotal = (sales as SalesEntry[] || []).reduce((sum, s) => sum + (s.total_cents || 0), 0);
-            const saleCount = (sales as SalesEntry[] || []).length;
-            const md = monthly as MonthlyData | null;
-            const cp = (critical as CriticalProduct[] || []);
-            const po = (pending as PendingOrder[] || []);
-            if (Array.isArray(products)) {
-              totalProductCount += products.length;
-              alertsConfiguredCount += products.filter((p) => (p.min_stock ?? 0) > 0 || (p.max_stock ?? 0) > 0).length;
-            }
-
-            allSalesTotal += todayTotal;
-            allSalesCount += saleCount;
-            allMonthTotal += md?.total || 0;
-            allMonthCount += md?.saleCount || 0;
-            allPrevTotal += md?.prevTotal || 0;
-            allCritical = [...allCritical, ...cp];
-            allPending = [...allPending, ...po.map((o) => ({ ...o, tenant_name: t.name }))];
-
-            results[t.id] = {
-              todayTotal,
-              saleCount,
-              total: md?.total || 0,
-              saleCountMonth: md?.saleCount || 0,
-              prevTotal: md?.prevTotal || 0,
-              variationPercent: md?.variationPercent || null,
-              avgTicket: md?.avgTicket || 0,
-              criticalCount: cp.length,
-            };
+            results[row.tenantId] = row.data;
           }
 
           if (!cancelled) {
@@ -193,24 +218,23 @@ export default function DashboardPage() {
             });
           }
         } else if (tenant?.id) {
-          const [salesRes, monthlyRes, criticalRes, pendingRes, productsRes] = await Promise.all([
+          const [salesRes, monthlyRes, criticalRes, pendingRes, countersRes] = await Promise.all([
             authFetch(`/api/sales?today=true&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`),
             authFetch('/api/sales/monthly'),
             authFetch('/api/products/critical'),
             authFetch('/api/purchase-orders/pending'),
-            authFetch('/api/products'),
+            authFetch('/api/products/counters'),
           ]);
 
           if (cancelled) return;
-          if (!salesRes.ok || !monthlyRes.ok || !criticalRes.ok || !pendingRes.ok) failed = true;
+          if (!salesRes.ok || !monthlyRes.ok || !criticalRes.ok || !pendingRes.ok || !countersRes.ok) failed = true;
 
-          if (productsRes.ok) {
-            const prods = await productsRes.json();
-            const list = Array.isArray(prods) ? prods as Record<string, unknown>[] : [];
+          if (countersRes.ok) {
+            const counters = await countersRes.json() as { count?: number; alertsConfigured?: boolean };
             if (!cancelled) {
               startTransition(() => {
-                setProductCount(list.length);
-                setAlertsConfigured(list.some((p) => Number(p.min_stock) > 0 || Number(p.max_stock) > 0));
+                setProductCount(Number(counters.count) || 0);
+                setAlertsConfigured(Boolean(counters.alertsConfigured));
               });
             }
           }

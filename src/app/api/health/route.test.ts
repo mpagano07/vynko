@@ -44,6 +44,18 @@ describe('GET /api/health', () => {
     expect(body.status).toBe('ok');
   });
 
+  it('hace un ping liviano con timeout para no colgar el monitor', async () => {
+    supabaseMock.__queue('tenants', { data: [{ id: 't1' }], error: null });
+
+    const res = await GET(healthRequest('db'));
+
+    expect(res.status).toBe(200);
+    const select = supabaseMock.__calls.find((c) => c.method === 'select');
+    expect(select?.args[1]).toEqual({ head: true });
+    const abort = supabaseMock.__calls.find((c) => c.method === 'abortSignal');
+    expect(abort?.args[0]).toBeInstanceOf(AbortSignal);
+  });
+
   it('devuelve 503 cuando la DB no responde', async () => {
     supabaseMock.__queue('tenants', { data: null, error: { message: 'db down' } });
 

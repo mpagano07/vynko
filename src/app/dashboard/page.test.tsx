@@ -96,6 +96,12 @@ function mockSuccessfulEndpoints() {
         ],
       });
     }
+    if (url.includes('/api/products/counters')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ count: 1, alertsConfigured: true }),
+      });
+    }
     if (url.includes('/api/products')) {
       return Promise.resolve({
         ok: true,
@@ -270,5 +276,10 @@ describe('DashboardPage: desglose multi-sucursal', () => {
     expect(norteRow).toBeTruthy();
 
     expect(fetchHandler).toHaveBeenCalledTimes(10); // 5 endpoints x 2 sucursales
+
+    // El dashboard pide solo los contadores, no el catálogo completo.
+    const urls = fetchHandler.mock.calls.map(([url]) => String(url));
+    expect(urls.filter((url) => url.includes('/api/products/counters'))).toHaveLength(2);
+    expect(urls.filter((url) => url.endsWith('/api/products'))).toHaveLength(0);
   });
 });

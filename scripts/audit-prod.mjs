@@ -54,7 +54,7 @@ function main() {
           const audit = JSON.parse(raw);
           const vulns = audit.vulnerabilities || {};
           let hasUnexcluded = false;
-          for (const [pkg, info] of Object.entries(vulns)) {
+          for (const info of Object.values(vulns)) {
             const via = info.via || [];
             for (let i = 0; i < via.length; i++) {
               const v = via[i];
@@ -68,7 +68,7 @@ function main() {
             process.exit(0);
           }
         }
-      } catch (e) {
+      } catch {
         // fall through
       }
     }

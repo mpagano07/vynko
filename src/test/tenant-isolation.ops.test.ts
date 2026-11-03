@@ -235,15 +235,19 @@ describe('sucursales', () => {
 });
 
 describe('perdidas, pronostico y dashboard', () => {
-  it('los productos criticos de A no incluyen los de B', async () => {
-    // `product_stock!inner` es el unico filtro posible sobre un catalogo global.
-    supabaseMock.__queue('products', { data: [], error: null });
+  it('los productos criticos de A se piden solo con los tenants de A', async () => {
+    supabaseMock.__rpcQueue('get_critical_products', { data: [], error: null });
 
     const res = await criticalProductsRoute(
       apiRequest('http://localhost/api/products/critical', 'GET')
     );
 
     expect(await res.json()).toEqual([]);
+    // El scope vive en la RPC (064): no hay query al catalogo global.
+    expect(supabaseMock.__calls).toHaveLength(0);
+    expect(supabaseMock.rpc).toHaveBeenCalledWith('get_critical_products', {
+      p_tenant_ids: [TENANT_A],
+    });
   });
 
   it('el analisis de stock no usa datos de B', async () => {

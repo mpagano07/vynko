@@ -57,6 +57,9 @@ y no `console.error`: el primero es busquable, el segundo es texto libre.
    - "issue sin resolver de nivel error en production" → page.
 2. **Uptime check** sobre `GET /api/health?check=db` (devuelve 503 si la base no
    responde). Es el unico chequeo que detecta "la app levanta pero no lee DB".
+   El endpoint corta la consulta a los 5 s; configurá el monitor con timeout de
+   10 s y **2 fallos consecutivos** antes de alertar, para no confundir una
+   latencia puntual de Supabase con una caida.
 3. **Ownership**: al crear un issue, asignarlo; un issue sin asignar despues de
    48 h es deuda.
 
