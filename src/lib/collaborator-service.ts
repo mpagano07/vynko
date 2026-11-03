@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
+import { createActivityLog } from '@/lib/activity-log';
 import type { AuthInfo } from '@/lib/api-auth';
 import type { PlanId } from '@/lib/plans';
 import { logger } from '@/lib/logger';
@@ -7,6 +8,8 @@ import { logger } from '@/lib/logger';
 export type CollaboratorResult =
   | { ok: true; body: unknown; status: number }
   | { ok: false; error: string; status: number };
+
+const ASSIGNABLE_ROLES = ['manager', 'member'];
 
 async function enforceUserLimit(tenantId: string): Promise<string | null> {
   const { data: tenantRow } = await supabaseAdmin
@@ -35,6 +38,14 @@ async function getOwnerTenantIds(userId: string): Promise<string[] | null> {
     .eq('role', 'owner');
   const ids = (ownerTus || []).map((t) => t.tenant_id as string);
   return ids.length > 0 ? ids : null;
+}
+
+interface CollaboratorMembership {
+  id: string;
+  tenant_id: string;
+  tenant_name: string;
+  role: string;
+  joined_at: string | null;
 }
 
 export async function listCollaborators(auth: AuthInfo): Promise<CollaboratorResult> {
@@ -73,13 +84,35 @@ export async function listCollaborators(auth: AuthInfo): Promise<CollaboratorRes
     const userTenants: Record<string, { id: string; name: string }[]> = {};
     const userRoles: Record<string, string> = {};
     const userTus: Record<string, string[]> = {};
+    const userMemberships: Record<string, CollaboratorMembership[]> = {};
+    const userJoinedAt: Record<string, string | null> = {};
+
     for (const m of allMembers) {
       const uid = m.user_id as string;
+      const tid = m.tenant_id as string;
+      const tn = tenantMap.get(tid);
+      const joinedAt = (m.joined_at as string | null) ?? null;
+
       if (!userTenants[uid]) userTenants[uid] = [];
       if (!userTus[uid]) userTus[uid] = [];
-      const tn = tenantMap.get(m.tenant_id as string);
+      if (!userMemberships[uid]) userMemberships[uid] = [];
+
       if (tn) userTenants[uid].push({ id: tn.id, name: tn.name });
       userTus[uid].push(m.id as string);
+      userMemberships[uid].push({
+        id: m.id as string,
+        tenant_id: tid,
+        tenant_name: tn?.name || '',
+        role: (m.role as string) || 'member',
+        joined_at: joinedAt,
+      });
+
+      if (joinedAt && (!userJoinedAt[uid] || joinedAt < userJoinedAt[uid]!)) {
+        userJoinedAt[uid] = joinedAt;
+      }
+
+      // El rol que se muestra arriba es el más alto de todas las sucursales.
+      // El detalle real, sucursal por sucursal, viaja en `memberships`.
       if (m.role === 'owner') userRoles[uid] = 'owner';
       else if (m.role === 'manager' && userRoles[uid] !== 'owner') userRoles[uid] = 'manager';
       else if (!userRoles[uid]) userRoles[uid] = m.role || 'member';
@@ -95,18 +128,52 @@ export async function listCollaborators(auth: AuthInfo): Promise<CollaboratorRes
         avatar_url: p?.avatar_url || null,
         tenants: tenants.sort((a, b) => a.name.localeCompare(b.name)),
         tenant_users_ids: userTus[uid] || [],
+        memberships: (userMemberships[uid] || []).sort((a, b) =>
+          a.tenant_name.localeCompare(b.tenant_name)
+        ),
+        joined_at: userJoinedAt[uid] || null,
       };
     });
 
     const { data: pendingInvitations } = await supabaseAdmin
       .from('invitations')
-      .select('id, email, role, created_at')
+      .select('id, email, role, created_at, invited_by, tenant_id')
       .in('tenant_id', ownerTenantIds)
-      .is('accepted_at', null);
+      .is('accepted_at', null)
+      .order('created_at', { ascending: false });
+
+    let invitations = (pendingInvitations || []).map((inv) => ({
+      id: inv.id as string,
+      email: inv.email as string,
+      role: (inv.role as string) || 'member',
+      created_at: (inv.created_at as string | null) ?? null,
+      invited_by: (inv.invited_by as string | null) ?? null,
+      invited_by_name: null as string | null,
+      tenant_id: inv.tenant_id as string,
+      tenant_name: tenantMap.get(inv.tenant_id as string)?.name || '',
+    }));
+
+    if (invitations.length > 0) {
+      const inviterIds = [...new Set(invitations.map((i) => i.invited_by).filter(Boolean))] as string[];
+      if (inviterIds.length > 0) {
+        const { data: inviters } = await supabaseAdmin
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', inviterIds);
+        const inviterMap = new Map((inviters || []).map((p) => [p.id as string, p]));
+        invitations = invitations.map((inv) => {
+          const inviter = inv.invited_by ? inviterMap.get(inv.invited_by) : undefined;
+          return {
+            ...inv,
+            invited_by_name: (inviter?.full_name as string) || (inviter?.email as string) || null,
+          };
+        });
+      }
+    }
 
     return {
       ok: true,
-      body: { collaborators, pendingInvitations: pendingInvitations || [] },
+      body: { collaborators, pendingInvitations: invitations },
       status: 200,
     };
   } catch (err) {
@@ -147,8 +214,7 @@ export async function addCollaborator(
       return { ok: false, error: 'No valid tenants selected', status: 400 };
     }
 
-    const validRoles = ['manager', 'member'];
-    const assignRole = validRoles.includes(role ?? '') ? (role as string) : 'member';
+    const assignRole = ASSIGNABLE_ROLES.includes(role ?? '') ? (role as string) : 'member';
     const assignName = typeof full_name === 'string' && full_name.trim() ? full_name.trim() : null;
 
     const { data: existingProfile } = await supabaseAdmin
@@ -177,7 +243,7 @@ export async function addCollaborator(
         // No se devuelve ningun dato de la persona (ni nombre ni avatar): seria
         // un oraculo de existencia y una fuga de PII para cualquiera que pruebe
         // emails. La invitacion se resuelve por el email, del lado del invitado.
-        return inviteByEmail(auth, email.toLowerCase(), assignRole, origin);
+        return inviteByEmail(auth, email.toLowerCase(), assignRole, origin, targetTenantIds);
       }
 
       // Es alguien de la casa: `profiles` es su identidad global, asi que solo
@@ -196,6 +262,10 @@ export async function addCollaborator(
         }
       }
 
+      // Primero se resuelve a qué sucursales hay que agregarla y se validan
+      // todos los límites: si una está llena, no queremos dejar altas a medias
+      // en las demás.
+      const tenantsToJoin: string[] = [];
       for (const tid of targetTenantIds) {
         const { data: existingMember } = await supabaseAdmin
           .from('tenant_users')
@@ -204,18 +274,32 @@ export async function addCollaborator(
           .eq('user_id', existingProfile.id)
           .maybeSingle();
 
-        if (!existingMember) {
-          const limitError = await enforceUserLimit(tid);
-          if (limitError) {
-            return { ok: false, error: limitError, status: 403 };
-          }
-          const { error: insertError } = await supabaseAdmin
-            .from('tenant_users')
-            .insert({ tenant_id: tid, user_id: existingProfile.id, role: assignRole });
-          if (insertError) {
-            logger.error(`Error adding to tenant ${tid}:`, { error: insertError });
-          }
+        if (!existingMember) tenantsToJoin.push(tid);
+      }
+
+      for (const tid of tenantsToJoin) {
+        const limitError = await enforceUserLimit(tid);
+        if (limitError) {
+          return { ok: false, error: limitError, status: 403 };
         }
+      }
+
+      for (const tid of tenantsToJoin) {
+        const { error: insertError } = await supabaseAdmin
+          .from('tenant_users')
+          .insert({ tenant_id: tid, user_id: existingProfile.id, role: assignRole });
+        if (insertError) {
+          logger.error(`Error adding to tenant ${tid}:`, { error: insertError });
+          continue;
+        }
+        await createActivityLog({
+          tenantId: tid,
+          userId: auth.userId,
+          action: 'add_collaborator',
+          entityType: 'collaborator',
+          entityId: existingProfile.id,
+          details: { email: email.toLowerCase(), role: assignRole },
+        });
       }
 
       const { data: profile } = await supabaseAdmin
@@ -240,7 +324,7 @@ export async function addCollaborator(
       };
     }
 
-    return inviteByEmail(auth, email.toLowerCase(), assignRole, origin);
+    return inviteByEmail(auth, email.toLowerCase(), assignRole, origin, targetTenantIds);
   } catch (err) {
     logger.error('Error adding collaborator:', { error: err });
     return { ok: false, error: 'Internal server error', status: 500 };
@@ -248,9 +332,10 @@ export async function addCollaborator(
 }
 
 /**
- * Crea la invitacion pendiente y manda el email. El invitado entra a
- * `tenant_users` recien cuando acepta (`acceptInvitationsForUser`), que es lo
- * que convierte el alta de un desconocido en algo que solo pasa con su venia.
+ * Crea las invitaciones pendientes (una por sucursal) y manda un solo email.
+ * El invitado entra a `tenant_users` recien cuando acepta
+ * (`acceptInvitationsForUser`), que es lo que convierte el alta de un
+ * desconocido en algo que solo pasa con su venia.
  *
  * El nombre que cargo el owner NO se guarda: la persona lo escribe al aceptar
  * (la pagina de aceptacion lo pide). Cargarle identidad a un desconocido por el
@@ -263,26 +348,33 @@ async function inviteByEmail(
   auth: AuthInfo,
   email: string,
   role: string,
-  origin: string
+  origin: string,
+  tenantIds: string[]
 ): Promise<CollaboratorResult> {
-  const ownerTenantIds = await getOwnerTenantIds(auth.userId);
-  if (!ownerTenantIds) {
-    return { ok: false, error: 'Only owners can manage collaborators', status: 403 };
+  if (tenantIds.length === 0) {
+    return { ok: false, error: 'No valid tenants selected', status: 400 };
   }
 
-  const inviteTenantId = ownerTenantIds[0];
-  const limitError = await enforceUserLimit(inviteTenantId);
-  if (limitError) {
-    return { ok: false, error: limitError, status: 403 };
+  // Se validan todas las sucursales antes de escribir: si una está llena, no
+  // queremos dejar invitaciones a medias en las demás.
+  for (const tid of tenantIds) {
+    const limitError = await enforceUserLimit(tid);
+    if (limitError) {
+      return { ok: false, error: limitError, status: 403 };
+    }
   }
 
   const { error: inviteError } = await supabaseAdmin.from('invitations').upsert(
-    {
-      tenant_id: inviteTenantId,
+    tenantIds.map((tid) => ({
+      tenant_id: tid,
       email,
       role,
       invited_by: auth.userId,
-    },
+      // Si la fila ya existía (p. ej. una invitación vieja ya aceptada de
+      // alguien que después salió del equipo), se reactiva como pendiente.
+      accepted_at: null,
+      created_at: new Date().toISOString(),
+    })),
     { onConflict: 'tenant_id,email' }
   );
 
@@ -295,12 +387,24 @@ async function inviteByEmail(
     redirectTo: `${origin}/accept-invite`,
   });
 
+  for (const tid of tenantIds) {
+    await createActivityLog({
+      tenantId: tid,
+      userId: auth.userId,
+      action: 'invite_collaborator',
+      entityType: 'collaborator',
+      entityId: email,
+      details: { email, role },
+    });
+  }
+
   return {
     ok: true,
     status: 201,
     body: {
       invited: true,
       email,
+      tenant_ids: tenantIds,
       message: 'Invitación enviada por email.',
     },
   };
@@ -323,8 +427,7 @@ export async function updateCollaborator(
 
     const { role, tenant_ids } = body;
 
-    const validRoles = ['manager', 'member'];
-    const newRole = validRoles.includes(role ?? '') ? role : 'member';
+    const newRole = ASSIGNABLE_ROLES.includes(role ?? '') ? role! : 'member';
     const targetTenantIds: string[] = Array.isArray(tenant_ids)
       ? [...new Set(tenant_ids.filter((id: string) => ownerTenantIds.includes(id)))]
       : ownerTenantIds;
@@ -344,6 +447,7 @@ export async function updateCollaborator(
     }
 
     const currentTenantIds = existingRows.map((r) => r.tenant_id as string);
+    const roleByTenant = new Map(existingRows.map((r) => [r.tenant_id as string, r.role as string]));
     const toRemoveTenantIds = currentTenantIds.filter((id) => !targetTenantIds.includes(id));
     const toAddTenantIds = targetTenantIds.filter((id) => !currentTenantIds.includes(id));
 
@@ -397,16 +501,49 @@ export async function updateCollaborator(
       }
     }
 
+    const keptTenantIds = currentTenantIds.filter((id) => !toRemoveTenantIds.includes(id));
     const { error: updateError } = await supabaseAdmin
       .from('tenant_users')
       .update({ role: newRole })
       .eq('user_id', targetUserId)
-      .in('tenant_id', currentTenantIds.filter((id) => !toRemoveTenantIds.includes(id)))
+      .in('tenant_id', keptTenantIds)
       .neq('role', 'owner');
 
     if (updateError) {
       logger.error('DB error:', { error: updateError });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
+    }
+
+    for (const tid of keptTenantIds) {
+      const previousRole = roleByTenant.get(tid) || null;
+      await createActivityLog({
+        tenantId: tid,
+        userId: auth.userId,
+        action: 'update_collaborator',
+        entityType: 'collaborator',
+        entityId: targetUserId,
+        details: { previous_role: previousRole, new_role: newRole },
+      });
+    }
+    for (const tid of toRemoveTenantIds) {
+      await createActivityLog({
+        tenantId: tid,
+        userId: auth.userId,
+        action: 'remove_from_branch',
+        entityType: 'collaborator',
+        entityId: targetUserId,
+        details: { branch_role: roleByTenant.get(tid) || null },
+      });
+    }
+    for (const tid of toAddTenantIds) {
+      await createActivityLog({
+        tenantId: tid,
+        userId: auth.userId,
+        action: 'add_to_branch',
+        entityType: 'collaborator',
+        entityId: targetUserId,
+        details: { role: newRole },
+      });
     }
 
     return { ok: true, body: { success: true }, status: 200 };
@@ -416,33 +553,46 @@ export async function updateCollaborator(
   }
 }
 
-export async function deleteCollaborator(auth: AuthInfo, id: string): Promise<CollaboratorResult> {
+export async function deleteCollaborator(
+  auth: AuthInfo,
+  targetUserId: string,
+  tenantId?: string
+): Promise<CollaboratorResult> {
   try {
     const ownerTenantIds = await getOwnerTenantIds(auth.userId);
     if (!ownerTenantIds) {
       return { ok: false, error: 'Only owners can remove collaborators', status: 403 };
     }
 
-    const { data: target } = await supabaseAdmin
-      .from('tenant_users')
-      .select('role, user_id')
-      .eq('id', id)
-      .in('tenant_id', ownerTenantIds)
-      .single();
+    if (targetUserId === auth.userId) {
+      return { ok: false, error: 'No podés quitarte a vos mismo del equipo', status: 400 };
+    }
 
-    if (!target) {
+    if (tenantId && !ownerTenantIds.includes(tenantId)) {
       return { ok: false, error: 'Collaborator not found', status: 404 };
     }
 
-    if (target.role === 'owner') {
+    const scopedTenantIds = tenantId ? [tenantId] : ownerTenantIds;
+
+    const { data: rows } = await supabaseAdmin
+      .from('tenant_users')
+      .select('id, tenant_id, role, user_id')
+      .eq('user_id', targetUserId)
+      .in('tenant_id', scopedTenantIds);
+
+    if (!rows || rows.length === 0) {
+      return { ok: false, error: 'Collaborator not found', status: 404 };
+    }
+
+    if (rows.some((r) => r.role === 'owner')) {
       return { ok: false, error: 'Cannot remove the owner', status: 400 };
     }
 
     const { error } = await supabaseAdmin
       .from('tenant_users')
       .delete()
-      .eq('user_id', target.user_id as string)
-      .in('tenant_id', ownerTenantIds)
+      .eq('user_id', targetUserId)
+      .in('tenant_id', scopedTenantIds)
       .neq('role', 'owner');
 
     if (error) {
@@ -450,9 +600,70 @@ export async function deleteCollaborator(auth: AuthInfo, id: string): Promise<Co
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }
 
+    // Se audita solo donde la persona era miembro de verdad: `scopedTenantIds`
+    // puede incluir sucursales del owner en las que nunca estuvo.
+    for (const row of rows) {
+      await createActivityLog({
+        tenantId: row.tenant_id as string,
+        userId: auth.userId,
+        action: tenantId ? 'remove_from_branch' : 'remove_collaborator',
+        entityType: 'collaborator',
+        entityId: targetUserId,
+        details: { branch_only: Boolean(tenantId), previous_role: row.role },
+      });
+    }
+
     return { ok: true, body: { success: true }, status: 200 };
   } catch (err) {
     logger.error('Error removing collaborator:', { error: err });
+    return { ok: false, error: 'Internal server error', status: 500 };
+  }
+}
+
+export async function revokeInvitation(
+  auth: AuthInfo,
+  invitationId: string
+): Promise<CollaboratorResult> {
+  try {
+    const ownerTenantIds = await getOwnerTenantIds(auth.userId);
+    if (!ownerTenantIds) {
+      return { ok: false, error: 'Only owners can manage invitations', status: 403 };
+    }
+
+    const { data: invitation } = await supabaseAdmin
+      .from('invitations')
+      .select('id, tenant_id, email, role')
+      .eq('id', invitationId)
+      .in('tenant_id', ownerTenantIds)
+      .maybeSingle();
+
+    if (!invitation) {
+      return { ok: false, error: 'Invitation not found', status: 404 };
+    }
+
+    const { error } = await supabaseAdmin
+      .from('invitations')
+      .delete()
+      .eq('id', invitationId)
+      .in('tenant_id', ownerTenantIds);
+
+    if (error) {
+      logger.error('DB error:', { error });
+      return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
+    }
+
+    await createActivityLog({
+      tenantId: invitation.tenant_id as string,
+      userId: auth.userId,
+      action: 'revoke_invitation',
+      entityType: 'collaborator',
+      entityId: invitation.email as string,
+      details: { email: invitation.email, role: invitation.role },
+    });
+
+    return { ok: true, body: { success: true }, status: 200 };
+  } catch (err) {
+    logger.error('Error revoking invitation:', { error: err });
     return { ok: false, error: 'Internal server error', status: 500 };
   }
 }

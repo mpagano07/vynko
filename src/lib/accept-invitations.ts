@@ -25,31 +25,41 @@ export async function acceptInvitationsForUser(user: UserLike) {
   for (const inv of invitations) {
     const { data: existingMember } = await supabaseAdmin
       .from('tenant_users')
-      .select('id')
+      .select('id, role')
       .eq('tenant_id', inv.tenant_id)
       .eq('user_id', user.id)
       .maybeSingle();
 
-    if (!existingMember) {
-      const { data: tenantRow } = await supabaseAdmin
-        .from('tenants')
-        .select('subscription_plan')
-        .eq('id', inv.tenant_id)
-        .single();
-      const plan = (tenantRow?.subscription_plan as PlanId) || NEW_ACCOUNT_PLAN;
-      const maxUsers = PLAN_LIMITS[plan]?.users ?? 1;
-      if (maxUsers !== Infinity) {
-        const { count } = await supabaseAdmin
-          .from('tenant_users')
-          .select('id', { count: 'exact', head: true })
-          .eq('tenant_id', inv.tenant_id);
-        if ((count ?? 0) >= maxUsers) {
-          await supabaseAdmin
-            .from('invitations')
-            .update({ accepted_at: new Date().toISOString() })
-            .eq('id', inv.id);
-          continue;
-        }
+    if (existingMember) {
+      // La persona ya es miembro de esa sucursal. Se marca la invitación como
+      // aceptada sin tocar su rol: un `upsert` con `role: inv.role` podía
+      // degradar a un owner o pisar un ascenso hecho después de invitar.
+      await supabaseAdmin
+        .from('invitations')
+        .update({ accepted_at: new Date().toISOString() })
+        .eq('id', inv.id);
+      accepted++;
+      continue;
+    }
+
+    const { data: tenantRow } = await supabaseAdmin
+      .from('tenants')
+      .select('subscription_plan')
+      .eq('id', inv.tenant_id)
+      .single();
+    const plan = (tenantRow?.subscription_plan as PlanId) || NEW_ACCOUNT_PLAN;
+    const maxUsers = PLAN_LIMITS[plan]?.users ?? 1;
+    if (maxUsers !== Infinity) {
+      const { count } = await supabaseAdmin
+        .from('tenant_users')
+        .select('id', { count: 'exact', head: true })
+        .eq('tenant_id', inv.tenant_id);
+      if ((count ?? 0) >= maxUsers) {
+        await supabaseAdmin
+          .from('invitations')
+          .update({ accepted_at: new Date().toISOString() })
+          .eq('id', inv.id);
+        continue;
       }
     }
 

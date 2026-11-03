@@ -30,7 +30,10 @@ export async function DELETE(
   const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-  const result = await deleteCollaborator(auth, id);
+  // `tenant_id` opcional: con él se quita a la persona solo de esa sucursal.
+  // Sin él, se la quita de todas las sucursales del owner.
+  const tenantId = new URL(request.url).searchParams.get('tenant_id') || undefined;
+  const result = await deleteCollaborator(auth, id, tenantId);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
   return NextResponse.json(result.body);
 }

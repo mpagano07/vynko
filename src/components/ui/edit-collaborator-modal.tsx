@@ -6,6 +6,7 @@ import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { FormLabel } from '@/components/ui/form-label';
 import { Pencil, Loader2, Shield, ShieldCheck, HelpCircle } from 'lucide-react';
+import { ROLE_DESCRIPTIONS } from '@/lib/roles';
 
 export interface TenantOption {
   id: string;
@@ -79,7 +80,7 @@ export function EditCollaboratorModal({
               Rol
               <span
                 className="inline-flex cursor-help text-gray-400"
-                title="Miembro: puede cobrar y ver ventas. Manager: además gestiona precios, productos y configuración de cobro. Propietario: control total de la empresa."
+                title={`Miembro: ${ROLE_DESCRIPTIONS.member}\nManager: ${ROLE_DESCRIPTIONS.manager}\nPropietario: ${ROLE_DESCRIPTIONS.owner}`}
               >
                 <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
               </span>

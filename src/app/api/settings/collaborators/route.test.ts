@@ -197,6 +197,8 @@ describe('POST /api/settings/collaborators', () => {
     supabaseMock.__queue('tenant_users', { data: null, error: null });
     supabaseMock.__queue('tenants', { data: { subscription_plan: 'business' } });
     supabaseMock.__queue('tenant_users', { data: null, error: null, count: 0 });
+    // El log de auditoría resuelve el nombre del actor con otra query a profiles.
+    supabaseMock.__queue('profiles', { data: { full_name: 'Actor' }, error: null });
     supabaseMock.__queue('profiles', {
       data: { email: 'a@b.com', full_name: 'Ana', avatar_url: null },
     });
@@ -267,14 +269,15 @@ describe('POST /api/settings/collaborators', () => {
     const upsert = supabaseMock.__calls.find(
       (c) => c.table === 'invitations' && c.method === 'upsert'
     );
-    expect(upsert?.args[0]).toMatchObject({ email: 'nuevo@tienda.com', role: 'member' });
+    expect(upsert?.args[0]).toEqual([
+      expect.objectContaining({ email: 'nuevo@tienda.com', role: 'member', tenant_id: 'tenant-1' }),
+    ]);
   });
 
   it('respeta el límite de usuarios del plan', async () => {
     supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
     supabaseMock.__queue('profiles', { data: { id: 'user-2', email: 'a@b.com' } });
     supabaseMock.__queue('tenant_users', { data: null, error: null });
-    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
     supabaseMock.__queue('tenants', { data: { subscription_plan: 'starter' } });
     supabaseMock.__queue('tenant_users', { data: null, error: null, count: 1 });
 
