@@ -13,40 +13,18 @@ import {
 } from '@/lib/payment-methods';
 import { formatARS } from '@/lib/utils/currency';
 import { cn } from '@/lib/utils/cn';
+import {
+  buildWhatsAppUrl,
+  formatReceiptDate,
+  type ReceiptSale,
+  type ReceiptTenant,
+} from '@/lib/sales-receipt';
 
-export interface ReceiptSale {
-  id: string;
-  created_at?: string | null;
-  total_cents: number;
-  discount_cents: number;
-  surcharge_cents: number;
-  amount_paid_cents: number;
-  change_cents: number;
-  payment_method?: string | null;
-  customer_name?: string | null;
-  customer_phone?: string | null;
-  notes?: string | null;
-  items: {
-    product_name: string;
-    quantity: number;
-    unit_price_cents: number;
-    subtotal_cents: number;
-  }[];
-  payments?: {
-    method: string;
-    amount_cents: number;
-    received_cents: number;
-    change_cents: number;
-  }[];
-  adjustments_applied?: Record<string, number>;
-}
-
-export interface ReceiptTenant {
-  name?: string | null;
-  company_name?: string | null;
-  business_address?: string | null;
-  business_phone?: string | null;
-}
+// Se re-exportan para no romper imports existentes: la implementación vive en
+// `@/lib/sales-receipt` (sin React) y así otras pantallas pueden compartir el
+// ticket sin cargar este componente.
+export { buildWhatsAppUrl, buildWhatsAppText } from '@/lib/sales-receipt';
+export type { ReceiptSale, ReceiptTenant } from '@/lib/sales-receipt';
 
 interface ReceiptModalProps {
   sale: ReceiptSale;
@@ -54,70 +32,6 @@ interface ReceiptModalProps {
   paperSize: '58mm' | '80mm';
   onPaperSizeChange: (size: '58mm' | '80mm') => void;
   onClose: () => void;
-}
-
-function fmtDate(iso?: string | null): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return d.toLocaleString('es-AR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-export function buildWhatsAppText(sale: ReceiptSale, tenant: ReceiptTenant): string {
-  const lines: string[] = [];
-  lines.push('🧾 *COMPROBANTE DE VENTA*');
-  lines.push('');
-  if (tenant.company_name) lines.push(tenant.company_name);
-  if (tenant.name) lines.push(tenant.name);
-  if (tenant.business_address) lines.push(tenant.business_address);
-  if (tenant.business_phone) lines.push(`Tel: ${tenant.business_phone}`);
-  lines.push(`Fecha: ${fmtDate(sale.created_at)}`);
-  lines.push(`${sale.id.slice(0, 8).toUpperCase()}`);
-  lines.push('------------------------------');
-  for (const item of sale.items) {
-    lines.push(`${item.quantity} x ${item.product_name}`);
-    lines.push(`    ${formatARS(item.unit_price_cents / 100)} c/u = ${formatARS(item.subtotal_cents / 100)}`);
-  }
-  lines.push('------------------------------');
-  if (sale.discount_cents > 0) lines.push(`Descuento: -${formatARS(sale.discount_cents / 100)}`);
-  if (sale.surcharge_cents > 0) lines.push(`Recargo: +${formatARS(sale.surcharge_cents / 100)}`);
-  lines.push(`TOTAL: ${formatARS(sale.total_cents / 100)}`);
-  const payments =
-    sale.payments && sale.payments.length > 0
-      ? sale.payments
-      : [
-          {
-            method: sale.payment_method ?? 'cash',
-            amount_cents: sale.total_cents,
-            received_cents: sale.amount_paid_cents,
-            change_cents: sale.change_cents,
-          },
-        ];
-  for (const p of payments) {
-    const label = getPaymentMethodLabel(p.method);
-    lines.push(`${label}: ${formatARS(p.amount_cents / 100)}`);
-    if (p.change_cents > 0) lines.push(`Vuelto: ${formatARS(p.change_cents / 100)}`);
-  }
-  if (sale.notes) lines.push('');
-  if (sale.notes) lines.push(`Nota: ${sale.notes}`);
-  lines.push('');
-  lines.push('¡Gracias por tu compra!');
-  return lines.join('\n');
-}
-
-export function buildWhatsAppUrl(sale: ReceiptSale, tenant: ReceiptTenant): string {
-  const text = buildWhatsAppText(sale, tenant);
-  if (sale.customer_phone) {
-    const digits = sale.customer_phone.replace(/\D/g, '');
-    const phone = digits.replace(/^0+/, '');
-    return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
-  }
-  return `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
 }
 
 export function PrintStyles() {
@@ -146,8 +60,7 @@ function ReceiptBody({ sale, tenant }: { sale: ReceiptSale; tenant: ReceiptTenan
       {tenant.business_phone && (
         <p className="text-center">Tel: {tenant.business_phone}</p>
       )}
-      <p className="text-center mt-1">Venta N° {sale.id.slice(0, 8).toUpperCase()}</p>
-      <p className="text-center">{fmtDate(sale.created_at)}</p>
+      <p className="text-center mt-1">Venta N° {sale.id.slice(0, 8).toUpperCase()}</p>      <p className="text-center">{formatReceiptDate(sale.created_at)}</p>
       <p className="text-center border-t border-dashed border-gray-400 my-1"></p>
 
       {(sale.items ?? []).map((item, idx) => (

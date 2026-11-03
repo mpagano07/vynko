@@ -16,8 +16,10 @@ import { SITE_URL } from '@/lib/site-url';
 import { getTrialDays } from '@/lib/plans';
 import type { Metadata, Viewport } from 'next';
 
+// `latin-ext` no aporta nada acá: los acentos y la ñ del español viven en el
+// subset `latin`. Sacarlo evita descargar una fuente extra que nadie usa.
 const inter = Inter({
-  subsets: ['latin', 'latin-ext'],
+  subsets: ['latin'],
   variable: '--font-sans',
   display: 'swap',
 });

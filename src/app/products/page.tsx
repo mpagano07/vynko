@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import dynamicImport from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useProducts } from '@/lib/hooks/useProducts';
 import { useCategories } from '@/lib/hooks/useCategories';
@@ -49,15 +50,24 @@ import {
 import { formatARS, groupThousands, parseAmountInput, amountToInput } from '@/lib/utils/currency';
 import { getTenantHeaders, authFetch } from '@/lib/fetchWithTenant';
 import { filterProducts } from '@/lib/product-search';
-import { IMPORT_FILE_ERROR, parseWorkbookFile, validateSpreadsheetFile } from '@/lib/excel-import-parse';
-import { exportProductsFile } from '@/lib/excel-export';
+import { IMPORT_FILE_ERROR } from '@/lib/excel-import-errors';
 import type { ExportFormat, ExportPlatform } from '@/lib/excel-export';
-import { ExportProductsModal, type DriveExportResult } from '@/components/products/export-products-modal';
+import type { DriveExportResult } from '@/components/products/export-products-modal';
 import { rememberDriveIntent, takeDriveIntent, clearDriveIntent, type DriveIntent } from '@/lib/google/drive-intent';
 import { matchesQuery } from '@/lib/utils/text';
-import { TransferInbox } from '@/components/transfers/TransferInbox';
 import { SortableTh, SortDir } from '@/components/ui/sortable-th';
 import { FormLabel } from '@/components/ui/form-label';
+
+// Modales y bandeja de transferencias fuera del bundle inicial de la página:
+// solo se descargan cuando el usuario abre el export o tiene multi-sucursal.
+const ExportProductsModal = dynamicImport(
+  () => import('@/components/products/export-products-modal').then((m) => ({ default: m.ExportProductsModal })),
+  { ssr: false },
+);
+const TransferInbox = dynamicImport(
+  () => import('@/components/transfers/TransferInbox').then((m) => ({ default: m.TransferInbox })),
+  { ssr: false },
+);
 
 type ImportProgressState = { processed: number; total: number };
 
@@ -292,17 +302,20 @@ function ProductsPageContent() {
     if (!file) return;
     setImportResults(null);
 
-    // Nombre, peso y tipo se miran antes de `arrayBuffer()`: leer el buffer
-    // de un archivo enorme es lo que cuelga la pestaña, y el atributo
-    // `accept` del input es solo una sugerencia que se esquiva con "mostrar
-    // todos los archivos".
-    const check = validateSpreadsheetFile(file);
-    if (!check.ok) {
-      toast.error(check.error);
-      return;
-    }
-
     try {
+      // El parser se carga recién acá: fuera del bundle inicial de /products.
+      const { parseWorkbookFile, validateSpreadsheetFile } = await import('@/lib/excel-import-parse');
+
+      // Nombre, peso y tipo se miran antes de `arrayBuffer()`: leer el buffer
+      // de un archivo enorme es lo que cuelga la pestaña, y el atributo
+      // `accept` del input es solo una sugerencia que se esquiva con "mostrar
+      // todos los archivos".
+      const check = validateSpreadsheetFile(file);
+      if (!check.ok) {
+        toast.error(check.error);
+        return;
+      }
+
       const buf = await file.arrayBuffer();
       const parsed = await parseWorkbookFile(buf, { fileName: file.name });
       if (!parsed.ok) {
@@ -439,6 +452,7 @@ function ProductsPageContent() {
           return;
         }
 
+        const { exportProductsFile } = await import('@/lib/excel-export');
         await exportProductsFile({
           products: filteredProducts,
           categories,

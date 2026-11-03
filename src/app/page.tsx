@@ -16,6 +16,7 @@ import { INSTAGRAM_URL } from '@/lib/marketing/social';
 import { formatPriceByCountry, getDisplayPrice, getConfiguredCurrenciesFromCookie, type CountryCode, type ConfiguredCurrencies, type PlanId } from '@/lib/pricing';
 
 import PromoCountdown from '@/components/landing/PromoCountdown';
+import { LazyMount } from '@/components/ui/lazy-mount';
 
 const DemoSales = dynamic(() => import('@/components/landing/DemoSales'), {
   ssr: false,
@@ -35,28 +36,19 @@ const ROICalculator = dynamic(() => import('@/components/landing/ROICalculator')
   ),
 });
 
-const DashboardPreviewChart = dynamic(() => import('@/components/landing/DashboardPreviewChart'), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-full flex items-end gap-1 px-2">
-      {[
-        { name: 'Lun', ventas: 4200 },
-        { name: 'Mar', ventas: 3800 },
-        { name: 'Mié', ventas: 5100 },
-        { name: 'Jue', ventas: 4700 },
-        { name: 'Vie', ventas: 6300 },
-        { name: 'Sáb', ventas: 5500 },
-        { name: 'Dom', ventas: 4800 },
-      ].map((d) => (
-        <div
-          key={d.name}
-          className="flex-1 bg-cyan-900/40 rounded-t"
-          style={{ height: `${(d.ventas / 6300) * 100}%` }}
-        />
-      ))}
-    </div>
-  ),
-});
+// Barras decorativas del preview del hero. Antes esto era un Recharts real
+// cargado dinámicamente después del mount: ~100 KB extra de JS en mobile para
+// dibujar siete barras estáticas que nadie interactúa. El markup CSS pesa cero
+// y se pinta en el primer render.
+const PREVIEW_BARS = [
+  { name: 'Lun', ventas: 4200 },
+  { name: 'Mar', ventas: 3800 },
+  { name: 'Mié', ventas: 5100 },
+  { name: 'Jue', ventas: 4700 },
+  { name: 'Vie', ventas: 6300 },
+  { name: 'Sáb', ventas: 5500 },
+  { name: 'Dom', ventas: 4800 },
+];
 
 export default function LandingPage() {
   const router = useRouter();
@@ -147,7 +139,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-gray-950 text-white">
       {/* Navbar */}
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-gray-800/50 bg-gray-950/80 backdrop-blur-xl">
+      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-gray-800/50 bg-gray-950/90 backdrop-blur-sm sm:bg-gray-950/80 sm:backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 sm:h-20">
             <div className="flex items-center gap-4 sm:gap-8 min-w-0">
@@ -205,7 +197,10 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="relative pt-36 pb-20 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-cyan-500/5 via-transparent to-transparent" />
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-cyan-500/5 rounded-full blur-3xl" />
+        {/* El círculo difuminado de 800px se oculta en mobile: pintar un blur
+            tan grande fuera de viewport es de los efectos más caros al
+            scrollear. En desktop suma ambiente, en mobile solo cuesta. */}
+        <div className="hidden sm:block absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-cyan-500/5 rounded-full blur-3xl" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
@@ -252,8 +247,8 @@ export default function LandingPage() {
 
             {/* Dashboard Preview */}
             <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-tr from-cyan-500/10 via-transparent to-blue-500/10 rounded-2xl blur-2xl" />
-              <div className="relative bg-gray-900/80 backdrop-blur-xl border border-gray-800 rounded-2xl p-6 shadow-2xl">
+              <div className="hidden sm:block absolute inset-0 bg-gradient-to-tr from-cyan-500/10 via-transparent to-blue-500/10 rounded-2xl blur-2xl" />
+              <div className="relative bg-gray-900/90 backdrop-blur-sm sm:bg-gray-900/80 sm:backdrop-blur-xl border border-gray-800 rounded-2xl p-6 shadow-2xl">
                 <div className="flex items-center gap-2 mb-6">
                   <div className="w-3 h-3 rounded-full bg-red-500" />
                   <div className="w-3 h-3 rounded-full bg-yellow-500" />
@@ -272,28 +267,14 @@ export default function LandingPage() {
                     </div>
                   ))}
                 </div>
-                <div className="h-32">
-                  {isMounted ? (
-                    <DashboardPreviewChart />
-                  ) : (
-                    <div className="w-full h-full flex items-end gap-1 px-2">
-                      {[
-                        { name: 'Lun', ventas: 4200 },
-                        { name: 'Mar', ventas: 3800 },
-                        { name: 'Mié', ventas: 5100 },
-                        { name: 'Jue', ventas: 4700 },
-                        { name: 'Vie', ventas: 6300 },
-                        { name: 'Sáb', ventas: 5500 },
-                        { name: 'Dom', ventas: 4800 },
-                      ].map((d) => (
-                        <div
-                          key={d.name}
-                          className="flex-1 bg-cyan-900/40 rounded-t"
-                          style={{ height: `${(d.ventas / 6300) * 100}%` }}
-                        />
-                      ))}
-                    </div>
-                  )}
+                <div className="h-32 flex items-end gap-1 px-2" aria-hidden="true">
+                  {PREVIEW_BARS.map((d) => (
+                    <div
+                      key={d.name}
+                      className="flex-1 bg-cyan-900/40 rounded-t"
+                      style={{ height: `${(d.ventas / 6300) * 100}%` }}
+                    />
+                  ))}
                 </div>
                 <div className="mt-4 flex items-center gap-3 p-3 bg-amber-500/5 border border-amber-500/10 rounded-lg">
                   <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
@@ -325,7 +306,9 @@ export default function LandingPage() {
             <p className="mt-4 text-gray-400 max-w-lg mx-auto">Sumá productos al carrito, simulá una venta y experimentá la interfaz. Sin crear cuenta, sin compromiso.</p>
           </div>
           <div className="max-w-5xl mx-auto">
-            <DemoSales />
+            <LazyMount fallback={<div className="h-72 rounded-2xl bg-gray-900/60 animate-pulse" />}>
+              <DemoSales />
+            </LazyMount>
           </div>
         </div>
       </section>
@@ -458,7 +441,9 @@ export default function LandingPage() {
             <p className="mt-4 text-gray-400">Ingresá los datos de tu negocio y calculá el impacto real.</p>
           </div>
           <div className="max-w-4xl mx-auto">
-            <ROICalculator />
+            <LazyMount fallback={<div className="h-72 rounded-2xl bg-gray-900/60 animate-pulse" />}>
+              <ROICalculator />
+            </LazyMount>
           </div>
         </div>
       </section>
@@ -734,7 +719,7 @@ export default function LandingPage() {
 
       {/* Sticky Mobile CTA */}
       {isMounted && !user && !hasSession && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden border-t border-gray-800/50 bg-gray-950/95 backdrop-blur-xl px-3 sm:px-4 py-2.5 sm:py-3" style={{ paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom))' }}>
+        <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden border-t border-gray-800/50 bg-gray-950/95 px-3 sm:px-4 py-2.5 sm:py-3" style={{ paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom))' }}>
           <Link
             href="/auth/signup"
             className="flex items-center justify-center gap-2 w-full max-w-full py-3 px-3 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl text-xs sm:text-sm transition-colors shadow-lg shadow-cyan-500/20 text-center leading-tight whitespace-normal break-words"
