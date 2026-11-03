@@ -6,6 +6,7 @@ import { isPaymentMethodId, normalizeCheckoutSettings } from '@/lib/payment-meth
 import type { AuthInfo } from '@/lib/api-auth';
 import { trackEvent } from '@/lib/track-event';
 import { scheduleAfterBackground } from '@/lib/after-background';
+import { hasCapability } from '@/lib/roles';
 import { logger } from '@/lib/logger';
 
 type SalesQueryResult = { data?: unknown; total?: number; page?: number; limit?: number };
@@ -499,6 +500,12 @@ export async function createSale(
   body: CreateSaleBody,
   idempotencyKey?: string
 ): Promise<CreateSaleResult> {
+  // Los roles de depósito y consulta no venden. El rol viaja en `auth` desde
+  // `getAuth` (que ya consultó las membresías), así que no agrega una query.
+  if (!hasCapability(auth.role, 'sell')) {
+    return { ok: false, error: 'No tenés permisos para registrar ventas', status: 403 };
+  }
+
   const { customer_id, notes, items, payment_method = 'cash', amount_paid, discount_percent = 0, surcharge_percent = 0, payments } = body;
 
   // ---- Idempotencia (048) ----

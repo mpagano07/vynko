@@ -27,7 +27,7 @@ import {
   type PaymentAdjustments,
 } from '@/lib/payment-methods';
 import { canUseFacturacion } from '@/lib/arca/access';
-import { ROLE_DESCRIPTIONS, getRoleLabel } from '@/lib/roles';
+import { ROLE_DESCRIPTIONS, ROLE_HELP_TEXT, ROLE_OPTIONS, getRoleLabel, hasCapability, highestRole, type TenantRole } from '@/lib/roles';
 import { ArcaConfigCard } from '@/components/settings/ArcaConfigCard';
 import { AccountDangerZone } from '@/components/settings/AccountDangerZone';
 import { GoogleDriveConnectionCard } from '@/components/settings/GoogleDriveConnectionCard';
@@ -44,7 +44,7 @@ interface Collaborator {
   user_id: string;
   full_name?: string;
   email: string;
-  role: 'owner' | 'manager' | 'member';
+  role: TenantRole;
   tenants?: { id: string; name: string }[];
   tenant_users_ids?: string[];
   memberships?: CollaboratorMembership[];
@@ -63,6 +63,38 @@ interface PendingInvitation {
 
 function capitalizeWords(value: string): string {
   return value.replace(/(^|\s)(\p{L})/gu, (_, pre: string, ch: string) => pre + ch.toUpperCase());
+}
+
+/**
+ * Color por rol para los chips de sucursal y el badge principal. Mantiene
+ * legible de un vistazo quién vende, quién administra y quién solo consulta.
+ */
+const ROLE_CHIP_CLASSES: Record<TenantRole, string> = {
+  owner: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+  manager: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
+  cashier: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+  stock: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300',
+  viewer: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+  member: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+};
+
+function roleChipClass(role: string): string {
+  return role in ROLE_CHIP_CLASSES
+    ? ROLE_CHIP_CLASSES[role as TenantRole]
+    : ROLE_CHIP_CLASSES.member;
+}
+
+const ROLE_BADGE_TONES: Record<TenantRole, 'amberSoft' | 'indigo' | 'emerald' | 'blue' | 'grayMuted'> = {
+  owner: 'amberSoft',
+  manager: 'indigo',
+  cashier: 'emerald',
+  stock: 'blue',
+  viewer: 'grayMuted',
+  member: 'grayMuted',
+};
+
+function roleBadgeTone(role: TenantRole) {
+  return ROLE_BADGE_TONES[role] ?? 'grayMuted';
 }
 
 function formatCuit(value: string): string {
@@ -217,7 +249,7 @@ function SettingsContent() {
     : collaborators;
 
   useEffect(() => {
-    if (!authLoading && role === 'member') {
+    if (!authLoading && !hasCapability(role, 'manage_tenant')) {
       router.replace('/dashboard');
     }
   }, [authLoading, role, router]);
@@ -401,7 +433,7 @@ function SettingsContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: inv.email,
-          role: inv.role === 'manager' ? 'manager' : 'member',
+          role: inv.role,
           full_name: null,
           // Reenvía solo la sucursal de esta invitación. Antes mandaba `[]`,
           // que el backend interpretaba como "todas las sucursales".
@@ -618,7 +650,10 @@ function SettingsContent() {
     }
   }, [passwordForm, user?.email, logout, router]);
 
-  const handleUpdateCollab = useCallback(async (collab: Collaborator, payload: { role: string; tenant_ids: string[] }) => {
+  const handleUpdateCollab = useCallback(async (
+    collab: Collaborator,
+    payload: { memberships: { tenant_id: string; role: string }[] }
+  ) => {
     try {
       const res = await authFetch(`/api/settings/collaborators/${collab.user_id}`, {
         method: 'PATCH',
@@ -637,22 +672,22 @@ function SettingsContent() {
       setCollaborators((prev) => prev.map((c) => {
         if (c.user_id !== collab.user_id) return c;
         const currentMemberships = c.memberships || [];
-        const nextMemberships: CollaboratorMembership[] = payload.tenant_ids.flatMap((tid) => {
-          const tenant = allTenants.find((t) => t.id === tid);
+        const nextMemberships: CollaboratorMembership[] = payload.memberships.flatMap(({ tenant_id, role }) => {
+          const tenant = allTenants.find((t) => t.id === tenant_id);
           if (!tenant) return [];
-          const existing = currentMemberships.find((m) => m.tenant_id === tid);
+          const existing = currentMemberships.find((m) => m.tenant_id === tenant_id);
           return [{
-            id: existing?.id || `pending-${tid}`,
-            tenant_id: tid,
+            id: existing?.id || `pending-${tenant_id}`,
+            tenant_id,
             tenant_name: tenant.name,
-            role: payload.role,
+            role,
             joined_at: existing?.joined_at ?? null,
           }];
         });
         return {
           ...c,
-          role: (payload.role as Collaborator['role']),
-          tenants: allTenants.filter(t => payload.tenant_ids.includes(t.id)),
+          role: highestRole(nextMemberships.map((m) => m.role)),
+          tenants: allTenants.filter(t => payload.memberships.some((m) => m.tenant_id === t.id)),
           memberships: nextMemberships,
           tenant_users_ids: nextMemberships.map((m) => m.id),
         };
@@ -675,7 +710,7 @@ function SettingsContent() {
     { id: 'cuenta', label: 'Mi Cuenta', icon: <Shield className="h-4 w-4" /> },
   ];
 
-  if (authLoading || role === 'member') return null;
+  if (authLoading || !hasCapability(role, 'manage_tenant')) return null;
 
   return (
     <div className="space-y-6">
@@ -1104,7 +1139,7 @@ function SettingsContent() {
                             {c.memberships!.map((m) => (
                               <span
                                 key={m.tenant_id}
-                                className="inline-flex items-center gap-1 text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded"
+                                className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${roleChipClass(m.role)}`}
                               >
                                 {m.tenant_name}
                                 <span className="opacity-70">· {getRoleLabel(m.role)}</span>
@@ -1143,7 +1178,7 @@ function SettingsContent() {
 
                     <div className="flex items-center gap-2 flex-shrink-0 ml-3">
                       <StatusBadge
-                        tone={c.role === 'owner' ? 'amberSoft' : 'grayMuted'}
+                        tone={roleBadgeTone(c.role)}
                         className="py-1"
                         icon={c.role === 'owner' ? <ShieldCheck className="h-3 w-3" /> : <Shield className="h-3 w-3" />}
                       >
@@ -1310,7 +1345,7 @@ function SettingsContent() {
                       Rol
                       <span
                         className="inline-flex cursor-help text-gray-400"
-                        title={`Miembro: ${ROLE_DESCRIPTIONS.member}\nManager: ${ROLE_DESCRIPTIONS.manager}`}
+                        title={ROLE_HELP_TEXT}
                       >
                         <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
                       </span>
@@ -1319,8 +1354,11 @@ function SettingsContent() {
                       value={inviteRole}
                       onChange={(e) => setInviteRole(e.target.value)}
                     >
-                      <option value="member">Miembro</option>
-                      <option value="manager">Manager</option>
+                      {ROLE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value} title={option.description}>
+                          {option.label}
+                        </option>
+                      ))}
                     </Select>
                   </div>
                 </div>
@@ -1549,7 +1587,10 @@ function SettingsContent() {
         email={editingCollab?.email || ''}
         role={editingCollab?.role || 'member'}
         tenants={tenants.map((t) => ({ id: t.id, name: t.name }))}
-        defaultTenantIds={(editingCollab?.tenants || []).map((t) => t.id)}
+        memberships={(editingCollab?.memberships || []).map((m) => ({
+          tenant_id: m.tenant_id,
+          role: m.role,
+        }))}
         onCancel={() => {
           setEditModalOpen(false);
           setEditingCollab(null);

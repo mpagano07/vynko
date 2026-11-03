@@ -4,6 +4,7 @@ import { createActivityLog } from '@/lib/activity-log';
 import { PAYMENT_METHODS, type PaymentMethodId } from '@/lib/payment-methods';
 import type { AuthInfo } from '@/lib/api-auth';
 import { trackEvent } from '@/lib/track-event';
+import { hasCapability } from '@/lib/roles';
 import { logger } from '@/lib/logger';
 
 export type CashRegisterResult<T> =
@@ -13,12 +14,6 @@ export type CashRegisterResult<T> =
 const MAX_INITIAL_FUND = 1_000_000_000;
 const MAX_MOVEMENT = 100_000_000;
 
-// Roles válidos en `tenant_users.role`: 'owner' | 'manager' | 'member'.
-// Un 'member' no debe poder mover dinero: antes esta comprobación comparaba con
-// 'viewer', un rol que el CHECK de la tabla nunca permite, así que cualquier
-// miembro pasaba el filtro.
-const CASH_OPERATOR_ROLES = new Set(['owner', 'manager']);
-
 async function assertOperatorRole(auth: AuthInfo): Promise<CashRegisterResult<never> | null> {
   const { data: tu } = await supabaseAdmin
     .from('tenant_users')
@@ -26,7 +21,7 @@ async function assertOperatorRole(auth: AuthInfo): Promise<CashRegisterResult<ne
     .eq('user_id', auth.userId)
     .eq('tenant_id', auth.tenantId);
   const role = (tu?.[0]?.role as string | undefined) ?? null;
-  if (!role || !CASH_OPERATOR_ROLES.has(role)) {
+  if (!hasCapability(role, 'operate_cash')) {
     return { ok: false, error: 'No tienes permisos para operar la caja', status: 403 };
   }
   return null;

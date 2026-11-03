@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
 import type { AuthInfo } from '@/lib/api-auth';
-import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
+import { getRoleInTenant, hasCapability } from '@/lib/membership-role';
 import { logger } from '@/lib/logger';
 
 export type StockTransferResult<T = unknown> =
@@ -91,7 +91,7 @@ export async function createTransfer(
     getRoleInTenant(auth.userId, from_tenant_id),
     getRoleInTenant(auth.userId, to_tenant_id),
   ]);
-  if (!canManageTenant(fromRole) || !canManageTenant(toRole)) {
+  if (!hasCapability(fromRole, 'manage_purchases') || !hasCapability(toRole, 'manage_purchases')) {
     return { ok: false, error: 'Solo el dueño o un administrador puede crear transferencias', status: 403 };
   }
 
@@ -193,7 +193,7 @@ export async function updateTransferStatus(
   // Dirección: enviar exige estar en el tenant origen; recibir, en el destino.
   // (El rol owner/manager se valida en el tenant correspondiente, no solo la pertenencia.)
   const activeRole = await getRoleInTenant(auth.userId, auth.tenantId);
-  if (!canManageTenant(activeRole)) {
+  if (!hasCapability(activeRole, 'manage_purchases')) {
     return { ok: false, error: 'Solo el dueño o un administrador puede operar transferencias', status: 403 };
   }
 
@@ -289,7 +289,7 @@ export async function deleteTransfer(auth: AuthInfo, id: string): Promise<StockT
   }
 
   const originRole = await getRoleInTenant(auth.userId, transfer.from_tenant_id);
-  if (!canManageTenant(originRole)) {
+  if (!hasCapability(originRole, 'manage_purchases')) {
     return { ok: false, error: 'Solo el dueño o un administrador puede cancelar transferencias', status: 403 };
   }
 

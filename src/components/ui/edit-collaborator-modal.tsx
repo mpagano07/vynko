@@ -5,24 +5,39 @@ import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { FormLabel } from '@/components/ui/form-label';
-import { Pencil, Loader2, Shield, ShieldCheck, HelpCircle } from 'lucide-react';
-import { ROLE_DESCRIPTIONS } from '@/lib/roles';
+import { Pencil, Loader2, ShieldCheck, HelpCircle } from 'lucide-react';
+import {
+  ASSIGNABLE_ROLES,
+  ROLE_HELP_TEXT,
+  ROLE_OPTIONS,
+  type TenantRole,
+} from '@/lib/roles';
 
 export interface TenantOption {
   id: string;
   name: string;
 }
 
+export interface MembershipInput {
+  tenant_id: string;
+  role: string;
+}
+
 interface EditCollaboratorModalProps {
   open: boolean;
   fullName?: string;
   email: string;
-  role: 'owner' | 'manager' | 'member';
+  role: TenantRole;
   tenants: TenantOption[];
-  defaultTenantIds: string[];
+  /** Rol actual en cada sucursal. La ausencia de una sucursal = no asignada. */
+  memberships: MembershipInput[];
   canEditRole?: boolean;
   onCancel: () => void;
-  onSave: (payload: { role: string; tenant_ids: string[] }) => Promise<void>;
+  onSave: (payload: { memberships: MembershipInput[] }) => Promise<void>;
+}
+
+function isAssignable(role: string | null | undefined): role is TenantRole {
+  return typeof role === 'string' && (ASSIGNABLE_ROLES as string[]).includes(role);
 }
 
 export function EditCollaboratorModal({
@@ -31,28 +46,52 @@ export function EditCollaboratorModal({
   email,
   role,
   tenants,
-  defaultTenantIds,
+  memberships,
   canEditRole = true,
   onCancel,
   onSave,
 }: EditCollaboratorModalProps) {
-  const [editRole, setEditRole] = useState(role);
-  const [selectedTenantIds, setSelectedTenantIds] = useState<string[]>(defaultTenantIds);
+  const [rolesByTenant, setRolesByTenant] = useState<Record<string, TenantRole>>(() => {
+    const initial: Record<string, TenantRole> = {};
+    for (const membership of memberships) {
+      initial[membership.tenant_id] = isAssignable(membership.role) ? membership.role : 'member';
+    }
+    return initial;
+  });
   const [saving, setSaving] = useState(false);
 
   if (!open) return null;
 
+  const defaultRole: TenantRole = isAssignable(role) ? role : 'member';
+  const selectedTenantIds = Object.keys(rolesByTenant);
+
   const toggleTenant = (id: string) => {
-    setSelectedTenantIds((prev) =>
-      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]
-    );
+    setRolesByTenant((prev) => {
+      if (id in prev) {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      return { ...prev, [id]: defaultRole };
+    });
+  };
+
+  const setRoleFor = (id: string, value: string) => {
+    if (!isAssignable(value)) return;
+    setRolesByTenant((prev) => ({ ...prev, [id]: value }));
   };
 
   const handleSave = async () => {
-    if (selectedTenantIds.length === 0) return;
+    const selected = tenants.filter((t) => t.id in rolesByTenant);
+    if (selected.length === 0) return;
     setSaving(true);
     try {
-      await onSave({ role: editRole, tenant_ids: selectedTenantIds });
+      await onSave({
+        memberships: selected.map((t) => ({
+          tenant_id: t.id,
+          role: rolesByTenant[t.id] ?? 'member',
+        })),
+      });
     } finally {
       setSaving(false);
     }
@@ -76,51 +115,65 @@ export function EditCollaboratorModal({
 
         <div className="space-y-4">
           <div>
-            <FormLabel className="mb-1.5 flex items-center gap-1">
-              Rol
-              <span
-                className="inline-flex cursor-help text-gray-400"
-                title={`Miembro: ${ROLE_DESCRIPTIONS.member}\nManager: ${ROLE_DESCRIPTIONS.manager}\nPropietario: ${ROLE_DESCRIPTIONS.owner}`}
-              >
-                <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <FormLabel className="mb-0 flex items-center gap-1">
+                Sucursales y rol
+                <span className="inline-flex cursor-help text-gray-400" title={ROLE_HELP_TEXT}>
+                  <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                </span>
+              </FormLabel>
+              <span className="text-[11px] text-gray-400">
+                {selectedTenantIds.length} de {tenants.length}
               </span>
-            </FormLabel>
-            <Select
-              value={editRole}
-              disabled={!canEditRole || role === 'owner'}
-              onChange={(e) => setEditRole(e.target.value as 'member' | 'manager')}
-            >
-              <option value="member">Miembro</option>
-              <option value="manager">Manager</option>
-            </Select>
-          </div>
+            </div>
 
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-              <Shield className="h-3.5 w-3.5" />
-              Sucursales asignadas
-            </p>
             {tenants.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
+              <div className="space-y-2">
                 {tenants.map((t) => {
-                  const checked = selectedTenantIds.includes(t.id);
+                  const checked = t.id in rolesByTenant;
+                  const tenantRole = rolesByTenant[t.id] ?? defaultRole;
                   return (
-                    <label
+                    <div
                       key={t.id}
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs cursor-pointer transition-colors ${
+                      className={`flex items-center gap-2 rounded-md border px-2.5 py-2 transition-colors ${
                         checked
-                          ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300'
-                          : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                          ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700'
+                          : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700'
                       }`}
                     >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleTenant(t.id)}
-                        className="sr-only"
-                      />
-                      {checked ? '✓' : '○'} {t.name}
-                    </label>
+                      <label className="flex items-center gap-1.5 text-xs cursor-pointer min-w-0 flex-1">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleTenant(t.id)}
+                          className="h-3.5 w-3.5 accent-blue-600"
+                        />
+                        <span
+                          className={`truncate ${
+                            checked
+                              ? 'text-blue-700 dark:text-blue-300'
+                              : 'text-gray-600 dark:text-gray-400'
+                          }`}
+                        >
+                          {t.name}
+                        </span>
+                      </label>
+                      {checked && (
+                        <Select
+                          value={tenantRole}
+                          disabled={!canEditRole}
+                          onChange={(e) => setRoleFor(t.id, e.target.value)}
+                          aria-label={`Rol en ${t.name}`}
+                          className="min-w-[8.5rem]"
+                        >
+                          {ROLE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </Select>
+                      )}
+                    </div>
                   );
                 })}
               </div>

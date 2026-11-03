@@ -17,6 +17,7 @@ import { useRouter } from 'next/navigation';
 import { formatARS } from '@/lib/utils/currency';
 import { authFetch } from '@/lib/fetchWithTenant';
 import { trackClientEvent } from '@/lib/analytics-client';
+import { hasCapability } from '@/lib/roles';
 
 interface Prediction {
   productId: string;
@@ -97,7 +98,7 @@ export default function ForecastPage() {
   }, []);
 
   useEffect(() => {
-    if (!authLoading && role === 'member') { router.replace('/dashboard'); return; }
+    if (!authLoading && !hasCapability(role, 'view_reports')) { router.replace('/dashboard'); return; }
     if (!authLoading && tenant && (tenant.subscription_plan === 'free' || tenant.subscription_plan === 'starter')) {
       router.replace('/dashboard');
     }
@@ -112,13 +113,13 @@ export default function ForecastPage() {
   const openedTracked = useRef(false);
   useEffect(() => {
     if (openedTracked.current) return;
-    if (authLoading || role === 'member') return;
+    if (authLoading || !hasCapability(role, 'view_reports')) return;
     if (tenant && (tenant.subscription_plan === 'free' || tenant.subscription_plan === 'starter')) return;
     openedTracked.current = true;
     trackClientEvent('forecast_opened');
   }, [authLoading, role, tenant]);
 
-  if (authLoading || role === 'member') return null;
+  if (authLoading || !hasCapability(role, 'view_reports')) return null;
 
   const isStarter = !authLoading && tenant && (tenant.subscription_plan === 'free' || tenant.subscription_plan === 'starter');
   if (!authLoading && isStarter) return null;

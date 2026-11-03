@@ -31,7 +31,7 @@ import {
 import { buildArcaQrUrl, generateQrImageDataUrl } from '@/lib/arca/qr';
 import { toArgentinaDate, toArgentinaDateCompact } from '@/lib/arca/date';
 import { canUseFacturacionForUser } from '@/lib/arca/access-server';
-import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
+import { getRoleInTenant, hasCapability } from '@/lib/membership-role';
 import { logger } from '@/lib/logger';
 
 interface ServiceResult<T> {
@@ -175,7 +175,7 @@ export async function saveArcaConfig(
     // el certificado de la empresa: es una accion administrativa. Sin este
     // chequeo cualquier `member` podia sobreescribir la identidad fiscal del
     // tenant (CUIT, punto de venta, entorno) y sus credenciales.
-    if (!(await canManageTenant(await getRoleInTenant(auth.userId, auth.tenantId)))) {
+    if (!(hasCapability(await getRoleInTenant(auth.userId, auth.tenantId), 'manage_documents'))) {
       return { ok: false, error: 'No tenés permisos para configurar la facturación electrónica', status: 403 };
     }
 
@@ -369,7 +369,7 @@ export async function testArcaConnection(auth: AuthInfo): Promise<
   try {
     // Autenticarse contra ARCA con la clave privada guardada es parte de la
     // administracion fiscal: no puede gatillarlo cualquier `member`.
-    if (!(await canManageTenant(await getRoleInTenant(auth.userId, auth.tenantId)))) {
+    if (!(hasCapability(await getRoleInTenant(auth.userId, auth.tenantId), 'manage_documents'))) {
       return { ok: false, error: 'No tenés permisos para operar la facturación electrónica', status: 403 };
     }
 

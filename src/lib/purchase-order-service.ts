@@ -5,7 +5,7 @@ import {
 } from '@/lib/commercial-document-number';
 import { createActivityLog } from '@/lib/activity-log';
 import type { AuthInfo } from '@/lib/api-auth';
-import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
+import { getRoleInTenant, hasCapability } from '@/lib/membership-role';
 import { trackEvent } from '@/lib/track-event';
 import { logger } from '@/lib/logger';
 
@@ -72,7 +72,7 @@ export async function createPurchaseOrder(
     const { supplier_id, expected_date, notes, status, items } = body;
 
     const role = await getRoleInTenant(auth.userId, auth.tenantId);
-    if (!canManageTenant(role)) {
+    if (!hasCapability(role, 'manage_purchases')) {
       return { ok: false, error: 'Solo el dueño o un administrador puede crear pedidos', status: 403 };
     }
 
@@ -213,7 +213,7 @@ export async function updatePurchaseOrder(
     const { status } = body;
 
     const role = await getRoleInTenant(auth.userId, auth.tenantId);
-    if (!canManageTenant(role)) {
+    if (!hasCapability(role, 'manage_purchases')) {
       return { ok: false, error: 'Solo el dueño o un administrador puede modificar pedidos', status: 403 };
     }
 
@@ -367,7 +367,7 @@ export async function receivePurchaseOrder(
   const { received_date, deposito, pasillo, estanteria, notes, items } = body;
 
   const role = await getRoleInTenant(auth.userId, auth.tenantId);
-  if (!canManageTenant(role)) {
+  if (!hasCapability(role, 'manage_purchases')) {
     return { ok: false, error: 'Solo el dueño o un administrador puede recibir pedidos', status: 403 };
   }
 

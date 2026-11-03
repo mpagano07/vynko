@@ -26,6 +26,7 @@ export function authAsTenantA(overrides: Partial<AuthInfo> = {}): AuthInfo {
     userId: USER_A,
     allTenants: false,
     tenantIds: [TENANT_A],
+    role: 'owner',
     ...overrides,
   };
 }
@@ -37,6 +38,7 @@ export function authAsTenantB(overrides: Partial<AuthInfo> = {}): AuthInfo {
     userId: USER_B,
     allTenants: false,
     tenantIds: [TENANT_B],
+    role: 'owner',
     ...overrides,
   };
 }

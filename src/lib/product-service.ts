@@ -7,7 +7,7 @@ import { validatePrice, validateProduct, validateStock } from '@/lib/product-val
 import { normalizeForSearch } from '@/lib/utils/text';
 import { adjustStock, buildStockMovement } from '@/lib/stock';
 import { isAllowedImagePath, pathFromLegacyPublicUrl, signProductImageUrls } from '@/lib/upload-service';
-import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
+import { getRoleInTenant, hasCapability } from '@/lib/membership-role';
 import { trackEvent } from '@/lib/track-event';
 import { rateLimit } from '@/lib/rate-limit';
 import { MAX_IMPORT_ROWS } from '@/lib/excel-import-parse';
@@ -59,7 +59,7 @@ export type AdjustProductStockResult =
         notes?: string;
       };
     }
-  | { ok: false; error: string; status: 400 | 404 | 500 };
+  | { ok: false; error: string; status: 400 | 403 | 404 | 500 };
 
 export type AdjustPricesResult =
   | { ok: true; data: Record<string, unknown> }
@@ -121,10 +121,29 @@ async function requireCatalogManager(
   auth: AuthInfo
 ): Promise<{ ok: true } | { ok: false; error: string; status: 403 }> {
   const role = await getRoleInTenant(auth.userId, auth.tenantId);
-  if (!canManageTenant(role)) {
+  if (!hasCapability(role, 'manage_catalog')) {
     return {
       ok: false,
-      error: 'Sólo el dueño o un administrador puede modificar el catálogo de productos',
+      error: 'Sólo el dueño, un administrador o un encargado de depósito puede modificar el catálogo de productos',
+      status: 403,
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * Ajustar stock y dar de baja un producto son operaciones de depósito. No
+ * exigen administrar el catálogo global (un `member` ya podía hacerlas), pero
+ * sí excluyen a los roles de solo lectura y a caja.
+ */
+async function requireStockManager(
+  auth: AuthInfo
+): Promise<{ ok: true } | { ok: false; error: string; status: 403 }> {
+  const role = await getRoleInTenant(auth.userId, auth.tenantId);
+  if (!hasCapability(role, 'manage_stock')) {
+    return {
+      ok: false,
+      error: 'No tenés permisos para modificar el stock de esta sucursal',
       status: 403,
     };
   }
@@ -471,6 +490,9 @@ export async function updateProduct(auth: AuthInfo, id: string, body: Record<str
 }
 
 export async function deleteProduct(auth: AuthInfo, id: string): Promise<DeleteProductResult> {
+  const stockCheck = await requireStockManager(auth);
+  if (!stockCheck.ok) return stockCheck;
+
   const { data: stockRow, error: stockError } = await supabaseAdmin
     .from('product_stock')
     .update({ active: false, updated_at: new Date().toISOString() })
@@ -1164,6 +1186,9 @@ export async function adjustProductStock(auth: AuthInfo, id: string, body: {
   reason?: unknown;
   notes?: unknown;
 }): Promise<AdjustProductStockResult> {
+  const stockCheck = await requireStockManager(auth);
+  if (!stockCheck.ok) return stockCheck;
+
   const { quantity, reason, notes } = body as {
     quantity: number;
     reason: 'damaged' | 'lost' | 'stolen' | 'expired' | 'found' | 'stock_in' | 'correction';

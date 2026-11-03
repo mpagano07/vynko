@@ -7,6 +7,7 @@ const mockAuth = {
   userId: 'user-1',
   allTenants: false,
   tenantIds: ['tenant-1'],
+  role: 'owner',
 };
 
 vi.mock('@/lib/api-auth', () => ({
@@ -58,6 +59,8 @@ import { POST as adjustProductStock } from '@/app/api/products/[id]/adjust/route
 import { POST as adjustPrices } from '@/app/api/products/adjust-prices/route';
 import { PATCH as updateCollaborator, DELETE as deleteCollaborator } from '@/app/api/settings/collaborators/[id]/route';
 import { POST as completeOnboarding } from '@/app/api/onboarding/route';
+import { POST as postSale } from '@/app/api/sales/route';
+import { GET as getActivityLogs } from '@/app/api/activity-logs/route';
 
 const idParams = { params: Promise.resolve({ id: 'doc-1' }) } as never;
 const supplierParams = { params: Promise.resolve({ id: 'sup-1' }) } as never;
@@ -341,6 +344,7 @@ describe('gateos por rol', () => {
     });
 
     it('productos: un member sí puede desactivar un producto (semántica documentada)', async () => {
+      supabaseMock.__queue('tenant_users', { data: { role: 'member' }, error: null });
       supabaseMock.__queue('product_stock', { data: { id: 'ps-1' }, error: null });
       supabaseMock.__queue('products', { data: { name: 'Coca' }, error: null });
       const res = await deleteProduct(jsonRequest('http://localhost/api/products/prod-1', 'DELETE'), productParams);
@@ -348,6 +352,7 @@ describe('gateos por rol', () => {
     });
 
     it('productos: un member sí puede ajustar su stock (semántica documentada)', async () => {
+      supabaseMock.__queue('tenant_users', { data: { role: 'member' }, error: null });
       supabaseMock.__queue('products', { data: { id: 'prod-1', name: 'Coca' }, error: null });
       supabaseMock.__queue('product_stock', { data: { stock: 5 }, error: null });
       const res = await adjustProductStock(
@@ -374,6 +379,90 @@ describe('gateos por rol', () => {
         jsonRequest('http://localhost/api/onboarding', 'POST', { companyName: 'Acme', ownerName: 'Ana' })
       );
       expect(res.status).toBe(401);
+    });
+  });
+
+  describe('nivel 2: roles operativos', () => {
+    it('productos: un cajero no ajusta stock', async () => {
+      supabaseMock.__queue('tenant_users', { data: { role: 'cashier' }, error: null });
+      const res = await adjustProductStock(
+        jsonRequest('http://localhost/api/products/prod-1/adjust', 'POST', { quantity: 3, reason: 'correction' }),
+        productParams
+      );
+      expect(res.status).toBe(403);
+      const rpcCalls = supabaseMock.rpc.mock.calls.filter(([fn]) => fn === 'adjust_stock_atomic');
+      expect(rpcCalls).toHaveLength(0);
+    });
+
+    it('productos: un depósito sí ajusta stock', async () => {
+      supabaseMock.__queue('tenant_users', { data: { role: 'stock' }, error: null });
+      supabaseMock.__queue('products', { data: { id: 'prod-1', name: 'Coca' }, error: null });
+      supabaseMock.__queue('product_stock', { data: { stock: 5 }, error: null });
+      const res = await adjustProductStock(
+        jsonRequest('http://localhost/api/products/prod-1/adjust', 'POST', { quantity: 3, reason: 'correction' }),
+        productParams
+      );
+      expect(res.status).toBe(200);
+    });
+
+    it('productos: un consulta no ajusta stock', async () => {
+      supabaseMock.__queue('tenant_users', { data: { role: 'viewer' }, error: null });
+      const res = await adjustProductStock(
+        jsonRequest('http://localhost/api/products/prod-1/adjust', 'POST', { quantity: 3, reason: 'correction' }),
+        productParams
+      );
+      expect(res.status).toBe(403);
+    });
+
+    it('caja: un cajero abre la caja', async () => {
+      supabaseMock.__queue('tenant_users', { data: [{ role: 'cashier' }], error: null });
+      // No hay caja abierta y el insert devuelve la sesión creada.
+      supabaseMock.__queue('cash_register_sessions', { data: null, error: null });
+      supabaseMock.__queue('cash_register_sessions', {
+        data: { id: 'sess-1', initial_fund_cents: 10000 },
+        error: null,
+      });
+      const res = await openCashRegister(
+        jsonRequest('http://localhost/api/cash-register', 'POST', { initial_fund: 100 })
+      );
+      expect(res.status).toBe(201);
+    });
+
+    it('caja: un consulta no abre la caja', async () => {
+      supabaseMock.__queue('tenant_users', { data: [{ role: 'viewer' }], error: null });
+      const res = await openCashRegister(
+        jsonRequest('http://localhost/api/cash-register', 'POST', { initial_fund: 100 })
+      );
+      expect(res.status).toBe(403);
+    });
+
+    it('ventas: un depósito no vende', async () => {
+      vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, role: 'stock' });
+      const res = await postSale(
+        jsonRequest('http://localhost/api/sales', 'POST', { items: [], payment_method: 'cash' })
+      );
+      expect(res.status).toBe(403);
+    });
+
+    it('ventas: un consulta no vende', async () => {
+      vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, role: 'viewer' });
+      const res = await postSale(
+        jsonRequest('http://localhost/api/sales', 'POST', { items: [], payment_method: 'cash' })
+      );
+      expect(res.status).toBe(403);
+    });
+
+    it('historial: un consulta puede verlo', async () => {
+      supabaseMock.__queue('tenant_users', { data: [{ role: 'viewer' }], error: null });
+      supabaseMock.__queue('activity_logs', { data: [], count: 0, error: null });
+      const res = await getActivityLogs(jsonRequest('http://localhost/api/activity-logs', 'GET'));
+      expect(res.status).toBe(200);
+    });
+
+    it('historial: un cajero no puede verlo', async () => {
+      supabaseMock.__queue('tenant_users', { data: [{ role: 'cashier' }], error: null });
+      const res = await getActivityLogs(jsonRequest('http://localhost/api/activity-logs', 'GET'));
+      expect(res.status).toBe(403);
     });
   });
 });

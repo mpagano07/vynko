@@ -33,6 +33,8 @@ describe('POST /api/products/[id]/adjust', () => {
   beforeEach(() => {
     supabaseMock.__reset();
     vi.mocked(getAuth).mockResolvedValue(mockAuth);
+    // El gate de stock consulta el rol del usuario en la sucursal activa.
+    supabaseMock.__queue('tenant_users', { data: { role: 'owner' }, error: null });
   });
 
   it('ajusta stock positivamente y registra el historial en la misma RPC', async () => {
@@ -222,6 +224,8 @@ describe('POST /api/products/[id]/adjust', () => {
   });
 
   it('dos ajustes paralelos sobre el mismo producto: el segundo pierde el CAS', async () => {
+    // Una consulta de rol por request (el beforeEach encoló la primera).
+    supabaseMock.__queue('tenant_users', { data: { role: 'owner' }, error: null });
     supabaseMock.__queue('products', { data: { id: 'p1', name: 'Coca' } });
     supabaseMock.__queue('products', { data: { id: 'p1', name: 'Coca' } });
     supabaseMock.__queue('product_stock', { data: { stock: 5 } });

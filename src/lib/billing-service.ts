@@ -41,9 +41,9 @@ export async function createCheckoutSession(
   const membership = activeTenantId ? tu.find((t) => t.tenant_id === activeTenantId) : undefined;
   const tenantId = membership ? membership.tenant_id : tu[0].tenant_id;
 
-  // 'admin' no es un rol válido en `tenant_users.role` (CHECK: owner|manager|member),
-  // así que la condición nunca era verdadera. La suscripción se gestiona con los
-  // mismos roles que el resto de acciones administrativas: owner o manager.
+  // 'admin' no es un rol válido en `tenant_users.role`, así que la condición
+  // nunca era verdadera. La suscripción se gestiona con los mismos roles que el
+  // resto de acciones administrativas: owner o manager (`manage_tenant`).
   const canManage = tu.some((t) => t.tenant_id === tenantId && canManageTenant(t.role));
   if (!canManage) {
     return { ok: false, error: 'Solo el owner o un administrador pueden gestionar la suscripción', status: 403 };
