@@ -1,6 +1,8 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
+import { isInvitationExpired } from '@/lib/invitation-policy';
+import { normalizeAssignableRole } from '@/lib/roles';
 import { logger } from '@/lib/logger';
 
 interface UserLike {
@@ -14,7 +16,7 @@ export async function acceptInvitationsForUser(user: UserLike) {
 
   const { data: invitations } = await supabaseAdmin
     .from('invitations')
-    .select('id, tenant_id, role')
+    .select('id, tenant_id, role, expires_at')
     .eq('email', user.email.toLowerCase())
     .is('accepted_at', null);
 
@@ -22,10 +24,23 @@ export async function acceptInvitationsForUser(user: UserLike) {
     return { accepted };
   }
 
+  const now = new Date();
+
   for (const inv of invitations) {
+    // Una invitación vencida se ignora: no se marca como aceptada para que el
+    // owner la vea como vencida y pueda reenviarla. Antes un email viejo servía
+    // para entrar años después.
+    if (isInvitationExpired(inv.expires_at as string | null, now)) {
+      logger.info('Invitación vencida ignorada', {
+        invitationId: inv.id,
+        tenantId: inv.tenant_id,
+      });
+      continue;
+    }
+
     const { data: existingMember } = await supabaseAdmin
       .from('tenant_users')
-      .select('id, role')
+      .select('id, role, status')
       .eq('tenant_id', inv.tenant_id)
       .eq('user_id', user.id)
       .maybeSingle();
@@ -34,9 +49,25 @@ export async function acceptInvitationsForUser(user: UserLike) {
       // La persona ya es miembro de esa sucursal. Se marca la invitación como
       // aceptada sin tocar su rol: un `upsert` con `role: inv.role` podía
       // degradar a un owner o pisar un ascenso hecho después de invitar.
+      //
+      // Si su membresía estaba inactiva, aceptar la invitación la reactiva con
+      // el rol invitado. Nunca se toca a un owner: reactivarlo o degradarlo
+      // desde una invitación sería una vía de escalada.
+      if (existingMember.status !== 'active' && existingMember.role !== 'owner') {
+        const { error: reactivateError } = await supabaseAdmin
+          .from('tenant_users')
+          .update({
+            role: normalizeAssignableRole(inv.role),
+            status: 'active',
+            joined_at: now.toISOString(),
+          })
+          .eq('id', existingMember.id);
+        if (reactivateError) continue;
+      }
+
       await supabaseAdmin
         .from('invitations')
-        .update({ accepted_at: new Date().toISOString() })
+        .update({ accepted_at: now.toISOString() })
         .eq('id', inv.id);
       accepted++;
       continue;
@@ -53,11 +84,12 @@ export async function acceptInvitationsForUser(user: UserLike) {
       const { count } = await supabaseAdmin
         .from('tenant_users')
         .select('id', { count: 'exact', head: true })
-        .eq('tenant_id', inv.tenant_id);
+        .eq('tenant_id', inv.tenant_id)
+        .eq('status', 'active');
       if ((count ?? 0) >= maxUsers) {
         await supabaseAdmin
           .from('invitations')
-          .update({ accepted_at: new Date().toISOString() })
+          .update({ accepted_at: now.toISOString() })
           .eq('id', inv.id);
         continue;
       }
@@ -69,15 +101,19 @@ export async function acceptInvitationsForUser(user: UserLike) {
     );
     if (upsertError) continue;
 
-    const { error: tuError } = await supabaseAdmin.from('tenant_users').upsert(
-      { tenant_id: inv.tenant_id, user_id: user.id, role: inv.role },
-      { onConflict: 'tenant_id,user_id' }
-    );
+    // `insert` en vez de `upsert`: si dos aceptaciones concurrentes chocan,
+    // la segunda falla por UNIQUE y no reescribe el rol que la primera ya
+    // asentó. El rol de una invitación vieja con `owner` cae a `member`.
+    const { error: tuError } = await supabaseAdmin.from('tenant_users').insert({
+      tenant_id: inv.tenant_id,
+      user_id: user.id,
+      role: normalizeAssignableRole(inv.role),
+    });
     if (tuError) continue;
 
     await supabaseAdmin
       .from('invitations')
-      .update({ accepted_at: new Date().toISOString() })
+      .update({ accepted_at: now.toISOString() })
       .eq('id', inv.id);
 
     accepted++;
@@ -90,7 +126,8 @@ export async function getUserTenantIds(userId: string): Promise<string[]> {
   const { data } = await supabaseAdmin
     .from('tenant_users')
     .select('tenant_id')
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .eq('status', 'active');
   return (data ?? []).map((m) => m.tenant_id);
 }
 

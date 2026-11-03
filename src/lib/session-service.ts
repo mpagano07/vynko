@@ -100,10 +100,13 @@ export async function getSessionData(request: Request): Promise<{ ok: true; data
     [key: string]: unknown;
   } | null;
 
+  // Las membresías inactivas no cuentan para la sesión: la persona sigue
+  // existiendo, pero no tiene ninguna sucursal activa a la que entrar.
   const { data: tenantUsers } = await supabaseAdmin
     .from('tenant_users')
     .select('tenant_id, role')
-    .eq('user_id', user.id);
+    .eq('user_id', user.id)
+    .eq('status', 'active');
 
   const activeTenantId = request.headers.get('x-active-tenant-id');
 

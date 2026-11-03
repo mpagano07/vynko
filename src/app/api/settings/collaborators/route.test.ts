@@ -44,12 +44,12 @@ describe('GET /api/settings/collaborators', () => {
     const res = await GET(makeRequest('GET'));
     expect(res.status).toBe(403);
     const json = await res.json();
-    expect(json.error).toBe('Only owners can manage collaborators');
+    expect(json.error).toBe('Only owners and managers can manage collaborators');
   });
 
   it('lista colaboradores e invitaciones pendientes para un owner', async () => {
     supabaseMock.__queue('tenant_users', {
-      data: [{ tenant_id: 'tenant-1', user_id: 'user-1' }],
+      data: [{ tenant_id: 'tenant-1', user_id: 'user-1', role: 'owner', status: 'active' }],
     });
     supabaseMock.__queue('tenant_users', {
       data: [
@@ -81,7 +81,7 @@ describe('GET /api/settings/collaborators', () => {
   });
 
   it('devuelve 500 si falla la carga de miembros', async () => {
-    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1', role: 'owner', status: 'active' }] });
     supabaseMock.__queue('tenant_users', { data: null, error: null });
 
     const res = await GET(makeRequest('GET'));
@@ -109,11 +109,11 @@ describe('POST /api/settings/collaborators', () => {
     const res = await POST(makeRequest('POST', { email: 'a@b.com' }));
     expect(res.status).toBe(403);
     const json = await res.json();
-    expect(json.error).toBe('Only owners can manage collaborators');
+    expect(json.error).toBe('Only owners and managers can manage collaborators');
   });
 
   it('exige un email válido', async () => {
-    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1', role: 'owner', status: 'active' }] });
 
     const res = await POST(makeRequest('POST', { role: 'member' }));
     expect(res.status).toBe(400);
@@ -122,7 +122,7 @@ describe('POST /api/settings/collaborators', () => {
   });
 
   it('agrega a un usuario ya registrado que YA es miembro de la casa', async () => {
-    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1', role: 'owner', status: 'active' }] });
     supabaseMock.__queue('profiles', { data: { id: 'user-2', email: 'a@b.com' } });
     // memberships: ya forma parte de tenant-1 (es de la casa).
     supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
@@ -150,7 +150,7 @@ describe('POST /api/settings/collaborators', () => {
     // El perfil existe en la plataforma, pero NO es miembro de ningun tenant de
     // este owner. Agregarlo por la fuerza le metia identidad y acceso sin su
     // venia; ademas la respuesta filtraba su nombre/avatar (oraculo de emails).
-    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1', role: 'owner', status: 'active' }] });
     supabaseMock.__queue('profiles', {
       data: { id: 'user-2', email: 'ajeno@otra.com' },
     });
@@ -190,7 +190,7 @@ describe('POST /api/settings/collaborators', () => {
   });
 
   it('actualiza el nombre y agrega a un miembro existente de la casa', async () => {
-    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1', role: 'owner', status: 'active' }] });
     supabaseMock.__queue('profiles', { data: { id: 'user-2', email: 'a@b.com' } });
     supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
     supabaseMock.__queue('profiles', { data: null, error: null });
@@ -221,7 +221,7 @@ describe('POST /api/settings/collaborators', () => {
   });
 
   it('invita (sin agregar) a un usuario registrado que no es de la casa', async () => {
-    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1', role: 'owner', status: 'active' }] });
     supabaseMock.__queue('profiles', { data: { id: 'user-9', email: 'ajeno@otra.com' } });
     supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-9' }] });
     supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
@@ -247,7 +247,7 @@ describe('POST /api/settings/collaborators', () => {
   });
 
   it('invita por email a un usuario nuevo', async () => {
-    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1', role: 'owner', status: 'active' }] });
     supabaseMock.__queue('profiles', { data: null, error: null });
     supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
     supabaseMock.__queue('tenants', { data: { subscription_plan: 'business' } });
@@ -275,7 +275,7 @@ describe('POST /api/settings/collaborators', () => {
   });
 
   it('respeta el límite de usuarios del plan', async () => {
-    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1', role: 'owner', status: 'active' }] });
     supabaseMock.__queue('profiles', { data: { id: 'user-2', email: 'a@b.com' } });
     supabaseMock.__queue('tenant_users', { data: null, error: null });
     supabaseMock.__queue('tenants', { data: { subscription_plan: 'starter' } });
@@ -288,9 +288,11 @@ describe('POST /api/settings/collaborators', () => {
   });
 
   it('devuelve 500 si falla el upsert de la invitación', async () => {
-    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1', role: 'owner', status: 'active' }] });
     supabaseMock.__queue('profiles', { data: null, error: null });
     supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
+    // Lectura de invitaciones pendientes (topes/cooldown) antes del upsert.
+    supabaseMock.__queue('invitations', { data: null, error: null });
     supabaseMock.__queue('tenants', { data: { subscription_plan: 'business' } });
     supabaseMock.__queue('invitations', {
       data: null,
@@ -305,7 +307,7 @@ describe('POST /api/settings/collaborators', () => {
   });
 
   it('devuelve 500 ante un body inválido', async () => {
-    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1' }] });
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1', role: 'owner', status: 'active' }] });
 
     const req = new Request('http://localhost/api/settings/collaborators', {
       method: 'POST',

@@ -3,7 +3,19 @@ import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import { createActivityLog } from '@/lib/activity-log';
 import type { AuthInfo } from '@/lib/api-auth';
 import type { PlanId } from '@/lib/plans';
-import { ASSIGNABLE_ROLES, highestRole, isTenantRole, type TenantRole } from '@/lib/roles';
+import {
+  canAssignRole,
+  canManageCollaboratorRole,
+  highestRole,
+  normalizeAssignableRole,
+  type TenantRole,
+} from '@/lib/roles';
+import {
+  invitationCooldownRemainingMs,
+  invitationExpiresAt,
+  isInvitationExpired,
+  MAX_PENDING_INVITATIONS_PER_TENANT,
+} from '@/lib/invitation-policy';
 import { logger } from '@/lib/logger';
 
 export type CollaboratorResult =
@@ -11,14 +23,103 @@ export type CollaboratorResult =
   | { ok: false; error: string; status: number };
 
 const ROLE_FALLBACK: TenantRole = 'member';
+const NOT_A_MANAGER = 'Only owners and managers can manage collaborators';
 
 /**
- * Normaliza un rol que llega del body. Solo se aceptan roles asignables: el
- * `owner` no se transfiere desde Colaboradores y un valor desconocido cae a
- * `member` (comportamiento histórico) en vez de fallar en el CHECK de la base.
+ * Sucursales que el usuario puede administrar. Un manager sólo manda en las
+ * suyas; el owner manda en todas las que le pertenecen. Los roles se resuelven
+ * por sucursal porque la misma persona puede ser owner en una y manager en otra.
  */
-function normalizeAssignableRole(role: string | null | undefined): TenantRole {
-  return isTenantRole(role) && ASSIGNABLE_ROLES.includes(role) ? role : ROLE_FALLBACK;
+interface ManagedScope {
+  ownerTenantIds: string[];
+  managerTenantIds: string[];
+  tenantIds: string[];
+}
+
+async function getManagedScope(userId: string): Promise<ManagedScope> {
+  const { data } = await supabaseAdmin
+    .from('tenant_users')
+    .select('tenant_id, role')
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .in('role', ['owner', 'manager']);
+
+  const rows = data ?? [];
+  const ownerTenantIds = rows
+    .filter((row) => row.role === 'owner')
+    .map((row) => row.tenant_id as string);
+  const managerTenantIds = rows
+    .filter((row) => row.role === 'manager')
+    .map((row) => row.tenant_id as string);
+
+  return {
+    ownerTenantIds,
+    managerTenantIds,
+    tenantIds: [...new Set([...ownerTenantIds, ...managerTenantIds])],
+  };
+}
+
+/** Rol del actor en una sucursal: owner, manager o null si no administra. */
+function actorRoleInTenant(scope: ManagedScope, tenantId: string): TenantRole | null {
+  if (scope.ownerTenantIds.includes(tenantId)) return 'owner';
+  if (scope.managerTenantIds.includes(tenantId)) return 'manager';
+  return null;
+}
+
+/**
+ * Arma el mapa sucursal → rol pedido y valida que el actor pueda asignarlo.
+ *
+ * `memberships` (rol por sucursal) gana sobre el par histórico `role` +
+ * `tenant_ids`. Todo tenant_id se filtra contra las sucursales que el actor
+ * administra: uno ajeno no puede colarse por el body.
+ */
+function buildDesiredRoles(
+  scope: ManagedScope,
+  body: {
+    role?: string;
+    tenant_ids?: string[];
+    memberships?: { tenant_id?: string; role?: string }[];
+  }
+): { ok: true; roleByTenant: Map<string, TenantRole> } | { ok: false; error: string; status: number } {
+  const rawMemberships = Array.isArray(body.memberships) ? body.memberships : [];
+  const roleByTenant = new Map<string, TenantRole>();
+
+  if (rawMemberships.length > 0) {
+    for (const item of rawMemberships) {
+      const tid = typeof item?.tenant_id === 'string' ? item.tenant_id : '';
+      if (!tid || !scope.tenantIds.includes(tid)) continue;
+      const role = normalizeAssignableRole(item?.role);
+      if (!canAssignRole(actorRoleInTenant(scope, tid), role)) {
+        return {
+          ok: false,
+          status: 403,
+          error: 'Sólo el propietario puede asignar el rol Manager',
+        };
+      }
+      roleByTenant.set(tid, role);
+    }
+  } else {
+    const requestedTenantIds = Array.isArray(body.tenant_ids)
+      ? [...new Set(body.tenant_ids.filter((id) => scope.tenantIds.includes(id)))]
+      : scope.tenantIds;
+    const role = normalizeAssignableRole(body.role);
+    for (const tid of requestedTenantIds) {
+      if (!canAssignRole(actorRoleInTenant(scope, tid), role)) {
+        return {
+          ok: false,
+          status: 403,
+          error: 'Sólo el propietario puede asignar el rol Manager',
+        };
+      }
+      roleByTenant.set(tid, role);
+    }
+  }
+
+  if (roleByTenant.size === 0) {
+    return { ok: false, error: 'No valid tenants selected', status: 400 };
+  }
+
+  return { ok: true, roleByTenant };
 }
 
 async function enforceUserLimit(tenantId: string): Promise<string | null> {
@@ -33,21 +134,12 @@ async function enforceUserLimit(tenantId: string): Promise<string | null> {
   const { count } = await supabaseAdmin
     .from('tenant_users')
     .select('id', { count: 'exact', head: true })
-    .eq('tenant_id', tenantId);
+    .eq('tenant_id', tenantId)
+    .eq('status', 'active');
   if ((count ?? 0) >= maxUsers) {
     return `Tu plan actual (${plan}) permite hasta ${maxUsers} usuario${maxUsers !== 1 ? 's' : ''}. Mejorá tu plan para agregar colaboradores.`;
   }
   return null;
-}
-
-async function getOwnerTenantIds(userId: string): Promise<string[] | null> {
-  const { data: ownerTus } = await supabaseAdmin
-    .from('tenant_users')
-    .select('tenant_id')
-    .eq('user_id', userId)
-    .eq('role', 'owner');
-  const ids = (ownerTus || []).map((t) => t.tenant_id as string);
-  return ids.length > 0 ? ids : null;
 }
 
 interface CollaboratorMembership {
@@ -55,20 +147,21 @@ interface CollaboratorMembership {
   tenant_id: string;
   tenant_name: string;
   role: string;
+  status: string;
   joined_at: string | null;
 }
 
 export async function listCollaborators(auth: AuthInfo): Promise<CollaboratorResult> {
   try {
-    const ownerTenantIds = await getOwnerTenantIds(auth.userId);
-    if (!ownerTenantIds) {
-      return { ok: false, error: 'Only owners can manage collaborators', status: 403 };
+    const scope = await getManagedScope(auth.userId);
+    if (scope.tenantIds.length === 0) {
+      return { ok: false, error: NOT_A_MANAGER, status: 403 };
     }
 
     const { data: allMembers } = await supabaseAdmin
       .from('tenant_users')
-      .select('id, user_id, role, joined_at, tenant_id')
-      .in('tenant_id', ownerTenantIds);
+      .select('id, user_id, role, status, joined_at, tenant_id')
+      .in('tenant_id', scope.tenantIds);
 
     if (!allMembers) {
       return { ok: false, error: 'Failed to fetch members', status: 500 };
@@ -102,6 +195,7 @@ export async function listCollaborators(auth: AuthInfo): Promise<CollaboratorRes
       const tid = m.tenant_id as string;
       const tn = tenantMap.get(tid);
       const joinedAt = (m.joined_at as string | null) ?? null;
+      const status = (m.status as string) || 'active';
 
       if (!userTenants[uid]) userTenants[uid] = [];
       if (!userTus[uid]) userTus[uid] = [];
@@ -114,52 +208,64 @@ export async function listCollaborators(auth: AuthInfo): Promise<CollaboratorRes
         tenant_id: tid,
         tenant_name: tn?.name || '',
         role: (m.role as string) || 'member',
+        status,
         joined_at: joinedAt,
       });
 
-      if (joinedAt && (!userJoinedAt[uid] || joinedAt < userJoinedAt[uid]!)) {
+      const isActiveMembership = status === 'active';
+      if (isActiveMembership && joinedAt && (!userJoinedAt[uid] || joinedAt < userJoinedAt[uid]!)) {
         userJoinedAt[uid] = joinedAt;
       }
 
-      // El rol que se muestra arriba es el más alto de todas las sucursales.
-      // El detalle real, sucursal por sucursal, viaja en `memberships`.
-      userRoles[uid] = highestRole([userRoles[uid], m.role as string]);
+      // El rol que se muestra arriba es el más alto de todas las sucursales
+      // activas. El detalle real, sucursal por sucursal, viaja en `memberships`.
+      if (isActiveMembership) {
+        userRoles[uid] = highestRole([userRoles[uid], m.role as string]);
+      }
     }
 
     const collaborators = Object.entries(userTenants).map(([uid, tenants]) => {
       const p = profileMap.get(uid);
+      const memberships = (userMemberships[uid] || []).sort((a, b) =>
+        a.tenant_name.localeCompare(b.tenant_name)
+      );
       return {
         user_id: uid,
-        role: userRoles[uid] || 'member',
+        role: (userRoles[uid] as TenantRole | undefined) || 'member',
+        active: memberships.some((m) => m.status === 'active'),
         email: p?.email || '',
         full_name: p?.full_name || '',
         avatar_url: p?.avatar_url || null,
         tenants: tenants.sort((a, b) => a.name.localeCompare(b.name)),
         tenant_users_ids: userTus[uid] || [],
-        memberships: (userMemberships[uid] || []).sort((a, b) =>
-          a.tenant_name.localeCompare(b.tenant_name)
-        ),
+        memberships,
         joined_at: userJoinedAt[uid] || null,
       };
     });
 
     const { data: pendingInvitations } = await supabaseAdmin
       .from('invitations')
-      .select('id, email, role, created_at, invited_by, tenant_id')
-      .in('tenant_id', ownerTenantIds)
+      .select('id, email, role, created_at, expires_at, invited_by, tenant_id')
+      .in('tenant_id', scope.tenantIds)
       .is('accepted_at', null)
       .order('created_at', { ascending: false });
 
-    let invitations = (pendingInvitations || []).map((inv) => ({
-      id: inv.id as string,
-      email: inv.email as string,
-      role: (inv.role as string) || 'member',
-      created_at: (inv.created_at as string | null) ?? null,
-      invited_by: (inv.invited_by as string | null) ?? null,
-      invited_by_name: null as string | null,
-      tenant_id: inv.tenant_id as string,
-      tenant_name: tenantMap.get(inv.tenant_id as string)?.name || '',
-    }));
+    const now = new Date();
+    let invitations = (pendingInvitations || []).map((inv) => {
+      const expiresAt = (inv.expires_at as string | null) ?? null;
+      return {
+        id: inv.id as string,
+        email: inv.email as string,
+        role: (inv.role as string) || 'member',
+        created_at: (inv.created_at as string | null) ?? null,
+        expires_at: expiresAt,
+        expired: isInvitationExpired(expiresAt, now),
+        invited_by: (inv.invited_by as string | null) ?? null,
+        invited_by_name: null as string | null,
+        tenant_id: inv.tenant_id as string,
+        tenant_name: tenantMap.get(inv.tenant_id as string)?.name || '',
+      };
+    });
 
     if (invitations.length > 0) {
       const inviterIds = [...new Set(invitations.map((i) => i.invited_by).filter(Boolean))] as string[];
@@ -201,6 +307,8 @@ interface AddCollaboratorBody {
    */
   memberships?: { tenant_id?: string; role?: string }[];
   full_name?: string;
+  /** Reenvío explícito: saltea el enfriamiento entre invitaciones iguales. */
+  resend?: boolean;
 }
 
 export async function addCollaborator(
@@ -209,42 +317,22 @@ export async function addCollaborator(
   origin: string
 ): Promise<CollaboratorResult> {
   try {
-    const ownerTenantIds = await getOwnerTenantIds(auth.userId);
-    if (!ownerTenantIds) {
-      return { ok: false, error: 'Only owners can manage collaborators', status: 403 };
+    const scope = await getManagedScope(auth.userId);
+    if (scope.tenantIds.length === 0) {
+      return { ok: false, error: NOT_A_MANAGER, status: 403 };
     }
 
-    const { email, role, tenant_ids, memberships, full_name } = body;
+    const { email, full_name } = body;
 
     if (!email || typeof email !== 'string') {
       return { ok: false, error: 'Email is required', status: 400 };
     }
 
-    // `memberships` (rol por sucursal) gana sobre el par `role` + `tenant_ids`
-    // histórico. Siempre se filtra contra las sucursales que este owner
-    // administra: un tenant_id ajeno no puede colarse por el body.
-    const rawMemberships = Array.isArray(memberships) ? memberships : [];
-    const roleByTenant = new Map<string, TenantRole>();
-    if (rawMemberships.length > 0) {
-      for (const item of rawMemberships) {
-        const tid = typeof item?.tenant_id === 'string' ? item.tenant_id : '';
-        if (!tid || !ownerTenantIds.includes(tid)) continue;
-        roleByTenant.set(tid, normalizeAssignableRole(item?.role));
-      }
-    } else {
-      const requestedTenantIds = Array.isArray(tenant_ids)
-        ? tenant_ids.filter((id: string) => ownerTenantIds.includes(id))
-        : ownerTenantIds;
-      const assignRole = normalizeAssignableRole(role);
-      for (const tid of requestedTenantIds) roleByTenant.set(tid, assignRole);
-    }
+    const desired = buildDesiredRoles(scope, body);
+    if (!desired.ok) return desired;
+    const { roleByTenant } = desired;
 
     const targetTenantIds = [...roleByTenant.keys()];
-
-    if (targetTenantIds.length === 0) {
-      return { ok: false, error: 'No valid tenants selected', status: 400 };
-    }
-
     const assignRole = highestRole([...roleByTenant.values()]);
     const assignName = typeof full_name === 'string' && full_name.trim() ? full_name.trim() : null;
 
@@ -257,34 +345,44 @@ export async function addCollaborator(
     if (existingProfile) {
       // `profiles` es global: esa fila pertenece a la persona, no a la empresa.
       // Saber si ya es de la casa no alcanza para poder agregarla: solo se
-      // agrega directo a quien YA es miembro de alguno de los tenants de este
-      // owner (o sea, ya consintio trabajar con el). A un desconocido registrado
-      // en la plataforma hay que invitarlo y esperar que acepte, igual que a uno
-      // sin cuenta: agregarlo por la fuerza metia su identidad y su acceso en
-      // manos de un tercero sin que lo haya pedido.
+      // agrega directo a quien YA es miembro de alguno de los tenants que este
+      // actor administra (o sea, ya consintio trabajar con el). A un desconocido
+      // registrado en la plataforma hay que invitarlo y esperar que acepte.
       const { data: memberships } = await supabaseAdmin
         .from('tenant_users')
-        .select('tenant_id')
+        .select('tenant_id, role')
         .eq('user_id', existingProfile.id);
       const isKnown = (memberships ?? []).some((m) =>
-        ownerTenantIds.includes(m.tenant_id as string)
+        scope.tenantIds.includes(m.tenant_id as string)
       );
 
       if (!isKnown) {
-        // No se devuelve ningun dato de la persona (ni nombre ni avatar): seria
-        // un oraculo de existencia y una fuga de PII para cualquiera que pruebe
-        // emails. La invitacion se resuelve por el email, del lado del invitado.
-        return inviteByEmail(auth, email.toLowerCase(), roleByTenant, origin);
+        return inviteByEmail(auth, scope, email.toLowerCase(), roleByTenant, origin, body.resend === true);
       }
 
-      // Es alguien de la casa: `profiles` es su identidad global, asi que solo
-      // se permite cargarle un nombre si no trabaja tambien en otra empresa.
+      // Un manager no puede tocar a un owner ni a otro manager: sería una vía
+      // para degradar a un par o ascender a un cómplice sin pasar por el owner.
+      for (const requestedTenantId of targetTenantIds) {
+        const actorRole = actorRoleInTenant(scope, requestedTenantId);
+        const targetRole = (memberships ?? []).find(
+          (m) => m.tenant_id === requestedTenantId
+        )?.role as string | undefined;
+        if (targetRole && !canManageCollaboratorRole(actorRole, targetRole)) {
+          return {
+            ok: false,
+            status: 403,
+            error: 'Un manager no puede modificar a un propietario ni a otro manager',
+          };
+        }
+      }
+
+      // `profiles` es su identidad global, asi que solo se permite cargarle un
+      // nombre si no trabaja también en otra empresa fuera de este alcance.
       if (assignName) {
         const foreignMemberships = (memberships ?? []).filter(
-          (m) => !ownerTenantIds.includes(m.tenant_id as string)
+          (m) => !scope.tenantIds.includes(m.tenant_id as string)
         );
 
-        // Si la persona solo trabaja en otra empresa, su nombre no se toca.
         if (foreignMemberships.length === 0) {
           await supabaseAdmin
             .from('profiles')
@@ -293,29 +391,52 @@ export async function addCollaborator(
         }
       }
 
-      // Primero se resuelve a qué sucursales hay que agregarla y se validan
-      // todos los límites: si una está llena, no queremos dejar altas a medias
-      // en las demás.
-      const tenantsToJoin: string[] = [];
+      interface MembershipRow {
+        id: string;
+        tenant_id: string;
+        role: string;
+        status: string | null;
+      }
+
+      // Primero se resuelve qué sucursales hay que crear o reactivar y se
+      // validan todos los límites: si una está llena, no queremos dejar altas
+      // a medias en las demás.
+      const rowsToCreate: string[] = [];
+      const rowsToReactivate: MembershipRow[] = [];
       for (const tid of targetTenantIds) {
         const { data: existingMember } = await supabaseAdmin
           .from('tenant_users')
-          .select('id')
+          .select('id, role, status')
           .eq('tenant_id', tid)
           .eq('user_id', existingProfile.id)
           .maybeSingle();
 
-        if (!existingMember) tenantsToJoin.push(tid);
+        if (!existingMember) {
+          rowsToCreate.push(tid);
+          continue;
+        }
+
+        const row = existingMember as MembershipRow;
+        if ((row.status ?? 'active') === 'active') continue;
+
+        if (!canManageCollaboratorRole(actorRoleInTenant(scope, tid), row.role)) {
+          return {
+            ok: false,
+            status: 403,
+            error: 'Un manager no puede reactivar a un propietario ni a otro manager',
+          };
+        }
+        rowsToReactivate.push(row);
       }
 
-      for (const tid of tenantsToJoin) {
+      for (const tid of [...rowsToCreate, ...rowsToReactivate.map((r) => r.tenant_id)]) {
         const limitError = await enforceUserLimit(tid);
         if (limitError) {
           return { ok: false, error: limitError, status: 403 };
         }
       }
 
-      for (const tid of tenantsToJoin) {
+      for (const tid of rowsToCreate) {
         const tenantRole = roleByTenant.get(tid) ?? ROLE_FALLBACK;
         const { error: insertError } = await supabaseAdmin
           .from('tenant_users')
@@ -328,6 +449,26 @@ export async function addCollaborator(
           tenantId: tid,
           userId: auth.userId,
           action: 'add_collaborator',
+          entityType: 'collaborator',
+          entityId: existingProfile.id,
+          details: { email: email.toLowerCase(), role: tenantRole },
+        });
+      }
+
+      for (const row of rowsToReactivate) {
+        const tenantRole = roleByTenant.get(row.tenant_id) ?? ROLE_FALLBACK;
+        const { error: updateError } = await supabaseAdmin
+          .from('tenant_users')
+          .update({ role: tenantRole, status: 'active', joined_at: new Date().toISOString() })
+          .eq('id', row.id);
+        if (updateError) {
+          logger.error(`Error reactivating in tenant ${row.tenant_id}:`, { error: updateError });
+          continue;
+        }
+        await createActivityLog({
+          tenantId: row.tenant_id,
+          userId: auth.userId,
+          action: 'reactivate_collaborator',
           entityType: 'collaborator',
           entityId: existingProfile.id,
           details: { email: email.toLowerCase(), role: tenantRole },
@@ -347,6 +488,7 @@ export async function addCollaborator(
           collaborator: {
             user_id: existingProfile.id,
             role: assignRole,
+            active: true,
             email: profile?.email || email,
             full_name: profile?.full_name || '',
             avatar_url: profile?.avatar_url || null,
@@ -356,7 +498,7 @@ export async function addCollaborator(
       };
     }
 
-    return inviteByEmail(auth, email.toLowerCase(), roleByTenant, origin);
+    return inviteByEmail(auth, scope, email.toLowerCase(), roleByTenant, origin, body.resend === true);
   } catch (err) {
     logger.error('Error adding collaborator:', { error: err });
     return { ok: false, error: 'Internal server error', status: 500 };
@@ -365,26 +507,65 @@ export async function addCollaborator(
 
 /**
  * Crea las invitaciones pendientes (una por sucursal) y manda un solo email.
- * El invitado entra a `tenant_users` recien cuando acepta
+ * El invitado entra a `tenant_users` recién cuando acepta
  * (`acceptInvitationsForUser`), que es lo que convierte el alta de un
  * desconocido en algo que solo pasa con su venia.
  *
- * El nombre que cargo el owner NO se guarda: la persona lo escribe al aceptar
- * (la pagina de aceptacion lo pide). Cargarle identidad a un desconocido por el
- * email es justamente lo que este camino evita.
- *
- * No devuelve ningun dato del invitado: el owner solo ve que la invitacion se
- * creo, nunca el nombre/avatar de la persona detras del email.
+ * El nombre que cargo el actor NO se guarda: la persona lo escribe al aceptar.
+ * No devuelve ningún dato del invitado: el actor solo ve que la invitación se
+ * creó, nunca el nombre/avatar de la persona detrás del email.
  */
 async function inviteByEmail(
   auth: AuthInfo,
+  scope: ManagedScope,
   email: string,
   roleByTenant: Map<string, TenantRole>,
-  origin: string
+  origin: string,
+  resend: boolean
 ): Promise<CollaboratorResult> {
   const tenantIds = [...roleByTenant.keys()];
   if (tenantIds.length === 0) {
     return { ok: false, error: 'No valid tenants selected', status: 400 };
+  }
+
+  // Una sola lectura de pendientes para dos reglas: tope por sucursal y
+  // enfriamiento del mismo email. Se miran vencidas también para no contar
+  // invitaciones que ya no pueden aceptarse.
+  const { data: pendingInvitations } = await supabaseAdmin
+    .from('invitations')
+    .select('id, tenant_id, email, created_at, expires_at')
+    .in('tenant_id', tenantIds)
+    .is('accepted_at', null);
+
+  const now = new Date();
+  const livePending = (pendingInvitations ?? []).filter(
+    (inv) => !isInvitationExpired(inv.expires_at as string | null, now)
+  );
+
+  for (const tid of tenantIds) {
+    const pendingInTenant = livePending.filter((inv) => inv.tenant_id === tid);
+    if (pendingInTenant.length >= MAX_PENDING_INVITATIONS_PER_TENANT) {
+      return {
+        ok: false,
+        status: 403,
+        error: 'Esta sucursal alcanzó el máximo de invitaciones pendientes. Revocá alguna antes de invitar a otra persona.',
+      };
+    }
+  }
+
+  if (!resend) {
+    const sameEmail = livePending.find(
+      (inv) => inv.tenant_id === tenantIds[0] && String(inv.email).toLowerCase() === email
+    );
+    const remaining = invitationCooldownRemainingMs(sameEmail?.created_at as string | null, now);
+    if (sameEmail && remaining > 0) {
+      const minutes = Math.ceil(remaining / 60000);
+      return {
+        ok: false,
+        status: 409,
+        error: `Ya hay una invitación pendiente para ese email. Podés reenviarla desde la lista en ${minutes} minuto${minutes !== 1 ? 's' : ''}.`,
+      };
+    }
   }
 
   // Se validan todas las sucursales antes de escribir: si una está llena, no
@@ -396,6 +577,7 @@ async function inviteByEmail(
     }
   }
 
+  const expiresAt = invitationExpiresAt(now);
   const { error: inviteError } = await supabaseAdmin.from('invitations').upsert(
     tenantIds.map((tid) => ({
       tenant_id: tid,
@@ -403,9 +585,11 @@ async function inviteByEmail(
       role: roleByTenant.get(tid) ?? ROLE_FALLBACK,
       invited_by: auth.userId,
       // Si la fila ya existía (p. ej. una invitación vieja ya aceptada de
-      // alguien que después salió del equipo), se reactiva como pendiente.
+      // alguien que después salió del equipo), se reactiva como pendiente y
+      // se le renueva el vencimiento.
       accepted_at: null,
-      created_at: new Date().toISOString(),
+      created_at: now.toISOString(),
+      expires_at: expiresAt,
     })),
     { onConflict: 'tenant_id,email' }
   );
@@ -452,47 +636,26 @@ export async function updateCollaborator(
   }
 ): Promise<CollaboratorResult> {
   try {
-    const ownerTenantIds = await getOwnerTenantIds(auth.userId);
-    if (!ownerTenantIds) {
-      return { ok: false, error: 'Only owners can edit collaborators', status: 403 };
+    const scope = await getManagedScope(auth.userId);
+    if (scope.tenantIds.length === 0) {
+      return { ok: false, error: 'Only owners and managers can edit collaborators', status: 403 };
     }
 
     if (targetUserId === auth.userId) {
       return { ok: false, error: 'No podés editar tu propio rol', status: 400 };
     }
 
-    const { role, tenant_ids, memberships } = body;
-
-    // Igual que en el alta: `memberships` (rol por sucursal) manda sobre el
-    // par histórico `role` + `tenant_ids`. Todo tenant_id se filtra contra las
-    // sucursales que este owner administra.
-    const rawMemberships = Array.isArray(memberships) ? memberships : [];
-    const desiredRoleByTenant = new Map<string, TenantRole>();
-    if (rawMemberships.length > 0) {
-      for (const item of rawMemberships) {
-        const tid = typeof item?.tenant_id === 'string' ? item.tenant_id : '';
-        if (!tid || !ownerTenantIds.includes(tid)) continue;
-        desiredRoleByTenant.set(tid, normalizeAssignableRole(item?.role));
-      }
-    } else {
-      const requestedTenantIds: string[] = Array.isArray(tenant_ids)
-        ? [...new Set(tenant_ids.filter((id: string) => ownerTenantIds.includes(id)))]
-        : ownerTenantIds;
-      const newRole = normalizeAssignableRole(role);
-      for (const tid of requestedTenantIds) desiredRoleByTenant.set(tid, newRole);
-    }
-
-    if (desiredRoleByTenant.size === 0) {
-      return { ok: false, error: 'No valid tenants selected', status: 400 };
-    }
+    const desired = buildDesiredRoles(scope, body);
+    if (!desired.ok) return desired;
+    const { roleByTenant: desiredRoleByTenant } = desired;
 
     const targetTenantIds = [...desiredRoleByTenant.keys()];
 
     const { data: existingRows } = await supabaseAdmin
       .from('tenant_users')
-      .select('id, tenant_id, role')
+      .select('id, tenant_id, role, status')
       .eq('user_id', targetUserId)
-      .in('tenant_id', ownerTenantIds);
+      .in('tenant_id', scope.tenantIds);
 
     if (!existingRows || existingRows.length === 0) {
       return { ok: false, error: 'Collaborator not found in your tenants', status: 404 };
@@ -502,13 +665,27 @@ export async function updateCollaborator(
       return { ok: false, error: 'No podés modificar al propietario', status: 400 };
     }
 
+    // El manager sólo puede tocar miembros operativos de sus sucursales.
+    for (const row of existingRows) {
+      const actorRole = actorRoleInTenant(scope, row.tenant_id as string);
+      if (!canManageCollaboratorRole(actorRole, row.role as string)) {
+        return {
+          ok: false,
+          status: 403,
+          error: 'Un manager no puede modificar a un propietario ni a otro manager',
+        };
+      }
+    }
+
     const currentTenantIds = existingRows.map((r) => r.tenant_id as string);
-    const roleByTenant = new Map(existingRows.map((r) => [r.tenant_id as string, r.role as string]));
+    const rowByTenant = new Map(existingRows.map((r) => [r.tenant_id as string, r]));
     const toRemoveTenantIds = currentTenantIds.filter((id) => !desiredRoleByTenant.has(id));
     const toAddTenantIds = targetTenantIds.filter((id) => !currentTenantIds.includes(id));
     const toUpdateTenantIds = targetTenantIds.filter(
       (id) =>
-        currentTenantIds.includes(id) && roleByTenant.get(id) !== desiredRoleByTenant.get(id)
+        currentTenantIds.includes(id) &&
+        (rowByTenant.get(id)?.role !== desiredRoleByTenant.get(id) ||
+          rowByTenant.get(id)?.status === 'inactive')
     );
 
     for (const tid of toAddTenantIds) {
@@ -523,7 +700,8 @@ export async function updateCollaborator(
         const { count } = await supabaseAdmin
           .from('tenant_users')
           .select('id', { count: 'exact', head: true })
-          .eq('tenant_id', tid);
+          .eq('tenant_id', tid)
+          .eq('status', 'active');
         if ((count ?? 0) >= maxUsers) {
           return {
             ok: false,
@@ -562,7 +740,8 @@ export async function updateCollaborator(
     }
 
     // Un update por cada rol distinto: las sucursales que comparten rol se
-    // actualizan juntas y las que no cambian no se tocan.
+    // actualizan juntas y las que no cambian no se tocan. Si la fila estaba
+    // inactiva, esta operación también la reactiva.
     const updateByRole = new Map<TenantRole, string[]>();
     for (const tid of toUpdateTenantIds) {
       const desiredRole = desiredRoleByTenant.get(tid)!;
@@ -574,7 +753,7 @@ export async function updateCollaborator(
     for (const [desiredRole, tenantIds] of updateByRole) {
       const { error: updateError } = await supabaseAdmin
         .from('tenant_users')
-        .update({ role: desiredRole })
+        .update({ role: desiredRole, status: 'active' })
         .eq('user_id', targetUserId)
         .in('tenant_id', tenantIds)
         .neq('role', 'owner');
@@ -593,7 +772,7 @@ export async function updateCollaborator(
         entityType: 'collaborator',
         entityId: targetUserId,
         details: {
-          previous_role: roleByTenant.get(tid) || null,
+          previous_role: rowByTenant.get(tid)?.role || null,
           new_role: desiredRoleByTenant.get(tid) ?? ROLE_FALLBACK,
         },
       });
@@ -605,7 +784,7 @@ export async function updateCollaborator(
         action: 'remove_from_branch',
         entityType: 'collaborator',
         entityId: targetUserId,
-        details: { branch_role: roleByTenant.get(tid) || null },
+        details: { branch_role: rowByTenant.get(tid)?.role || null },
       });
     }
     for (const tid of toAddTenantIds) {
@@ -632,24 +811,24 @@ export async function deleteCollaborator(
   tenantId?: string
 ): Promise<CollaboratorResult> {
   try {
-    const ownerTenantIds = await getOwnerTenantIds(auth.userId);
-    if (!ownerTenantIds) {
-      return { ok: false, error: 'Only owners can remove collaborators', status: 403 };
+    const scope = await getManagedScope(auth.userId);
+    if (scope.tenantIds.length === 0) {
+      return { ok: false, error: 'Only owners and managers can remove collaborators', status: 403 };
     }
 
     if (targetUserId === auth.userId) {
       return { ok: false, error: 'No podés quitarte a vos mismo del equipo', status: 400 };
     }
 
-    if (tenantId && !ownerTenantIds.includes(tenantId)) {
+    if (tenantId && !scope.tenantIds.includes(tenantId)) {
       return { ok: false, error: 'Collaborator not found', status: 404 };
     }
 
-    const scopedTenantIds = tenantId ? [tenantId] : ownerTenantIds;
+    const scopedTenantIds = tenantId ? [tenantId] : scope.tenantIds;
 
     const { data: rows } = await supabaseAdmin
       .from('tenant_users')
-      .select('id, tenant_id, role, user_id')
+      .select('id, tenant_id, role, status, user_id')
       .eq('user_id', targetUserId)
       .in('tenant_id', scopedTenantIds);
 
@@ -659,6 +838,17 @@ export async function deleteCollaborator(
 
     if (rows.some((r) => r.role === 'owner')) {
       return { ok: false, error: 'Cannot remove the owner', status: 400 };
+    }
+
+    for (const row of rows) {
+      const actorRole = actorRoleInTenant(scope, row.tenant_id as string);
+      if (!canManageCollaboratorRole(actorRole, row.role as string)) {
+        return {
+          ok: false,
+          status: 403,
+          error: 'Un manager no puede quitar a un propietario ni a otro manager',
+        };
+      }
     }
 
     const { error } = await supabaseAdmin
@@ -674,7 +864,7 @@ export async function deleteCollaborator(
     }
 
     // Se audita solo donde la persona era miembro de verdad: `scopedTenantIds`
-    // puede incluir sucursales del owner en las que nunca estuvo.
+    // puede incluir sucursales del actor en las que nunca estuvo.
     for (const row of rows) {
       await createActivityLog({
         tenantId: row.tenant_id as string,
@@ -693,21 +883,201 @@ export async function deleteCollaborator(
   }
 }
 
+/**
+ * Desactiva o reactiva una membresía sin borrarla. Desactivar es lo que
+ * corresponde cuando alguien deja el equipo temporalmente: conserva el
+ * historial, la persona deja de resolver tenant en `getAuth`/sesión y puede
+ * volver con el mismo rol.
+ *
+ * El borrado definitivo sigue existiendo (`deleteCollaborator`) y es el único
+ * que quita la fila.
+ */
+export async function setCollaboratorActive(
+  auth: AuthInfo,
+  targetUserId: string,
+  active: boolean,
+  tenantId?: string
+): Promise<CollaboratorResult> {
+  try {
+    const scope = await getManagedScope(auth.userId);
+    if (scope.tenantIds.length === 0) {
+      return { ok: false, error: NOT_A_MANAGER, status: 403 };
+    }
+
+    if (targetUserId === auth.userId) {
+      return { ok: false, error: 'No podés cambiar tu propio estado', status: 400 };
+    }
+
+    if (tenantId && !scope.tenantIds.includes(tenantId)) {
+      return { ok: false, error: 'Collaborator not found', status: 404 };
+    }
+
+    const scopedTenantIds = tenantId ? [tenantId] : scope.tenantIds;
+
+    const { data: rows } = await supabaseAdmin
+      .from('tenant_users')
+      .select('id, tenant_id, role')
+      .eq('user_id', targetUserId)
+      .in('tenant_id', scopedTenantIds);
+
+    if (!rows || rows.length === 0) {
+      return { ok: false, error: 'Collaborator not found', status: 404 };
+    }
+
+    for (const row of rows) {
+      if (row.role === 'owner') {
+        return { ok: false, error: 'No podés desactivar al propietario', status: 400 };
+      }
+      if (!canManageCollaboratorRole(actorRoleInTenant(scope, row.tenant_id as string), row.role as string)) {
+        return {
+          ok: false,
+          status: 403,
+          error: 'Un manager no puede cambiar el estado de otro manager',
+        };
+      }
+    }
+
+    const { error } = await supabaseAdmin
+      .from('tenant_users')
+      .update({ status: active ? 'active' : 'inactive' })
+      .eq('user_id', targetUserId)
+      .in('tenant_id', scopedTenantIds)
+      .neq('role', 'owner');
+
+    if (error) {
+      logger.error('DB error:', { error });
+      return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
+    }
+
+    for (const row of rows) {
+      await createActivityLog({
+        tenantId: row.tenant_id as string,
+        userId: auth.userId,
+        action: active ? 'reactivate_collaborator' : 'deactivate_collaborator',
+        entityType: 'collaborator',
+        entityId: targetUserId,
+        details: { branch_only: Boolean(tenantId), role: row.role },
+      });
+    }
+
+    return { ok: true, body: { success: true, active }, status: 200 };
+  } catch (err) {
+    logger.error('Error changing collaborator status:', { error: err });
+    return { ok: false, error: 'Internal server error', status: 500 };
+  }
+}
+
+/**
+ * Transfiere la propiedad de una sucursal. La transferencia real la hace la
+ * función SQL `transfer_tenant_ownership` (migración 066): promueve primero al
+ * nuevo owner y recién después degrada al anterior, para que el trigger del
+ * último owner nunca vea una empresa sin propietario.
+ */
+export async function transferOwnership(
+  auth: AuthInfo,
+  tenantId: string | null | undefined,
+  newOwnerUserId: string | null | undefined
+): Promise<CollaboratorResult> {
+  try {
+    if (!tenantId || typeof tenantId !== 'string') {
+      return { ok: false, error: 'tenant_id is required', status: 400 };
+    }
+    if (!newOwnerUserId || typeof newOwnerUserId !== 'string') {
+      return { ok: false, error: 'new_owner_user_id is required', status: 400 };
+    }
+    if (newOwnerUserId === auth.userId) {
+      return { ok: false, error: 'Ya sos el propietario de esa sucursal', status: 400 };
+    }
+
+    const { data: actorRow } = await supabaseAdmin
+      .from('tenant_users')
+      .select('role, status')
+      .eq('tenant_id', tenantId)
+      .eq('user_id', auth.userId)
+      .maybeSingle();
+
+    if (!actorRow || actorRow.role !== 'owner' || actorRow.status !== 'active') {
+      return { ok: false, error: 'Sólo el propietario puede transferir la empresa', status: 403 };
+    }
+
+    const { data: targetRow } = await supabaseAdmin
+      .from('tenant_users')
+      .select('role, status')
+      .eq('tenant_id', tenantId)
+      .eq('user_id', newOwnerUserId)
+      .maybeSingle();
+
+    if (!targetRow) {
+      return { ok: false, error: 'El colaborador no pertenece a esa sucursal', status: 404 };
+    }
+    if (targetRow.status !== 'active') {
+      return { ok: false, error: 'No podés transferir la propiedad a un colaborador inactivo', status: 400 };
+    }
+    if (targetRow.role === 'owner') {
+      return { ok: false, error: 'Ese colaborador ya es propietario', status: 400 };
+    }
+
+    const { error } = await supabaseAdmin.rpc('transfer_tenant_ownership', {
+      p_tenant_id: tenantId,
+      p_new_owner: newOwnerUserId,
+      p_actor: auth.userId,
+    });
+
+    if (error) {
+      const message = String(error.message ?? '');
+      if (message.includes('last_owner_protected')) {
+        return { ok: false, error: 'La empresa no puede quedar sin propietario', status: 400 };
+      }
+      if (message.includes('transfer_target_inactive')) {
+        return { ok: false, error: 'No podés transferir la propiedad a un colaborador inactivo', status: 400 };
+      }
+      if (message.includes('transfer_target_not_member')) {
+        return { ok: false, error: 'El colaborador no pertenece a esa sucursal', status: 404 };
+      }
+      if (message.includes('transfer_not_owner')) {
+        return { ok: false, error: 'Sólo el propietario puede transferir la empresa', status: 403 };
+      }
+      if (message.includes('transfer_target_already_owner')) {
+        return { ok: false, error: 'Ese colaborador ya es propietario', status: 400 };
+      }
+      if (message.includes('transfer_same_user')) {
+        return { ok: false, error: 'Ya sos el propietario de esa sucursal', status: 400 };
+      }
+      logger.error('DB error:', { error });
+      return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
+    }
+
+    await createActivityLog({
+      tenantId,
+      userId: auth.userId,
+      action: 'transfer_ownership',
+      entityType: 'collaborator',
+      entityId: newOwnerUserId,
+      details: { previous_owner: auth.userId, new_owner: newOwnerUserId },
+    });
+
+    return { ok: true, body: { success: true }, status: 200 };
+  } catch (err) {
+    logger.error('Error transferring ownership:', { error: err });
+    return { ok: false, error: 'Internal server error', status: 500 };
+  }
+}
+
 export async function revokeInvitation(
   auth: AuthInfo,
   invitationId: string
 ): Promise<CollaboratorResult> {
   try {
-    const ownerTenantIds = await getOwnerTenantIds(auth.userId);
-    if (!ownerTenantIds) {
-      return { ok: false, error: 'Only owners can manage invitations', status: 403 };
+    const scope = await getManagedScope(auth.userId);
+    if (scope.tenantIds.length === 0) {
+      return { ok: false, error: 'Only owners and managers can manage invitations', status: 403 };
     }
 
     const { data: invitation } = await supabaseAdmin
       .from('invitations')
       .select('id, tenant_id, email, role')
       .eq('id', invitationId)
-      .in('tenant_id', ownerTenantIds)
+      .in('tenant_id', scope.tenantIds)
       .maybeSingle();
 
     if (!invitation) {
@@ -718,7 +1088,7 @@ export async function revokeInvitation(
       .from('invitations')
       .delete()
       .eq('id', invitationId)
-      .in('tenant_id', ownerTenantIds);
+      .in('tenant_id', scope.tenantIds);
 
     if (error) {
       logger.error('DB error:', { error });

@@ -144,7 +144,7 @@ describe('colaboradores — nivel 2 (rol por sucursal)', () => {
     expect(res.status).toBe(200);
     const updates = callsTo(supabaseMock.__calls, 'tenant_users', 'update');
     expect(updates).toHaveLength(1);
-    expect(updates[0].args[0]).toEqual({ role: 'viewer' });
+    expect(updates[0].args[0]).toEqual({ role: 'viewer', status: 'active' });
     // La última consulta `in` es el filtro del update: solo A2.
     expect(inFilters().at(-1)?.args[1]).toEqual([TENANT_A2]);
     expect(callsTo(supabaseMock.__calls, 'tenant_users', 'delete')).toHaveLength(0);
@@ -175,7 +175,7 @@ describe('colaboradores — nivel 2 (rol por sucursal)', () => {
     expect(inFilters().at(-2)?.args[1]).toEqual([TENANT_A2]);
     const updates = callsTo(supabaseMock.__calls, 'tenant_users', 'update');
     expect(updates).toHaveLength(1);
-    expect(updates[0].args[0]).toEqual({ role: 'cashier' });
+    expect(updates[0].args[0]).toEqual({ role: 'cashier', status: 'active' });
     expect(inFilters().at(-1)?.args[1]).toEqual([TENANT_A]);
   });
 
@@ -202,7 +202,7 @@ describe('colaboradores — nivel 2 (rol por sucursal)', () => {
     expect(deletes).toHaveLength(1);
     expect(inFilters().at(-2)?.args[1]).toEqual([TENANT_A]);
     const updates = callsTo(supabaseMock.__calls, 'tenant_users', 'update');
-    expect(updates[0].args[0]).toEqual({ role: 'manager' });
+    expect(updates[0].args[0]).toEqual({ role: 'manager', status: 'active' });
     expect(inFilters().at(-1)?.args[1]).toEqual([TENANT_A2]);
   });
 

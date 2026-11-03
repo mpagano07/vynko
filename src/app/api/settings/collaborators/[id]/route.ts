@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
-import { deleteCollaborator, updateCollaborator } from '@/lib/collaborator-service';
+import {
+  deleteCollaborator,
+  setCollaboratorActive,
+  updateCollaborator,
+} from '@/lib/collaborator-service';
 
 export async function PATCH(
   request: Request,
@@ -17,7 +21,19 @@ export async function PATCH(
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 
-  const result = await updateCollaborator(auth, id, body as Record<string, unknown>);
+  const payload = body as Record<string, unknown>;
+
+  // Desactivar/reactivar es una operación distinta de editar roles: conserva la
+  // fila y el historial. Se separa por `status` para no mezclarla con el
+  // payload de `memberships`.
+  if (payload.status === 'active' || payload.status === 'inactive') {
+    const tenantId = typeof payload.tenant_id === 'string' ? payload.tenant_id : undefined;
+    const result = await setCollaboratorActive(auth, id, payload.status === 'active', tenantId);
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    return NextResponse.json(result.body);
+  }
+
+  const result = await updateCollaborator(auth, id, payload);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
   return NextResponse.json(result.body);
 }

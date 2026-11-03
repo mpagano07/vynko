@@ -70,8 +70,65 @@ export const ASSIGNABLE_ROLES: TenantRole[] = [
   'member',
 ];
 
+/**
+ * Roles que puede asignar un manager. Sí puede repartir trabajo operativo,
+ * pero no crear pares: si pudiera nombrar managers, un manager podría armarse
+ * un equipo con los mismos permisos que él y escalar sin pasar por el owner.
+ */
+export const MANAGER_ASSIGNABLE_ROLES: TenantRole[] = ASSIGNABLE_ROLES.filter(
+  (role) => role !== 'manager'
+);
+
 /** Roles con permiso para administrar la empresa (settings, plan, sucursales). */
 export const MANAGE_ROLES: TenantRole[] = ['owner', 'manager'];
+
+/**
+ * Normaliza un rol que llega del cliente o de una invitación. Sólo se aceptan
+ * roles asignables: el `owner` no se transfiere por esta vía y un valor
+ * desconocido cae a `member` en vez de romper el CHECK de la base.
+ */
+export function normalizeAssignableRole(
+  role: string | null | undefined
+): TenantRole {
+  return isTenantRole(role) && ASSIGNABLE_ROLES.includes(role) ? role : 'member';
+}
+
+/** ¿Este rol puede administrar el equipo de una sucursal? */
+export function canManageTeam(role: string | null | undefined): boolean {
+  return hasCapability(role, 'manage_tenant');
+}
+
+/** Roles que `actorRole` puede asignar en una sucursal. */
+export function assignableRolesFor(
+  actorRole: string | null | undefined
+): TenantRole[] {
+  if (actorRole === 'owner') return [...ASSIGNABLE_ROLES];
+  if (actorRole === 'manager') return [...MANAGER_ASSIGNABLE_ROLES];
+  return [];
+}
+
+/**
+ * ¿`actorRole` puede modificar la membresía de alguien con `targetRole`?
+ * El owner manda sobre todos salvo otro owner (la propiedad se transfiere,
+ * no se edita). El manager no toca owners ni a otros managers.
+ */
+export function canManageCollaboratorRole(
+  actorRole: string | null | undefined,
+  targetRole: string | null | undefined
+): boolean {
+  if (!isTenantRole(targetRole) || targetRole === 'owner') return false;
+  if (actorRole === 'owner') return true;
+  if (actorRole === 'manager') return targetRole !== 'manager';
+  return false;
+}
+
+/** ¿`actorRole` puede asignar `role` en una sucursal? */
+export function canAssignRole(
+  actorRole: string | null | undefined,
+  role: string | null | undefined
+): boolean {
+  return isTenantRole(role) && assignableRolesFor(actorRole).includes(role);
+}
 
 export const ROLE_LABELS: Record<TenantRole, string> = {
   owner: 'Propietario',
@@ -89,7 +146,7 @@ export const ROLE_LABELS: Record<TenantRole, string> = {
 export const ROLE_DESCRIPTIONS: Record<TenantRole, string> = {
   owner: 'Control total: empresa, sucursales, colaboradores, facturación y plan.',
   manager:
-    'Administra la operación y la configuración de la empresa. No puede transferir la propiedad ni gestionar colaboradores.',
+    'Administra la operación y el equipo de sus sucursales. No puede asignar managers ni transferir la propiedad.',
   cashier:
     'Cobra ventas y opera la caja: abrir, cerrar y movimientos. No administra catálogo ni equipo.',
   stock:

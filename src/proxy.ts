@@ -270,7 +270,8 @@ export async function proxy(request: NextRequest) {
   const { data: tenantUsers, error: membershipError } = await supabaseAdmin
     .from('tenant_users')
     .select('tenant_id')
-    .eq('user_id', user.id);
+    .eq('user_id', user.id)
+    .eq('status', 'active');
 
   const tenantIds = tenantUsers?.map((tu) => tu.tenant_id) ?? [];
 

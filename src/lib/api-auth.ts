@@ -35,10 +35,14 @@ export async function getAuth(request?: Request): Promise<AuthInfo | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
+  // Sólo las membresías activas dan acceso: una persona desactivada conserva
+  // su fila (y su historial), pero deja de resolver tenant y rol. Es lo que
+  // hace que "desactivar" sea distinto de "eliminar" sin abrir una puerta.
   const { data: tu } = await supabaseAdmin
     .from('tenant_users')
     .select('tenant_id, role')
-    .eq('user_id', user.id);
+    .eq('user_id', user.id)
+    .eq('status', 'active');
 
   if (!tu || tu.length === 0) return null;
 
