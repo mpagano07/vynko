@@ -8,11 +8,12 @@ import { Menu } from 'lucide-react';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
 import { TenantSwitcher } from '@/components/ui/tenant-switcher';
 import { IconAction } from '@/components/ui/icon-action';
+import { hasCapability } from '@/lib/roles';
 
 export function Header() {
   const pathname = usePathname();
   const router = useRouter();
-  const { profile, tenants, user, logout } = useAuth();
+  const { profile, tenants, user, role, logout } = useAuth();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const { toggle: toggleSidebar } = useSidebar();
 
@@ -71,15 +72,17 @@ export function Header() {
                     {profile?.email || user?.email}
                   </p>
                 </div>
-                <button
-                  onClick={() => {
-                    setIsUserMenuOpen(false);
-                    router.push('/billing');
-                  }}
-                  className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  Planes
-                </button>
+                {hasCapability(role, 'manage_tenant') && (
+                  <button
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      router.push('/billing');
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    Planes
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     setIsUserMenuOpen(false);

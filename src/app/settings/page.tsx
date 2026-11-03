@@ -113,6 +113,16 @@ function formatPhone(value: string): string {
 
 const validTabs = ['perfil', 'empresa', 'facturacion', 'colaboradores', 'preferencias', 'cuenta'];
 
+/**
+ * Pestañas que dependen de un permiso. Mi Perfil, Preferencias y Mi Cuenta son
+ * de autoservicio: las ve cualquier rol, incluso un cajero o un consulta.
+ */
+function canAccessTab(tab: string, canManageTenant: boolean, canFacturacion: boolean): boolean {
+  if (tab === 'empresa' || tab === 'colaboradores') return canManageTenant;
+  if (tab === 'facturacion') return canFacturacion;
+  return true;
+}
+
 function formatShortDate(value?: string | null): string | null {
   if (!value) return null;
   const date = new Date(value);
@@ -142,6 +152,10 @@ function SettingsContent() {
   // La pestaña de Facturación ARCA es una feature en pruebas: por ahora sólo la
   // ve la cuenta admin (además de la visibilidad en el sidebar).
   const canFacturacion = canUseFacturacion(profile, tenant);
+  // Empresa, facturación y colaboradores son de administración. El resto de las
+  // pestañas (perfil, preferencias y cuenta) son de autoservicio para cualquier
+  // rol: un cajero también necesita cambiar su nombre y su contraseña.
+  const canManageTenant = hasCapability(role, 'manage_tenant');
 
   const initialTab =
     requestedTab && (validTabs.includes(requestedTab) || requestedTab === 'arca')
@@ -151,18 +165,17 @@ function SettingsContent() {
   const [activeTab, setActiveTab] = useState(initialTab);
 
   useEffect(() => {
-    if (!requestedTab) return;
+    if (!requestedTab || authLoading) return;
     const normalized = requestedTab === 'arca' ? 'facturacion' : requestedTab;
     if (!validTabs.includes(normalized)) return;
-    // Un no-admin que entra por URL a la pestaña de Facturación ARCA (en pruebas)
-    // cae en Mi Perfil en vez de quedar en un panel vacío.
-    if (normalized === 'facturacion' && !authLoading && !canFacturacion) {
+    // Una pestaña sin permiso cae en Mi Perfil en vez de dejar un panel vacío.
+    if (!canAccessTab(normalized, canManageTenant, canFacturacion)) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveTab('perfil');
       return;
     }
     setActiveTab(normalized);
-  }, [requestedTab, authLoading, canFacturacion]);
+  }, [requestedTab, authLoading, canManageTenant, canFacturacion]);
 
   const [profileForm, setProfileForm] = useState({ full_name: '' });
   const [profileSynced, setProfileSynced] = useState(false);
@@ -249,12 +262,6 @@ function SettingsContent() {
     : collaborators;
 
   useEffect(() => {
-    if (!authLoading && !hasCapability(role, 'manage_tenant')) {
-      router.replace('/dashboard');
-    }
-  }, [authLoading, role, router]);
-
-  useEffect(() => {
     if (profile && !profileSynced) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setProfileForm({ full_name: profile.full_name || '' });
@@ -286,6 +293,14 @@ function SettingsContent() {
   }, [tenant, tenantSynced]);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!canManageTenant) {
+      // Un rol operativo no puede ver el equipo: no se pide una API que
+      // devolvería 403 ni se deja el spinner encendido.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLoadingCollaborators(false);
+      return;
+    }
     async function fetchCollaborators() {
       try {
         const res = await authFetch('/api/settings/collaborators');
@@ -301,10 +316,10 @@ function SettingsContent() {
       }
     }
     fetchCollaborators();
-  }, []);
+  }, [authLoading, canManageTenant]);
 
   useEffect(() => {
-    if (!tenant || checkoutSynced) return;
+    if (!canManageTenant || !tenant || checkoutSynced) return;
     let cancelled = false;
     (async () => {
       try {
@@ -325,7 +340,7 @@ function SettingsContent() {
     return () => {
       cancelled = true;
     };
-  }, [tenant, checkoutSynced]);
+  }, [tenant, checkoutSynced, canManageTenant]);
 
   const saveCheckoutConfig = useCallback(async () => {
     const res = await authFetch('/api/settings/checkout', {
@@ -701,23 +716,27 @@ function SettingsContent() {
 
   const tabs = [
     { id: 'perfil', label: 'Mi Perfil', icon: <User className="h-4 w-4" /> },
-    { id: 'empresa', label: 'Datos de Empresa', icon: <Building2 className="h-4 w-4" /> },
+    ...(canManageTenant
+      ? [{ id: 'empresa', label: 'Datos de Empresa', icon: <Building2 className="h-4 w-4" /> }]
+      : []),
     ...(canFacturacion
       ? [{ id: 'facturacion', label: 'Facturación ARCA', icon: <FileText className="h-4 w-4" /> }]
       : []),
-    { id: 'colaboradores', label: 'Colaboradores', icon: <Users className="h-4 w-4" /> },
+    ...(canManageTenant
+      ? [{ id: 'colaboradores', label: 'Colaboradores', icon: <Users className="h-4 w-4" /> }]
+      : []),
     { id: 'preferencias', label: 'Preferencias', icon: <Ticket className="h-4 w-4" /> },
     { id: 'cuenta', label: 'Mi Cuenta', icon: <Shield className="h-4 w-4" /> },
   ];
 
-  if (authLoading || !hasCapability(role, 'manage_tenant')) return null;
+  if (authLoading) return null;
 
   return (
     <div className="space-y-6">
       <PageHeader
         icon={<Settings className="h-8 w-8 text-gray-600 dark:text-gray-400" />}
         title="Configuración"
-        subtitle="Administra tu perfil y los datos de tu empresa."
+        subtitle="Administra tu perfil, tus preferencias y los datos de tu empresa."
       />
 
       <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
@@ -1462,6 +1481,7 @@ function SettingsContent() {
             </Card>
           </div>
 
+          {canManageTenant && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
               <Card className="p-6">
                 <div className="flex items-center gap-2 mb-4">
@@ -1570,6 +1590,7 @@ function SettingsContent() {
                 </form>
               </Card>
             </div>
+          )}
         </div>
       </TabPanel>
 
