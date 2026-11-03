@@ -69,6 +69,15 @@ export type CriticalProductsResult =
   | { ok: true; products: Array<Record<string, unknown>> }
   | { ok: false; error: string };
 
+export interface ProductCounters {
+  count: number;
+  alertsConfigured: boolean;
+}
+
+export type ProductCountersResult =
+  | { ok: true; data: ProductCounters }
+  | { ok: false; error: string };
+
 export type StockAnalysisResult =
   | { ok: true; products: Array<Record<string, unknown>> }
   | { ok: false; error: string };
@@ -159,6 +168,41 @@ export async function listProducts(auth: AuthInfo): Promise<ListProductsResult> 
     price: p.price_cents != null ? p.price_cents / 100 : 0,
   })) || [];
   return { ok: true, products: await signProductImageUrls(products, auth.tenantId) };
+}
+
+function scopedTenantIds(auth: AuthInfo): string[] {
+  return auth.allTenants ? auth.tenantIds : [auth.tenantId];
+}
+
+/**
+ * Contadores livianos para el dashboard.
+ *
+ * El dashboard solo necesita "cuántos productos hay" y "¿hay alguna alerta de
+ * stock configurada?", pero antes pedía `/api/products`: traía el catálogo
+ * completo, hacía join con `product_stock` y firmaba cada URL de imagen. Con un
+ * catálogo grande eso es payload y trabajo de storage tirados a la basura.
+ *
+ * Las dos COUNT corren en una sola pasada dentro de `get_product_counters`
+ * (migración 064): un único RPC en vez de dos round trips a PostgREST.
+ */
+export async function getProductCounters(auth: AuthInfo): Promise<ProductCountersResult> {
+  const { data, error } = await supabaseAdmin.rpc('get_product_counters', {
+    p_tenant_ids: scopedTenantIds(auth),
+  });
+
+  if (error) {
+    logger.error('DB error:', { error });
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
+  }
+
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null | undefined;
+  return {
+    ok: true,
+    data: {
+      count: Number(row?.product_count) || 0,
+      alertsConfigured: Boolean(row?.alerts_configured),
+    },
+  };
 }
 
 export async function createProduct(auth: AuthInfo, body: Record<string, unknown>): Promise<CreateProductResult> {
@@ -1325,35 +1369,22 @@ export async function adjustPrices(auth: AuthInfo, body: {
 
 export async function getCriticalProducts(auth: AuthInfo): Promise<CriticalProductsResult> {
   try {
-    const tenantId = auth.tenantId;
-
-    let productsQuery = supabaseAdmin
-      .from('products')
-      .select(`
-        id, name,
-        stock_data:product_stock!inner(stock, min_stock)
-      `);
-    if (auth.allTenants) productsQuery = productsQuery.in('product_stock.tenant_id', auth.tenantIds);
-    else productsQuery = productsQuery.eq('product_stock.tenant_id', tenantId);
-    productsQuery = productsQuery.eq('product_stock.active', true);
-    const { data: products, error } = await productsQuery;
+    // El filtro `stock <= min_stock` y el scope por tenant viven en la RPC
+    // (migración 064): antes se traía el catálogo entero y se filtraba en JS.
+    const { data, error } = await supabaseAdmin.rpc('get_critical_products', {
+      p_tenant_ids: scopedTenantIds(auth),
+    });
 
     if (error) {
       logger.error('DB error:', { error });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
     }
 
-    const critical = (products ?? []).filter((p) => {
-      const s = p.stock_data?.[0];
-      if (!s) return false;
-      const stock = Number(s.stock) || 0;
-      const minStock = Number(s.min_stock) || 0;
-      return stock <= minStock;
-    }).map((p) => ({
+    const critical = ((data ?? []) as Array<Record<string, unknown>>).map((p) => ({
       id: p.id,
       name: p.name,
-      stock: Number(p.stock_data?.[0]?.stock) || 0,
-      min_stock: Number(p.stock_data?.[0]?.min_stock) || 0,
+      stock: Number(p.stock) || 0,
+      min_stock: Number(p.min_stock) || 0,
     }));
 
     return { ok: true, products: critical };

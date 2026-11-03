@@ -81,7 +81,7 @@ function createSupabaseMock() {
         return builder;
       };
 
-    for (const method of ['select', 'eq', 'neq', 'in', 'gte', 'lte', 'lt', 'gt', 'order', 'range', 'is', 'limit', 'not', 'or', 'like', 'ilike']) {
+    for (const method of ['select', 'eq', 'neq', 'in', 'gte', 'lte', 'lt', 'gt', 'order', 'range', 'is', 'limit', 'not', 'or', 'like', 'ilike', 'abortSignal']) {
       builder[method] = chain(method);
     }
     for (const method of ['insert', 'update', 'delete', 'upsert']) {
@@ -149,6 +149,10 @@ function createSupabaseMock() {
     // tope, acredita stock y mueve el status de la PO en una sola transaccion.
     // El default es una recepcion minima en curso (all=false -> partial).
     receive_po_stock: { data: [{ ok: true, code: null, row: { status: 'partial', received_date: null, all: false } }], error: null },
+    // `get_critical_products`/`get_product_counters` (migracion 064) devuelven
+    // solo las filas que el dashboard necesita; el default es catalogo vacio.
+    get_critical_products: { data: [], error: null },
+    get_product_counters: { data: [{ product_count: 0, alerts_configured: false }], error: null },
   };
 
   // El segundo parametro existe porque la app SI llama por RPC con argumentos
@@ -246,6 +250,8 @@ function createSupabaseMock() {
       rpcResults.send_transfer = { data: [], error: null };
       rpcResults.receive_transfer = { data: [], error: null };
       rpcResults.receive_po_stock = { data: [{ ok: true, code: null, row: { status: 'partial', received_date: null, all: false } }], error: null };
+      rpcResults.get_critical_products = { data: [], error: null };
+      rpcResults.get_product_counters = { data: [{ product_count: 0, alerts_configured: false }], error: null };
       vi.clearAllMocks();
     },
     get __calls() {
