@@ -10,6 +10,7 @@ import OnboardingChecklist from '@/components/dashboard/OnboardingChecklist';
 import { authFetch } from '@/lib/fetchWithTenant';
 import { formatDate, timeAgo } from '@/lib/utils/format';
 import type { CriticalProduct, PendingOrder } from '@/lib/types/dashboard';
+import { hasCapability } from '@/lib/roles';
 
 function actionInfo(action: string, entityType: string, details: Record<string, unknown>): { emoji: string; label: string; detail: string } {
   const name = (details.products as string) || (details.name as string) || '';
@@ -65,9 +66,9 @@ export default function StockAndActivity({
   const [stockAnalysis, setStockAnalysis] = useState<{ id: string; lastSale: string | null }[]>([]);
 
   const criticalCount = criticalProducts.length;
-  // El Historial es solo para owner/manager (el API devuelve 403 si no);
-  // pedirlo igual genera ruido de 403 en la consola.
-  const canViewActivity = role === 'owner' || role === 'manager';
+  // El Historial requiere la capacidad de ver reportes (el API devuelve 403 si
+  // no); pedirlo igual genera ruido de 403 en la consola.
+  const canViewActivity = hasCapability(role, 'view_reports');
 
   useEffect(() => {
     if (!tenantId && !allTenants) return;

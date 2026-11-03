@@ -26,6 +26,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { authFetch } from '@/lib/fetchWithTenant';
 import { getPaddleClient, openPaddleCheckout, setPaddleCustomer } from '@/lib/paddle-client';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { hasCapability } from '@/lib/roles';
 
 export default function BillingPage() {
   return (
@@ -85,7 +86,7 @@ function BillingContent() {
   const [showSalesModal, setShowSalesModal] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && role === 'member') router.replace('/dashboard');
+    if (!authLoading && !hasCapability(role, 'manage_tenant')) router.replace('/dashboard');
   }, [authLoading, role, router]);
 
   useEffect(() => {
@@ -142,7 +143,7 @@ function BillingContent() {
     };
   }, [showRevocationTooltip]);
 
-  if (authLoading || role === 'member') return null;
+  if (authLoading || !hasCapability(role, 'manage_tenant')) return null;
 
   const handleSubscribe = async (planId: string) => {
     const targetRank = PLAN_ORDER.indexOf(planId as PlanId);

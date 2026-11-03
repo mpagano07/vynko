@@ -3,13 +3,23 @@ import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import { createActivityLog } from '@/lib/activity-log';
 import type { AuthInfo } from '@/lib/api-auth';
 import type { PlanId } from '@/lib/plans';
+import { ASSIGNABLE_ROLES, highestRole, isTenantRole, type TenantRole } from '@/lib/roles';
 import { logger } from '@/lib/logger';
 
 export type CollaboratorResult =
   | { ok: true; body: unknown; status: number }
   | { ok: false; error: string; status: number };
 
-const ASSIGNABLE_ROLES = ['manager', 'member'];
+const ROLE_FALLBACK: TenantRole = 'member';
+
+/**
+ * Normaliza un rol que llega del body. Solo se aceptan roles asignables: el
+ * `owner` no se transfiere desde Colaboradores y un valor desconocido cae a
+ * `member` (comportamiento histórico) en vez de fallar en el CHECK de la base.
+ */
+function normalizeAssignableRole(role: string | null | undefined): TenantRole {
+  return isTenantRole(role) && ASSIGNABLE_ROLES.includes(role) ? role : ROLE_FALLBACK;
+}
 
 async function enforceUserLimit(tenantId: string): Promise<string | null> {
   const { data: tenantRow } = await supabaseAdmin
@@ -113,9 +123,7 @@ export async function listCollaborators(auth: AuthInfo): Promise<CollaboratorRes
 
       // El rol que se muestra arriba es el más alto de todas las sucursales.
       // El detalle real, sucursal por sucursal, viaja en `memberships`.
-      if (m.role === 'owner') userRoles[uid] = 'owner';
-      else if (m.role === 'manager' && userRoles[uid] !== 'owner') userRoles[uid] = 'manager';
-      else if (!userRoles[uid]) userRoles[uid] = m.role || 'member';
+      userRoles[uid] = highestRole([userRoles[uid], m.role as string]);
     }
 
     const collaborators = Object.entries(userTenants).map(([uid, tenants]) => {
@@ -186,6 +194,12 @@ interface AddCollaboratorBody {
   email?: string;
   role?: string;
   tenant_ids?: string[];
+  /**
+   * Rol por sucursal. Si viene, manda sobre `role`/`tenant_ids`. Es lo que usa
+   * el modal de edición para asignar, por ejemplo, Manager en una sucursal y
+   * Consulta en otra.
+   */
+  memberships?: { tenant_id?: string; role?: string }[];
   full_name?: string;
 }
 
@@ -200,21 +214,38 @@ export async function addCollaborator(
       return { ok: false, error: 'Only owners can manage collaborators', status: 403 };
     }
 
-    const { email, role, tenant_ids, full_name } = body;
+    const { email, role, tenant_ids, memberships, full_name } = body;
 
     if (!email || typeof email !== 'string') {
       return { ok: false, error: 'Email is required', status: 400 };
     }
 
-    const targetTenantIds: string[] = Array.isArray(tenant_ids) && tenant_ids.length > 0
-      ? tenant_ids.filter((id: string) => ownerTenantIds.includes(id))
-      : ownerTenantIds;
+    // `memberships` (rol por sucursal) gana sobre el par `role` + `tenant_ids`
+    // histórico. Siempre se filtra contra las sucursales que este owner
+    // administra: un tenant_id ajeno no puede colarse por el body.
+    const rawMemberships = Array.isArray(memberships) ? memberships : [];
+    const roleByTenant = new Map<string, TenantRole>();
+    if (rawMemberships.length > 0) {
+      for (const item of rawMemberships) {
+        const tid = typeof item?.tenant_id === 'string' ? item.tenant_id : '';
+        if (!tid || !ownerTenantIds.includes(tid)) continue;
+        roleByTenant.set(tid, normalizeAssignableRole(item?.role));
+      }
+    } else {
+      const requestedTenantIds = Array.isArray(tenant_ids)
+        ? tenant_ids.filter((id: string) => ownerTenantIds.includes(id))
+        : ownerTenantIds;
+      const assignRole = normalizeAssignableRole(role);
+      for (const tid of requestedTenantIds) roleByTenant.set(tid, assignRole);
+    }
+
+    const targetTenantIds = [...roleByTenant.keys()];
 
     if (targetTenantIds.length === 0) {
       return { ok: false, error: 'No valid tenants selected', status: 400 };
     }
 
-    const assignRole = ASSIGNABLE_ROLES.includes(role ?? '') ? (role as string) : 'member';
+    const assignRole = highestRole([...roleByTenant.values()]);
     const assignName = typeof full_name === 'string' && full_name.trim() ? full_name.trim() : null;
 
     const { data: existingProfile } = await supabaseAdmin
@@ -243,7 +274,7 @@ export async function addCollaborator(
         // No se devuelve ningun dato de la persona (ni nombre ni avatar): seria
         // un oraculo de existencia y una fuga de PII para cualquiera que pruebe
         // emails. La invitacion se resuelve por el email, del lado del invitado.
-        return inviteByEmail(auth, email.toLowerCase(), assignRole, origin, targetTenantIds);
+        return inviteByEmail(auth, email.toLowerCase(), roleByTenant, origin);
       }
 
       // Es alguien de la casa: `profiles` es su identidad global, asi que solo
@@ -285,9 +316,10 @@ export async function addCollaborator(
       }
 
       for (const tid of tenantsToJoin) {
+        const tenantRole = roleByTenant.get(tid) ?? ROLE_FALLBACK;
         const { error: insertError } = await supabaseAdmin
           .from('tenant_users')
-          .insert({ tenant_id: tid, user_id: existingProfile.id, role: assignRole });
+          .insert({ tenant_id: tid, user_id: existingProfile.id, role: tenantRole });
         if (insertError) {
           logger.error(`Error adding to tenant ${tid}:`, { error: insertError });
           continue;
@@ -298,7 +330,7 @@ export async function addCollaborator(
           action: 'add_collaborator',
           entityType: 'collaborator',
           entityId: existingProfile.id,
-          details: { email: email.toLowerCase(), role: assignRole },
+          details: { email: email.toLowerCase(), role: tenantRole },
         });
       }
 
@@ -324,7 +356,7 @@ export async function addCollaborator(
       };
     }
 
-    return inviteByEmail(auth, email.toLowerCase(), assignRole, origin, targetTenantIds);
+    return inviteByEmail(auth, email.toLowerCase(), roleByTenant, origin);
   } catch (err) {
     logger.error('Error adding collaborator:', { error: err });
     return { ok: false, error: 'Internal server error', status: 500 };
@@ -347,10 +379,10 @@ export async function addCollaborator(
 async function inviteByEmail(
   auth: AuthInfo,
   email: string,
-  role: string,
-  origin: string,
-  tenantIds: string[]
+  roleByTenant: Map<string, TenantRole>,
+  origin: string
 ): Promise<CollaboratorResult> {
+  const tenantIds = [...roleByTenant.keys()];
   if (tenantIds.length === 0) {
     return { ok: false, error: 'No valid tenants selected', status: 400 };
   }
@@ -368,7 +400,7 @@ async function inviteByEmail(
     tenantIds.map((tid) => ({
       tenant_id: tid,
       email,
-      role,
+      role: roleByTenant.get(tid) ?? ROLE_FALLBACK,
       invited_by: auth.userId,
       // Si la fila ya existía (p. ej. una invitación vieja ya aceptada de
       // alguien que después salió del equipo), se reactiva como pendiente.
@@ -394,7 +426,7 @@ async function inviteByEmail(
       action: 'invite_collaborator',
       entityType: 'collaborator',
       entityId: email,
-      details: { email, role },
+      details: { email, role: roleByTenant.get(tid) ?? ROLE_FALLBACK },
     });
   }
 
@@ -413,7 +445,11 @@ async function inviteByEmail(
 export async function updateCollaborator(
   auth: AuthInfo,
   targetUserId: string,
-  body: { role?: string; tenant_ids?: string[] }
+  body: {
+    role?: string;
+    tenant_ids?: string[];
+    memberships?: { tenant_id?: string; role?: string }[];
+  }
 ): Promise<CollaboratorResult> {
   try {
     const ownerTenantIds = await getOwnerTenantIds(auth.userId);
@@ -425,12 +461,32 @@ export async function updateCollaborator(
       return { ok: false, error: 'No podés editar tu propio rol', status: 400 };
     }
 
-    const { role, tenant_ids } = body;
+    const { role, tenant_ids, memberships } = body;
 
-    const newRole = ASSIGNABLE_ROLES.includes(role ?? '') ? role! : 'member';
-    const targetTenantIds: string[] = Array.isArray(tenant_ids)
-      ? [...new Set(tenant_ids.filter((id: string) => ownerTenantIds.includes(id)))]
-      : ownerTenantIds;
+    // Igual que en el alta: `memberships` (rol por sucursal) manda sobre el
+    // par histórico `role` + `tenant_ids`. Todo tenant_id se filtra contra las
+    // sucursales que este owner administra.
+    const rawMemberships = Array.isArray(memberships) ? memberships : [];
+    const desiredRoleByTenant = new Map<string, TenantRole>();
+    if (rawMemberships.length > 0) {
+      for (const item of rawMemberships) {
+        const tid = typeof item?.tenant_id === 'string' ? item.tenant_id : '';
+        if (!tid || !ownerTenantIds.includes(tid)) continue;
+        desiredRoleByTenant.set(tid, normalizeAssignableRole(item?.role));
+      }
+    } else {
+      const requestedTenantIds: string[] = Array.isArray(tenant_ids)
+        ? [...new Set(tenant_ids.filter((id: string) => ownerTenantIds.includes(id)))]
+        : ownerTenantIds;
+      const newRole = normalizeAssignableRole(role);
+      for (const tid of requestedTenantIds) desiredRoleByTenant.set(tid, newRole);
+    }
+
+    if (desiredRoleByTenant.size === 0) {
+      return { ok: false, error: 'No valid tenants selected', status: 400 };
+    }
+
+    const targetTenantIds = [...desiredRoleByTenant.keys()];
 
     const { data: existingRows } = await supabaseAdmin
       .from('tenant_users')
@@ -448,8 +504,12 @@ export async function updateCollaborator(
 
     const currentTenantIds = existingRows.map((r) => r.tenant_id as string);
     const roleByTenant = new Map(existingRows.map((r) => [r.tenant_id as string, r.role as string]));
-    const toRemoveTenantIds = currentTenantIds.filter((id) => !targetTenantIds.includes(id));
+    const toRemoveTenantIds = currentTenantIds.filter((id) => !desiredRoleByTenant.has(id));
     const toAddTenantIds = targetTenantIds.filter((id) => !currentTenantIds.includes(id));
+    const toUpdateTenantIds = targetTenantIds.filter(
+      (id) =>
+        currentTenantIds.includes(id) && roleByTenant.get(id) !== desiredRoleByTenant.get(id)
+    );
 
     for (const tid of toAddTenantIds) {
       const { data: tenantRow } = await supabaseAdmin
@@ -493,7 +553,7 @@ export async function updateCollaborator(
         .insert(toAddTenantIds.map((tid) => ({
           tenant_id: tid,
           user_id: targetUserId,
-          role: newRole,
+          role: desiredRoleByTenant.get(tid) ?? ROLE_FALLBACK,
         })));
       if (error) {
         logger.error('DB error:', { error });
@@ -501,28 +561,41 @@ export async function updateCollaborator(
       }
     }
 
-    const keptTenantIds = currentTenantIds.filter((id) => !toRemoveTenantIds.includes(id));
-    const { error: updateError } = await supabaseAdmin
-      .from('tenant_users')
-      .update({ role: newRole })
-      .eq('user_id', targetUserId)
-      .in('tenant_id', keptTenantIds)
-      .neq('role', 'owner');
-
-    if (updateError) {
-      logger.error('DB error:', { error: updateError });
-      return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
+    // Un update por cada rol distinto: las sucursales que comparten rol se
+    // actualizan juntas y las que no cambian no se tocan.
+    const updateByRole = new Map<TenantRole, string[]>();
+    for (const tid of toUpdateTenantIds) {
+      const desiredRole = desiredRoleByTenant.get(tid)!;
+      const ids = updateByRole.get(desiredRole) ?? [];
+      ids.push(tid);
+      updateByRole.set(desiredRole, ids);
     }
 
-    for (const tid of keptTenantIds) {
-      const previousRole = roleByTenant.get(tid) || null;
+    for (const [desiredRole, tenantIds] of updateByRole) {
+      const { error: updateError } = await supabaseAdmin
+        .from('tenant_users')
+        .update({ role: desiredRole })
+        .eq('user_id', targetUserId)
+        .in('tenant_id', tenantIds)
+        .neq('role', 'owner');
+
+      if (updateError) {
+        logger.error('DB error:', { error: updateError });
+        return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
+      }
+    }
+
+    for (const tid of toUpdateTenantIds) {
       await createActivityLog({
         tenantId: tid,
         userId: auth.userId,
         action: 'update_collaborator',
         entityType: 'collaborator',
         entityId: targetUserId,
-        details: { previous_role: previousRole, new_role: newRole },
+        details: {
+          previous_role: roleByTenant.get(tid) || null,
+          new_role: desiredRoleByTenant.get(tid) ?? ROLE_FALLBACK,
+        },
       });
     }
     for (const tid of toRemoveTenantIds) {
@@ -542,7 +615,7 @@ export async function updateCollaborator(
         action: 'add_to_branch',
         entityType: 'collaborator',
         entityId: targetUserId,
-        details: { role: newRole },
+        details: { role: desiredRoleByTenant.get(tid) ?? ROLE_FALLBACK },
       });
     }
 

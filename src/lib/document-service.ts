@@ -5,7 +5,7 @@ import {
 } from '@/lib/commercial-document-number';
 import type { CreateDocumentRequest, DocumentStatus, DocumentType } from '@/lib/types/document';
 import type { AuthInfo } from '@/lib/api-auth';
-import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
+import { getRoleInTenant, hasCapability } from '@/lib/membership-role';
 import { trackEvent } from '@/lib/track-event';
 import { logger } from '@/lib/logger';
 
@@ -213,7 +213,7 @@ export async function updateDocument(
 ): Promise<DocumentResult> {
   // Cambiar el estado de un documento comercial (anular, entregar, facturar) es
   // una acción administrativa, no operativa: se limita a owner/manager.
-  if (!(await canManageTenant(await getRoleInTenant(auth.userId, auth.tenantId)))) {
+  if (!(hasCapability(await getRoleInTenant(auth.userId, auth.tenantId), 'manage_documents'))) {
     return {
       ok: false,
       error: 'Sólo el dueño o un administrador pueden modificar documentos',
@@ -248,7 +248,7 @@ export async function updateDocument(
 }
 
 export async function deleteDocument(auth: AuthInfo, id: string): Promise<DocumentResult> {
-  if (!(await canManageTenant(await getRoleInTenant(auth.userId, auth.tenantId)))) {
+  if (!(hasCapability(await getRoleInTenant(auth.userId, auth.tenantId), 'manage_documents'))) {
     return {
       ok: false,
       error: 'Sólo el dueño o un administrador pueden eliminar documentos',

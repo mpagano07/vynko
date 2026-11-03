@@ -67,13 +67,16 @@ describe('resolveNavAccess', () => {
     });
   });
 
-  describe('rol y multi-sucursal', () => {
-    it('oculta por rol no permitido', () => {
+  describe('capacidad y multi-sucursal', () => {
+    it('oculta cuando el rol no tiene la capacidad', () => {
       expect(
-        resolveNavAccess({ requiredRole: ['owner', 'manager'] }, { plan: 'business', role: 'member' })
+        resolveNavAccess({ requiredCapability: 'view_reports' }, { plan: 'business', role: 'member' })
       ).toEqual({ visible: false, locked: false });
       expect(
-        resolveNavAccess({ requiredRole: ['owner', 'manager'] }, { plan: 'business', role: 'owner' })
+        resolveNavAccess({ requiredCapability: 'view_reports' }, { plan: 'business', role: 'viewer' })
+      ).toEqual({ visible: true, locked: false });
+      expect(
+        resolveNavAccess({ requiredCapability: 'view_reports' }, { plan: 'business', role: 'owner' })
       ).toEqual({ visible: true, locked: false });
     });
 

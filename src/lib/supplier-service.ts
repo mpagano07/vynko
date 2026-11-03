@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createActivityLog } from '@/lib/activity-log';
 import type { AuthInfo } from '@/lib/api-auth';
-import { canManageTenant, getRoleInTenant } from '@/lib/membership-role';
+import { getRoleInTenant, hasCapability } from '@/lib/membership-role';
 import { logger } from '@/lib/logger';
 import {
   PARTY_TAX_FIELD_KEYS,
@@ -21,7 +21,7 @@ export type SupplierResult<T = unknown> =
  * tenant.
  */
 async function assertSupplierManager(auth: AuthInfo): Promise<SupplierResult<never> | null> {
-  if (await canManageTenant(await getRoleInTenant(auth.userId, auth.tenantId))) return null;
+  if (hasCapability(await getRoleInTenant(auth.userId, auth.tenantId), 'manage_purchases')) return null;
   return {
     ok: false,
     error: 'Sólo el dueño o un administrador pueden gestionar proveedores',

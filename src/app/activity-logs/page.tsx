@@ -29,6 +29,7 @@ import { formatARS } from '@/lib/utils/currency';
 import { formatDate } from '@/lib/utils/format';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
+import { hasCapability } from '@/lib/roles';
 import { TRANSFER_STATUS_LABELS, type Transfer, type TransferStatus } from '@/lib/types/stock-transfer';
 
 interface ActivityDetails {
@@ -525,7 +526,7 @@ export default function ActivityLogsPage() {
 
   if (authLoading || isStarterPlan) return null;
 
-  if (role !== 'owner' && role !== 'manager') {
+  if (!hasCapability(role, 'view_reports')) {
     return (
       <div className="flex items-center justify-center h-64">
         <p className="text-gray-500">No tienes permisos para ver esta página.</p>

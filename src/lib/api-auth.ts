@@ -8,6 +8,16 @@ export interface AuthInfo {
   userId: string;
   allTenants: boolean;
   tenantIds: string[];
+  /**
+   * Rol del usuario en la sucursal activa (`tenantId`). Lo completa `getAuth`
+   * a partir de las membresías que ya consulta, así que los gates pueden
+   * decidir sin una query extra por request. En el consolidado (`allTenants`)
+   * es `owner`, que es la única forma de llegar a ese modo.
+   *
+   * Es opcional para no romper objetos `AuthInfo` construidos a mano en tests
+   * o scripts; ausente equivale a "sin permisos".
+   */
+  role?: string | null;
 }
 
 export async function getAuth(request?: Request): Promise<AuthInfo | null> {
@@ -52,5 +62,6 @@ export async function getAuth(request?: Request): Promise<AuthInfo | null> {
   }
 
   enterLogContext({ userId: user.id, tenantId, tenantIds });
-  return { tenantId, userId: user.id, allTenants, tenantIds };
+  const role = (tu ?? []).find((t) => t.tenant_id === tenantId)?.role ?? null;
+  return { tenantId, userId: user.id, role, allTenants, tenantIds };
 }

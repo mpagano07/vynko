@@ -13,6 +13,7 @@ const mockAuth = {
   userId: 'user-1',
   allTenants: false,
   tenantIds: ['tenant-1'],
+  role: 'owner',
 };
 
 vi.mock('@/lib/api-auth', () => ({

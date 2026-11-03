@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import type { AuthInfo } from '@/lib/api-auth';
+import { hasCapability } from '@/lib/roles';
 import { logger } from '@/lib/logger';
 
 export type ActivityLogsResult<T = unknown> =
@@ -18,7 +19,7 @@ export async function getActivityLogs(
     .eq('user_id', auth.userId)
     .eq('tenant_id', tenantId);
   const role = tu?.[0]?.role;
-  if (role !== 'owner' && role !== 'manager') {
+  if (!hasCapability(role, 'view_reports')) {
     return { ok: false, error: 'No tienes permisos', status: 403 };
   }
 

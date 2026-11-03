@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { normalizeCheckoutSettings, PAYMENT_METHODS, type CheckoutSettings } from '@/lib/payment-methods';
 import type { AuthInfo } from '@/lib/api-auth';
 import { logger } from '@/lib/logger';
+import { hasCapability } from '@/lib/roles';
 
 export type SettingsResult<T = unknown> =
   | { ok: true; data: T }
@@ -21,7 +22,7 @@ export async function getCheckoutSettings(auth: AuthInfo): Promise<SettingsResul
     .eq('tenant_id', auth.tenantId);
 
   const role = tu?.[0]?.role;
-  const canEdit = role === 'owner' || role === 'manager';
+  const canEdit = hasCapability(role, 'manage_tenant');
 
   const settings = normalizeCheckoutSettings(
     (tenant?.settings as Record<string, unknown> | undefined)?.checkout
@@ -43,7 +44,7 @@ export async function updateCheckoutSettings(
   if (!membership) {
     return { ok: false, error: 'No tenant found', status: 404 };
   }
-  if (!['owner', 'manager'].includes(membership.role)) {
+  if (!hasCapability(membership.role, 'manage_tenant')) {
     return { ok: false, error: 'Solo el dueño o un administrador puede cambiar la configuración de cobro', status: 403 };
   }
 

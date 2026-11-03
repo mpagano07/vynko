@@ -15,6 +15,7 @@ import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
 import { getTrialDays, getTrialPlan } from '@/lib/plans';
 import { isAdminProfile } from '@/lib/admin';
 import { canUseFacturacion } from '@/lib/arca/access';
+import { hasCapability, type Capability } from '@/lib/roles';
 import { toast } from 'react-hot-toast';
 
 interface NavItem {
@@ -22,7 +23,8 @@ interface NavItem {
   href: string;
   icon?: React.ReactNode;
   requiredPlan?: string[];
-  requiredRole?: string[];
+  /** Capacidad que debe tener el rol en la sucursal activa para ver el item. */
+  requiredCapability?: Capability;
   requiredMultiBranch?: boolean;
   /**
    * Requiere tener la facturación electrónica habilitada. Mientras la feature
@@ -32,10 +34,10 @@ interface NavItem {
   badge?: string;
 }
 
-/** Campos de un item que participan del filtrado por plan/rol/feature. */
+/** Campos de un item que participan del filtrado por plan/capacidad/feature. */
 export type NavItemAccess = Pick<
   NavItem,
-  'requiredPlan' | 'requiredRole' | 'requiredMultiBranch' | 'requiresFacturacion'
+  'requiredPlan' | 'requiredCapability' | 'requiredMultiBranch' | 'requiresFacturacion'
 >;
 
 export interface NavAccessContext {
@@ -69,11 +71,13 @@ export function resolveNavAccess(item: NavItemAccess, ctx: NavAccessContext): Fi
     return { visible: false, locked: false };
   }
 
-  const roleBlocked = Boolean(item.requiredRole && !item.requiredRole.includes(ctx.role || ''));
+  const capabilityBlocked = Boolean(
+    item.requiredCapability && !hasCapability(ctx.role, item.requiredCapability)
+  );
   const multiBranchBlocked = Boolean(item.requiredMultiBranch && !ctx.multiBranch);
   const planBlocked = Boolean(item.requiredPlan && !item.requiredPlan.includes(ctx.plan));
 
-  if (roleBlocked || multiBranchBlocked) return { visible: false, locked: false };
+  if (capabilityBlocked || multiBranchBlocked) return { visible: false, locked: false };
   if (planBlocked) return { visible: true, locked: true };
   return { visible: true, locked: false };
 }
@@ -110,9 +114,9 @@ const navGroups: NavGroup[] = [
   {
     label: 'Análisis',
     items: [
-      { name: 'Pronóstico', href: '/forecast', requiredPlan: ['business', 'enterprise'], requiredRole: ['owner', 'manager'] },
+      { name: 'Pronóstico', href: '/forecast', requiredPlan: ['business', 'enterprise'], requiredCapability: 'view_reports' },
       { name: 'Antipérdidas', href: '/loss-prevention', requiredPlan: ['business', 'enterprise'] },
-      { name: 'Historial', href: '/activity-logs', requiredPlan: ['business', 'enterprise'], requiredRole: ['owner', 'manager'] },
+      { name: 'Historial', href: '/activity-logs', requiredPlan: ['business', 'enterprise'], requiredCapability: 'view_reports' },
     ],
   },
 ];
