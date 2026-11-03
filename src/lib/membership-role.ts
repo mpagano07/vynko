@@ -1,7 +1,10 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { MANAGE_ROLES, type TenantRole } from '@/lib/roles';
 
-// Roles que pueden operar operaciones sensibles (no solo ver).
-export const MANAGE_ROLES = ['owner', 'manager'] as const;
+// Roles que pueden operar operaciones sensibles (no solo ver). Se reexporta
+// desde `roles.ts` para que el cliente pueda usar las mismas etiquetas sin
+// arrastrar el cliente de Supabase al bundle.
+export { MANAGE_ROLES } from '@/lib/roles';
 
 export async function getRoleInTenant(userId: string, tenantId: string): Promise<string | null> {
   const { data } = await supabaseAdmin
@@ -14,5 +17,5 @@ export async function getRoleInTenant(userId: string, tenantId: string): Promise
 }
 
 export function canManageTenant(role: string | null): boolean {
-  return role !== null && (MANAGE_ROLES as readonly string[]).includes(role);
+  return role !== null && (MANAGE_ROLES as readonly string[]).includes(role as TenantRole);
 }

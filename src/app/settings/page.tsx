@@ -12,7 +12,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabPanel } from '@/components/ui/tabs';
 import { EditCollaboratorModal } from '@/components/ui/edit-collaborator-modal';
-import { Settings, User, Building2, Loader2, Save, KeyRound, Users, Mail, X, Shield, ShieldCheck, FileText, MapPin, Palette, ListChecks, Percent, Ticket, Pencil, HelpCircle, RefreshCw } from 'lucide-react';
+import { Settings, User, Building2, Loader2, Save, KeyRound, Users, Mail, X, Shield, ShieldCheck, FileText, MapPin, Palette, ListChecks, Percent, Ticket, Pencil, HelpCircle, RefreshCw, Search, Trash2 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Select } from '@/components/ui/select';
 import { FormLabel } from '@/components/ui/form-label';
@@ -27,9 +27,18 @@ import {
   type PaymentAdjustments,
 } from '@/lib/payment-methods';
 import { canUseFacturacion } from '@/lib/arca/access';
+import { ROLE_DESCRIPTIONS, getRoleLabel } from '@/lib/roles';
 import { ArcaConfigCard } from '@/components/settings/ArcaConfigCard';
 import { AccountDangerZone } from '@/components/settings/AccountDangerZone';
 import { GoogleDriveConnectionCard } from '@/components/settings/GoogleDriveConnectionCard';
+
+interface CollaboratorMembership {
+  id: string;
+  tenant_id: string;
+  tenant_name: string;
+  role: string;
+  joined_at?: string | null;
+}
 
 interface Collaborator {
   user_id: string;
@@ -38,12 +47,18 @@ interface Collaborator {
   role: 'owner' | 'manager' | 'member';
   tenants?: { id: string; name: string }[];
   tenant_users_ids?: string[];
+  memberships?: CollaboratorMembership[];
+  joined_at?: string | null;
 }
 
 interface PendingInvitation {
   id?: string;
   email: string;
   role: string;
+  created_at?: string | null;
+  invited_by_name?: string | null;
+  tenant_id?: string;
+  tenant_name?: string;
 }
 
 function capitalizeWords(value: string): string {
@@ -65,6 +80,13 @@ function formatPhone(value: string): string {
 }
 
 const validTabs = ['perfil', 'empresa', 'facturacion', 'colaboradores', 'preferencias', 'cuenta'];
+
+function formatShortDate(value?: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
+}
 
 export default function SettingsPage() {
   return (
@@ -158,10 +180,13 @@ function SettingsContent() {
   const [inviteName, setInviteName] = useState('');
   const [inviting, setInviting] = useState(false);
   const [resendingInvite, setResendingInvite] = useState<string | null>(null);
+  const [revokingInvite, setRevokingInvite] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [removingBranchId, setRemovingBranchId] = useState<string | null>(null);
   const [selectedTenantIds, setSelectedTenantIds] = useState<string[]>([]);
   const [editingCollab, setEditingCollab] = useState<Collaborator | null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [collabSearch, setCollabSearch] = useState('');
 
   useEffect(() => {
     if (tenants.length > 0 && selectedTenantIds.length === 0) {
@@ -174,6 +199,22 @@ function SettingsContent() {
   const currentUserCollab = collaborators.find((c) => c.user_id === currentUserId);
   const isOwner = currentUserCollab?.role === 'owner';
   const canInvite = tenant?.subscription_plan === 'business' || tenant?.subscription_plan === 'enterprise';
+
+  const normalizedSearch = collabSearch.trim().toLowerCase();
+  const filteredCollaborators = normalizedSearch
+    ? collaborators.filter((c) => {
+        const haystack = [
+          c.full_name || '',
+          c.email || '',
+          c.role || '',
+          ...(c.memberships || []).flatMap((m) => [m.tenant_name, m.role]),
+          ...(c.tenants || []).map((t) => t.name),
+        ]
+          .join(' ')
+          .toLowerCase();
+        return haystack.includes(normalizedSearch);
+      })
+    : collaborators;
 
   useEffect(() => {
     if (!authLoading && role === 'member') {
@@ -325,7 +366,20 @@ function SettingsContent() {
 
       if (data.invited) {
         toast.success(data.message || 'Invitación enviada');
-        setPendingInvitations((prev) => [...prev, { id: 'pending', email: data.email, role: inviteRole }]);
+        const invitedTenantIds: string[] = data.tenant_ids || targetTenantIds;
+        const createdAt = new Date().toISOString();
+        setPendingInvitations((prev) => [
+          ...prev,
+          ...invitedTenantIds.map((tid) => ({
+            id: `pending-${tid}-${data.email}`,
+            email: data.email,
+            role: inviteRole,
+            tenant_id: tid,
+            tenant_name: tenants.find((t) => t.id === tid)?.name || '',
+            created_at: createdAt,
+            invited_by_name: profile?.full_name || null,
+          })),
+        ]);
       } else {
         toast.success('Colaborador agregado');
         setCollaborators((prev) => [...prev, { ...data.collaborator, tenants: tenants.filter(t => targetTenantIds.includes(t.id)) }]);
@@ -337,10 +391,10 @@ function SettingsContent() {
     } finally {
       setInviting(false);
     }
-  }, [inviteEmail, inviteRole, inviteName, selectedTenantIds, tenants]);
+  }, [inviteEmail, inviteRole, inviteName, selectedTenantIds, tenants, profile?.full_name]);
 
   const handleResendInvite = useCallback(async (inv: PendingInvitation) => {
-    setResendingInvite(inv.email);
+    setResendingInvite(inv.id || inv.email);
     try {
       const res = await authFetch('/api/settings/collaborators', {
         method: 'POST',
@@ -349,7 +403,9 @@ function SettingsContent() {
           email: inv.email,
           role: inv.role === 'manager' ? 'manager' : 'member',
           full_name: null,
-          tenant_ids: [],
+          // Reenvía solo la sucursal de esta invitación. Antes mandaba `[]`,
+          // que el backend interpretaba como "todas las sucursales".
+          tenant_ids: inv.tenant_id ? [inv.tenant_id] : [],
         }),
       });
       const data = await res.json();
@@ -365,11 +421,38 @@ function SettingsContent() {
     }
   }, []);
 
-  const handleRemove = useCallback(async (tenantUsersId: string | undefined, userId: string) => {
-    if (!tenantUsersId) return;
-    setRemovingId(tenantUsersId);
+  const handleRevokeInvite = useCallback(async (inv: PendingInvitation) => {
+    if (!inv.id || inv.id.startsWith('pending-')) {
+      toast.error('Recargá la página para revocar esta invitación');
+      return;
+    }
+    if (!window.confirm(`¿Revocar la invitación a ${inv.email}${inv.tenant_name ? ` en ${inv.tenant_name}` : ''}?`)) {
+      return;
+    }
+    setRevokingInvite(inv.id);
     try {
-      const res = await authFetch(`/api/settings/collaborators/${tenantUsersId}`, {
+      const res = await authFetch(`/api/settings/invitations/${inv.id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(data.error || 'Error al revocar la invitación');
+        return;
+      }
+      toast.success('Invitación revocada');
+      setPendingInvitations((prev) => prev.filter((i) => i.id !== inv.id));
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error al revocar la invitación');
+    } finally {
+      setRevokingInvite(null);
+    }
+  }, []);
+
+  const handleRemoveFromTeam = useCallback(async (collab: Collaborator) => {
+    if (!window.confirm(`¿Quitar a ${collab.full_name || collab.email} de todo el equipo?`)) {
+      return;
+    }
+    setRemovingId(collab.user_id);
+    try {
+      const res = await authFetch(`/api/settings/collaborators/${collab.user_id}`, {
         method: 'DELETE',
       });
 
@@ -380,11 +463,45 @@ function SettingsContent() {
       }
 
       toast.success('Colaborador removido');
-      setCollaborators((prev) => prev.filter((c) => c.user_id !== userId));
+      setCollaborators((prev) => prev.filter((c) => c.user_id !== collab.user_id));
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al remover');
     } finally {
       setRemovingId(null);
+    }
+  }, []);
+
+  const handleRemoveFromBranch = useCallback(async (collab: Collaborator, tenantId: string, tenantName: string) => {
+    if (!window.confirm(`¿Quitar a ${collab.full_name || collab.email} de ${tenantName}?`)) {
+      return;
+    }
+    setRemovingBranchId(`${collab.user_id}:${tenantId}`);
+    try {
+      const res = await authFetch(
+        `/api/settings/collaborators/${collab.user_id}?tenant_id=${encodeURIComponent(tenantId)}`,
+        { method: 'DELETE' }
+      );
+
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(data.error || 'Error al quitar de la sucursal');
+        return;
+      }
+
+      toast.success('Colaborador quitado de la sucursal');
+      setCollaborators((prev) => prev
+        .map((c) => {
+          if (c.user_id !== collab.user_id) return c;
+          const memberships = (c.memberships || []).filter((m) => m.tenant_id !== tenantId);
+          const tenantList = (c.tenants || []).filter((t) => t.id !== tenantId);
+          return { ...c, memberships, tenants: tenantList, tenant_users_ids: memberships.map((m) => m.id) };
+        })
+        .filter((c) => c.user_id !== collab.user_id || (c.memberships?.length ?? c.tenants?.length ?? 0) > 0)
+      );
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error al quitar de la sucursal');
+    } finally {
+      setRemovingBranchId(null);
     }
   }, []);
 
@@ -519,15 +636,25 @@ function SettingsContent() {
       const allTenants = tenants.map(t => ({ id: t.id, name: t.name }));
       setCollaborators((prev) => prev.map((c) => {
         if (c.user_id !== collab.user_id) return c;
-        const current = c.tenants || [];
-        const nextTenants = allTenants.filter(t => payload.tenant_ids.includes(t.id));
-        const fullTenants = [
-          ...nextTenants.map(nt => current.find(ct => ct.id === nt.id) || nt),
-        ];
+        const currentMemberships = c.memberships || [];
+        const nextMemberships: CollaboratorMembership[] = payload.tenant_ids.flatMap((tid) => {
+          const tenant = allTenants.find((t) => t.id === tid);
+          if (!tenant) return [];
+          const existing = currentMemberships.find((m) => m.tenant_id === tid);
+          return [{
+            id: existing?.id || `pending-${tid}`,
+            tenant_id: tid,
+            tenant_name: tenant.name,
+            role: payload.role,
+            joined_at: existing?.joined_at ?? null,
+          }];
+        });
         return {
           ...c,
           role: (payload.role as Collaborator['role']),
-          tenants: fullTenants,
+          tenants: allTenants.filter(t => payload.tenant_ids.includes(t.id)),
+          memberships: nextMemberships,
+          tenant_users_ids: nextMemberships.map((m) => m.id),
         };
       }));
       setEditModalOpen(false);
@@ -925,9 +1052,27 @@ function SettingsContent() {
               <Users className="h-5 w-5 text-green-500" />
               <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Colaboradores</h2>
               {tenant && (
-                <span className="ml-auto text-xs text-gray-400">{loadingCollaborators ? '...' : `${collaborators.length} miembro${collaborators.length !== 1 ? 's' : ''}`}</span>
+                <span className="ml-auto text-xs text-gray-400">
+                  {loadingCollaborators
+                    ? '...'
+                    : `${filteredCollaborators.length} miembro${filteredCollaborators.length !== 1 ? 's' : ''}${normalizedSearch ? ` de ${collaborators.length}` : ''}`}
+                </span>
               )}
             </div>
+
+            {!loadingCollaborators && collaborators.length > 0 && (
+              <div className="relative mb-4">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  type="search"
+                  value={collabSearch}
+                  onChange={(e) => setCollabSearch(e.target.value)}
+                  placeholder="Buscar por nombre, email o sucursal..."
+                  className="pl-9"
+                  aria-label="Buscar colaboradores"
+                />
+              </div>
+            )}
 
             {loadingCollaborators ? (
               <div className="flex items-center justify-center py-8">
@@ -935,7 +1080,7 @@ function SettingsContent() {
               </div>
             ) : (
               <div className="space-y-3">
-                {collaborators.map((c) => (
+                {filteredCollaborators.map((c) => (
                   <div
                     key={c.user_id}
                     className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700"
@@ -949,28 +1094,63 @@ function SettingsContent() {
                           {c.full_name || 'Sin nombre'}
                         </p>
                         <p className="text-xs text-gray-500 truncate">{c.email}</p>
-                        {c.tenants && c.tenants.length > 0 && (
+                        {formatShortDate(c.joined_at) && (
+                          <p className="text-[11px] text-gray-400">
+                            En el equipo desde {formatShortDate(c.joined_at)}
+                          </p>
+                        )}
+                        {(c.memberships?.length ?? 0) > 0 ? (
                           <div className="flex flex-wrap gap-1 mt-1">
-                            {c.tenants.map((t) => (
-                              <span key={t.id} className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
-                                {t.name}
+                            {c.memberships!.map((m) => (
+                              <span
+                                key={m.tenant_id}
+                                className="inline-flex items-center gap-1 text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded"
+                              >
+                                {m.tenant_name}
+                                <span className="opacity-70">· {getRoleLabel(m.role)}</span>
+                                {isOwner && m.role !== 'owner' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveFromBranch(c, m.tenant_id, m.tenant_name)}
+                                    disabled={removingBranchId === `${c.user_id}:${m.tenant_id}`}
+                                    title={`Quitar de ${m.tenant_name}`}
+                                    aria-label={`Quitar a ${c.full_name || c.email} de ${m.tenant_name}`}
+                                    className="inline-flex items-center justify-center rounded-sm hover:text-red-600 disabled:opacity-50"
+                                  >
+                                    {removingBranchId === `${c.user_id}:${m.tenant_id}` ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <X className="h-3 w-3" />
+                                    )}
+                                  </button>
+                                )}
                               </span>
                             ))}
                           </div>
+                        ) : (
+                          c.tenants && c.tenants.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {c.tenants.map((t) => (
+                                <span key={t.id} className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
+                                  {t.name}
+                                </span>
+                              ))}
+                            </div>
+                          )
                         )}
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                      {c.role === 'owner' ? (
-                        <StatusBadge tone="amberSoft" className="py-1" icon={<ShieldCheck className="h-3 w-3" />}>
-                          Propietario
-                        </StatusBadge>
-                      ) : (
-                        <StatusBadge tone="grayMuted" className="py-1" icon={<Shield className="h-3 w-3" />}>
-                          {c.role === 'manager' ? 'Manager' : 'Miembro'}
-                        </StatusBadge>
-                      )}
+                      <StatusBadge
+                        tone={c.role === 'owner' ? 'amberSoft' : 'grayMuted'}
+                        className="py-1"
+                        icon={c.role === 'owner' ? <ShieldCheck className="h-3 w-3" /> : <Shield className="h-3 w-3" />}
+                      >
+                        <span title={ROLE_DESCRIPTIONS[c.role] || undefined}>
+                          {getRoleLabel(c.role)}
+                        </span>
+                      </StatusBadge>
 
                       {isOwner && c.role !== 'owner' && (
                         <Button
@@ -992,20 +1172,28 @@ function SettingsContent() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleRemove(c.tenant_users_ids?.[0], c.user_id)}
-                          disabled={removingId === c.tenant_users_ids?.[0]}
+                          onClick={() => handleRemoveFromTeam(c)}
+                          disabled={removingId === c.user_id}
+                          aria-label={`Quitar a ${c.full_name || c.email} del equipo`}
+                          title="Quitar de todo el equipo"
                           className="border-transparent text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
                         >
-                          {removingId === c.tenant_users_ids?.[0] ? (
+                          {removingId === c.user_id ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
-                            <X className="h-4 w-4" />
+                            <Trash2 className="h-4 w-4" />
                           )}
                         </Button>
                       )}
                     </div>
                   </div>
                 ))}
+
+                {filteredCollaborators.length === 0 && collaborators.length > 0 && (
+                  <p className="text-sm text-gray-500 text-center py-6">
+                    No hay colaboradores que coincidan con «{collabSearch}».
+                  </p>
+                )}
 
                 {collaborators.length === 0 && (
                   <EmptyState
@@ -1024,38 +1212,58 @@ function SettingsContent() {
                   Invitaciones pendientes
                 </p>
                 <div className="space-y-2">
-                  {pendingInvitations.map((inv, idx) => (
-                    <div key={inv.id || idx} className="flex items-center justify-between p-2 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="h-8 w-8 rounded-full bg-amber-200 dark:bg-amber-800 flex items-center justify-center text-sm font-medium text-amber-700 dark:text-amber-300 flex-shrink-0">
-                          {(inv.email || '?').charAt(0).toUpperCase()}
+                  {pendingInvitations.map((inv, idx) => {
+                    const invitedAt = formatShortDate(inv.created_at);
+                    const meta = [
+                      `Pendiente — ${getRoleLabel(inv.role)}`,
+                      inv.tenant_name ? `Sucursal ${inv.tenant_name}` : null,
+                      invitedAt ? `Invitada el ${invitedAt}` : null,
+                      inv.invited_by_name ? `por ${inv.invited_by_name}` : null,
+                    ].filter(Boolean).join(' · ');
+
+                    return (
+                      <div key={inv.id || idx} className="flex items-center justify-between gap-3 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="h-8 w-8 rounded-full bg-amber-200 dark:bg-amber-800 flex items-center justify-center text-sm font-medium text-amber-700 dark:text-amber-300 flex-shrink-0">
+                            {(inv.email || '?').charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm text-amber-800 dark:text-amber-200 truncate">{inv.email}</p>
+                            <p className="text-xs text-amber-600 dark:text-amber-400 truncate">{meta}</p>
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-sm text-amber-800 dark:text-amber-200 truncate">{inv.email}</p>
-                          <p className="text-xs text-amber-600 dark:text-amber-400">
-                            Pendiente — {inv.role === 'manager' ? 'Manager' : 'Miembro'}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                        <span className="text-xs text-amber-500 italic">Esperando registro</span>
                         {isOwner && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={resendingInvite === inv.email}
-                            onClick={() => handleResendInvite(inv)}
-                          >
-                            {resendingInvite === inv.email ? (
-                              <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />Reenviando...</>
-                            ) : (
-                              <><RefreshCw className="h-3.5 w-3.5 mr-1" />Reenviar</>
-                            )}
-                          </Button>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={resendingInvite === (inv.id || inv.email)}
+                              onClick={() => handleResendInvite(inv)}
+                            >
+                              {resendingInvite === (inv.id || inv.email) ? (
+                                <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />Reenviando...</>
+                              ) : (
+                                <><RefreshCw className="h-3.5 w-3.5 mr-1" />Reenviar</>
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={revokingInvite === inv.id}
+                              onClick={() => handleRevokeInvite(inv)}
+                              className="border-transparent text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                            >
+                              {revokingInvite === inv.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <><X className="h-3.5 w-3.5 mr-1" />Revocar</>
+                              )}
+                            </Button>
+                          </div>
                         )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -1102,7 +1310,7 @@ function SettingsContent() {
                       Rol
                       <span
                         className="inline-flex cursor-help text-gray-400"
-                        title="Miembro: puede cobrar y ver ventas. Manager: además gestiona precios, productos y configuración de cobro. Propietario: control total de la empresa."
+                        title={`Miembro: ${ROLE_DESCRIPTIONS.member}\nManager: ${ROLE_DESCRIPTIONS.manager}`}
                       >
                         <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
                       </span>
