@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { SEO_PAGES, type SeoLandingContent } from './seo-landing';
 
-import { content as controlDeStock } from '@/app/control-de-stock/page';
-import { content as controlDeCompras } from '@/app/control-de-compras/page';
-import { content as ventasYCaja } from '@/app/ventas-y-caja/page';
-import { content as alternativaAExcel } from '@/app/alternativa-a-excel/page';
-import { content as gestionArgentina } from '@/app/software-gestion-argentina/page';
-import { content as importarProductos } from '@/app/importar-productos-mercadolibre-tiendanube/page';
-import { content as sistemaParaKiosco } from '@/app/sistema-para-kiosco/page';
-import { content as softwareParaFerreteria } from '@/app/software-para-ferreteria/page';
-import { content as sistemaParaDistribuidora } from '@/app/sistema-para-distribuidora/page';
+import { content as controlDeStock } from '@/app/control-de-stock/content';
+import { content as controlDeCompras } from '@/app/control-de-compras/content';
+import { content as ventasYCaja } from '@/app/ventas-y-caja/content';
+import { content as alternativaAExcel } from '@/app/alternativa-a-excel/content';
+import { content as gestionArgentina } from '@/app/software-gestion-argentina/content';
+import { content as importarProductos } from '@/app/importar-productos-mercadolibre-tiendanube/content';
+import { content as sistemaParaKiosco } from '@/app/sistema-para-kiosco/content';
+import { content as softwareParaFerreteria } from '@/app/software-para-ferreteria/content';
+import { content as sistemaParaDistribuidora } from '@/app/sistema-para-distribuidora/content';
 
 /**
  * Todas las landings, para verificar el contenido de cada una contra las

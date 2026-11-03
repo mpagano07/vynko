@@ -47,13 +47,21 @@ import { authFetch } from '@/lib/fetchWithTenant';
 import { matchesQuery } from '@/lib/utils/text';
 import type { Customer } from '@/lib/types/sale';
 import type { ArcaConfig } from '@/lib/types/arca';
-import { CheckoutModal, type CheckoutPayload } from '@/components/sales/checkout-modal';
-import {
-  PrintReceipt,
-  buildWhatsAppUrl,
-  type ReceiptSale,
-  type ReceiptTenant,
-} from '@/components/sales/receipt-modal';
+import type { CheckoutPayload } from '@/components/sales/checkout-modal';
+import type { ReceiptSale, ReceiptTenant } from '@/lib/sales-receipt';
+import { buildWhatsAppUrl } from '@/lib/sales-receipt';
+
+// Los modales de cobro y de ticket son los componentes más pesados de la
+// página y solo hacen falta cuando el usuario cobra o reimprime. Se cargan
+// bajo demanda para no inflar el bundle inicial de /sales en mobile.
+const CheckoutModal = dynamicImport(
+  () => import('@/components/sales/checkout-modal').then((m) => ({ default: m.CheckoutModal })),
+  { ssr: false },
+);
+const PrintReceipt = dynamicImport(
+  () => import('@/components/sales/receipt-modal').then((m) => ({ default: m.PrintReceipt })),
+  { ssr: false },
+);
 import {
   DEFAULT_CHECKOUT_SETTINGS,
   normalizeCheckoutSettings,

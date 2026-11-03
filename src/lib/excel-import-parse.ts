@@ -12,6 +12,10 @@
 
 // Solo tipos: se borran al compilar, no arrastran la libreria al bundle.
 import type { WorkBook, WorkSheet } from 'xlsx';
+import {
+  IMPORT_EMPTY_FILE_ERROR,
+  IMPORT_FILE_ERROR,
+} from '@/lib/excel-import-errors';
 
 /**
  * Alias de encabezados aceptados. Cada clave se pliega con `foldImportHeader`
@@ -97,9 +101,7 @@ const IMPORT_COLUMN_ALIASES_FOLDED: Record<string, string> = Object.fromEntries(
 /** Columnas cuyo valor se interpreta como numero. */
 const NUMERIC_COLUMNS = ['price', 'cost', 'stock', 'min_stock', 'max_stock'] as const;
 
-export const IMPORT_FILE_ERROR =
-  'Error al leer el archivo. Asegurate de que sea un Excel (.xlsx o .xls) o un CSV válido';
-export const IMPORT_EMPTY_FILE_ERROR = 'El archivo está vacío';
+export { IMPORT_FILE_ERROR, IMPORT_EMPTY_FILE_ERROR } from '@/lib/excel-import-errors';
 
 /**
  * Convierte el texto de una celda numerica en number.

@@ -23,18 +23,6 @@ vi.mock('next/image', () => ({
   ),
 }));
 
-vi.mock('recharts', () => {
-  const PassThrough = ({ children }: { children?: ReactNode }) => <>{children}</>;
-  return {
-    ResponsiveContainer: PassThrough,
-    BarChart: PassThrough,
-    Bar: PassThrough,
-    XAxis: PassThrough,
-    YAxis: PassThrough,
-    CartesianGrid: PassThrough,
-  };
-});
-
 vi.mock('@/lib/hooks/useAuth', () => ({
   useAuth: vi.fn(),
 }));
