@@ -7,6 +7,7 @@ import { ClientLayoutWrapper } from '@/components/layout/ClientLayoutWrapper';
 import { AuthProvider } from '@/lib/contexts/auth-context';
 import { NoTenantAccessGuard } from '@/components/auth/no-tenant-access-guard';
 import { MagicLinkFallback } from '@/components/auth/magic-link-fallback';
+import { buildMagicLinkRescueScript } from '@/components/auth/magic-link-rescue';
 import { TenantHeaderProvider } from '@/components/TenantHeaderProvider';
 import { AppProviders } from '@/components/AppProviders';
 import { AppReturnTracker } from '@/components/analytics/app-return-tracker';
@@ -145,6 +146,18 @@ export default async function RootLayout({
     <html lang="es" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
+        {/*
+          Rescate de magic links de invitacion. Va primero y inline (firmado con
+          el nonce del request) porque tiene que correr mientras se parsea el
+          documento: si espera a hidratar, en una carga fria el invitado ve la
+          home o el login durante decenas de segundos y cree que el link no
+          funciono. El componente `MagicLinkFallback` queda como red de
+          seguridad para navegaciones del cliente.
+        */}
+        <script
+          nonce={nonce}
+          dangerouslySetInnerHTML={{ __html: buildMagicLinkRescueScript() }}
+        />
         <ThemeInit />
         <script
           type="application/ld+json"

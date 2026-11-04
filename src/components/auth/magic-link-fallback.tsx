@@ -2,40 +2,17 @@
 
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
+import { MAGIC_PATH, magicRedirectTarget } from '@/components/auth/magic-link-rescue';
 
-const MAGIC_PATH = '/auth/magic';
-const INVITATION_TYPES = new Set(['invite', 'magiclink', 'signup']);
-
-/**
- * Devuelve la URL de canje cuando el fragmento trae una sesión de invitación,
- * o `null` si no hay nada que rescatar.
- *
- * `redirect_to` sólo se respeta si la URL está en la allowlist del proyecto.
- * Si no lo está, GoTrue colapsa el destino al Site URL (`/`) y deja la sesión
- * en el fragmento (`#access_token=...&type=invite`). El servidor no ve ese
- * fragmento, así que el usuario queda en la home sin sesión y cree que el link
- * no funcionó.
- *
- * No toca los links de recuperación de contraseña (flujo PKCE con `?code`) ni
- * el flujo implícito de recuperación (`type=recovery`).
- */
-export function magicRedirectTarget(hash: string): string | null {
-  const raw = hash.replace(/^#/, '');
-  if (!raw) return null;
-
-  const params = new URLSearchParams(raw);
-  const type = params.get('type') ?? '';
-  const hasSession = Boolean(params.get('access_token') && params.get('refresh_token'));
-
-  if (!hasSession || !INVITATION_TYPES.has(type)) return null;
-  return `${MAGIC_PATH}#${raw}`;
-}
+export { magicRedirectTarget };
 
 /**
  * Rescata los magic links de invitación cuando Supabase los manda a la raíz.
  *
- * Vive en el layout raíz para cubrir ese caso sin depender de la configuración
- * de Supabase.
+ * El rescate principal vive en un script inline del `<head>`
+ * (`buildMagicLinkRescueScript`), porque corre antes de hidratar. Este
+ * componente queda como red de seguridad para navegaciones del cliente que
+ * dejen el fragmento en la URL.
  */
 export function MagicLinkFallback() {
   const pathname = usePathname();
