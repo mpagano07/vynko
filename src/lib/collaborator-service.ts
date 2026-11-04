@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { supabaseAnon } from '@/lib/supabaseAnon';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import { createActivityLog } from '@/lib/activity-log';
 import type { AuthInfo } from '@/lib/api-auth';
@@ -578,7 +579,8 @@ async function inviteByEmail(
   }
 
   const expiresAt = invitationExpiresAt(now);
-  const { error: inviteError } = await supabaseAdmin.from('invitations').upsert(
+  const createdAt = now.toISOString();
+  const { error: inviteRowError } = await supabaseAdmin.from('invitations').upsert(
     tenantIds.map((tid) => ({
       tenant_id: tid,
       email,
@@ -588,20 +590,26 @@ async function inviteByEmail(
       // alguien que después salió del equipo), se reactiva como pendiente y
       // se le renueva el vencimiento.
       accepted_at: null,
-      created_at: now.toISOString(),
+      created_at: createdAt,
       expires_at: expiresAt,
     })),
     { onConflict: 'tenant_id,email' }
   );
 
-  if (inviteError) {
-    logger.error('DB error:', { error: inviteError });
+  if (inviteRowError) {
+    logger.error('DB error:', { error: inviteRowError });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
 
-  await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${origin}/accept-invite`,
-  });
+  // Si el email no sale, la invitación pendiente no sirve para nada: se
+  // revierte para que el owner pueda reintentar sin chocar con el enfriamiento
+  // ni con el tope de pendientes, y para que la lista no muestre una
+  // invitación que nadie recibió.
+  const delivery = await deliverInvitationEmail(email, origin);
+  if (!delivery.ok) {
+    await discardPendingInvitations(tenantIds, email, createdAt);
+    return { ok: false, status: delivery.status, error: delivery.error };
+  }
 
   for (const tid of tenantIds) {
     await createActivityLog({
@@ -621,9 +629,113 @@ async function inviteByEmail(
       invited: true,
       email,
       tenant_ids: tenantIds,
-      message: 'Invitación enviada por email.',
+      message: delivery.existingAccount
+        ? 'Ese email ya tiene cuenta en Vynko. Le enviamos un link de acceso para que entre y acepte la invitación.'
+        : 'Invitación enviada por email.',
     },
   };
+}
+
+type EmailDelivery =
+  | { ok: true; existingAccount: boolean }
+  | { ok: false; status: number; error: string };
+
+interface AuthErrorLike {
+  code?: string | null;
+  message?: string | null;
+  status?: number;
+}
+
+function isEmailExistsError(error: AuthErrorLike): boolean {
+  if (error.code === 'email_exists' || error.code === 'user_already_exists') return true;
+  return (
+    error.status === 422 &&
+    /already been registered|already registered|already exists/i.test(error.message ?? '')
+  );
+}
+
+function describeEmailError(error: AuthErrorLike): { status: number; error: string } {
+  if (error.status === 429 || error.code === 'over_email_send_rate_limit') {
+    return {
+      status: 429,
+      error:
+        'Supabase limita el envío a 2 emails por hora con el proveedor incorporado. Configurá un SMTP propio o reintentá más tarde.',
+    };
+  }
+  return {
+    status: 502,
+    error: 'No se pudo enviar el email de invitación. Revisá la configuración de correo y reintentá.',
+  };
+}
+
+/**
+ * Manda el email que corresponde según quién es el invitado.
+ *
+ * `inviteUserByEmail` sólo funciona con emails que todavía no tienen cuenta:
+ * para uno ya registrado Supabase devuelve `email_exists` y no envía nada. En
+ * ese caso se manda un magic link, que sirve para cualquier cuenta existente.
+ */
+async function deliverInvitationEmail(email: string, origin: string): Promise<EmailDelivery> {
+  // Los dos caminos apuntan al callback: ahí se canjea el código del email y
+  // queda la sesión. `/accept-invite` sólo no puede canjear nada porque el
+  // `code` llega como query param y la página no lo procesa.
+  const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent('/accept-invite')}`;
+
+  const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+    redirectTo,
+  });
+
+  if (!inviteError) return { ok: true, existingAccount: false };
+
+  const error = inviteError as AuthErrorLike;
+
+  if (!isEmailExistsError(error)) {
+    logger.error('No se pudo enviar la invitación por email:', {
+      code: error.code,
+      status: error.status,
+      message: error.message,
+    });
+    return { ok: false, ...describeEmailError(error) };
+  }
+
+  const { error: otpError } = await supabaseAnon.auth.signInWithOtp({
+    email,
+    options: {
+      // El usuario ya existe: nada de crear cuentas desde acá.
+      shouldCreateUser: false,
+      emailRedirectTo: redirectTo,
+    },
+  });
+
+  if (otpError) {
+    logger.error('No se pudo enviar el magic link de invitación:', {
+      code: (otpError as AuthErrorLike).code,
+      status: (otpError as AuthErrorLike).status,
+      message: otpError.message,
+    });
+    return { ok: false, ...describeEmailError(otpError as AuthErrorLike) };
+  }
+
+  return { ok: true, existingAccount: true };
+}
+
+/** Borra únicamente las filas que acaba de escribir este intento. */
+async function discardPendingInvitations(
+  tenantIds: string[],
+  email: string,
+  createdAt: string
+): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from('invitations')
+    .delete()
+    .in('tenant_id', tenantIds)
+    .eq('email', email)
+    .is('accepted_at', null)
+    .eq('created_at', createdAt);
+
+  if (error) {
+    logger.error('No se pudieron limpiar las invitaciones sin email:', { error: error.message });
+  }
 }
 
 export async function updateCollaborator(
