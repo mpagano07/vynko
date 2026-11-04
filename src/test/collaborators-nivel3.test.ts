@@ -360,6 +360,45 @@ describe('colaboradores — nivel 3 (managers y ciclo de vida)', () => {
     expect(inserts[0].args[0]).toMatchObject({ tenant_id: TENANT_A, role: 'member' });
   });
 
+  it('no pisa el tenant_id del perfil de alguien que ya tiene empresa propia', async () => {
+    supabaseMock.__queue('invitations', {
+      data: [{ id: 'inv-1', tenant_id: TENANT_A, role: 'cashier', expires_at: futureDate() }],
+    });
+    supabaseMock.__queue('tenant_users', { data: null });
+    supabaseMock.__queue('tenants', { data: { subscription_plan: 'business' } });
+    supabaseMock.__queue('profiles', {
+      data: { id: USER_A, tenant_id: TENANT_B },
+      error: null,
+    });
+
+    const result = await acceptInvitationsForUser({ id: USER_A, email: EMAIL });
+
+    expect(result.accepted).toBe(1);
+    const upserts = callsTo(supabaseMock.__calls, 'profiles', 'upsert');
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0].args[0]).not.toHaveProperty('tenant_id');
+    // La membresía real sigue siendo la que resuelve el acceso.
+    expect(callsTo(supabaseMock.__calls, 'tenant_users', 'insert')[0].args[0]).toMatchObject({
+      tenant_id: TENANT_A,
+      role: 'cashier',
+    });
+  });
+
+  it('completa el tenant_id del perfil cuando todavía no tiene ninguno', async () => {
+    supabaseMock.__queue('invitations', {
+      data: [{ id: 'inv-1', tenant_id: TENANT_A, role: 'member', expires_at: futureDate() }],
+    });
+    supabaseMock.__queue('tenant_users', { data: null });
+    supabaseMock.__queue('tenants', { data: { subscription_plan: 'business' } });
+    supabaseMock.__queue('profiles', { data: null, error: null });
+
+    const result = await acceptInvitationsForUser({ id: USER_A, email: EMAIL });
+
+    expect(result.accepted).toBe(1);
+    const upserts = callsTo(supabaseMock.__calls, 'profiles', 'upsert');
+    expect(upserts[0].args[0]).toMatchObject({ id: USER_A, tenant_id: TENANT_A });
+  });
+
   it('no reactiva por invitación a un owner inactivo', async () => {
     supabaseMock.__queue('invitations', {
       data: [{ id: 'inv-1', tenant_id: TENANT_A, role: 'member', expires_at: futureDate() }],

@@ -141,6 +141,34 @@ describe('getSessionData resuelve permisos por request', () => {
     expect(asMember.data.role).toBe('member');
   });
 
+  it('sin tenant activo arranca en la empresa propia, no en la que lo invitó', async () => {
+    // La consulta real pide `joined_at` ascendente; acá la invitación figura
+    // primero para probar que el criterio no es "el primero que vino".
+    supabaseMock.__queue('profiles', {
+      data: { id: USER_ID, onboarding_pending: false },
+      error: null,
+    });
+    supabaseMock.__queue('tenant_users', {
+      data: [
+        { tenant_id: 'tenant-ajena', role: 'cashier' },
+        { tenant_id: 'tenant-propia', role: 'owner' },
+      ],
+      error: null,
+    });
+    supabaseMock.__queue('tenants', {
+      data: [
+        { id: 'tenant-ajena', name: 'Ajena', slug: 'ajena' },
+        { id: 'tenant-propia', name: 'Propia', slug: 'propia' },
+      ],
+      error: null,
+    });
+
+    const result = await getSessionData(sessionRequest());
+
+    expect(result.data.role).toBe('owner');
+    expect((result.data.tenant as { id?: string } | null)?.id).toBe('tenant-propia');
+  });
+
   it('ignora un x-active-tenant-id de un tenant que no le pertenece', async () => {
     // Elegir el tenant activo no puede ser un vector de escalada: si el id no
     // esta en las membresias del usuario, se cae al primero.

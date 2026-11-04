@@ -57,6 +57,23 @@ describe('getAuth', () => {
     expect(auth).toMatchObject({ tenantId: 't1', allTenants: false, tenantIds: ['t1'] });
   });
 
+  it('arranca en la empresa propia aunque la invitación venga primero', async () => {
+    // Escenario: owner de su propia empresa, invitado como cajero a otra. Sin
+    // `x-active-tenant-id` tiene que entrar a la suya, no a la que lo invitó.
+    supabaseMock.__queue('tenant_users', {
+      data: [
+        { tenant_id: 'ajena', user_id: 'user-1', role: 'cashier' },
+        { tenant_id: 'propia', user_id: 'user-1', role: 'owner' },
+      ],
+    });
+
+    const auth = await getAuth(makeRequest());
+
+    expect(auth?.tenantId).toBe('propia');
+    expect(auth?.role).toBe('owner');
+    expect(auth?.tenantIds).toEqual(['ajena', 'propia']);
+  });
+
   it('selecciona la sucursal indicada por x-active-tenant-id', async () => {
     supabaseMock.__queue('tenant_users', {
       data: [

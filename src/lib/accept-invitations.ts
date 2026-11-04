@@ -95,10 +95,33 @@ export async function acceptInvitationsForUser(user: UserLike) {
       }
     }
 
-    const { error: upsertError } = await supabaseAdmin.from('profiles').upsert(
-      { id: user.id, email: user.email, tenant_id: inv.tenant_id },
-      { onConflict: 'id' }
-    );
+    // `profiles.tenant_id` es legado (desde la migración 034 el aislamiento se
+    // ancla en `tenant_users`) y el trigger lo vuelve inmutable para el
+    // cliente. Sólo se completa cuando el perfil todavía no tiene ninguna
+    // empresa: alguien que ya es owner de la suya no debe terminar apuntando a
+    // la empresa que lo invitó como cajero.
+    const { data: existingProfile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('tenant_id')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      logger.error('acceptInvitationsForUser: no se pudo leer el perfil:', {
+        error: profileError.message,
+      });
+      continue;
+    }
+
+    const profileRow: { id: string; email: string; tenant_id?: string } = {
+      id: user.id,
+      email: user.email,
+    };
+    if (!existingProfile?.tenant_id) profileRow.tenant_id = inv.tenant_id;
+
+    const { error: upsertError } = await supabaseAdmin
+      .from('profiles')
+      .upsert(profileRow, { onConflict: 'id' });
     if (upsertError) continue;
 
     // `insert` en vez de `upsert`: si dos aceptaciones concurrentes chocan,
