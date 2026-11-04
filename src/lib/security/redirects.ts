@@ -67,3 +67,30 @@ export function safeInternalRedirect(
 
   return `${parsed.origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
 }
+
+/**
+ * Normaliza un `next` a un path interno.
+ *
+ * Versión sin `Request` de `safeInternalRedirect`, para el cliente (por
+ * ejemplo la página que canjea un magic link). Una URL absoluta, `//evil.com`
+ * o `/\\evil.com` caen al fallback.
+ */
+export function safeInternalPath(
+  target: string | null | undefined,
+  fallback = '/dashboard'
+): string {
+  const raw = (target ?? '').trim();
+  if (!raw) return fallback;
+  if (!raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\')) {
+    return fallback;
+  }
+
+  try {
+    const base = 'http://internal.local';
+    const parsed = new URL(raw, base);
+    if (parsed.origin !== base) return fallback;
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return fallback;
+  }
+}

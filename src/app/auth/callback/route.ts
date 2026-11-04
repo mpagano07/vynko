@@ -21,7 +21,15 @@ export async function GET(request: Request) {
   const code = searchParams.get('code');
 
   if (!code) {
-    return NextResponse.redirect(safeInternalRedirect(request, null, '/login?error=missing_code'));
+    // Los emails de invitación (magic link / invite) usan el flujo implícito:
+    // la sesión llega en el fragmento (`#access_token=...`), que el servidor no
+    // recibe. Se deriva a `/auth/magic`, que canjea los tokens en el navegador.
+    // El navegador conserva el fragmento al seguir un redirect cuyo `Location`
+    // no trae uno, así también funcionan los links viejos que apuntaban acá.
+    const magicUrl = new URL('/auth/magic', origin);
+    const requestedNext = searchParams.get('next');
+    if (requestedNext) magicUrl.searchParams.set('next', requestedNext);
+    return NextResponse.redirect(magicUrl);
   }
 
   const capturedCookies: ServerCookie[] = [];

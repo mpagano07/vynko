@@ -33,6 +33,11 @@ export default function AcceptInvitePage() {
         const data = await res.json();
 
         if (data.accepted > 0) {
+          if (data.requiresSetup === false) {
+            toast.success('¡Invitación aceptada! Ingresando...');
+            router.replace('/dashboard');
+            return;
+          }
           setStatus('accepted');
         } else {
           router.push('/dashboard');
@@ -73,31 +78,31 @@ export default function AcceptInvitePage() {
       // ninguna. Aca la prueba es la invitacion pendiente del mismo email. El
       // servidor revoca todas las sesiones al terminar, asi que despues hay que
       // entrar de nuevo.
-        const passRes = await fetch('/api/auth/invitation-password', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ newPassword: password }),
-        });
-        const passData = await passRes.json();
-        if (!passRes.ok) {
-          // 403 con este mensaje es el caso de una cuenta que ya estaba en uso: el
-          // servidor no permite fijar la contrasena sin la anterior. No es un
-          // error de este formulario, asi que no se lo muestra como si lo fuera.
-          //
-          // Va a /dashboard directo: el objetivo de este camino es que la
-          // persona pueda empezar a operar, y ya tiene sesión válida. /settings
-          // también está disponible para todos los roles (Mi Perfil / Mi
-          // Cuenta), pero este flujo no necesita pasar por ahí.
-          if (passRes.status === 403 && /ya tiene una contraseña/i.test(passData?.error ?? '')) {
-            toast.error(passData.error, { duration: 8000 });
-            router.replace('/dashboard');
-            return;
-          }
-          throw new Error(passData?.error || 'No se pudo guardar la contraseña');
+      const passRes = await fetch('/api/auth/invitation-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPassword: password }),
+      });
+      const passData = await passRes.json();
+      if (!passRes.ok) {
+        // 403 con este mensaje es el caso de una cuenta que ya estaba en uso: el
+        // servidor no permite fijar la contrasena sin la anterior. No es un
+        // error de este formulario, asi que no se lo muestra como si lo fuera.
+        //
+        // Va a /dashboard directo: el objetivo de este camino es que la
+        // persona pueda empezar a operar, y ya tiene sesión válida. /settings
+        // también está disponible para todos los roles (Mi Perfil / Mi
+        // Cuenta), pero este flujo no necesita pasar por ahí.
+        if (passRes.status === 403 && /ya tiene una contraseña/i.test(passData?.error ?? '')) {
+          toast.error(passData.error, { duration: 8000 });
+          router.replace('/dashboard');
+          return;
         }
+        throw new Error(passData?.error || 'No se pudo guardar la contraseña');
+      }
 
-        toast.success('¡Listo! Iniciá sesión con tu nueva contraseña.');
-        router.replace('/login');
+      toast.success('¡Listo! Iniciá sesión con tu nueva contraseña.');
+      router.replace('/login');
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al guardar');
     } finally {

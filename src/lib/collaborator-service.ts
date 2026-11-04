@@ -676,10 +676,11 @@ function describeEmailError(error: AuthErrorLike): { status: number; error: stri
  * ese caso se manda un magic link, que sirve para cualquier cuenta existente.
  */
 async function deliverInvitationEmail(email: string, origin: string): Promise<EmailDelivery> {
-  // Los dos caminos apuntan al callback: ahí se canjea el código del email y
-  // queda la sesión. `/accept-invite` sólo no puede canjear nada porque el
-  // `code` llega como query param y la página no lo procesa.
-  const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent('/accept-invite')}`;
+  // Los dos caminos apuntan a `/auth/magic`: Supabase entrega la sesión en el
+  // fragmento (`#access_token=...`), que el servidor no puede leer, así que el
+  // canje tiene que ocurrir en el navegador. Desde ahí se sigue a
+  // `/accept-invite`, que acepta la invitación y pide nombre/contraseña.
+  const redirectTo = `${origin}/auth/magic?next=${encodeURIComponent('/accept-invite')}`;
 
   const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
     redirectTo,

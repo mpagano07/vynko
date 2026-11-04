@@ -52,4 +52,17 @@ describe('NoTenantAccessGuard', () => {
 
     expect(replaceMock).not.toHaveBeenCalled();
   });
+
+  it('no expulsa si la ruta es pública (evita atrapar al usuario al recuperar clave o ir a login)', () => {
+    contextValue = { noTenantAccess: true, loading: false };
+
+    pathname = '/auth/forgot-password';
+    const { unmount } = render(<NoTenantAccessGuard />);
+    expect(replaceMock).not.toHaveBeenCalled();
+    unmount();
+
+    pathname = '/login';
+    render(<NoTenantAccessGuard />);
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
 });
