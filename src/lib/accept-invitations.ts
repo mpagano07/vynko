@@ -113,11 +113,16 @@ export async function acceptInvitationsForUser(user: UserLike) {
       continue;
     }
 
-    const profileRow: { id: string; email: string; tenant_id?: string } = {
+    // `tenant_id` SIEMPRE va en la fila, incluso cuando ya había uno: es NOT
+    // NULL y PostgreSQL valida la tupla propuesta del INSERT antes de aplicar
+    // el `ON CONFLICT DO UPDATE`. Si se omite, el upsert falla con 23502 y la
+    // membresía nunca se crea, aunque el perfil ya exista con su tenant. Se
+    // repite el tenant existente para no pisarlo.
+    const profileRow: { id: string; email: string; tenant_id: string } = {
       id: user.id,
       email: user.email,
+      tenant_id: existingProfile?.tenant_id ?? inv.tenant_id,
     };
-    if (!existingProfile?.tenant_id) profileRow.tenant_id = inv.tenant_id;
 
     const { error: upsertError } = await supabaseAdmin
       .from('profiles')
