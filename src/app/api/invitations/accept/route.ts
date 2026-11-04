@@ -58,6 +58,10 @@ export async function POST(request: Request) {
 
     const { accepted } = await acceptInvitationsForUser({ id: user.id, email: user.email });
 
+    // Una cuenta que ya existía (por ejemplo el owner de otra empresa) no tiene
+    // que pasar por el formulario de nombre y contraseña: ya tiene credenciales
+    // y ya entró con el magic link. Sólo se pide completar el perfil cuando la
+    // cuenta nació de esta invitación.
     const scope = await getInvitationAccountScope(user.id, user.email);
     const { data: profile } = await supabaseAdmin
       .from('profiles')
@@ -65,10 +69,11 @@ export async function POST(request: Request) {
       .eq('id', user.id)
       .maybeSingle();
 
+    const providers = (user.app_metadata as Record<string, unknown> | undefined)?.providers;
     const isEstablishedUser =
       scope.hasForeignMembership ||
       Boolean(profile?.full_name?.trim()) ||
-      Boolean((user.app_metadata as Record<string, unknown> | undefined)?.providers && Array.isArray((user.app_metadata as Record<string, unknown>).providers) && ((user.app_metadata as Record<string, unknown>).providers as string[]).includes('google'));
+      (Array.isArray(providers) && providers.includes('google'));
 
     return NextResponse.json({ accepted, requiresSetup: !isEstablishedUser });
   } catch (err) {

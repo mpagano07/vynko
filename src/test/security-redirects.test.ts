@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getAppOrigin, safeInternalRedirect } from '@/lib/security/redirects';
+import { getAppOrigin, safeInternalPath, safeInternalRedirect } from '@/lib/security/redirects';
 
 function req(headers: Record<string, string> = {}, url = 'https://internal.test/auth/callback'): Request {
   return new Request(url, { headers });
@@ -71,3 +71,24 @@ describe('safeInternalRedirect', () => {
     );
   });
 });
+
+describe('safeInternalPath', () => {
+  it('allows internal paths and preserves query and hash', () => {
+    expect(safeInternalPath('/accept-invite')).toBe('/accept-invite');
+    expect(safeInternalPath('/ventas?filtro=1#top')).toBe('/ventas?filtro=1#top');
+  });
+
+  it('uses the fallback for empty or external targets', () => {
+    expect(safeInternalPath(null)).toBe('/dashboard');
+    expect(safeInternalPath('', '/accept-invite')).toBe('/accept-invite');
+    expect(safeInternalPath('https://evil.test/steal')).toBe('/dashboard');
+    expect(safeInternalPath('//evil.test/steal')).toBe('/dashboard');
+    expect(safeInternalPath('/\\evil.test/steal')).toBe('/dashboard');
+  });
+
+  it('rejects non-http protocols', () => {
+    expect(safeInternalPath('javascript:alert(1)')).toBe('/dashboard');
+    expect(safeInternalPath('data:text/html,<script>alert(1)</script>')).toBe('/dashboard');
+  });
+});
+

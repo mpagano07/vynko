@@ -58,4 +58,22 @@ describe('GET /auth/callback', () => {
     expect(createCompanyForUser).not.toHaveBeenCalled();
     expect(res.headers.get('location')).toContain('/accept-invite');
   });
+
+  it('deriva a /auth/magic cuando el link no trae code (flujo implícito)', async () => {
+    // Los emails de invitación y magic link entregan la sesión en el fragmento,
+    // que el servidor no recibe. Sin esta derivación la request caía acá con
+    // `code=null` y se la trataba como error.
+    const res = await GET(callback('next=%2Faccept-invite'));
+
+    expect(exchangeCodeForSession).not.toHaveBeenCalled();
+    expect(res.headers.get('location')).toBe(
+      'http://localhost:3000/auth/magic?next=%2Faccept-invite'
+    );
+  });
+
+  it('deriva a /auth/magic sin next cuando el link viejo no lo traía', async () => {
+    const res = await GET(callback(''));
+
+    expect(res.headers.get('location')).toBe('http://localhost:3000/auth/magic');
+  });
 });

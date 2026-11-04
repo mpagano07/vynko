@@ -23,6 +23,23 @@ const invitationScopeMock = {
   })),
 };
 
+// `getRequiresSetup` lee el nombre del perfil para distinguir una cuenta nueva
+// de una que ya existe. La ruta de aceptación es la única que usa el cliente
+// admin en este archivo.
+const adminProfileMock = {
+  maybeSingle: vi.fn(async () => ({ data: null as { full_name?: string | null } | null, error: null })),
+};
+
+vi.mock('@/lib/supabaseAdmin', () => ({
+  supabaseAdmin: {
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({ maybeSingle: adminProfileMock.maybeSingle })),
+      })),
+    })),
+  },
+}));
+
 vi.mock('@/lib/accept-invitations', () => ({
   acceptInvitationsForUser: (...args: unknown[]) =>
     acceptInvitationsMock.acceptInvitationsForUser(...(args as [])),
@@ -110,6 +127,7 @@ beforeEach(() => {
     invitedTenantIds: ['t1'],
     hasForeignMembership: false,
   });
+  adminProfileMock.maybeSingle.mockResolvedValue({ data: null, error: null });
   authServiceMock.sendResetPasswordEmail.mockResolvedValue({
     data: { success: true, message: 'Email enviado' },
     status: 200,
@@ -886,5 +904,31 @@ describe('POST /api/invitations/accept', () => {
       id: 'u1',
       email: 'user@example.com',
     });
+    // Cuenta nueva: no tiene nombre ni otras membresías, así que se le pide
+    // completar el perfil y fijar una contraseña.
+    await expect(response.json()).resolves.toMatchObject({ accepted: 1, requiresSetup: true });
+  });
+
+  it('no pide completar el perfil a una cuenta que ya está en otra empresa', async () => {
+    invitationScopeMock.getInvitationAccountScope.mockResolvedValue({
+      hasInvitation: true,
+      invitedTenantIds: ['t2'],
+      hasForeignMembership: true,
+    });
+
+    const response = await acceptInvitation(post(url, {}, sameOrigin()));
+
+    await expect(response.json()).resolves.toMatchObject({ accepted: 1, requiresSetup: false });
+  });
+
+  it('no pide completar el perfil si la cuenta ya tiene nombre', async () => {
+    adminProfileMock.maybeSingle.mockResolvedValue({
+      data: { full_name: 'Matías' },
+      error: null,
+    });
+
+    const response = await acceptInvitation(post(url, {}, sameOrigin()));
+
+    await expect(response.json()).resolves.toMatchObject({ accepted: 1, requiresSetup: false });
   });
 });
