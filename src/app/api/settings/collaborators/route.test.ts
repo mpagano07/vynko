@@ -277,7 +277,7 @@ describe('POST /api/settings/collaborators', () => {
 
     expect(supabaseMock.auth.admin.inviteUserByEmail).toHaveBeenCalledWith(
       'nuevo@tienda.com',
-      expect.objectContaining({ redirectTo: expect.stringContaining('/auth/callback?next=%2Faccept-invite') })
+      expect.objectContaining({ redirectTo: expect.stringContaining('/auth/magic?next=%2Faccept-invite') })
     );
 
     const upsert = supabaseMock.__calls.find(
@@ -316,7 +316,7 @@ describe('POST /api/settings/collaborators', () => {
       email: 'ajeno@otra.com',
       options: {
         shouldCreateUser: false,
-        emailRedirectTo: expect.stringContaining('/auth/callback?next=%2Faccept-invite'),
+        emailRedirectTo: expect.stringContaining('/auth/magic?next=%2Faccept-invite'),
       },
     });
 

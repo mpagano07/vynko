@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthContext } from '@/lib/contexts/auth-context';
+import { isPublicPath } from '@/lib/marketing/public-routes';
 
 /**
  * Expulsa a `/no-access` a la sesion que no tiene ninguna empresa.
@@ -18,9 +19,9 @@ import { useAuthContext } from '@/lib/contexts/auth-context';
  * te vuelva a invitado". Aca `/api/session` ya es una segunda lectura, con la
  * pagina cargada.
  *
- * `/no-access` esta en las `publicPaths` del proxy justamente para que este
- * redireccionamiento no se realimente: sin eso el proxy mandaria de vuelta y
- * seria un bucle.
+ * `/no-access` y las rutas publicas (como `/login`, `/auth/forgot-password`)
+ * quedan exentas para que el usuario pueda recuperar contraseñas o cambiar
+ * de cuenta sin quedar atrapado en un bucle de redirección.
  */
 export function NoTenantAccessGuard() {
   const { noTenantAccess, loading } = useAuthContext();
@@ -29,7 +30,7 @@ export function NoTenantAccessGuard() {
 
   useEffect(() => {
     if (loading || !noTenantAccess) return;
-    if (pathname === '/no-access') return;
+    if (pathname === '/no-access' || isPublicPath(pathname)) return;
     router.replace('/no-access');
   }, [loading, noTenantAccess, pathname, router]);
 

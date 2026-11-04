@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
-import { acceptInvitationsForUser } from '@/lib/accept-invitations';
+import { acceptInvitationsForUser, getInvitationAccountScope } from '@/lib/accept-invitations';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { isSameOriginRequest } from '@/lib/security/csrf';
 import { logger } from '@/lib/logger';
 
@@ -57,7 +58,24 @@ export async function POST(request: Request) {
 
     const { accepted } = await acceptInvitationsForUser({ id: user.id, email: user.email });
 
-    return NextResponse.json({ accepted });
+    // Una cuenta que ya existía (por ejemplo el owner de otra empresa) no tiene
+    // que pasar por el formulario de nombre y contraseña: ya tiene credenciales
+    // y ya entró con el magic link. Sólo se pide completar el perfil cuando la
+    // cuenta nació de esta invitación.
+    const scope = await getInvitationAccountScope(user.id, user.email);
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('full_name')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    const providers = (user.app_metadata as Record<string, unknown> | undefined)?.providers;
+    const isEstablishedUser =
+      scope.hasForeignMembership ||
+      Boolean(profile?.full_name?.trim()) ||
+      (Array.isArray(providers) && providers.includes('google'));
+
+    return NextResponse.json({ accepted, requiresSetup: !isEstablishedUser });
   } catch (err) {
     logger.error('Error accepting invitations:', { error: err });
     return NextResponse.json({ accepted: 0 }, { status: 500 });

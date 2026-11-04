@@ -6,6 +6,7 @@ import { ThemeInit } from '@/components/ThemeInit';
 import { ClientLayoutWrapper } from '@/components/layout/ClientLayoutWrapper';
 import { AuthProvider } from '@/lib/contexts/auth-context';
 import { NoTenantAccessGuard } from '@/components/auth/no-tenant-access-guard';
+import { MagicLinkFallback } from '@/components/auth/magic-link-fallback';
 import { TenantHeaderProvider } from '@/components/TenantHeaderProvider';
 import { AppProviders } from '@/components/AppProviders';
 import { AppReturnTracker } from '@/components/analytics/app-return-tracker';
@@ -155,6 +156,7 @@ export default async function RootLayout({
         <AppProviders>
           <AuthProvider>
             <NoTenantAccessGuard />
+            <MagicLinkFallback />
             <AppReturnTracker />
             <TenantHeaderProvider>
               <ClientLayoutWrapper>
