@@ -12,7 +12,8 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabPanel } from '@/components/ui/tabs';
 import { EditCollaboratorModal } from '@/components/ui/edit-collaborator-modal';
-import { Settings, User, Building2, Loader2, Save, KeyRound, Users, Mail, X, Shield, ShieldCheck, FileText, MapPin, Palette, ListChecks, Percent, Ticket, Pencil, HelpCircle, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { ConfirmModal } from '@/components/ui/confirm-modal';
+import { Settings, User, Building2, Loader2, Save, KeyRound, Users, Mail, X, Shield, ShieldCheck, FileText, MapPin, Palette, ListChecks, Percent, Ticket, Pencil, HelpCircle, RefreshCw, Search, Trash2, UserCheck, UserX, Crown, Clock } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Select } from '@/components/ui/select';
 import { FormLabel } from '@/components/ui/form-label';
@@ -27,7 +28,18 @@ import {
   type PaymentAdjustments,
 } from '@/lib/payment-methods';
 import { canUseFacturacion } from '@/lib/arca/access';
-import { ROLE_DESCRIPTIONS, ROLE_HELP_TEXT, ROLE_OPTIONS, getRoleLabel, hasCapability, highestRole, type TenantRole } from '@/lib/roles';
+import {
+  ROLE_DESCRIPTIONS,
+  ROLE_HELP_TEXT,
+  ROLE_OPTIONS,
+  assignableRolesFor,
+  canAssignRole,
+  canManageCollaboratorRole,
+  getRoleLabel,
+  hasCapability,
+  highestRole,
+  type TenantRole,
+} from '@/lib/roles';
 import { ArcaConfigCard } from '@/components/settings/ArcaConfigCard';
 import { AccountDangerZone } from '@/components/settings/AccountDangerZone';
 import { GoogleDriveConnectionCard } from '@/components/settings/GoogleDriveConnectionCard';
@@ -37,6 +49,7 @@ interface CollaboratorMembership {
   tenant_id: string;
   tenant_name: string;
   role: string;
+  status?: string;
   joined_at?: string | null;
 }
 
@@ -45,6 +58,7 @@ interface Collaborator {
   full_name?: string;
   email: string;
   role: TenantRole;
+  active?: boolean;
   tenants?: { id: string; name: string }[];
   tenant_users_ids?: string[];
   memberships?: CollaboratorMembership[];
@@ -56,9 +70,25 @@ interface PendingInvitation {
   email: string;
   role: string;
   created_at?: string | null;
+  expires_at?: string | null;
+  expired?: boolean;
   invited_by_name?: string | null;
   tenant_id?: string;
   tenant_name?: string;
+}
+
+/**
+ * Acción destructiva o sensible que espera confirmación. Guardar el callback
+ * en el estado permite usar el mismo `ConfirmModal` para revocar, quitar,
+ * desactivar y transferir sin abrir diálogos nativos del navegador.
+ */
+interface PendingConfirmation {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  confirmLabelShort?: string;
+  variant?: 'danger' | 'default';
+  action: () => Promise<void> | void;
 }
 
 function capitalizeWords(value: string): string {
@@ -228,22 +258,73 @@ function SettingsContent() {
   const [revokingInvite, setRevokingInvite] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removingBranchId, setRemovingBranchId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [transferringId, setTransferringId] = useState<string | null>(null);
   const [selectedTenantIds, setSelectedTenantIds] = useState<string[]>([]);
   const [editingCollab, setEditingCollab] = useState<Collaborator | null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [collabSearch, setCollabSearch] = useState('');
+  const [confirmation, setConfirmation] = useState<PendingConfirmation | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
-  useEffect(() => {
-    if (tenants.length > 0 && selectedTenantIds.length === 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSelectedTenantIds(tenants.map(t => t.id));
+  const reloadCollaborators = useCallback(async () => {
+    try {
+      const res = await authFetch('/api/settings/collaborators');
+      const data = await res.json();
+      if (res.ok) {
+        setCollaborators(data.collaborators || []);
+        setPendingInvitations(data.pendingInvitations || []);
+      }
+    } catch {
+      toast.error('Error al cargar los colaboradores');
     }
-  }, [tenants, selectedTenantIds.length]);
+  }, []);
+
+  const requestConfirmation = useCallback((next: PendingConfirmation) => {
+    setConfirmation(next);
+  }, []);
+
+  const handleConfirm = useCallback(async () => {
+    if (!confirmation) return;
+    setConfirming(true);
+    try {
+      await confirmation.action();
+    } finally {
+      setConfirming(false);
+      setConfirmation(null);
+    }
+  }, [confirmation]);
 
   const currentUserId = user?.id;
   const currentUserCollab = collaborators.find((c) => c.user_id === currentUserId);
-  const isOwner = currentUserCollab?.role === 'owner';
+  // El rol "de equipo" es el más alto del actor en todas las sucursales que
+  // administra; para las acciones puntuales manda el rol de esa sucursal.
+  const teamRole = currentUserCollab?.role ?? role;
+
+  const myRoleByTenant = new Map(
+    (currentUserCollab?.memberships ?? []).map((m) => [m.tenant_id, m.role])
+  );
+  // `listCollaborators` ya viene filtrado al alcance del actor, así que sus
+  // membresías son exactamente las sucursales que puede administrar.
+  const managedTenantIds = new Set(
+    collaborators.flatMap((c) => (c.memberships ?? []).map((m) => m.tenant_id))
+  );
+  const manageableTenants = canManageTenant
+    ? tenants.filter((t) => managedTenantIds.has(t.id))
+    : [];
+  const manageableIdsKey = manageableTenants.map((t) => t.id).join(',');
+
+  const assignableForMe = assignableRolesFor(teamRole);
+  const roleOptions = ROLE_OPTIONS.filter((option) => assignableForMe.includes(option.value));
+
   const canInvite = tenant?.subscription_plan === 'business' || tenant?.subscription_plan === 'enterprise';
+
+  useEffect(() => {
+    if (manageableIdsKey && selectedTenantIds.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedTenantIds(manageableIdsKey.split(','));
+    }
+  }, [manageableIdsKey, selectedTenantIds.length]);
 
   const normalizedSearch = collabSearch.trim().toLowerCase();
   const filteredCollaborators = normalizedSearch
@@ -301,22 +382,8 @@ function SettingsContent() {
       setLoadingCollaborators(false);
       return;
     }
-    async function fetchCollaborators() {
-      try {
-        const res = await authFetch('/api/settings/collaborators');
-        const data = await res.json();
-        if (res.ok) {
-          setCollaborators(data.collaborators || []);
-          setPendingInvitations(data.pendingInvitations || []);
-        }
-      } catch {
-        toast.error('Error al cargar los colaboradores');
-      } finally {
-        setLoadingCollaborators(false);
-      }
-    }
-    fetchCollaborators();
-  }, [authLoading, canManageTenant]);
+    reloadCollaborators().finally(() => setLoadingCollaborators(false));
+  }, [authLoading, canManageTenant, reloadCollaborators]);
 
   useEffect(() => {
     if (!canManageTenant || !tenant || checkoutSynced) return;
@@ -386,11 +453,18 @@ function SettingsContent() {
     }
   }, [canEditCheckout, saveCheckoutConfig]);
 
-  const handleInvite = useCallback(async (e: React.FormEvent) => {
+  const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail.trim()) return;
 
-    const targetTenantIds = selectedTenantIds.length > 0 ? selectedTenantIds : tenants.map(t => t.id);
+    const availableTenantIds = manageableIdsKey ? manageableIdsKey.split(',') : [];
+    const targetTenantIds = selectedTenantIds.length > 0
+      ? selectedTenantIds.filter((id) => availableTenantIds.includes(id))
+      : availableTenantIds;
+    if (targetTenantIds.length === 0) {
+      toast.error('No tenés sucursales disponibles para invitar');
+      return;
+    }
 
     setInviting(true);
     try {
@@ -424,6 +498,7 @@ function SettingsContent() {
             tenant_id: tid,
             tenant_name: tenants.find((t) => t.id === tid)?.name || '',
             created_at: createdAt,
+            expired: false,
             invited_by_name: profile?.full_name || null,
           })),
         ]);
@@ -438,7 +513,7 @@ function SettingsContent() {
     } finally {
       setInviting(false);
     }
-  }, [inviteEmail, inviteRole, inviteName, selectedTenantIds, tenants, profile?.full_name]);
+  };
 
   const handleResendInvite = useCallback(async (inv: PendingInvitation) => {
     setResendingInvite(inv.id || inv.email);
@@ -453,6 +528,9 @@ function SettingsContent() {
           // Reenvía solo la sucursal de esta invitación. Antes mandaba `[]`,
           // que el backend interpretaba como "todas las sucursales".
           tenant_ids: inv.tenant_id ? [inv.tenant_id] : [],
+          // Un reenvío explícito saltea el enfriamiento entre invitaciones
+          // iguales; si no, el botón devolvía 409 durante 10 minutos.
+          resend: true,
         }),
       });
       const data = await res.json();
@@ -460,6 +538,12 @@ function SettingsContent() {
         toast.error(data.error || 'Error al reenviar la invitación');
         return;
       }
+      const now = new Date().toISOString();
+      setPendingInvitations((prev) => prev.map((item) =>
+        item.email === inv.email && item.tenant_id === inv.tenant_id
+          ? { ...item, created_at: now, expired: false }
+          : item
+      ));
       toast.success('Invitación reenviada por email');
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al reenviar la invitación');
@@ -468,24 +552,18 @@ function SettingsContent() {
     }
   }, []);
 
-  const handleRevokeInvite = useCallback(async (inv: PendingInvitation) => {
-    if (!inv.id || inv.id.startsWith('pending-')) {
-      toast.error('Recargá la página para revocar esta invitación');
-      return;
-    }
-    if (!window.confirm(`¿Revocar la invitación a ${inv.email}${inv.tenant_name ? ` en ${inv.tenant_name}` : ''}?`)) {
-      return;
-    }
-    setRevokingInvite(inv.id);
+  const revokeInvite = useCallback(async (inv: PendingInvitation) => {
+    const invitationId = inv.id!;
+    setRevokingInvite(invitationId);
     try {
-      const res = await authFetch(`/api/settings/invitations/${inv.id}`, { method: 'DELETE' });
+      const res = await authFetch(`/api/settings/invitations/${invitationId}`, { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json();
         toast.error(data.error || 'Error al revocar la invitación');
         return;
       }
       toast.success('Invitación revocada');
-      setPendingInvitations((prev) => prev.filter((i) => i.id !== inv.id));
+      setPendingInvitations((prev) => prev.filter((i) => i.id !== invitationId));
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al revocar la invitación');
     } finally {
@@ -493,10 +571,21 @@ function SettingsContent() {
     }
   }, []);
 
-  const handleRemoveFromTeam = useCallback(async (collab: Collaborator) => {
-    if (!window.confirm(`¿Quitar a ${collab.full_name || collab.email} de todo el equipo?`)) {
+  const handleRevokeInvite = useCallback((inv: PendingInvitation) => {
+    if (!inv.id || inv.id.startsWith('pending-')) {
+      toast.error('Recargá la página para revocar esta invitación');
       return;
     }
+    requestConfirmation({
+      title: 'Revocar invitación',
+      message: `¿Revocar la invitación a ${inv.email}${inv.tenant_name ? ` en ${inv.tenant_name}` : ''}? El email ya no va a poder usarse para entrar.`,
+      confirmLabel: 'Revocar',
+      variant: 'danger',
+      action: () => revokeInvite(inv),
+    });
+  }, [requestConfirmation, revokeInvite]);
+
+  const removeFromTeam = useCallback(async (collab: Collaborator) => {
     setRemovingId(collab.user_id);
     try {
       const res = await authFetch(`/api/settings/collaborators/${collab.user_id}`, {
@@ -505,23 +594,30 @@ function SettingsContent() {
 
       if (!res.ok) {
         const data = await res.json();
-        toast.error(data.error || 'Error al remover');
+        toast.error(data.error || 'Error al eliminar');
         return;
       }
 
-      toast.success('Colaborador removido');
+      toast.success('Colaborador eliminado');
       setCollaborators((prev) => prev.filter((c) => c.user_id !== collab.user_id));
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Error al remover');
+      toast.error(err instanceof Error ? err.message : 'Error al eliminar');
     } finally {
       setRemovingId(null);
     }
   }, []);
 
-  const handleRemoveFromBranch = useCallback(async (collab: Collaborator, tenantId: string, tenantName: string) => {
-    if (!window.confirm(`¿Quitar a ${collab.full_name || collab.email} de ${tenantName}?`)) {
-      return;
-    }
+  const handleRemoveFromTeam = useCallback((collab: Collaborator) => {
+    requestConfirmation({
+      title: 'Eliminar del equipo',
+      message: `¿Eliminar a ${collab.full_name || collab.email} de todo el equipo? Pierde sus membresías en todas las sucursales.`,
+      confirmLabel: 'Eliminar',
+      variant: 'danger',
+      action: () => removeFromTeam(collab),
+    });
+  }, [requestConfirmation, removeFromTeam]);
+
+  const removeFromBranch = useCallback(async (collab: Collaborator, tenantId: string) => {
     setRemovingBranchId(`${collab.user_id}:${tenantId}`);
     try {
       const res = await authFetch(
@@ -551,6 +647,107 @@ function SettingsContent() {
       setRemovingBranchId(null);
     }
   }, []);
+
+  const handleRemoveFromBranch = useCallback((collab: Collaborator, tenantId: string, tenantName: string) => {
+    requestConfirmation({
+      title: 'Quitar de la sucursal',
+      message: `¿Quitar a ${collab.full_name || collab.email} de ${tenantName}?`,
+      confirmLabel: 'Quitar',
+      variant: 'danger',
+      action: () => removeFromBranch(collab, tenantId),
+    });
+  }, [requestConfirmation, removeFromBranch]);
+
+  const toggleActive = useCallback(async (collab: Collaborator) => {
+    const nextActive = collab.active === false;
+    const action = nextActive ? 'reactivar' : 'desactivar';
+    setTogglingId(collab.user_id);
+    try {
+      const res = await authFetch(`/api/settings/collaborators/${collab.user_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextActive ? 'active' : 'inactive' }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || `Error al ${action}`);
+        return;
+      }
+      toast.success(nextActive ? 'Colaborador reactivado' : 'Colaborador desactivado');
+      setCollaborators((prev) => prev.map((c) => c.user_id === collab.user_id
+        ? {
+            ...c,
+            active: nextActive,
+            memberships: (c.memberships || []).map((m) => ({
+              ...m,
+              status: nextActive ? 'active' : 'inactive',
+            })),
+          }
+        : c));
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : `Error al ${action}`);
+    } finally {
+      setTogglingId(null);
+    }
+  }, []);
+
+  const handleToggleActive = useCallback((collab: Collaborator) => {
+    const nextActive = collab.active === false;
+    requestConfirmation({
+      title: nextActive ? 'Reactivar colaborador' : 'Desactivar colaborador',
+      message: nextActive
+        ? `¿Reactivar a ${collab.full_name || collab.email}? Vuelve a tener acceso con su rol actual.`
+        : `¿Desactivar a ${collab.full_name || collab.email}? Conserva el historial y podés reactivarlo después.`,
+      confirmLabel: nextActive ? 'Reactivar' : 'Desactivar',
+      confirmLabelShort: nextActive ? 'Reactivar' : 'Desactivar',
+      variant: nextActive ? 'default' : 'danger',
+      action: () => toggleActive(collab),
+    });
+  }, [requestConfirmation, toggleActive]);
+
+  const transferOwnership = useCallback(async (
+    collab: Collaborator,
+    tenantId: string,
+    tenantName: string
+  ) => {
+    setTransferringId(`${collab.user_id}:${tenantId}`);
+    try {
+      const res = await authFetch(
+        `/api/settings/collaborators/${collab.user_id}/transfer-ownership`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tenant_id: tenantId }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Error al transferir la propiedad');
+        return;
+      }
+      toast.success(`Propiedad de ${tenantName} transferida`);
+      await reloadCollaborators();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error al transferir la propiedad');
+    } finally {
+      setTransferringId(null);
+    }
+  }, [reloadCollaborators]);
+
+  const handleTransferOwnership = useCallback((
+    collab: Collaborator,
+    tenantId: string,
+    tenantName: string
+  ) => {
+    requestConfirmation({
+      title: 'Transferir propiedad',
+      message: `¿Transferir la propiedad de ${tenantName} a ${collab.full_name || collab.email}? Vas a quedar como Manager de esa sucursal y dejás de ser propietario.`,
+      confirmLabel: 'Transferir propiedad',
+      confirmLabelShort: 'Transferir',
+      variant: 'danger',
+      action: () => transferOwnership(collab, tenantId, tenantName),
+    });
+  }, [requestConfirmation, transferOwnership]);
 
   const handleSaveProfile = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1158,11 +1355,11 @@ function SettingsContent() {
                             {c.memberships!.map((m) => (
                               <span
                                 key={m.tenant_id}
-                                className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${roleChipClass(m.role)}`}
+                                className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${roleChipClass(m.role)} ${m.status === 'inactive' ? 'opacity-50' : ''}`}
                               >
                                 {m.tenant_name}
-                                <span className="opacity-70">· {getRoleLabel(m.role)}</span>
-                                {isOwner && m.role !== 'owner' && (
+                                <span className="opacity-70">· {getRoleLabel(m.role)}{m.status === 'inactive' ? ' · inactivo' : ''}</span>
+                                {canManageCollaboratorRole(myRoleByTenant.get(m.tenant_id) ?? role, m.role) && (
                                   <button
                                     type="button"
                                     onClick={() => handleRemoveFromBranch(c, m.tenant_id, m.tenant_name)}
@@ -1175,6 +1372,22 @@ function SettingsContent() {
                                       <Loader2 className="h-3 w-3 animate-spin" />
                                     ) : (
                                       <X className="h-3 w-3" />
+                                    )}
+                                  </button>
+                                )}
+                                {myRoleByTenant.get(m.tenant_id) === 'owner' && m.role !== 'owner' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTransferOwnership(c, m.tenant_id, m.tenant_name)}
+                                    disabled={transferringId === `${c.user_id}:${m.tenant_id}`}
+                                    title={`Transferir la propiedad de ${m.tenant_name}`}
+                                    aria-label={`Transferir la propiedad de ${m.tenant_name} a ${c.full_name || c.email}`}
+                                    className="inline-flex items-center justify-center rounded-sm hover:text-amber-700 disabled:opacity-50"
+                                  >
+                                    {transferringId === `${c.user_id}:${m.tenant_id}` ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Crown className="h-3 w-3" />
                                     )}
                                   </button>
                                 )}
@@ -1206,7 +1419,13 @@ function SettingsContent() {
                         </span>
                       </StatusBadge>
 
-                      {isOwner && c.role !== 'owner' && (
+                      {c.active === false && (
+                        <StatusBadge tone="grayMuted" className="py-1" icon={<Clock className="h-3 w-3" />}>
+                          Inactivo
+                        </StatusBadge>
+                      )}
+
+                      {canManageCollaboratorRole(teamRole, c.role) && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -1222,14 +1441,34 @@ function SettingsContent() {
                         </Button>
                       )}
 
-                      {isOwner && c.role !== 'owner' && (
+                      {canManageCollaboratorRole(teamRole, c.role) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleToggleActive(c)}
+                          disabled={togglingId === c.user_id}
+                          aria-label={`${c.active === false ? 'Reactivar' : 'Desactivar'} a ${c.full_name || c.email}`}
+                          title={c.active === false ? 'Reactivar colaborador' : 'Desactivar sin borrar el historial'}
+                          className="border-transparent text-gray-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                        >
+                          {togglingId === c.user_id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : c.active === false ? (
+                            <UserCheck className="h-4 w-4" />
+                          ) : (
+                            <UserX className="h-4 w-4" />
+                          )}
+                        </Button>
+                      )}
+
+                      {canManageCollaboratorRole(teamRole, c.role) && (
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleRemoveFromTeam(c)}
                           disabled={removingId === c.user_id}
-                          aria-label={`Quitar a ${c.full_name || c.email} del equipo`}
-                          title="Quitar de todo el equipo"
+                          aria-label={`Eliminar a ${c.full_name || c.email} del equipo`}
+                          title="Eliminar del equipo"
                           className="border-transparent text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
                         >
                           {removingId === c.user_id ? (
@@ -1269,24 +1508,24 @@ function SettingsContent() {
                   {pendingInvitations.map((inv, idx) => {
                     const invitedAt = formatShortDate(inv.created_at);
                     const meta = [
-                      `Pendiente — ${getRoleLabel(inv.role)}`,
+                      `${inv.expired ? 'Vencida' : 'Pendiente'} — ${getRoleLabel(inv.role)}`,
                       inv.tenant_name ? `Sucursal ${inv.tenant_name}` : null,
                       invitedAt ? `Invitada el ${invitedAt}` : null,
                       inv.invited_by_name ? `por ${inv.invited_by_name}` : null,
                     ].filter(Boolean).join(' · ');
 
                     return (
-                      <div key={inv.id || idx} className="flex items-center justify-between gap-3 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800">
+                      <div key={inv.id || idx} className={`flex items-center justify-between gap-3 p-2 rounded-lg border ${inv.expired ? 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-700' : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800'}`}>
                         <div className="flex items-center gap-2 min-w-0">
                           <div className="h-8 w-8 rounded-full bg-amber-200 dark:bg-amber-800 flex items-center justify-center text-sm font-medium text-amber-700 dark:text-amber-300 flex-shrink-0">
                             {(inv.email || '?').charAt(0).toUpperCase()}
                           </div>
                           <div className="min-w-0">
-                            <p className="text-sm text-amber-800 dark:text-amber-200 truncate">{inv.email}</p>
-                            <p className="text-xs text-amber-600 dark:text-amber-400 truncate">{meta}</p>
+                            <p className={`text-sm truncate ${inv.expired ? 'text-gray-700 dark:text-gray-300' : 'text-amber-800 dark:text-amber-200'}`}>{inv.email}</p>
+                            <p className={`text-xs truncate ${inv.expired ? 'text-gray-500 dark:text-gray-400' : 'text-amber-600 dark:text-amber-400'}`}>{meta}</p>
                           </div>
                         </div>
-                        {isOwner && (
+                        {canManageTenant && canAssignRole(teamRole, inv.role) && (
                           <div className="flex items-center gap-2 flex-shrink-0">
                             <Button
                               size="sm"
@@ -1322,14 +1561,14 @@ function SettingsContent() {
               </div>
             )}
 
-            {isOwner && !canInvite && (
+            {canManageTenant && !canInvite && (
               <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-500">
                 Tu plan actual (Starter) incluye 1 usuario.{' '}
                 <Link href="/billing" className="text-indigo-500 hover:underline">Mejorá tu plan para invitar colaboradores</Link>.
               </div>
             )}
 
-            {isOwner && canInvite && (
+            {canManageTenant && canInvite && (
               <form onSubmit={handleInvite} className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 space-y-4">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   Invitar colaborador
@@ -1373,7 +1612,7 @@ function SettingsContent() {
                       value={inviteRole}
                       onChange={(e) => setInviteRole(e.target.value)}
                     >
-                      {ROLE_OPTIONS.map((option) => (
+                      {roleOptions.map((option) => (
                         <option key={option.value} value={option.value} title={option.description}>
                           {option.label}
                         </option>
@@ -1387,7 +1626,7 @@ function SettingsContent() {
                     Sucursales asignadas
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {tenants.map((t) => {
+                    {manageableTenants.map((t) => {
                       const checked = selectedTenantIds.includes(t.id);
                       return (
                         <label
@@ -1412,7 +1651,7 @@ function SettingsContent() {
                         </label>
                       );
                     })}
-                    {tenants.length === 0 && (
+                    {manageableTenants.length === 0 && (
                       <p className="text-xs text-gray-400">No hay sucursales disponibles.</p>
                     )}
                   </div>
@@ -1601,13 +1840,30 @@ function SettingsContent() {
         </div>
       </TabPanel>
 
+      {confirmation && (
+        <ConfirmModal
+          open
+          title={confirmation.title}
+          message={confirmation.message}
+          confirmLabel={confirmation.confirmLabel}
+          confirmLabelShort={confirmation.confirmLabelShort}
+          variant={confirmation.variant}
+          loading={confirming}
+          onConfirm={handleConfirm}
+          onCancel={() => {
+            if (!confirming) setConfirmation(null);
+          }}
+        />
+      )}
+
       <EditCollaboratorModal
         key={editingCollab?.user_id || 'closed'}
         open={editModalOpen}
         fullName={editingCollab?.full_name}
         email={editingCollab?.email || ''}
         role={editingCollab?.role || 'member'}
-        tenants={tenants.map((t) => ({ id: t.id, name: t.name }))}
+        tenants={manageableTenants.map((t) => ({ id: t.id, name: t.name }))}
+        allowedRoles={assignableForMe}
         memberships={(editingCollab?.memberships || []).map((m) => ({
           tenant_id: m.tenant_id,
           role: m.role,

@@ -32,8 +32,14 @@ describe('google token crypto', () => {
     vi.stubEnv('GOOGLE_TOKEN_ENCRYPTION_KEY', 'clave-de-prueba-con-suficiente-entropia');
 
     const encrypted = encryptGoogleToken('token-original');
-    const tampered = { ...encrypted, encrypted: `${encrypted.encrypted.slice(0, -2)}00` };
+    // Cambiar el último byte de forma determinista. Escribir '00' a ciegas
+    // dejaba el ciphertext intacto cuando el byte original ya era 00 (1 de cada
+    // 256 corridas), y el test fallaba sin que hubiera un bug real.
+    const lastByte = Number.parseInt(encrypted.encrypted.slice(-2), 16);
+    const flipped = (lastByte ^ 0xff).toString(16).padStart(2, '0');
+    const tampered = { ...encrypted, encrypted: `${encrypted.encrypted.slice(0, -2)}${flipped}` };
 
+    expect(tampered.encrypted).not.toBe(encrypted.encrypted);
     expect(() => decryptGoogleToken(tampered)).toThrow();
   });
 

@@ -24,7 +24,8 @@ export async function checkAccess(request: Request): Promise<CheckAccessResult> 
   const { data: tu } = await supabaseAdmin
     .from('tenant_users')
     .select('tenant_id')
-    .eq('user_id', user.id);
+    .eq('user_id', user.id)
+    .eq('status', 'active');
 
   if (!tu || tu.length === 0) {
     return { ok: true, data: { blocked: false } };

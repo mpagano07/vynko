@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
+import { pickDefaultTenantId } from '@/lib/tenant-selection';
 
 type SessionPayload = Record<string, unknown>;
 
@@ -100,10 +101,14 @@ export async function getSessionData(request: Request): Promise<{ ok: true; data
     [key: string]: unknown;
   } | null;
 
+  // Las membresías inactivas no cuentan para la sesión: la persona sigue
+  // existiendo, pero no tiene ninguna sucursal activa a la que entrar.
   const { data: tenantUsers } = await supabaseAdmin
     .from('tenant_users')
     .select('tenant_id, role')
-    .eq('user_id', user.id);
+    .eq('user_id', user.id)
+    .eq('status', 'active')
+    .order('joined_at', { ascending: true });
 
   const activeTenantId = request.headers.get('x-active-tenant-id');
 
@@ -121,10 +126,16 @@ export async function getSessionData(request: Request): Promise<{ ok: true; data
 
     tenants = (tenantsData as Record<string, unknown>[] | null) || [];
 
-    let targetId = tenantUsers[0].tenant_id;
-    if (activeTenantId === '__all__') {
-      // keep targetId as first tenant; no role change needed
-    } else if (activeTenantId && tenantIds.includes(activeTenantId)) {
+    let targetId =
+      pickDefaultTenantId(tenantUsers) ?? tenantUsers[0].tenant_id;
+    // `__all__` es el modo consolidado: también arranca en la empresa propia
+    // (ver `pickDefaultTenantId`), igual que `getAuth`, para que el rol que
+    // muestra la UI coincida con el que aplica el backend.
+    if (
+      activeTenantId &&
+      activeTenantId !== '__all__' &&
+      tenantIds.includes(activeTenantId)
+    ) {
       targetId = activeTenantId;
     }
 

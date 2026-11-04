@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { isSameOriginRequest } from '@/lib/security/csrf';
 import { enterLogContext, resolveRequestId } from '@/lib/log-context';
+import { pickDefaultTenantId } from '@/lib/tenant-selection';
 
 export interface AuthInfo {
   tenantId: string;
@@ -35,16 +36,21 @@ export async function getAuth(request?: Request): Promise<AuthInfo | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
+  // Sólo las membresías activas dan acceso: una persona desactivada conserva
+  // su fila (y su historial), pero deja de resolver tenant y rol. Es lo que
+  // hace que "desactivar" sea distinto de "eliminar" sin abrir una puerta.
   const { data: tu } = await supabaseAdmin
     .from('tenant_users')
     .select('tenant_id, role')
-    .eq('user_id', user.id);
+    .eq('user_id', user.id)
+    .eq('status', 'active')
+    .order('joined_at', { ascending: true });
 
   if (!tu || tu.length === 0) return null;
 
   const allTenantIds = (tu ?? []).map((t) => t.tenant_id);
   let tenantIds = allTenantIds;
-  let tenantId = tenantIds[0];
+  let tenantId = pickDefaultTenantId(tu ?? []) ?? allTenantIds[0];
   let allTenants = false;
 
   const activeTenantId = request?.headers.get('x-active-tenant-id');

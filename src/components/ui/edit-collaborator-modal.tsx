@@ -32,6 +32,11 @@ interface EditCollaboratorModalProps {
   /** Rol actual en cada sucursal. La ausencia de una sucursal = no asignada. */
   memberships: MembershipInput[];
   canEditRole?: boolean;
+  /**
+   * Roles que este actor puede asignar. Un manager no puede nombrar otros
+   * managers; el backend lo rechaza, pero el selector tampoco debe ofrecerlo.
+   */
+  allowedRoles?: TenantRole[];
   onCancel: () => void;
   onSave: (payload: { memberships: MembershipInput[] }) => Promise<void>;
 }
@@ -48,6 +53,7 @@ export function EditCollaboratorModal({
   tenants,
   memberships,
   canEditRole = true,
+  allowedRoles = ASSIGNABLE_ROLES,
   onCancel,
   onSave,
 }: EditCollaboratorModalProps) {
@@ -166,7 +172,9 @@ export function EditCollaboratorModal({
                           aria-label={`Rol en ${t.name}`}
                           className="min-w-[8.5rem]"
                         >
-                          {ROLE_OPTIONS.map((option) => (
+                          {ROLE_OPTIONS.filter((option) =>
+                            allowedRoles.includes(option.value)
+                          ).map((option) => (
                             <option key={option.value} value={option.value}>
                               {option.label}
                             </option>

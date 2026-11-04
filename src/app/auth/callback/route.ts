@@ -44,7 +44,15 @@ export async function GET(request: Request) {
   const user = data.user;
   let redirectPath = '/dashboard';
 
-  if (user?.id) {
+  // La pantalla de invitación acepta la invitación y pide nombre/contraseña.
+  // Si el callback la aceptara antes, la página vería `accepted = 0` y mandaría
+  // al dashboard sin dejar completar el perfil. Por eso los links de invitación
+  // llegan acá con `next=/accept-invite` y el canje de la sesión se hace igual,
+  // pero la aceptación queda para la página.
+  const requestedNext = searchParams.get('next');
+  const deferredAccept = requestedNext === '/accept-invite';
+
+  if (user?.id && !deferredAccept) {
     // 1. Acepta invitaciones pendientes (idempotente).
     await acceptInvitationsForUser({ id: user.id, email: user.email });
 
@@ -83,7 +91,6 @@ export async function GET(request: Request) {
 
   // `next` sólo se acepta si es un path interno del propio origen: evita
   // open redirect con un enlace de confirmación manipulado.
-  const requestedNext = searchParams.get('next');
   if (requestedNext) {
     redirectPath = new URL(safeInternalRedirect(request, requestedNext, '/dashboard')).pathname;
   }

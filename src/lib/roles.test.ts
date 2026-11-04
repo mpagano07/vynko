@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
   ASSIGNABLE_ROLES,
+  MANAGER_ASSIGNABLE_ROLES,
   ROLE_LABELS,
+  assignableRolesFor,
+  canAssignRole,
+  canManageCollaboratorRole,
+  canManageTeam,
   getCapabilities,
   getRoleLabel,
   hasCapability,
   highestRole,
   isTenantRole,
+  normalizeAssignableRole,
 } from './roles';
 
 describe('matriz de roles y capacidades', () => {
@@ -87,5 +93,51 @@ describe('matriz de roles y capacidades', () => {
     expect(highestRole(['member', null, undefined])).toBe('member');
     expect(highestRole(['viewer', 'manager'])).toBe('manager');
     expect(highestRole(['owner', 'manager'])).toBe('owner');
+  });
+
+  it('normaliza roles que llegan del cliente o de una invitación', () => {
+    expect(normalizeAssignableRole('cashier')).toBe('cashier');
+    expect(normalizeAssignableRole('manager')).toBe('manager');
+    expect(normalizeAssignableRole('owner')).toBe('member');
+    expect(normalizeAssignableRole('admin')).toBe('member');
+    expect(normalizeAssignableRole(null)).toBe('member');
+    expect(normalizeAssignableRole(undefined)).toBe('member');
+  });
+
+  it('el owner puede asignar managers y el manager no', () => {
+    expect(MANAGER_ASSIGNABLE_ROLES).not.toContain('manager');
+    expect(assignableRolesFor('owner')).toEqual(expect.arrayContaining(['manager', 'cashier']));
+    expect(assignableRolesFor('manager')).toEqual(
+      expect.arrayContaining(['cashier', 'stock', 'viewer', 'member'])
+    );
+    expect(assignableRolesFor('manager')).not.toContain('manager');
+    expect(assignableRolesFor('cashier')).toEqual([]);
+    expect(assignableRolesFor(null)).toEqual([]);
+
+    expect(canAssignRole('owner', 'manager')).toBe(true);
+    expect(canAssignRole('manager', 'manager')).toBe(false);
+    expect(canAssignRole('manager', 'cashier')).toBe(true);
+    expect(canAssignRole('cashier', 'cashier')).toBe(false);
+    expect(canAssignRole('owner', 'owner')).toBe(false);
+  });
+
+  it('un manager no administra owners ni a otros managers', () => {
+    expect(canManageCollaboratorRole('owner', 'manager')).toBe(true);
+    expect(canManageCollaboratorRole('owner', 'owner')).toBe(false);
+    expect(canManageCollaboratorRole('manager', 'cashier')).toBe(true);
+    expect(canManageCollaboratorRole('manager', 'manager')).toBe(false);
+    expect(canManageCollaboratorRole('manager', 'owner')).toBe(false);
+    expect(canManageCollaboratorRole('cashier', 'member')).toBe(false);
+    expect(canManageCollaboratorRole(null, 'member')).toBe(false);
+  });
+
+  it('sólo owner y manager administran el equipo', () => {
+    expect(canManageTeam('owner')).toBe(true);
+    expect(canManageTeam('manager')).toBe(true);
+    expect(canManageTeam('cashier')).toBe(false);
+    expect(canManageTeam('stock')).toBe(false);
+    expect(canManageTeam('viewer')).toBe(false);
+    expect(canManageTeam('member')).toBe(false);
+    expect(canManageTeam(null)).toBe(false);
   });
 });
