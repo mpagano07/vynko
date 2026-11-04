@@ -6,10 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loader2, CheckCircle2, XCircle, User, Lock } from 'lucide-react';
 import { validatePassword, PASSWORD_MIN_LENGTH } from '@/lib/password-policy';
+import { useAuthContext } from '@/lib/contexts/auth-context';
 import toast from 'react-hot-toast';
 
 export default function AcceptInvitePage() {
   const router = useRouter();
+  const { refreshSession } = useAuthContext();
   const [status, setStatus] = useState<'processing' | 'accepted' | 'error'>('processing');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
@@ -35,11 +37,21 @@ export default function AcceptInvitePage() {
         if (data.accepted > 0) {
           if (data.requiresSetup === false) {
             toast.success('¡Invitación aceptada! Ingresando...');
+            // El AuthProvider ya había cargado `/api/session` al montar esta
+            // página, antes de que este POST creara las membresías (y a veces
+            // ni siquiera veía la sesión, porque las cookies las escribe el
+            // magic link en el mismo SPA). Sin re-resolver, el invitado
+            // navega al dashboard con las sucursales de antes: se queda con
+            // menos de las que tiene, aunque el owner las vea activas a todas.
+            await refreshSession();
             router.replace('/dashboard');
             return;
           }
           setStatus('accepted');
         } else {
+          // Aun sin altas nuevas conviene revalidar: la membresía pudo
+          // crearse en otra pestaña y el estado del cliente quedó viejo.
+          await refreshSession();
           router.push('/dashboard');
         }
       } catch {
@@ -47,7 +59,7 @@ export default function AcceptInvitePage() {
       }
     }
     accept();
-  }, [router]);
+  }, [router, refreshSession]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
