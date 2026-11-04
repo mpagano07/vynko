@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabPanel } from '@/components/ui/tabs';
 import { EditCollaboratorModal } from '@/components/ui/edit-collaborator-modal';
+import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { Settings, User, Building2, Loader2, Save, KeyRound, Users, Mail, X, Shield, ShieldCheck, FileText, MapPin, Palette, ListChecks, Percent, Ticket, Pencil, HelpCircle, RefreshCw, Search, Trash2, UserCheck, UserX, Crown, Clock } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Select } from '@/components/ui/select';
@@ -74,6 +75,20 @@ interface PendingInvitation {
   invited_by_name?: string | null;
   tenant_id?: string;
   tenant_name?: string;
+}
+
+/**
+ * Acción destructiva o sensible que espera confirmación. Guardar el callback
+ * en el estado permite usar el mismo `ConfirmModal` para revocar, quitar,
+ * desactivar y transferir sin abrir diálogos nativos del navegador.
+ */
+interface PendingConfirmation {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  confirmLabelShort?: string;
+  variant?: 'danger' | 'default';
+  action: () => Promise<void> | void;
 }
 
 function capitalizeWords(value: string): string {
@@ -249,6 +264,8 @@ function SettingsContent() {
   const [editingCollab, setEditingCollab] = useState<Collaborator | null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [collabSearch, setCollabSearch] = useState('');
+  const [confirmation, setConfirmation] = useState<PendingConfirmation | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
   const reloadCollaborators = useCallback(async () => {
     try {
@@ -262,6 +279,21 @@ function SettingsContent() {
       toast.error('Error al cargar los colaboradores');
     }
   }, []);
+
+  const requestConfirmation = useCallback((next: PendingConfirmation) => {
+    setConfirmation(next);
+  }, []);
+
+  const handleConfirm = useCallback(async () => {
+    if (!confirmation) return;
+    setConfirming(true);
+    try {
+      await confirmation.action();
+    } finally {
+      setConfirming(false);
+      setConfirmation(null);
+    }
+  }, [confirmation]);
 
   const currentUserId = user?.id;
   const currentUserCollab = collaborators.find((c) => c.user_id === currentUserId);
@@ -520,24 +552,18 @@ function SettingsContent() {
     }
   }, []);
 
-  const handleRevokeInvite = useCallback(async (inv: PendingInvitation) => {
-    if (!inv.id || inv.id.startsWith('pending-')) {
-      toast.error('Recargá la página para revocar esta invitación');
-      return;
-    }
-    if (!window.confirm(`¿Revocar la invitación a ${inv.email}${inv.tenant_name ? ` en ${inv.tenant_name}` : ''}?`)) {
-      return;
-    }
-    setRevokingInvite(inv.id);
+  const revokeInvite = useCallback(async (inv: PendingInvitation) => {
+    const invitationId = inv.id!;
+    setRevokingInvite(invitationId);
     try {
-      const res = await authFetch(`/api/settings/invitations/${inv.id}`, { method: 'DELETE' });
+      const res = await authFetch(`/api/settings/invitations/${invitationId}`, { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json();
         toast.error(data.error || 'Error al revocar la invitación');
         return;
       }
       toast.success('Invitación revocada');
-      setPendingInvitations((prev) => prev.filter((i) => i.id !== inv.id));
+      setPendingInvitations((prev) => prev.filter((i) => i.id !== invitationId));
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al revocar la invitación');
     } finally {
@@ -545,10 +571,22 @@ function SettingsContent() {
     }
   }, []);
 
-  const handleRemoveFromTeam = useCallback(async (collab: Collaborator) => {
-    if (!window.confirm(`¿Quitar a ${collab.full_name || collab.email} de todo el equipo?`)) {
+  const handleRevokeInvite = useCallback((inv: PendingInvitation) => {
+    if (!inv.id || inv.id.startsWith('pending-')) {
+      toast.error('Recargá la página para revocar esta invitación');
       return;
     }
+    requestConfirmation({
+      title: 'Revocar invitación',
+      message: `¿Revocar la invitación a ${inv.email}${inv.tenant_name ? ` en ${inv.tenant_name}` : ''}? El email ya no va a poder usarse para entrar.`,
+      confirmLabel: 'Revocar invitación',
+      confirmLabelShort: 'Revocar',
+      variant: 'danger',
+      action: () => revokeInvite(inv),
+    });
+  }, [requestConfirmation, revokeInvite]);
+
+  const removeFromTeam = useCallback(async (collab: Collaborator) => {
     setRemovingId(collab.user_id);
     try {
       const res = await authFetch(`/api/settings/collaborators/${collab.user_id}`, {
@@ -570,10 +608,18 @@ function SettingsContent() {
     }
   }, []);
 
-  const handleRemoveFromBranch = useCallback(async (collab: Collaborator, tenantId: string, tenantName: string) => {
-    if (!window.confirm(`¿Quitar a ${collab.full_name || collab.email} de ${tenantName}?`)) {
-      return;
-    }
+  const handleRemoveFromTeam = useCallback((collab: Collaborator) => {
+    requestConfirmation({
+      title: 'Quitar del equipo',
+      message: `¿Quitar a ${collab.full_name || collab.email} de todo el equipo? Pierde sus membresías en todas las sucursales.`,
+      confirmLabel: 'Quitar del equipo',
+      confirmLabelShort: 'Quitar',
+      variant: 'danger',
+      action: () => removeFromTeam(collab),
+    });
+  }, [requestConfirmation, removeFromTeam]);
+
+  const removeFromBranch = useCallback(async (collab: Collaborator, tenantId: string) => {
     setRemovingBranchId(`${collab.user_id}:${tenantId}`);
     try {
       const res = await authFetch(
@@ -604,12 +650,20 @@ function SettingsContent() {
     }
   }, []);
 
-  const handleToggleActive = useCallback(async (collab: Collaborator) => {
+  const handleRemoveFromBranch = useCallback((collab: Collaborator, tenantId: string, tenantName: string) => {
+    requestConfirmation({
+      title: 'Quitar de la sucursal',
+      message: `¿Quitar a ${collab.full_name || collab.email} de ${tenantName}?`,
+      confirmLabel: 'Quitar de la sucursal',
+      confirmLabelShort: 'Quitar',
+      variant: 'danger',
+      action: () => removeFromBranch(collab, tenantId),
+    });
+  }, [requestConfirmation, removeFromBranch]);
+
+  const toggleActive = useCallback(async (collab: Collaborator) => {
     const nextActive = collab.active === false;
     const action = nextActive ? 'reactivar' : 'desactivar';
-    if (!window.confirm(`¿${nextActive ? 'Reactivar' : 'Desactivar'} a ${collab.full_name || collab.email}?`)) {
-      return;
-    }
     setTogglingId(collab.user_id);
     try {
       const res = await authFetch(`/api/settings/collaborators/${collab.user_id}`, {
@@ -640,17 +694,25 @@ function SettingsContent() {
     }
   }, []);
 
-  const handleTransferOwnership = useCallback(async (
+  const handleToggleActive = useCallback((collab: Collaborator) => {
+    const nextActive = collab.active === false;
+    requestConfirmation({
+      title: nextActive ? 'Reactivar colaborador' : 'Desactivar colaborador',
+      message: nextActive
+        ? `¿Reactivar a ${collab.full_name || collab.email}? Vuelve a tener acceso con su rol actual.`
+        : `¿Desactivar a ${collab.full_name || collab.email}? Conserva el historial y podés reactivarlo después.`,
+      confirmLabel: nextActive ? 'Reactivar' : 'Desactivar',
+      confirmLabelShort: nextActive ? 'Reactivar' : 'Desactivar',
+      variant: nextActive ? 'default' : 'danger',
+      action: () => toggleActive(collab),
+    });
+  }, [requestConfirmation, toggleActive]);
+
+  const transferOwnership = useCallback(async (
     collab: Collaborator,
     tenantId: string,
     tenantName: string
   ) => {
-    if (!window.confirm(
-      `¿Transferir la propiedad de ${tenantName} a ${collab.full_name || collab.email}? ` +
-      'Vas a quedar como Manager de esa sucursal y dejás de ser propietario.'
-    )) {
-      return;
-    }
     setTransferringId(`${collab.user_id}:${tenantId}`);
     try {
       const res = await authFetch(
@@ -674,6 +736,21 @@ function SettingsContent() {
       setTransferringId(null);
     }
   }, [reloadCollaborators]);
+
+  const handleTransferOwnership = useCallback((
+    collab: Collaborator,
+    tenantId: string,
+    tenantName: string
+  ) => {
+    requestConfirmation({
+      title: 'Transferir propiedad',
+      message: `¿Transferir la propiedad de ${tenantName} a ${collab.full_name || collab.email}? Vas a quedar como Manager de esa sucursal y dejás de ser propietario.`,
+      confirmLabel: 'Transferir propiedad',
+      confirmLabelShort: 'Transferir',
+      variant: 'danger',
+      action: () => transferOwnership(collab, tenantId, tenantName),
+    });
+  }, [requestConfirmation, transferOwnership]);
 
   const handleSaveProfile = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1765,6 +1842,22 @@ function SettingsContent() {
           <AccountDangerZone />
         </div>
       </TabPanel>
+
+      {confirmation && (
+        <ConfirmModal
+          open
+          title={confirmation.title}
+          message={confirmation.message}
+          confirmLabel={confirmation.confirmLabel}
+          confirmLabelShort={confirmation.confirmLabelShort}
+          variant={confirmation.variant}
+          loading={confirming}
+          onConfirm={handleConfirm}
+          onCancel={() => {
+            if (!confirming) setConfirmation(null);
+          }}
+        />
+      )}
 
       <EditCollaboratorModal
         key={editingCollab?.user_id || 'closed'}
