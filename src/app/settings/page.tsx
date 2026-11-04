@@ -579,8 +579,7 @@ function SettingsContent() {
     requestConfirmation({
       title: 'Revocar invitación',
       message: `¿Revocar la invitación a ${inv.email}${inv.tenant_name ? ` en ${inv.tenant_name}` : ''}? El email ya no va a poder usarse para entrar.`,
-      confirmLabel: 'Revocar invitación',
-      confirmLabelShort: 'Revocar',
+      confirmLabel: 'Revocar',
       variant: 'danger',
       action: () => revokeInvite(inv),
     });
@@ -595,14 +594,14 @@ function SettingsContent() {
 
       if (!res.ok) {
         const data = await res.json();
-        toast.error(data.error || 'Error al remover');
+        toast.error(data.error || 'Error al eliminar');
         return;
       }
 
-      toast.success('Colaborador removido');
+      toast.success('Colaborador eliminado');
       setCollaborators((prev) => prev.filter((c) => c.user_id !== collab.user_id));
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Error al remover');
+      toast.error(err instanceof Error ? err.message : 'Error al eliminar');
     } finally {
       setRemovingId(null);
     }
@@ -610,10 +609,9 @@ function SettingsContent() {
 
   const handleRemoveFromTeam = useCallback((collab: Collaborator) => {
     requestConfirmation({
-      title: 'Quitar del equipo',
-      message: `¿Quitar a ${collab.full_name || collab.email} de todo el equipo? Pierde sus membresías en todas las sucursales.`,
-      confirmLabel: 'Quitar del equipo',
-      confirmLabelShort: 'Quitar',
+      title: 'Eliminar del equipo',
+      message: `¿Eliminar a ${collab.full_name || collab.email} de todo el equipo? Pierde sus membresías en todas las sucursales.`,
+      confirmLabel: 'Eliminar',
       variant: 'danger',
       action: () => removeFromTeam(collab),
     });
@@ -654,8 +652,7 @@ function SettingsContent() {
     requestConfirmation({
       title: 'Quitar de la sucursal',
       message: `¿Quitar a ${collab.full_name || collab.email} de ${tenantName}?`,
-      confirmLabel: 'Quitar de la sucursal',
-      confirmLabelShort: 'Quitar',
+      confirmLabel: 'Quitar',
       variant: 'danger',
       action: () => removeFromBranch(collab, tenantId),
     });
@@ -1470,8 +1467,8 @@ function SettingsContent() {
                           size="sm"
                           onClick={() => handleRemoveFromTeam(c)}
                           disabled={removingId === c.user_id}
-                          aria-label={`Quitar a ${c.full_name || c.email} del equipo`}
-                          title="Quitar de todo el equipo"
+                          aria-label={`Eliminar a ${c.full_name || c.email} del equipo`}
+                          title="Eliminar del equipo"
                           className="border-transparent text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
                         >
                           {removingId === c.user_id ? (
