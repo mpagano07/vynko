@@ -376,7 +376,10 @@ describe('colaboradores — nivel 3 (managers y ciclo de vida)', () => {
     expect(result.accepted).toBe(1);
     const upserts = callsTo(supabaseMock.__calls, 'profiles', 'upsert');
     expect(upserts).toHaveLength(1);
-    expect(upserts[0].args[0]).not.toHaveProperty('tenant_id');
+    // El upsert SIEMPRE manda `tenant_id` porque la columna es NOT NULL y
+    // Postgres valida la tupla del INSERT antes del ON CONFLICT. Si se omite,
+    // la aceptación falla con 23502 y la membresía nunca se crea.
+    expect(upserts[0].args[0]).toMatchObject({ tenant_id: TENANT_B });
     // La membresía real sigue siendo la que resuelve el acceso.
     expect(callsTo(supabaseMock.__calls, 'tenant_users', 'insert')[0].args[0]).toMatchObject({
       tenant_id: TENANT_A,
