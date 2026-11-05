@@ -319,12 +319,9 @@ function SettingsContent() {
 
   const canInvite = tenant?.subscription_plan === 'business' || tenant?.subscription_plan === 'enterprise';
 
-  useEffect(() => {
-    if (manageableIdsKey && selectedTenantIds.length === 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSelectedTenantIds(manageableIdsKey.split(','));
-    }
-  }, [manageableIdsKey, selectedTenantIds.length]);
+  // Las sucursales arrancan desmarcadas a propósito: invitar es otorgar acceso
+  // y una lista preseleccionada convierte "enviar" en "enviar a todas" sin que
+  // nadie lo haya decidido. La selección tiene que ser explícita.
 
   const normalizedSearch = collabSearch.trim().toLowerCase();
   const filteredCollaborators = normalizedSearch
@@ -458,11 +455,11 @@ function SettingsContent() {
     if (!inviteEmail.trim()) return;
 
     const availableTenantIds = manageableIdsKey ? manageableIdsKey.split(',') : [];
-    const targetTenantIds = selectedTenantIds.length > 0
-      ? selectedTenantIds.filter((id) => availableTenantIds.includes(id))
-      : availableTenantIds;
+    // Sin sucursal elegida no se manda nada: antes una lista vacía se
+    // interpretaba como "todas" y la invitación salía a cada sucursal.
+    const targetTenantIds = selectedTenantIds.filter((id) => availableTenantIds.includes(id));
     if (targetTenantIds.length === 0) {
-      toast.error('No tenés sucursales disponibles para invitar');
+      toast.error('Elegí al menos una sucursal para enviar la invitación');
       return;
     }
 
@@ -498,6 +495,8 @@ function SettingsContent() {
       await reloadCollaborators();
       setInviteEmail('');
       setInviteName('');
+      // La próxima invitación vuelve a empezar sin sucursales marcadas.
+      setSelectedTenantIds([]);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al invitar');
     } finally {
@@ -854,7 +853,10 @@ function SettingsContent() {
 
   const handleUpdateCollab = useCallback(async (
     collab: Collaborator,
-    payload: { memberships: { tenant_id: string; role: string }[] }
+    payload: {
+      memberships: { tenant_id: string; role: string }[];
+      full_name?: string | null;
+    }
   ) => {
     try {
       const res = await authFetch(`/api/settings/collaborators/${collab.user_id}`, {
@@ -889,6 +891,9 @@ function SettingsContent() {
         return {
           ...c,
           role: highestRole(nextMemberships.map((m) => m.role)),
+          // Si el nombre vino vacío, se conserva el actual: el backend tampoco
+          // lo borra, así que la fila no debe mostrar algo distinto.
+          full_name: payload.full_name?.trim() || c.full_name,
           tenants: allTenants.filter(t => payload.memberships.some((m) => m.tenant_id === t.id)),
           memberships: nextMemberships,
           tenant_users_ids: nextMemberships.map((m) => m.id),
@@ -1612,9 +1617,14 @@ function SettingsContent() {
                 </div>
 
                 <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
-                  <p className="text-xs font-medium text-gray-500 mb-2">
-                    Sucursales asignadas
-                  </p>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-gray-500">
+                      Sucursales asignadas
+                    </p>
+                    <span className="text-[11px] text-gray-400">
+                      {selectedTenantIds.length} de {manageableTenants.length}
+                    </span>
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     {manageableTenants.map((t) => {
                       const checked = selectedTenantIds.includes(t.id);
@@ -1645,6 +1655,11 @@ function SettingsContent() {
                       <p className="text-xs text-gray-400">No hay sucursales disponibles.</p>
                     )}
                   </div>
+                  {manageableTenants.length > 0 && selectedTenantIds.length === 0 && (
+                    <p className="mt-2 text-xs text-gray-400">
+                      Elegí al menos una sucursal. No se envía nada hasta que lo hagas.
+                    </p>
+                  )}
                 </div>
 
                 <Button type="submit" disabled={inviting || selectedTenantIds.length === 0}>

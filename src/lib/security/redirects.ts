@@ -12,6 +12,13 @@ function originFromValue(value: string | null | undefined): string | null {
 }
 
 function configuredOrigin(): string | null {
+  // En un Preview Deployment manda el host del request, no la URL canonica.
+  // `NEXT_PUBLIC_SITE_URL` suele estar scopeada a produccion (o quedar con el
+  // dominio real); usarla en un preview haria que el link de recuperacion
+  // abierto desde una rama aterrice en el sitio productivo y que ese entorno
+  // dispare sesiones contra datos reales.
+  if (process.env.VERCEL_ENV === 'preview') return null;
+
   const configured = (
     process.env.NEXT_PUBLIC_SITE_URL ??
     process.env.NEXT_PUBLIC_APP_URL ??

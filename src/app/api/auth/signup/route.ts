@@ -7,6 +7,7 @@ import { validatePassword } from '@/lib/password-policy';
 import { classifyAuthFailure } from '@/lib/auth-errors';
 import { trackEvent } from '@/lib/track-event';
 import { logger } from '@/lib/logger';
+import { LAST_SEEN_COOKIE, LAST_SEEN_COOKIE_OPTIONS } from '@/lib/session-policy';
 
 const MAX_IP_ATTEMPTS = 10;
 const MAX_EMAIL_ATTEMPTS = 3;
@@ -134,5 +135,18 @@ export async function POST(request: Request) {
     });
   }
 
-  return NextResponse.json({ success: true, requiresConfirmation: !data?.session });
+  const response = NextResponse.json({
+    success: true,
+    requiresConfirmation: !data?.session,
+  });
+
+  // Cuando Supabase devuelve sesion (confirmacion de email desactivada), el
+  // navegador queda autenticado sin pasar por /login. La cookie de inactividad
+  // tiene que nacer en el mismo response: sin ella, el proxy trata la sesion
+  // como vieja y la cierra en el primer request autenticado.
+  if (data?.session) {
+    response.cookies.set(LAST_SEEN_COOKIE, String(Date.now()), LAST_SEEN_COOKIE_OPTIONS);
+  }
+
+  return response;
 }

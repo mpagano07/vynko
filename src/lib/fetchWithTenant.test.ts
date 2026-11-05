@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { fetchWithTenant, getTenantHeaders } from './fetchWithTenant';
 
-const { getAuthHeaders, authFetch } = await import('./fetchWithTenant');
+const { getAuthHeaders, authFetch, classifySessionRefresh } = await import('./fetchWithTenant');
 
 describe('fetchWithTenant', () => {
   beforeEach(() => {
@@ -200,6 +200,31 @@ describe('authFetch', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('no reintenta ni trata como vencida la sesión de un usuario sin membresías', async () => {
+    // Un usuario válido al que le desactivaron la última membresía recibe 401
+    // en las rutas de datos. No es una sesión vencida: /no-access explica lo
+    // que pasa; /login?reason=expired lo haría entrar en un bucle.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('', { status: 401 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            user: { id: 'user-1' },
+            tenants: [],
+            onboarding_pending: false,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+    global.fetch = fetchMock;
+
+    const response = await authFetch('/api/settings/collaborators');
+
+    expect(response.status).toBe(401);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('does not retry a body that cannot be replayed', async () => {
     // FormData/streams consumen el cuerpo: reenviarlo mandaría una request
     // distinta o vacía. Es preferible devolver el 401 tal cual.
@@ -212,5 +237,42 @@ describe('authFetch', () => {
 
     expect(response.status).toBe(401);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('classifySessionRefresh', () => {
+  it('trata como vencida la sesión sin usuario', () => {
+    expect(classifySessionRefresh({ user: null })).toBe('expired');
+    expect(classifySessionRefresh(null)).toBe('expired');
+  });
+
+  it('trata como sin acceso al usuario con onboarding completo y cero membresías', () => {
+    expect(
+      classifySessionRefresh({
+        user: { id: 'user-1' },
+        tenants: [],
+        onboarding_pending: false,
+      })
+    ).toBe('no-access');
+  });
+
+  it('mantiene la sesión activa si todavía está en onboarding', () => {
+    expect(
+      classifySessionRefresh({
+        user: { id: 'user-1' },
+        tenants: [],
+        onboarding_pending: true,
+      })
+    ).toBe('active');
+  });
+
+  it('mantiene la sesión activa si tiene al menos una membresía', () => {
+    expect(
+      classifySessionRefresh({
+        user: { id: 'user-1' },
+        tenants: [{ id: 'tenant-1' }],
+        onboarding_pending: false,
+      })
+    ).toBe('active');
   });
 });

@@ -66,9 +66,13 @@ export async function authFetch(input: RequestInfo | URL, init?: RequestInit): P
   // resuelve la sesión contra Supabase y reescribe las cookies; si sigue
   // habiendo usuario, reintentamos una vez.
   if (!canReplayRequest(input, init)) return response;
-  const refreshed = await refreshSessionOnce();
-  if (!refreshed) {
+  const outcome = await refreshSessionOnce();
+  if (outcome === 'expired') {
     redirectToLoginForExpiredSession();
+    return response;
+  }
+  if (outcome === 'no-access') {
+    redirectToNoAccess();
     return response;
   }
 
@@ -88,13 +92,43 @@ function canReplayRequest(input: RequestInfo | URL, init?: RequestInit): boolean
   return false;
 }
 
-let sessionRefresh: Promise<boolean> | null = null;
+let sessionRefresh: Promise<SessionRefreshOutcome> | null = null;
+
+export type SessionRefreshOutcome = 'active' | 'expired' | 'no-access';
+
+/**
+ * Traduce el payload de `/api/session` a la accion que corresponde.
+ *
+ * Un usuario valido con `tenants: []` NO tiene la sesion vencida: lo que no
+ * tiene es acceso. Mandarlo a `/login?reason=expired` le pide que vuelva a
+ * entrar y, al entrar, aterriza otra vez en el mismo 401 sin explicacion. La
+ * pantalla correcta es `/no-access`, la misma a la que lo manda el guard.
+ *
+ * `onboarding_pending === false` es la unica senal de que el alta ya termino:
+ * durante el onboarding el array vacio es normal y no hay que expulsar a nadie.
+ */
+export function classifySessionRefresh(data: unknown): SessionRefreshOutcome {
+  if (!data || typeof data !== 'object') return 'expired';
+
+  const payload = data as {
+    user?: unknown;
+    tenants?: unknown;
+    onboarding_pending?: unknown;
+  };
+
+  if (!payload.user) return 'expired';
+
+  const tenants = Array.isArray(payload.tenants) ? payload.tenants : [];
+  if (tenants.length === 0 && payload.onboarding_pending === false) return 'no-access';
+
+  return 'active';
+}
 
 /**
  * Deduplica el refresco: si varias requests reciben 401 a la vez, todas
  * esperan el mismo `/api/session` en vez de competir por el refresh token.
  */
-function refreshSessionOnce(): Promise<boolean> {
+function refreshSessionOnce(): Promise<SessionRefreshOutcome> {
   if (!sessionRefresh) {
     sessionRefresh = (async () => {
       try {
@@ -102,11 +136,11 @@ function refreshSessionOnce(): Promise<boolean> {
           credentials: 'include',
           cache: 'no-store',
         });
-        if (!res.ok) return false;
-        const data = (await res.json()) as { user?: unknown } | null;
-        return Boolean(data?.user);
+        if (!res.ok) return 'expired';
+        const data = (await res.json()) as unknown;
+        return classifySessionRefresh(data);
       } catch {
-        return false;
+        return 'expired';
       } finally {
         sessionRefresh = null;
       }
@@ -116,11 +150,19 @@ function refreshSessionOnce(): Promise<boolean> {
 }
 
 function redirectToLoginForExpiredSession(): void {
+  redirectOnce('/login?reason=expired');
+}
+
+function redirectToNoAccess(): void {
+  redirectOnce('/no-access');
+}
+
+function redirectOnce(path: string): void {
   if (typeof window === 'undefined') return;
   // En tests/jsdom no hay navegación real y `location.replace` no aplica.
   if (process.env.NODE_ENV === 'test') return;
-  if (window.location.pathname === '/login') return;
+  if (window.location.pathname === path.split('?')[0]) return;
   // `replace` y no `assign`: la pantalla con la sesión vencida no debe quedar en
   // el historial, porque volver atrás mostraría datos de una sesión que ya no existe.
-  window.location.replace('/login?reason=expired');
+  window.location.replace(path);
 }

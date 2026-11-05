@@ -118,9 +118,13 @@ function buildDesiredRoles(
       roleByTenant.set(tid, role);
     }
   } else {
+    // Sin lista explícita NO se asume "todas": mandar una invitación a cada
+    // sucursal por omisión era la forma más fácil de filtrar accesos sin
+    // querer. Si no vino ninguna sucursal válida, el llamador recibe el 400 de
+    // abajo y tiene que elegir.
     const requestedTenantIds = Array.isArray(body.tenant_ids)
       ? [...new Set(body.tenant_ids.filter((id) => scope.tenantIds.includes(id)))]
-      : scope.tenantIds;
+      : [];
     const role = normalizeAssignableRole(body.role);
     for (const tid of requestedTenantIds) {
       if (!canAssignRole(actorRoleInTenant(scope, tid), role)) {
@@ -764,6 +768,8 @@ export async function updateCollaborator(
     role?: string;
     tenant_ids?: string[];
     memberships?: { tenant_id?: string; role?: string }[];
+    /** Nombre visible de la persona. Se ignora si viene vacío. */
+    full_name?: string | null;
   }
 ): Promise<CollaboratorResult> {
   try {
@@ -805,6 +811,47 @@ export async function updateCollaborator(
           status: 403,
           error: 'Un manager no puede modificar a un propietario ni a otro manager',
         };
+      }
+    }
+
+    // El nombre vive en `profiles`, que es identidad global: se valida acá y se
+    // escribe recién al final, cuando las membresías ya se aplicaron bien.
+    let nameChange: { nextName: string; previousName: string | null } | null = null;
+    if (typeof body.full_name === 'string' && body.full_name.trim()) {
+      const nextName = body.full_name.trim();
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('id, full_name')
+        .eq('id', targetUserId)
+        .maybeSingle();
+
+      if (!profile) {
+        return { ok: false, error: 'Collaborator not found', status: 404 };
+      }
+
+      const previousName = (profile.full_name as string | null) ?? null;
+      if (nextName !== previousName) {
+        const { data: allMemberships } = await supabaseAdmin
+          .from('tenant_users')
+          .select('tenant_id')
+          .eq('user_id', targetUserId);
+
+        // Igual que al agregar: el perfil es compartido entre empresas, así que
+        // sólo se puede renombrar a quien no trabaja también fuera de este
+        // alcance. Si no, cada empresa podría pisarle el nombre a la persona.
+        const worksElsewhere = (allMemberships ?? []).some(
+          (membership) => !scope.tenantIds.includes(membership.tenant_id as string)
+        );
+        if (worksElsewhere) {
+          return {
+            ok: false,
+            status: 403,
+            error:
+              'Ese colaborador también trabaja en otra empresa. El nombre lo administra esa persona desde su perfil.',
+          };
+        }
+
+        nameChange = { nextName, previousName };
       }
     }
 
@@ -931,6 +978,29 @@ export async function updateCollaborator(
         entityId: targetUserId,
         details: { role: desiredRoleByTenant.get(tid) ?? ROLE_FALLBACK },
       });
+    }
+
+    if (nameChange) {
+      const { error: nameError } = await supabaseAdmin
+        .from('profiles')
+        .update({ full_name: nameChange.nextName })
+        .eq('id', targetUserId);
+
+      if (nameError) {
+        logger.error('DB error:', { error: nameError });
+        return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
+      }
+
+      for (const tid of targetTenantIds) {
+        await createActivityLog({
+          tenantId: tid,
+          userId: auth.userId,
+          action: 'update_collaborator_name',
+          entityType: 'collaborator',
+          entityId: targetUserId,
+          details: { previous_name: nameChange.previousName, new_name: nameChange.nextName },
+        });
+      }
     }
 
     return { ok: true, body: { success: true }, status: 200 };

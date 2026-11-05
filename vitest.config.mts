@@ -11,7 +11,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text-summary'],
-      // Piso medido sobre la suite actual (71.55 / 64.22 / 70.59 / 73.02).
+      // Piso medido sobre la suite actual (71.68 / 64.33 / 70.79 / 73.17).
       // Un poco por debajo a proposito: el objetivo es detectar caidas grandes,
       // no obligar a tocar el umbral cada vez que se agrega una rama.
       thresholds: {

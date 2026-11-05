@@ -151,6 +151,13 @@ describe('colaboradores — nivel 1', () => {
     expect(res.status).toBe(200);
     const deletes = callsTo(supabaseMock.__calls, 'tenant_users', 'delete');
     expect(deletes).toHaveLength(1);
+    // Quitar la última sucursal tiene que intentar cerrar las sesiones de auth:
+    // sin esto el refresh token sigue renovando la cookie aunque el backend ya
+    // no le resuelva ningún tenant.
+    expect(supabaseMock.rpc).toHaveBeenCalledWith(
+      'revoke_user_sessions_if_no_active_membership',
+      { p_user_id: targetUserId }
+    );
     const tenantFilters = callsTo(supabaseMock.__calls, 'tenant_users', 'in')
       .filter((c) => c.args[0] === 'tenant_id');
     expect(tenantFilters.length).toBeGreaterThan(0);

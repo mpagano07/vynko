@@ -242,7 +242,7 @@ export async function proxy(request: NextRequest) {
   // ese codigo, y el refresh token se renueva desde el servidor mientras el
   // atacante navegue. El plazo se comprueba aca, con un timestamp en una cookie
   // HttpOnly que el usuario no puede editar, y al vencer se revoca la sesion en
-  // Supabase en vez de solo_clean la cookie local.
+  // Supabase en vez de solo limpiar la cookie local.
   const lastSeenRaw = request.cookies.get(LAST_SEEN_COOKIE)?.value;
   const lastSeen = lastSeenRaw ? Number.parseInt(lastSeenRaw, 10) : Number.NaN;
 
