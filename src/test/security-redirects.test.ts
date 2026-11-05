@@ -15,6 +15,19 @@ describe('getAppOrigin', () => {
     }
   });
 
+  it('en un preview de Vercel prefiere el host del request sobre la URL canónica', () => {
+    process.env.NEXT_PUBLIC_SITE_URL = 'https://app.vynko.com';
+    process.env.VERCEL_ENV = 'preview';
+    try {
+      expect(
+        getAppOrigin(req({ host: 'rama.vercel.app' }, 'https://rama.vercel.app/auth/callback'))
+      ).toBe('https://rama.vercel.app');
+    } finally {
+      delete process.env.NEXT_PUBLIC_SITE_URL;
+      delete process.env.VERCEL_ENV;
+    }
+  });
+
   it('prefers the request url origin over forwarded headers', () => {
     // Los headers `x-forwarded-*` son controlados por el cliente si el proxy
     // no los sanea: la URL de la request tiene precedencia.

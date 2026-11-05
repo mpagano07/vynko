@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { InvitationAccountScope } from '@/lib/accept-invitations';
+import { LAST_SEEN_COOKIE } from '@/lib/session-policy';
 
 const serverAuthMock = {
   auth: {
@@ -256,6 +257,30 @@ describe('POST /api/auth/signup', () => {
     const call = serverAuthMock.auth.signUp.mock.calls[0][0];
     expect(call.options.data).toEqual({ company_name: 'Acme', full_name: 'Ana' });
     expect(call.options.emailRedirectTo).toMatch(/^https:\/\/app\.test\/auth\/callback\?company_name=Acme&full_name=Ana$/);
+    // Con confirmación de email desactivada Supabase abre sesión en el acto.
+    // La cookie de inactividad tiene que salir en este mismo response o el
+    // proxy cierra la sesión en el primer request autenticado.
+    expect(
+      response.headers.getSetCookie().some((cookie) => cookie.startsWith(`${LAST_SEEN_COOKIE}=`))
+    ).toBe(true);
+  });
+
+  it('no escribe la cookie de inactividad cuando la cuenta queda sin sesión', async () => {
+    serverAuthMock.auth.signUp.mockResolvedValueOnce({
+      data: { user: { identities: [{ id: 'i1' }] }, session: null },
+      error: null,
+    });
+    const response = await signup(
+      post(
+        'https://app.test/api/auth/signup',
+        { email: uniqueEmail(), password: VALID_PASSWORD, companyName: 'Acme', fullName: 'Ana' },
+        sameOrigin()
+      )
+    );
+
+    expect(
+      response.headers.getSetCookie().some((cookie) => cookie.startsWith(`${LAST_SEEN_COOKIE}=`))
+    ).toBe(false);
   });
 
   it('reporta requiresConfirmation sin sesión', async () => {

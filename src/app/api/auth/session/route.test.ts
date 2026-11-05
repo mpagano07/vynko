@@ -19,6 +19,7 @@ vi.mock('@/lib/supabase', () => ({
 
 import { POST } from '@/app/api/auth/session/route';
 import { __resetRateLimitStateForTests } from '@/lib/rate-limit';
+import { LAST_SEEN_COOKIE } from '@/lib/session-policy';
 
 function post(body: unknown, headers: Record<string, string> = {}): Request {
   return new Request('https://app.test/api/auth/session', {
@@ -60,6 +61,9 @@ describe('POST /api/auth/session', () => {
     const cookie = response.headers.get('set-cookie') ?? '';
     expect(cookie).toContain('sb-test-auth-token=cookie-value');
     expect(cookie).toContain('HttpOnly');
+    // El proxy exige esta marca; si no se escribe al abrir sesion, el primer
+    // request autenticado se toma como inactividad vencida.
+    expect(response.cookies.get(LAST_SEEN_COOKIE)?.value).toBeTruthy();
   });
 
   it('no escribe cookies si el token es inválido o expiró', async () => {

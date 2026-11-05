@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { FormLabel } from '@/components/ui/form-label';
@@ -38,7 +39,10 @@ interface EditCollaboratorModalProps {
    */
   allowedRoles?: TenantRole[];
   onCancel: () => void;
-  onSave: (payload: { memberships: MembershipInput[] }) => Promise<void>;
+  onSave: (payload: {
+    memberships: MembershipInput[];
+    full_name?: string | null;
+  }) => Promise<void>;
 }
 
 function isAssignable(role: string | null | undefined): role is TenantRole {
@@ -57,6 +61,7 @@ export function EditCollaboratorModal({
   onCancel,
   onSave,
 }: EditCollaboratorModalProps) {
+  const [name, setName] = useState(fullName ?? '');
   const [rolesByTenant, setRolesByTenant] = useState<Record<string, TenantRole>>(() => {
     const initial: Record<string, TenantRole> = {};
     for (const membership of memberships) {
@@ -97,6 +102,9 @@ export function EditCollaboratorModal({
           tenant_id: t.id,
           role: rolesByTenant[t.id] ?? 'member',
         })),
+        // Vacío = no tocar el nombre. El backend ignora la cadena vacía para
+        // que borrar el campo no deje a la persona "Sin nombre" por accidente.
+        full_name: name.trim() || null,
       });
     } finally {
       setSaving(false);
@@ -120,6 +128,20 @@ export function EditCollaboratorModal({
         </div>
 
         <div className="space-y-4">
+          <div>
+            <FormLabel htmlFor="collaborator-name">Nombre</FormLabel>
+            <Input
+              id="collaborator-name"
+              type="text"
+              placeholder="Nombre del colaborador"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <p className="mt-1 text-xs text-gray-400">
+              La persona también puede cambiarlo desde su perfil.
+            </p>
+          </div>
+
           <div>
             <div className="mb-1.5 flex items-center justify-between gap-2">
               <FormLabel className="mb-0 flex items-center gap-1">

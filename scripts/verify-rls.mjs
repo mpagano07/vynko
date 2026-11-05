@@ -119,7 +119,7 @@ async function teardownSeguro() {
   if (teardownHecho) return;
   teardownHecho = true;
   try {
-await teardownSeguro();
+    await teardown();
   } catch (e) {
     console.error('teardown fallo:', e?.message ?? e);
   }
@@ -405,6 +405,82 @@ await section('Aislamiento de lectura entre tenants', async () => {
     (stock ?? []).every((s) => ownTenants.includes(s.tenant_id)),
     `filtrado: ${JSON.stringify((stock ?? []).filter((s) => !ownTenants.includes(s.tenant_id)))}`
   );
+});
+
+await section('Una membresia inactiva no conserva acceso al tenant', async () => {
+  // `067` agrega `status = 'active'` a las policies de `tenant_users` y a los
+  // helpers que usan Storage y la mayoria de las tablas. Sin esta prueba, el
+  // check de lectura entre tenants no distingue a un miembro inactivo de uno
+  // que nunca pertenecio al tenant, y un RLS que solo mira `user_id` pasaria
+  // en verde.
+  const slug = `rls-verify-inactive-${stamp}`;
+  const { data: inactiveTenant, error: tenantErr } = await admin
+    .from('tenants')
+    .insert({ name: 'RLS Verify Inactive', slug })
+    .select()
+    .single();
+  if (tenantErr) throw new Error(`no se pudo crear tenant inactivo: ${tenantErr.message}`);
+
+  let inactiveSupplierId = null;
+  try {
+    const { data: supplier, error: supplierErr } = await admin
+      .from('suppliers')
+      .insert({ tenant_id: inactiveTenant.id, name: `RLS Verify Inactive Supplier ${stamp}` })
+      .select()
+      .single();
+    if (supplierErr) throw new Error(`no se pudo crear supplier inactivo: ${supplierErr.message}`);
+    inactiveSupplierId = supplier.id;
+
+    const { error: membershipErr } = await admin.from('tenant_users').insert({
+      tenant_id: inactiveTenant.id,
+      user_id: VICTIM_USER_ID,
+      role: 'member',
+      status: 'inactive',
+    });
+    if (membershipErr) throw new Error(`no se pudo crear membresia inactiva: ${membershipErr.message}`);
+
+    const { data: visibleTenants } = await user.from('tenants').select('id');
+    check(
+      'tenants no expone el tenant con membresia inactiva',
+      !(visibleTenants ?? []).some((t) => t.id === inactiveTenant.id),
+      `visible: ${JSON.stringify((visibleTenants ?? []).some((t) => t.id === inactiveTenant.id))}`
+    );
+
+    const { data: visibleMemberships } = await user.from('tenant_users').select('tenant_id');
+    check(
+      'tenant_users no expone la membresia inactiva',
+      !(visibleMemberships ?? []).some((m) => m.tenant_id === inactiveTenant.id)
+    );
+
+    const { data: visibleSuppliers } = await user.from('suppliers').select('id');
+    check(
+      'suppliers no expone datos del tenant con membresia inactiva',
+      !(visibleSuppliers ?? []).some((s) => s.id === inactiveSupplierId)
+    );
+
+    await blocked(
+      'INSERT suppliers en tenant con membresia inactiva',
+      user
+        .from('suppliers')
+        .insert({ tenant_id: inactiveTenant.id, name: `hacked-inactive-${stamp}` })
+        .select()
+    );
+  } finally {
+    await admin
+      .from('suppliers')
+      .delete()
+      .eq('tenant_id', inactiveTenant.id)
+      .like('name', `hacked-inactive-${stamp}%`);
+    if (inactiveSupplierId) {
+      await admin.from('suppliers').delete().eq('id', inactiveSupplierId);
+    }
+    await admin
+      .from('tenant_users')
+      .delete()
+      .eq('tenant_id', inactiveTenant.id)
+      .eq('user_id', VICTIM_USER_ID);
+    await admin.from('tenants').delete().eq('id', inactiveTenant.id);
+  }
 });
 
 await section('DML directo con anon key + JWT esta bloqueado', async () => {

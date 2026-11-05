@@ -423,6 +423,7 @@ npx playwright test --list
 - Los tests que usan credenciales reales leen `E2E_USER_EMAIL` y `E2E_USER_PASSWORD` desde `.env.local` (ya están configurados para el usuario de prueba). Si faltan, ese test se salta.
 - Los tests de permisos usan `E2E_MEMBER_USER_EMAIL` y `E2E_MEMBER_USER_PASSWORD` para autenticar un usuario con rol member.
 - El `webServer` del config levanta `npm run dev` automáticamente; si ya tenés el server corriendo en `:3000`, reutiliza esa instancia.
+- El teardown global solo borra datos si `NEXT_PUBLIC_SUPABASE_URL` apunta a un Supabase local. Contra un proyecto remoto de test hay que setear `E2E_ALLOW_REMOTE=1`; sin ese flag la limpieza se omite para no tocar clientes reales.
 
 #### Helpers y Fixtures
 

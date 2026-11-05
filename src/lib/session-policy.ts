@@ -3,7 +3,7 @@
  *
  * Vive en su propio modulo porque las dos puntas necesitan exactamente el mismo
  * numero. Antes el timeout de inactividad estaba escrito en `auth-context.tsx` y
- * el proxy no lo conhecia: el navegador cerraba la sesion por su cuenta, pero
+ * el proxy no lo conocia: el navegador cerraba la sesion por su cuenta, pero
  * una cookie robada podia seguir renovandose desde el servidor indefinidamente.
  * Ahora el proxy aplica el mismo plazo, que es el unico que se puede esquivar
  * de verdad.

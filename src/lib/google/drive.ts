@@ -9,9 +9,12 @@ export async function downloadDriveFile(
   fileId: string,
   accessToken: string
 ): Promise<{ buffer: ArrayBuffer; mimeType: string; name: string }> {
+  // El ID viene del cliente: se escapa para que no pueda introducir path
+  // traversal ni query params en la URL de la API de Drive.
+  const encodedFileId = encodeURIComponent(fileId);
   // Get file metadata
   const metaRes = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,size`,
+    `https://www.googleapis.com/drive/v3/files/${encodedFileId}?fields=id,name,mimeType,size`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -27,7 +30,7 @@ export async function downloadDriveFile(
 
   // Download file content
   const downloadRes = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+    `https://www.googleapis.com/drive/v3/files/${encodedFileId}?alt=media`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,

@@ -1,5 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { isCrossSiteRequest, isSameOriginRequest } from '@/lib/security/csrf';
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 function makeRequest(url: string, init: RequestInit & { headers?: Record<string, string> } = {}): Request {
   return new Request(url, init);
@@ -24,6 +28,32 @@ describe('isSameOriginRequest', () => {
     const request = makeRequest('https://app.test/api/x', {
       method: 'POST',
       headers: { 'sec-fetch-site': 'cross-site' },
+    });
+    expect(isSameOriginRequest(request)).toBe(false);
+  });
+
+  it('rejects a same-site subdomain when the Origin does not match exactly', () => {
+    // `same-site` incluye subdominios: evil.app.test y app.test son same-site.
+    // No alcanza con el header, hay que validar el Origin.
+    const request = makeRequest('https://app.test/api/x', {
+      method: 'POST',
+      headers: { origin: 'https://evil.app.test', 'sec-fetch-site': 'same-site' },
+    });
+    expect(isSameOriginRequest(request)).toBe(false);
+  });
+
+  it('accepts same-site only when the Origin matches exactly', () => {
+    const request = makeRequest('https://app.test/api/x', {
+      method: 'POST',
+      headers: { origin: 'https://app.test', 'sec-fetch-site': 'same-site' },
+    });
+    expect(isSameOriginRequest(request)).toBe(true);
+  });
+
+  it('rejects same-site without Origin instead of trusting the flag', () => {
+    const request = makeRequest('https://app.test/api/x', {
+      method: 'POST',
+      headers: { 'sec-fetch-site': 'same-site' },
     });
     expect(isSameOriginRequest(request)).toBe(false);
   });
@@ -76,15 +106,37 @@ describe('isSameOriginRequest', () => {
     });
     expect(isSameOriginRequest(request)).toBe(true);
   });
+
+  it('accepts the configured public origin behind a host-rewriting proxy', () => {
+    // Con un proxy que no reenvía x-forwarded-host, `request.url` puede reflejar
+    // un host interno. El Origin del navegador sigue siendo el sitio público.
+    vi.stubEnv('NEXT_PUBLIC_SITE_URL', 'https://app.test');
+    const request = makeRequest('http://internal:3000/api/x', {
+      method: 'POST',
+      headers: { origin: 'https://app.test', host: 'internal:3000' },
+    });
+    expect(isSameOriginRequest(request)).toBe(true);
+  });
+
+  it('still rejects an origin that is not the configured one', () => {
+    vi.stubEnv('NEXT_PUBLIC_SITE_URL', 'https://app.test');
+    const request = makeRequest('http://internal:3000/api/x', {
+      method: 'POST',
+      headers: { origin: 'https://evil.test', host: 'internal:3000' },
+    });
+    expect(isSameOriginRequest(request)).toBe(false);
+  });
 });
 
 describe('isCrossSiteRequest', () => {
-  it('prefers sec-fetch-site when present', () => {
-    const sameSiteHeader = makeRequest('https://app.test/api/x', {
+  it('does not let a same-origin flag hide a foreign Origin', () => {
+    // Regresion: antes cualquier `sec-fetch-site` presente ganaba y se confiaba
+    // en `same-origin`, aunque el Origin dijera otra cosa.
+    const forged = makeRequest('https://app.test/api/x', {
       method: 'POST',
       headers: { 'sec-fetch-site': 'same-origin', origin: 'https://evil.test' },
     });
-    expect(isCrossSiteRequest(sameSiteHeader)).toBe(false);
+    expect(isCrossSiteRequest(forged)).toBe(true);
   });
 
   it('rejects a malformed origin', () => {

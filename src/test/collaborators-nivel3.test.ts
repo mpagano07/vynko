@@ -200,6 +200,36 @@ describe('colaboradores — nivel 3 (managers y ciclo de vida)', () => {
     const updates = callsTo(supabaseMock.__calls, 'tenant_users', 'update');
     expect(updates).toHaveLength(1);
     expect(updates[0].args[0]).toEqual({ status: 'inactive' });
+    // La RPC decide si la persona sigue activa en otra sucursal. Se llama
+    // siempre al desactivar; la base es la que sabe si corresponde revocar.
+    expect(supabaseMock.rpc).toHaveBeenCalledWith(
+      'revoke_user_sessions_if_no_active_membership',
+      { p_user_id: TARGET }
+    );
+  });
+
+  it('desactivar no falla si la revocación de sesiones falla', async () => {
+    supabaseMock.__queue('tenant_users', ownerOf(TENANT_A));
+    supabaseMock.__queue(
+      'tenant_users',
+      existingRows([{ id: 'tu-a', tenant_id: TENANT_A, role: 'cashier', status: 'active' }])
+    );
+    supabaseMock.__rpcQueue('revoke_user_sessions_if_no_active_membership', {
+      data: null,
+      error: { message: 'rpc caida' },
+    });
+
+    const res = await patchCollaborator(
+      apiRequest(`http://localhost/api/settings/collaborators/${TARGET}`, 'PATCH', {
+        status: 'inactive',
+      }),
+      routeParams(TARGET)
+    );
+
+    // La revocación es best-effort: la membresía ya quedó inactiva y el
+    // backend le niega el tenant igual. Devolver 500 haría creer al owner que
+    // la desactivación no se aplicó.
+    expect(res.status).toBe(200);
   });
 
   it('reactivar vuelve a poner la membresía en activo', async () => {
@@ -219,6 +249,11 @@ describe('colaboradores — nivel 3 (managers y ciclo de vida)', () => {
     expect(res.status).toBe(200);
     const updates = callsTo(supabaseMock.__calls, 'tenant_users', 'update');
     expect(updates[0].args[0]).toEqual({ status: 'active' });
+    // Reactivar nunca revoca: no hay ninguna membresía que se haya perdido.
+    expect(supabaseMock.rpc).not.toHaveBeenCalledWith(
+      'revoke_user_sessions_if_no_active_membership',
+      expect.anything()
+    );
   });
 
   it('no se puede desactivar al propietario', async () => {

@@ -3,6 +3,7 @@ import { rateLimit, rateLimitPeek, getClientIp } from '@/lib/rate-limit';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { isSameOriginRequest } from '@/lib/security/csrf';
 import { logger } from '@/lib/logger';
+import { LAST_SEEN_COOKIE, LAST_SEEN_COOKIE_OPTIONS } from '@/lib/session-policy';
 
 const MAX_FAILED_ATTEMPTS = 5;
 /**
@@ -92,5 +93,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Credenciales inválidas' }, { status: 401 });
   }
 
-  return NextResponse.json({ success: true });
+  const response = NextResponse.json({ success: true });
+  response.cookies.set(LAST_SEEN_COOKIE, String(Date.now()), LAST_SEEN_COOKIE_OPTIONS);
+  return response;
 }

@@ -1,7 +1,7 @@
 # Autenticacion: sesiones, permisos y revocacion
 
 Como se resuelven las sesiones y los permisos en Vynko, y que se espera que pase
-cuando algo cambia. Rama: `feature/auth-revision-2`.
+cuando algo cambia. Rama: `security/audit-hardening`.
 
 ## Dónde vive cada decisión
 
@@ -28,11 +28,17 @@ Consecuencias Practicas:
 - Un usuario en dos empresas tiene un rol **por empresa**. `x-active-tenant-id`
   elige cuál; si el id no está en sus membresías se ignora y se usa la primera, así
   que esa header no es vector de escalada.
-- Quitarle todas las membresías **no** invalida la sesión. El usuario sigue
-  autenticado, llega a la app, y `NoTenantAccessGuard` lo manda a `/no-access`.
-  Es una decisión deliberada: el proxy no expulsa por esto porque una lectura
-  transitoria de `tenant_users` (un error de red) mandaría a un cliente legítimo
-  a esa pantalla y perdería su contexto de trabajo.
+- Quitarle todas las membresías activas no es un cambio silencioso: dispara
+  `revoke_user_sessions_if_no_active_membership` (migración 067), que cierra las
+  sesiones de auth de esa persona. Es best-effort: si la RPC falla, la
+  membresía igual quedó inactiva/eliminada y el backend le sigue negando el
+  tenant; si la sesión sobrevive, `NoTenantAccessGuard` la manda a `/no-access`.
+  El proxy no expulsa por membresía vacía a propósito: una lectura transitoria
+  fallida de `tenant_users` no debe sacar de la app a un cliente que sí tiene
+  empresa; por eso la decisión vive en el cliente, sobre una segunda lectura.
+- Un miembro con `status = 'inactive'` tampoco conserva acceso directo por
+  PostgREST ni por Storage: las policies de 067 filtran `status = 'active'`, así
+  que la anon key + su JWT dejan de ver el tenant.
 
 Fijado en `src/test/security-session-resolution.test.ts`.
 
@@ -45,7 +51,8 @@ Fijado en `src/test/security-session-resolution.test.ts`.
 | `POST /api/auth/invitation-password` (alta por invitación) | **Global** | Se caen |
 | `POST /api/auth/logout` | Local | No se caen |
 | Cierre por inactividad (30 min) | Local | No se caen |
-| Cambio de rol o de membresía | No revoca | No hace falta: se resuelve por request |
+| Cambio de rol o alta/baja de una sucursal conservando otra activa | No revoca | No hace falta: se resuelve por request |
+| Desactivar o quitar la última membresía activa | **Global** (best-effort) | Se caen vía RPC de 067 |
 
 El cambio y la recuperación de contraseña revocan globalmente a propósito: son el
 camino para recuperar una cuenta que se sospecha que fue sustraída, y dejar viva

@@ -27,6 +27,24 @@ const ROLE_FALLBACK: TenantRole = 'member';
 const NOT_A_MANAGER = 'Only owners and managers can manage collaborators';
 
 /**
+ * Cierra las sesiones de auth de una persona que se quedo sin ninguna
+ * membresia activa. La funcion SQL decide: si sigue activa en otra sucursal no
+ * toca nada. Es best-effort a proposito, porque la membresia ya quedo
+ * actualizada y el backend igual le niega el tenant al refresh token.
+ */
+async function revokeSessionsIfNoActiveMembership(userId: string): Promise<void> {
+  const { error } = await supabaseAdmin.rpc('revoke_user_sessions_if_no_active_membership', {
+    p_user_id: userId,
+  });
+  if (error) {
+    logger.warn('No se pudieron revocar las sesiones del colaborador sin membresias activas', {
+      error,
+      userId,
+    });
+  }
+}
+
+/**
  * Sucursales que el usuario puede administrar. Un manager sólo manda en las
  * suyas; el owner manda en todas las que le pertenecen. Los roles se resuelven
  * por sucursal porque la misma persona puede ser owner en una y manager en otra.
@@ -100,9 +118,13 @@ function buildDesiredRoles(
       roleByTenant.set(tid, role);
     }
   } else {
+    // Sin lista explícita NO se asume "todas": mandar una invitación a cada
+    // sucursal por omisión era la forma más fácil de filtrar accesos sin
+    // querer. Si no vino ninguna sucursal válida, el llamador recibe el 400 de
+    // abajo y tiene que elegir.
     const requestedTenantIds = Array.isArray(body.tenant_ids)
       ? [...new Set(body.tenant_ids.filter((id) => scope.tenantIds.includes(id)))]
-      : scope.tenantIds;
+      : [];
     const role = normalizeAssignableRole(body.role);
     for (const tid of requestedTenantIds) {
       if (!canAssignRole(actorRoleInTenant(scope, tid), role)) {
@@ -746,6 +768,8 @@ export async function updateCollaborator(
     role?: string;
     tenant_ids?: string[];
     memberships?: { tenant_id?: string; role?: string }[];
+    /** Nombre visible de la persona. Se ignora si viene vacío. */
+    full_name?: string | null;
   }
 ): Promise<CollaboratorResult> {
   try {
@@ -757,12 +781,6 @@ export async function updateCollaborator(
     if (targetUserId === auth.userId) {
       return { ok: false, error: 'No podés editar tu propio rol', status: 400 };
     }
-
-    const desired = buildDesiredRoles(scope, body);
-    if (!desired.ok) return desired;
-    const { roleByTenant: desiredRoleByTenant } = desired;
-
-    const targetTenantIds = [...desiredRoleByTenant.keys()];
 
     const { data: existingRows } = await supabaseAdmin
       .from('tenant_users')
@@ -787,6 +805,56 @@ export async function updateCollaborator(
           status: 403,
           error: 'Un manager no puede modificar a un propietario ni a otro manager',
         };
+      }
+    }
+
+    // Se valida el body recién después de confirmar que el objetivo existe en
+    // el alcance: un usuario de otra empresa debe recibir 404, no un 400 que
+    // revele que el body llegó a procesarse.
+    const desired = buildDesiredRoles(scope, body);
+    if (!desired.ok) return desired;
+    const { roleByTenant: desiredRoleByTenant } = desired;
+
+    const targetTenantIds = [...desiredRoleByTenant.keys()];
+
+    // El nombre vive en `profiles`, que es identidad global: se valida acá y se
+    // escribe recién al final, cuando las membresías ya se aplicaron bien.
+    let nameChange: { nextName: string; previousName: string | null } | null = null;
+    if (typeof body.full_name === 'string' && body.full_name.trim()) {
+      const nextName = body.full_name.trim();
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('id, full_name')
+        .eq('id', targetUserId)
+        .maybeSingle();
+
+      if (!profile) {
+        return { ok: false, error: 'Collaborator not found', status: 404 };
+      }
+
+      const previousName = (profile.full_name as string | null) ?? null;
+      if (nextName !== previousName) {
+        const { data: allMemberships } = await supabaseAdmin
+          .from('tenant_users')
+          .select('tenant_id')
+          .eq('user_id', targetUserId);
+
+        // Igual que al agregar: el perfil es compartido entre empresas, así que
+        // sólo se puede renombrar a quien no trabaja también fuera de este
+        // alcance. Si no, cada empresa podría pisarle el nombre a la persona.
+        const worksElsewhere = (allMemberships ?? []).some(
+          (membership) => !scope.tenantIds.includes(membership.tenant_id as string)
+        );
+        if (worksElsewhere) {
+          return {
+            ok: false,
+            status: 403,
+            error:
+              'Ese colaborador también trabaja en otra empresa. El nombre lo administra esa persona desde su perfil.',
+          };
+        }
+
+        nameChange = { nextName, previousName };
       }
     }
 
@@ -877,6 +945,10 @@ export async function updateCollaborator(
       }
     }
 
+    if (toRemoveTenantIds.length > 0) {
+      await revokeSessionsIfNoActiveMembership(targetUserId);
+    }
+
     for (const tid of toUpdateTenantIds) {
       await createActivityLog({
         tenantId: tid,
@@ -909,6 +981,29 @@ export async function updateCollaborator(
         entityId: targetUserId,
         details: { role: desiredRoleByTenant.get(tid) ?? ROLE_FALLBACK },
       });
+    }
+
+    if (nameChange) {
+      const { error: nameError } = await supabaseAdmin
+        .from('profiles')
+        .update({ full_name: nameChange.nextName })
+        .eq('id', targetUserId);
+
+      if (nameError) {
+        logger.error('DB error:', { error: nameError });
+        return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
+      }
+
+      for (const tid of targetTenantIds) {
+        await createActivityLog({
+          tenantId: tid,
+          userId: auth.userId,
+          action: 'update_collaborator_name',
+          entityType: 'collaborator',
+          entityId: targetUserId,
+          details: { previous_name: nameChange.previousName, new_name: nameChange.nextName },
+        });
+      }
     }
 
     return { ok: true, body: { success: true }, status: 200 };
@@ -975,6 +1070,8 @@ export async function deleteCollaborator(
       logger.error('DB error:', { error });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }
+
+    await revokeSessionsIfNoActiveMembership(targetUserId);
 
     // Se audita solo donde la persona era miembro de verdad: `scopedTenantIds`
     // puede incluir sucursales del actor en las que nunca estuvo.
@@ -1060,6 +1157,10 @@ export async function setCollaboratorActive(
     if (error) {
       logger.error('DB error:', { error });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
+    }
+
+    if (!active) {
+      await revokeSessionsIfNoActiveMembership(targetUserId);
     }
 
     for (const row of rows) {

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient, type ServerCookie } from '@/lib/supabase';
 import { isSameOriginRequest } from '@/lib/security/csrf';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { LAST_SEEN_COOKIE, LAST_SEEN_COOKIE_OPTIONS } from '@/lib/session-policy';
 
 interface ResponseCookieOptions {
   maxAge?: number;
@@ -52,6 +53,7 @@ export async function POST(request: Request) {
   }
 
   const response = NextResponse.json({ success: true });
+  response.cookies.set(LAST_SEEN_COOKIE, String(Date.now()), LAST_SEEN_COOKIE_OPTIONS);
   for (const c of capturedCookies) {
     const opts = c.options as Partial<ResponseCookieOptions>;
     if (c.value === '') {

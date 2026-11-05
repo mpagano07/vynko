@@ -283,8 +283,24 @@ export function __resetRateLimitStateForTests(): void {
   postgresUnavailableLoggedAt = 0;
 }
 
-/** Headers que el edge de la plataforma sobrescribe, y que el cliente no puede forjar. */
+/**
+ * Headers que el edge de la plataforma sobrescribe, y que el cliente no puede
+ * forjar. Solo se confian cuando la app corre en un edge que realmente los
+ * pisa: en un servidor propio, `x-vercel-forwarded-for` o `true-client-ip` los
+ * manda cualquiera y usarlos como clave vuelve a abrir la evasion de limites.
+ *
+ * `TRUST_EDGE_IP_HEADERS=1` es la salida explicita para un proxy propio que
+ * garantice el saneamiento.
+ */
 const EDGE_IP_HEADERS = ['x-vercel-forwarded-for', 'cf-connecting-ip', 'true-client-ip'];
+
+function shouldTrustEdgeIpHeaders(): boolean {
+  return Boolean(
+    process.env.VERCEL ||
+      process.env.CF_PAGES ||
+      process.env.TRUST_EDGE_IP_HEADERS === '1'
+  );
+}
 
 /**
  * IP real del cliente, para usarla como clave de limite.
@@ -308,10 +324,12 @@ const EDGE_IP_HEADERS = ['x-vercel-forwarded-for', 'cf-connecting-ip', 'true-cli
  * correcto es configurar `RATE_LIMIT_TRUSTED_HOPS` con cuantos proxies hay.
  */
 export function getClientIp(request: Request): string {
-  for (const header of EDGE_IP_HEADERS) {
-    const value = request.headers.get(header);
-    const single = value?.split(',')[0]?.trim();
-    if (single) return normalizeIp(single);
+  if (shouldTrustEdgeIpHeaders()) {
+    for (const header of EDGE_IP_HEADERS) {
+      const value = request.headers.get(header);
+      const single = value?.split(',')[0]?.trim();
+      if (single) return normalizeIp(single);
+    }
   }
 
   const forwarded = request.headers.get('x-forwarded-for');

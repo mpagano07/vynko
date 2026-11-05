@@ -42,7 +42,7 @@ export default function OpengraphImage() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element -- Satori (next/og) no soporta next/image; el data URI ya viene optimizado */}
+          {/* Satori (next/og) no soporta next/image; el data URI ya viene optimizado */}
           <img src={logoSrc} width={132} height={132} alt="" style={{ borderRadius: 28 }} />
           <div style={{ display: 'flex', fontSize: 92, fontWeight: 700, letterSpacing: -2 }}>
             Vynko

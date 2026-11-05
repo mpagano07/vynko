@@ -50,13 +50,15 @@ const MAX_CLOCK_SKEW_SECONDS = 10 * 60;
 export function verifyMercadoPagoSignature(request: Request, dataId?: string): boolean {
   const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
   if (!secret) {
-    if (process.env.NODE_ENV === 'production') {
-      logger.error('MERCADOPAGO_WEBHOOK_SECRET is not configured in environment variables');
-      return false;
+    // Fail-closed por defecto. El unico bypass es explicito
+    // (`WEBHOOK_ALLOW_UNVERIFIED=1`) y solo en desarrollo.
+    const allowUnverified =
+      process.env.NODE_ENV === 'development' && process.env.WEBHOOK_ALLOW_UNVERIFIED === '1';
+    logger.error('MERCADOPAGO_WEBHOOK_SECRET is not configured in environment variables');
+    if (allowUnverified) {
+      logger.warn('WEBHOOK_ALLOW_UNVERIFIED=1: se omite la firma de MercadoPago solo en desarrollo');
     }
-    // In dev mode without secret, log warning but allow bypass
-    logger.warn('MERCADOPAGO_WEBHOOK_SECRET is not set. Skipping signature verification in dev mode');
-    return true;
+    return allowUnverified;
   }
 
   const xSignature = request.headers.get('x-signature');

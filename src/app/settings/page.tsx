@@ -319,12 +319,9 @@ function SettingsContent() {
 
   const canInvite = tenant?.subscription_plan === 'business' || tenant?.subscription_plan === 'enterprise';
 
-  useEffect(() => {
-    if (manageableIdsKey && selectedTenantIds.length === 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSelectedTenantIds(manageableIdsKey.split(','));
-    }
-  }, [manageableIdsKey, selectedTenantIds.length]);
+  // Las sucursales arrancan desmarcadas a propósito: invitar es otorgar acceso
+  // y una lista preseleccionada convierte "enviar" en "enviar a todas" sin que
+  // nadie lo haya decidido. La selección tiene que ser explícita.
 
   const normalizedSearch = collabSearch.trim().toLowerCase();
   const filteredCollaborators = normalizedSearch
@@ -458,11 +455,11 @@ function SettingsContent() {
     if (!inviteEmail.trim()) return;
 
     const availableTenantIds = manageableIdsKey ? manageableIdsKey.split(',') : [];
-    const targetTenantIds = selectedTenantIds.length > 0
-      ? selectedTenantIds.filter((id) => availableTenantIds.includes(id))
-      : availableTenantIds;
+    // Sin sucursal elegida no se manda nada: antes una lista vacía se
+    // interpretaba como "todas" y la invitación salía a cada sucursal.
+    const targetTenantIds = selectedTenantIds.filter((id) => availableTenantIds.includes(id));
     if (targetTenantIds.length === 0) {
-      toast.error('No tenés sucursales disponibles para invitar');
+      toast.error('Elegí al menos una sucursal para enviar la invitación');
       return;
     }
 
@@ -487,27 +484,19 @@ function SettingsContent() {
 
       if (data.invited) {
         toast.success(data.message || 'Invitación enviada');
-        const invitedTenantIds: string[] = data.tenant_ids || targetTenantIds;
-        const createdAt = new Date().toISOString();
-        setPendingInvitations((prev) => [
-          ...prev,
-          ...invitedTenantIds.map((tid) => ({
-            id: `pending-${tid}-${data.email}`,
-            email: data.email,
-            role: inviteRole,
-            tenant_id: tid,
-            tenant_name: tenants.find((t) => t.id === tid)?.name || '',
-            created_at: createdAt,
-            expired: false,
-            invited_by_name: profile?.full_name || null,
-          })),
-        ]);
       } else {
         toast.success('Colaborador agregado');
-        setCollaborators((prev) => [...prev, { ...data.collaborator, tenants: tenants.filter(t => targetTenantIds.includes(t.id)) }]);
       }
+      // Se recarga la lista en vez de insertar una copia optimista: el backend
+      // devuelve el colaborador ya agrupado por usuario y las invitaciones con
+      // su id real. Antes se hacía un append local que duplicaba la fila (misma
+      // `user_id` => misma key de React) cuando el email ya era miembro, y las
+      // invitaciones quedaban con ids sintéticos que no se podían revocar.
+      await reloadCollaborators();
       setInviteEmail('');
       setInviteName('');
+      // La próxima invitación vuelve a empezar sin sucursales marcadas.
+      setSelectedTenantIds([]);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al invitar');
     } finally {
@@ -864,7 +853,10 @@ function SettingsContent() {
 
   const handleUpdateCollab = useCallback(async (
     collab: Collaborator,
-    payload: { memberships: { tenant_id: string; role: string }[] }
+    payload: {
+      memberships: { tenant_id: string; role: string }[];
+      full_name?: string | null;
+    }
   ) => {
     try {
       const res = await authFetch(`/api/settings/collaborators/${collab.user_id}`, {
@@ -899,6 +891,9 @@ function SettingsContent() {
         return {
           ...c,
           role: highestRole(nextMemberships.map((m) => m.role)),
+          // Si el nombre vino vacío, se conserva el actual: el backend tampoco
+          // lo borra, así que la fila no debe mostrar algo distinto.
+          full_name: payload.full_name?.trim() || c.full_name,
           tenants: allTenants.filter(t => payload.memberships.some((m) => m.tenant_id === t.id)),
           memberships: nextMemberships,
           tenant_users_ids: nextMemberships.map((m) => m.id),
@@ -1354,7 +1349,7 @@ function SettingsContent() {
                           <div className="flex flex-wrap gap-1 mt-1">
                             {c.memberships!.map((m) => (
                               <span
-                                key={m.tenant_id}
+                                key={m.id}
                                 className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${roleChipClass(m.role)} ${m.status === 'inactive' ? 'opacity-50' : ''}`}
                               >
                                 {m.tenant_name}
@@ -1505,7 +1500,7 @@ function SettingsContent() {
                   Invitaciones pendientes
                 </p>
                 <div className="space-y-2">
-                  {pendingInvitations.map((inv, idx) => {
+                  {pendingInvitations.map((inv) => {
                     const invitedAt = formatShortDate(inv.created_at);
                     const meta = [
                       `${inv.expired ? 'Vencida' : 'Pendiente'} — ${getRoleLabel(inv.role)}`,
@@ -1515,7 +1510,7 @@ function SettingsContent() {
                     ].filter(Boolean).join(' · ');
 
                     return (
-                      <div key={inv.id || idx} className={`flex items-center justify-between gap-3 p-2 rounded-lg border ${inv.expired ? 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-700' : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800'}`}>
+                      <div key={inv.id ?? `${inv.email}:${inv.tenant_id ?? ''}`} className={`flex items-center justify-between gap-3 p-2 rounded-lg border ${inv.expired ? 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-700' : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800'}`}>
                         <div className="flex items-center gap-2 min-w-0">
                           <div className="h-8 w-8 rounded-full bg-amber-200 dark:bg-amber-800 flex items-center justify-center text-sm font-medium text-amber-700 dark:text-amber-300 flex-shrink-0">
                             {(inv.email || '?').charAt(0).toUpperCase()}
@@ -1622,9 +1617,14 @@ function SettingsContent() {
                 </div>
 
                 <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
-                  <p className="text-xs font-medium text-gray-500 mb-2">
-                    Sucursales asignadas
-                  </p>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-gray-500">
+                      Sucursales asignadas
+                    </p>
+                    <span className="text-[11px] text-gray-400">
+                      {selectedTenantIds.length} de {manageableTenants.length}
+                    </span>
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     {manageableTenants.map((t) => {
                       const checked = selectedTenantIds.includes(t.id);
@@ -1655,6 +1655,11 @@ function SettingsContent() {
                       <p className="text-xs text-gray-400">No hay sucursales disponibles.</p>
                     )}
                   </div>
+                  {manageableTenants.length > 0 && selectedTenantIds.length === 0 && (
+                    <p className="mt-2 text-xs text-gray-400">
+                      Elegí al menos una sucursal. No se envía nada hasta que lo hagas.
+                    </p>
+                  )}
                 </div>
 
                 <Button type="submit" disabled={inviting || selectedTenantIds.length === 0}>

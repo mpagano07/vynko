@@ -135,6 +135,18 @@ describe('POST /api/settings/collaborators', () => {
     expect(json.error).toBe('Email is required');
   });
 
+  it('exige elegir al menos una sucursal', async () => {
+    // Antes la ausencia de `tenant_ids` se interpretaba como "todas" y una
+    // invitación sin sucursales marcadas salía a cada una. Ahora es un 400.
+    supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1', role: 'owner', status: 'active' }] });
+
+    const res = await POST(makeRequest('POST', { email: 'a@b.com', role: 'member' }));
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe('No valid tenants selected');
+    expect(supabaseMock.auth.admin.inviteUserByEmail).not.toHaveBeenCalled();
+  });
+
   it('agrega a un usuario ya registrado que YA es miembro de la casa', async () => {
     supabaseMock.__queue('tenant_users', { data: [{ tenant_id: 'tenant-1', role: 'owner', status: 'active' }] });
     supabaseMock.__queue('profiles', { data: { id: 'user-2', email: 'a@b.com' } });
@@ -148,7 +160,11 @@ describe('POST /api/settings/collaborators', () => {
       data: { email: 'a@b.com', full_name: '', avatar_url: null },
     });
 
-    const res = await POST(makeRequest('POST', { email: 'a@b.com', role: 'member' }));
+    const res = await POST(makeRequest('POST', {
+      email: 'a@b.com',
+      role: 'member',
+      tenant_ids: ['tenant-1'],
+    }));
     expect(res.status).toBe(201);
 
     const json = await res.json();
@@ -179,6 +195,7 @@ describe('POST /api/settings/collaborators', () => {
     const res = await POST(makeRequest('POST', {
       email: 'ajeno@otra.com',
       role: 'member',
+      tenant_ids: ['tenant-1'],
       full_name: 'Intruso',
     }));
     expect(res.status).toBe(201);
@@ -220,6 +237,7 @@ describe('POST /api/settings/collaborators', () => {
     const res = await POST(makeRequest('POST', {
       email: 'a@b.com',
       role: 'member',
+      tenant_ids: ['tenant-1'],
       full_name: 'Ana',
     }));
 
@@ -246,6 +264,7 @@ describe('POST /api/settings/collaborators', () => {
     const res = await POST(makeRequest('POST', {
       email: 'ajeno@otra.com',
       role: 'manager',
+      tenant_ids: ['tenant-1'],
       full_name: 'Nuevo',
     }));
 
@@ -268,7 +287,11 @@ describe('POST /api/settings/collaborators', () => {
     supabaseMock.__queue('tenant_users', { data: null, error: null, count: 1 });
     supabaseMock.__queue('invitations', { data: null, error: null });
 
-    const res = await POST(makeRequest('POST', { email: 'nuevo@tienda.com', role: 'member' }));
+    const res = await POST(makeRequest('POST', {
+      email: 'nuevo@tienda.com',
+      role: 'member',
+      tenant_ids: ['tenant-1'],
+    }));
     expect(res.status).toBe(201);
 
     const json = await res.json();
@@ -306,7 +329,11 @@ describe('POST /api/settings/collaborators', () => {
       },
     } as never);
 
-    const res = await POST(makeRequest('POST', { email: 'ajeno@otra.com', role: 'member' }));
+    const res = await POST(makeRequest('POST', {
+      email: 'ajeno@otra.com',
+      role: 'member',
+      tenant_ids: ['tenant-1'],
+    }));
     expect(res.status).toBe(201);
 
     const json = await res.json();
@@ -344,7 +371,11 @@ describe('POST /api/settings/collaborators', () => {
       },
     } as never);
 
-    const res = await POST(makeRequest('POST', { email: 'nuevo@tienda.com', role: 'member' }));
+    const res = await POST(makeRequest('POST', {
+      email: 'nuevo@tienda.com',
+      role: 'member',
+      tenant_ids: ['tenant-1'],
+    }));
     expect(res.status).toBe(429);
 
     const json = await res.json();
@@ -366,7 +397,11 @@ describe('POST /api/settings/collaborators', () => {
     supabaseMock.__queue('tenants', { data: { subscription_plan: 'starter' } });
     supabaseMock.__queue('tenant_users', { data: null, error: null, count: 1 });
 
-    const res = await POST(makeRequest('POST', { email: 'a@b.com', role: 'member' }));
+    const res = await POST(makeRequest('POST', {
+      email: 'a@b.com',
+      role: 'member',
+      tenant_ids: ['tenant-1'],
+    }));
     expect(res.status).toBe(403);
     const json = await res.json();
     expect(json.error).toContain('permite hasta 1 usuario');
@@ -384,7 +419,11 @@ describe('POST /api/settings/collaborators', () => {
       error: { message: 'invite fail' },
     });
 
-    const res = await POST(makeRequest('POST', { email: 'nuevo@tienda.com', role: 'member' }));
+    const res = await POST(makeRequest('POST', {
+      email: 'nuevo@tienda.com',
+      role: 'member',
+      tenant_ids: ['tenant-1'],
+    }));
     expect(res.status).toBe(500);
     const json = await res.json();
     expect(json.error).toBe('Ocurrio un error inesperado. Intenta de nuevo.');

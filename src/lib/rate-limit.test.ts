@@ -237,11 +237,24 @@ describe('getClientIp', () => {
     expect(getClientIp(req({ 'x-forwarded-for': '9.9.9.9' }))).toBe('9.9.9.9');
   });
 
-  it('prefiere el header que escribe el edge, que el cliente no puede forjar', () => {
+  it('prefiere el header del edge solo cuando corre en un edge de confianza', () => {
+    vi.stubEnv('VERCEL', '1');
     expect(
       getClientIp(req({ 'x-forwarded-for': '9.9.9.9', 'x-vercel-forwarded-for': '1.1.1.1' }))
     ).toBe('1.1.1.1');
     expect(getClientIp(req({ 'cf-connecting-ip': '2.2.2.2' }))).toBe('2.2.2.2');
+  });
+
+  it('ignora headers de edge falsificados fuera de Vercel/Cloudflare', () => {
+    // Regresion: en un servidor propio cualquiera puede mandar
+    // `true-client-ip` y elegir su bucket. Sin edge conocido manda el ultimo
+    // salto de X-Forwarded-For.
+    vi.stubEnv('VERCEL', '');
+    vi.stubEnv('CF_PAGES', '');
+    vi.stubEnv('TRUST_EDGE_IP_HEADERS', '');
+    expect(
+      getClientIp(req({ 'x-forwarded-for': '9.9.9.9, 1.1.1.1', 'true-client-ip': '6.6.6.6' }))
+    ).toBe('1.1.1.1');
   });
 
   it('respeta la cantidad de proxies de confianza configurada', () => {

@@ -242,11 +242,16 @@ export async function proxy(request: NextRequest) {
   // ese codigo, y el refresh token se renueva desde el servidor mientras el
   // atacante navegue. El plazo se comprueba aca, con un timestamp en una cookie
   // HttpOnly que el usuario no puede editar, y al vencer se revoca la sesion en
-  // Supabase en vez de solo_clean la cookie local.
+  // Supabase en vez de solo limpiar la cookie local.
   const lastSeenRaw = request.cookies.get(LAST_SEEN_COOKIE)?.value;
   const lastSeen = lastSeenRaw ? Number.parseInt(lastSeenRaw, 10) : Number.NaN;
 
-  if (Number.isFinite(lastSeen) && Date.now() - lastSeen > INACTIVITY_TIMEOUT_MS) {
+  // La cookie ausente NO se trata como "recien activo": si fuera asi, una cookie
+  // de sesion robada pero sin `vynko_last_seen` esquivaria el plazo para
+  // siempre. Las rutas que abren sesion (login, callback, /api/auth/session) la
+  // escriben en el mismo response; una sesion vieja sin esta cookie se cierra
+  // una unica vez y la persona vuelve a entrar.
+  if (!Number.isFinite(lastSeen) || Date.now() - lastSeen > INACTIVITY_TIMEOUT_MS) {
     await supabase.auth.signOut({ scope: 'local' });
     response.cookies.set(LAST_SEEN_COOKIE, '', { ...LAST_SEEN_COOKIE_OPTIONS, maxAge: 0 });
     const inactiveUrl = new URL('/login', request.url);
