@@ -45,13 +45,82 @@ export async function getAuthHeaders(): Promise<Record<string, string>> {
 }
 
 export async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const headers = new Headers();
-  const auth = await getAuthHeaders();
-  for (const [key, value] of Object.entries(auth)) {
-    headers.set(key, value);
+  const send = () => {
+    const headers = new Headers();
+    const auth = getTenantHeaders();
+    for (const [key, value] of Object.entries(auth)) {
+      headers.set(key, value);
+    }
+    for (const [key, value] of new Headers(init?.headers)) {
+      headers.set(key, value);
+    }
+    return fetch(input, { ...init, headers, credentials: init?.credentials ?? 'include' });
+  };
+
+  const response = await send();
+  if (response.status !== 401) return response;
+
+  // Un 401 en una ruta autenticada casi siempre es un access token vencido
+  // que el cliente de servidor no llegó a refrescar (por ejemplo, porque dos
+  // requests paralelos compitieron por el mismo refresh token). `/api/session`
+  // resuelve la sesión contra Supabase y reescribe las cookies; si sigue
+  // habiendo usuario, reintentamos una vez.
+  if (!canReplayRequest(input, init)) return response;
+  const refreshed = await refreshSessionOnce();
+  if (!refreshed) {
+    redirectToLoginForExpiredSession();
+    return response;
   }
-  for (const [key, value] of new Headers(init?.headers)) {
-    headers.set(key, value);
+
+  const retried = await send();
+  if (retried.status === 401) redirectToLoginForExpiredSession();
+  return retried;
+}
+
+/**
+ * Reintentar sólo es seguro cuando el cuerpo se puede volver a enviar. Un
+ * `ReadableStream` (o un `Request` ya consumido) no se puede reproducir.
+ */
+function canReplayRequest(input: RequestInfo | URL, init?: RequestInit): boolean {
+  if (typeof input !== 'string' && !(input instanceof URL)) return false;
+  const body = init?.body;
+  if (body == null || typeof body === 'string') return true;
+  return false;
+}
+
+let sessionRefresh: Promise<boolean> | null = null;
+
+/**
+ * Deduplica el refresco: si varias requests reciben 401 a la vez, todas
+ * esperan el mismo `/api/session` en vez de competir por el refresh token.
+ */
+function refreshSessionOnce(): Promise<boolean> {
+  if (!sessionRefresh) {
+    sessionRefresh = (async () => {
+      try {
+        const res = await fetch('/api/session', {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        if (!res.ok) return false;
+        const data = (await res.json()) as { user?: unknown } | null;
+        return Boolean(data?.user);
+      } catch {
+        return false;
+      } finally {
+        sessionRefresh = null;
+      }
+    })();
   }
-  return fetch(input, { ...init, headers, credentials: init?.credentials ?? 'include' });
+  return sessionRefresh;
+}
+
+function redirectToLoginForExpiredSession(): void {
+  if (typeof window === 'undefined') return;
+  // En tests/jsdom no hay navegación real y `location.replace` no aplica.
+  if (process.env.NODE_ENV === 'test') return;
+  if (window.location.pathname === '/login') return;
+  // `replace` y no `assign`: la pantalla con la sesión vencida no debe quedar en
+  // el historial, porque volver atrás mostraría datos de una sesión que ya no existe.
+  window.location.replace('/login?reason=expired');
 }

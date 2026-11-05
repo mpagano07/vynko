@@ -126,8 +126,10 @@ consuma.
      en Paddle) y correr el cron.
   9. **Firma invalida**: un POST a `/api/webhooks/paddle` sin
      `Paddle-Signature` (o con firma mala) devuelve 401. Requiere
-     `PADDLE_WEBHOOK_SECRET`: sin el, fuera de produccion la firma se OMITE a
-     proposito.
+     `PADDLE_WEBHOOK_SECRET`: sin el, el webhook se rechaza SIEMPRE (tambien en
+     desarrollo). Para probar el flujo local sin firma hay que pedirlo explicito
+     con `WEBHOOK_ALLOW_UNVERIFIED=1` y solo funciona con
+     `NODE_ENV=development`.
   10. Argentina siempre cae a MercadoPago (ARS): para probar Paddle hay que
       usar un pais no-AR.
 

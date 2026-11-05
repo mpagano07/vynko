@@ -8,5 +8,18 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text-summary'],
+      // Piso medido sobre la suite actual (71.55 / 64.22 / 70.59 / 73.02).
+      // Un poco por debajo a proposito: el objetivo es detectar caidas grandes,
+      // no obligar a tocar el umbral cada vez que se agrega una rama.
+      thresholds: {
+        statements: 70,
+        branches: 63,
+        functions: 69,
+        lines: 71,
+      },
+    },
   },
 })

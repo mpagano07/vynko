@@ -153,6 +153,10 @@ function createSupabaseMock() {
     // solo las filas que el dashboard necesita; el default es catalogo vacio.
     get_critical_products: { data: [], error: null },
     get_product_counters: { data: [{ product_count: 0, alerts_configured: false }], error: null },
+    // `revoke_user_sessions_if_no_active_membership` (migracion 067) devuelve
+    // true solo si borro sesiones. Para los tests de desactivacion alcanza con
+    // el default false: la llamada no debe cambiar el resultado de la operacion.
+    revoke_user_sessions_if_no_active_membership: { data: false, error: null },
   };
 
   // El segundo parametro existe porque la app SI llama por RPC con argumentos

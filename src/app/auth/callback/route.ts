@@ -3,6 +3,7 @@ import { createServerSupabaseClient, type ServerCookie } from '@/lib/supabase';
 import { acceptInvitationsForUser, getUserTenantIds } from '@/lib/accept-invitations';
 import { createCompanyForUser } from '@/lib/create-company';
 import { getAppOrigin, safeInternalRedirect } from '@/lib/security/redirects';
+import { LAST_SEEN_COOKIE, LAST_SEEN_COOKIE_OPTIONS } from '@/lib/session-policy';
 
 export const dynamic = 'force-dynamic';
 
@@ -104,6 +105,7 @@ export async function GET(request: Request) {
   }
 
   const response = NextResponse.redirect(safeInternalRedirect(request, redirectPath));
+  response.cookies.set(LAST_SEEN_COOKIE, String(Date.now()), LAST_SEEN_COOKIE_OPTIONS);
   for (const c of capturedCookies) {
     const opts = c.options as Partial<ResponseCookieOptions>;
     if (c.value === '') {

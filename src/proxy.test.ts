@@ -68,6 +68,11 @@ function makeAdminClient() {
 
 function request(pathname = '/dashboard', cookies: Record<string, string> = {}) {
   const req = new NextRequest(`http://localhost${pathname}`);
+  // Por defecto la sesion esta "activa": el caso de cookie ausente se prueba
+  // aparte, sin este default, para no volver a esconder la regresion.
+  if (!(LAST_SEEN_COOKIE in cookies)) {
+    req.cookies.set(LAST_SEEN_COOKIE, String(Date.now()));
+  }
   for (const [name, value] of Object.entries(cookies)) {
     req.cookies.set(name, value);
   }
@@ -317,17 +322,18 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
     expect(refreshed?.httpOnly).toBe(true);
   });
 
-  it('no corta la sesión en la primera request aunque no exista la marca de actividad', async () => {
-    // La cookie aparece recien en la primera request con sesion: si se exigiera
-    // desde el primer request, cada login recien hecho expulsaria al usuario.
-    adminQueue.push({ data: [{ tenant_id: 't1' }], error: null });
-    adminQueue.push({ data: { onboarding_pending: false }, error: null });
-    adminQueue.push({ data: [{ subscription_status: 'active' }], error: null });
+  it('corta la sesión si falta la marca de actividad', async () => {
+    // Regresion: antes la cookie ausente saltaba el chequeo, asi que una cookie
+    // de sesion robada sin `vynko_last_seen` no vencia nunca. Las rutas que
+    // abren sesion escriben la marca en el mismo response.
+    const req = new NextRequest('http://localhost/dashboard');
 
-    const res = await proxy(request('/dashboard'));
+    const res = await proxy(req);
 
-    expect(res.status).toBe(200);
-    expect(signOutMock).not.toHaveBeenCalled();
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toContain('/login');
+    expect(res.headers.get('location')).toContain('reason=inactive');
+    expect(signOutMock).toHaveBeenCalledWith({ scope: 'local' });
   });
 
   it('BLOQUEA /onboarding y redirige a /dashboard si el flag dice onboarding completado', async () => {
@@ -450,6 +456,8 @@ describe('proxy: rate limit global de paginas (F1-6)', () => {
 
     expect(res.status).toBe(200);
     expect(rateLimitMock).toHaveBeenCalledWith('proxy:ip:203.0.113.5', expect.any(Number), expect.any(Number));
+    // Sin este host el navegador bloquea el envio de errores a Sentry.
+    expect(res.headers.get('Content-Security-Policy')).toContain('https://*.ingest.sentry.io');
   });
 
   it('bloquea con 429 y Retry-After cuando una IP supera el tope', async () => {

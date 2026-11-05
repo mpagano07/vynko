@@ -76,12 +76,30 @@ describe('verifyMercadoPagoSignature', () => {
     expect(verifyMercadoPagoSignature(req, DATA_ID)).toBe(false);
   });
 
-  it('bypasses verification in dev mode when MERCADOPAGO_WEBHOOK_SECRET is not set', () => {
+  it('rejects in dev mode when the secret is missing and no bypass was requested', () => {
     delete process.env.MERCADOPAGO_WEBHOOK_SECRET;
     vi.stubEnv('NODE_ENV', 'development');
 
     const req = makeRequest({});
+    expect(verifyMercadoPagoSignature(req, DATA_ID)).toBe(false);
+  });
+
+  it('bypasses only with an explicit flag in development', () => {
+    delete process.env.MERCADOPAGO_WEBHOOK_SECRET;
+    vi.stubEnv('NODE_ENV', 'development');
+    vi.stubEnv('WEBHOOK_ALLOW_UNVERIFIED', '1');
+
+    const req = makeRequest({});
     expect(verifyMercadoPagoSignature(req, DATA_ID)).toBe(true);
+  });
+
+  it('ignores the bypass flag in production', () => {
+    delete process.env.MERCADOPAGO_WEBHOOK_SECRET;
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('WEBHOOK_ALLOW_UNVERIFIED', '1');
+
+    const req = makeRequest({});
+    expect(verifyMercadoPagoSignature(req, DATA_ID)).toBe(false);
   });
 
   it('rejects in production when MERCADOPAGO_WEBHOOK_SECRET is not set', () => {

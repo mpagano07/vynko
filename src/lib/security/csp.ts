@@ -57,7 +57,7 @@ export function buildCsp(nonce: string): string {
     "style-src 'self' 'unsafe-inline' https://*.paddle.com",
     "img-src 'self' blob: data: https://*.supabase.co https://*.supabase.in https://*.mercadopago.com https://http2.mlstatic.com https://*.gravatar.com https://images.unsplash.com",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.paddle.com https://apis.google.com https://*.googleapis.com",
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.paddle.com https://apis.google.com https://*.googleapis.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io",
     // Google Picker se monta en un iframe de docs.google.com/drive.google.com.
     "frame-src https://*.mercadopago.com https://*.paddle.com https://docs.google.com https://drive.google.com",
     "media-src 'self' blob:",

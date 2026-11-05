@@ -487,25 +487,15 @@ function SettingsContent() {
 
       if (data.invited) {
         toast.success(data.message || 'Invitación enviada');
-        const invitedTenantIds: string[] = data.tenant_ids || targetTenantIds;
-        const createdAt = new Date().toISOString();
-        setPendingInvitations((prev) => [
-          ...prev,
-          ...invitedTenantIds.map((tid) => ({
-            id: `pending-${tid}-${data.email}`,
-            email: data.email,
-            role: inviteRole,
-            tenant_id: tid,
-            tenant_name: tenants.find((t) => t.id === tid)?.name || '',
-            created_at: createdAt,
-            expired: false,
-            invited_by_name: profile?.full_name || null,
-          })),
-        ]);
       } else {
         toast.success('Colaborador agregado');
-        setCollaborators((prev) => [...prev, { ...data.collaborator, tenants: tenants.filter(t => targetTenantIds.includes(t.id)) }]);
       }
+      // Se recarga la lista en vez de insertar una copia optimista: el backend
+      // devuelve el colaborador ya agrupado por usuario y las invitaciones con
+      // su id real. Antes se hacía un append local que duplicaba la fila (misma
+      // `user_id` => misma key de React) cuando el email ya era miembro, y las
+      // invitaciones quedaban con ids sintéticos que no se podían revocar.
+      await reloadCollaborators();
       setInviteEmail('');
       setInviteName('');
     } catch (err: unknown) {
@@ -1354,7 +1344,7 @@ function SettingsContent() {
                           <div className="flex flex-wrap gap-1 mt-1">
                             {c.memberships!.map((m) => (
                               <span
-                                key={m.tenant_id}
+                                key={m.id}
                                 className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${roleChipClass(m.role)} ${m.status === 'inactive' ? 'opacity-50' : ''}`}
                               >
                                 {m.tenant_name}
@@ -1505,7 +1495,7 @@ function SettingsContent() {
                   Invitaciones pendientes
                 </p>
                 <div className="space-y-2">
-                  {pendingInvitations.map((inv, idx) => {
+                  {pendingInvitations.map((inv) => {
                     const invitedAt = formatShortDate(inv.created_at);
                     const meta = [
                       `${inv.expired ? 'Vencida' : 'Pendiente'} — ${getRoleLabel(inv.role)}`,
@@ -1515,7 +1505,7 @@ function SettingsContent() {
                     ].filter(Boolean).join(' · ');
 
                     return (
-                      <div key={inv.id || idx} className={`flex items-center justify-between gap-3 p-2 rounded-lg border ${inv.expired ? 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-700' : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800'}`}>
+                      <div key={inv.id ?? `${inv.email}:${inv.tenant_id ?? ''}`} className={`flex items-center justify-between gap-3 p-2 rounded-lg border ${inv.expired ? 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-700' : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800'}`}>
                         <div className="flex items-center gap-2 min-w-0">
                           <div className="h-8 w-8 rounded-full bg-amber-200 dark:bg-amber-800 flex items-center justify-center text-sm font-medium text-amber-700 dark:text-amber-300 flex-shrink-0">
                             {(inv.email || '?').charAt(0).toUpperCase()}

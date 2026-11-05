@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET } from './route';
+import { LAST_SEEN_COOKIE } from '@/lib/session-policy';
 
 const { acceptInvitationsForUser, getUserTenantIds, createCompanyForUser, exchangeCodeForSession } = vi.hoisted(() => ({
   acceptInvitationsForUser: vi.fn(async () => ({ accepted: 1 })),
@@ -44,6 +45,7 @@ describe('GET /auth/callback', () => {
     expect(exchangeCodeForSession).toHaveBeenCalledWith('abc');
     expect(acceptInvitationsForUser).toHaveBeenCalledWith({ id: 'user-1', email: 'nuevo@tienda.com' });
     expect(res.headers.get('location')).toContain('/dashboard');
+    expect(res.cookies.get(LAST_SEEN_COOKIE)?.value).toBeTruthy();
   });
 
   it('deja la aceptación para /accept-invite cuando el link viene de una invitación', async () => {

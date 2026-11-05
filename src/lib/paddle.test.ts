@@ -12,6 +12,7 @@ const ENV_KEYS = [
   'PADDLE_PRICE_IDS',
   'PADDLE_ENVIRONMENT',
   'NODE_ENV',
+  'WEBHOOK_ALLOW_UNVERIFIED',
 ] as const;
 
 const original: Record<string, string | undefined> = {};
@@ -134,9 +135,21 @@ describe('paddle', () => {
       expect(verifyPaddleSignature(body, 'ts=1;h1=abc')).toBe(false);
     });
 
-    it('permite el bypass en desarrollo sin secreto', () => {
-      setEnv('NODE_ENV', 'test');
+    it('rechaza en desarrollo sin secreto si no se pidio el bypass', () => {
+      setEnv('NODE_ENV', 'development');
+      expect(verifyPaddleSignature(body, null)).toBe(false);
+    });
+
+    it('permite el bypass solo con flag explicito en desarrollo', () => {
+      setEnv('NODE_ENV', 'development');
+      setEnv('WEBHOOK_ALLOW_UNVERIFIED', '1');
       expect(verifyPaddleSignature(body, null)).toBe(true);
+    });
+
+    it('ignora el flag de bypass en produccion', () => {
+      setEnv('NODE_ENV', 'production');
+      setEnv('WEBHOOK_ALLOW_UNVERIFIED', '1');
+      expect(verifyPaddleSignature(body, null)).toBe(false);
     });
   });
 });

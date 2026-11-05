@@ -1,7 +1,7 @@
 {
   "name": "vynko",
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=24.0.0"
   },
   "private": true,
   "scripts": {
@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "verify:rls": "node scripts/verify-rls.mjs",
     "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "update-prices": "node scripts/update-prices.mjs",

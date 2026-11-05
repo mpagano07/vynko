@@ -11,7 +11,7 @@ function originFromValue(value: string | null | undefined): string | null {
   }
 }
 
-export function getAppOrigin(request: Request): string {
+function configuredOrigin(): string | null {
   const configured = (
     process.env.NEXT_PUBLIC_SITE_URL ??
     process.env.NEXT_PUBLIC_APP_URL ??
@@ -21,6 +21,26 @@ export function getAppOrigin(request: Request): string {
     const origin = originFromValue(configured);
     if (origin) return origin;
   }
+
+  // En produccion sin URL publica configurada, Vercel expone el dominio real
+  // en estas variables. Preferirlas evita derivar el origen del header Host,
+  // que en un despliegue self-hosted puede inyectar un dominio ajeno en los
+  // links de recuperacion de contrasena.
+  if (process.env.NODE_ENV === 'production') {
+    const vercelHost = (
+      process.env.VERCEL_PROJECT_PRODUCTION_URL ??
+      process.env.VERCEL_URL ??
+      ''
+    ).trim();
+    if (vercelHost) return originFromValue(`https://${vercelHost}`);
+  }
+
+  return null;
+}
+
+export function getAppOrigin(request: Request): string {
+  const configured = configuredOrigin();
+  if (configured) return configured;
 
   const requestOrigin = originFromValue(request.url);
   if (requestOrigin) return requestOrigin;

@@ -237,12 +237,17 @@ const MAX_CLOCK_SKEW_SECONDS = 5 * 60;
 export function verifyPaddleSignature(rawBody: string, signatureHeader: string | null): boolean {
   const secret = process.env.PADDLE_WEBHOOK_SECRET;
   if (!secret) {
-    if (process.env.NODE_ENV === 'production') {
-      logger.error('PADDLE_WEBHOOK_SECRET is not set. Rejecting webhook.');
-      return false;
+    // Fail-closed por defecto, tambien en desarrollo. El bypass solo existe si
+    // se pide explicitamente (`WEBHOOK_ALLOW_UNVERIFIED=1`) y NUNCA en
+    // produccion: un deploy sin el secreto tiene que rechazar deliveries, no
+    // aceptar cualquiera que conozca la URL.
+    const allowUnverified =
+      process.env.NODE_ENV === 'development' && process.env.WEBHOOK_ALLOW_UNVERIFIED === '1';
+    logger.error('PADDLE_WEBHOOK_SECRET is not set. Rejecting webhook.');
+    if (allowUnverified) {
+      logger.warn('WEBHOOK_ALLOW_UNVERIFIED=1: se omite la firma de Paddle solo en desarrollo');
     }
-    logger.warn('PADDLE_WEBHOOK_SECRET is not set. Skipping signature verification in dev mode');
-    return true;
+    return allowUnverified;
   }
 
   if (!signatureHeader) return false;

@@ -27,6 +27,24 @@ const ROLE_FALLBACK: TenantRole = 'member';
 const NOT_A_MANAGER = 'Only owners and managers can manage collaborators';
 
 /**
+ * Cierra las sesiones de auth de una persona que se quedo sin ninguna
+ * membresia activa. La funcion SQL decide: si sigue activa en otra sucursal no
+ * toca nada. Es best-effort a proposito, porque la membresia ya quedo
+ * actualizada y el backend igual le niega el tenant al refresh token.
+ */
+async function revokeSessionsIfNoActiveMembership(userId: string): Promise<void> {
+  const { error } = await supabaseAdmin.rpc('revoke_user_sessions_if_no_active_membership', {
+    p_user_id: userId,
+  });
+  if (error) {
+    logger.warn('No se pudieron revocar las sesiones del colaborador sin membresias activas', {
+      error,
+      userId,
+    });
+  }
+}
+
+/**
  * Sucursales que el usuario puede administrar. Un manager sólo manda en las
  * suyas; el owner manda en todas las que le pertenecen. Los roles se resuelven
  * por sucursal porque la misma persona puede ser owner en una y manager en otra.
@@ -877,6 +895,10 @@ export async function updateCollaborator(
       }
     }
 
+    if (toRemoveTenantIds.length > 0) {
+      await revokeSessionsIfNoActiveMembership(targetUserId);
+    }
+
     for (const tid of toUpdateTenantIds) {
       await createActivityLog({
         tenantId: tid,
@@ -976,6 +998,8 @@ export async function deleteCollaborator(
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
     }
 
+    await revokeSessionsIfNoActiveMembership(targetUserId);
+
     // Se audita solo donde la persona era miembro de verdad: `scopedTenantIds`
     // puede incluir sucursales del actor en las que nunca estuvo.
     for (const row of rows) {
@@ -1060,6 +1084,10 @@ export async function setCollaboratorActive(
     if (error) {
       logger.error('DB error:', { error });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
+    }
+
+    if (!active) {
+      await revokeSessionsIfNoActiveMembership(targetUserId);
     }
 
     for (const row of rows) {
