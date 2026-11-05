@@ -782,12 +782,6 @@ export async function updateCollaborator(
       return { ok: false, error: 'No podés editar tu propio rol', status: 400 };
     }
 
-    const desired = buildDesiredRoles(scope, body);
-    if (!desired.ok) return desired;
-    const { roleByTenant: desiredRoleByTenant } = desired;
-
-    const targetTenantIds = [...desiredRoleByTenant.keys()];
-
     const { data: existingRows } = await supabaseAdmin
       .from('tenant_users')
       .select('id, tenant_id, role, status')
@@ -813,6 +807,15 @@ export async function updateCollaborator(
         };
       }
     }
+
+    // Se valida el body recién después de confirmar que el objetivo existe en
+    // el alcance: un usuario de otra empresa debe recibir 404, no un 400 que
+    // revele que el body llegó a procesarse.
+    const desired = buildDesiredRoles(scope, body);
+    if (!desired.ok) return desired;
+    const { roleByTenant: desiredRoleByTenant } = desired;
+
+    const targetTenantIds = [...desiredRoleByTenant.keys()];
 
     // El nombre vive en `profiles`, que es identidad global: se valida acá y se
     // escribe recién al final, cuando las membresías ya se aplicaron bien.

@@ -12,8 +12,13 @@ const MEMBERSHIPS = [
   { tenant_id: 'tenant-b', role: 'manager' },
 ];
 
+type SavePayload = {
+  memberships: { tenant_id: string; role: string }[];
+  full_name?: string | null;
+};
+
 function renderModal(overrides: Partial<Parameters<typeof EditCollaboratorModal>[0]> = {}) {
-  const onSave = vi.fn(async () => undefined);
+  const onSave = vi.fn<(payload: SavePayload) => Promise<void>>(async () => undefined);
   const onCancel = vi.fn();
   render(
     <EditCollaboratorModal
