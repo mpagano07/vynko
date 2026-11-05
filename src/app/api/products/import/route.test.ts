@@ -10,7 +10,10 @@ const mockAuth = {
   tenantIds: ['tenant-1'],
 };
 
+const guardKillMock = vi.hoisted(() => vi.fn());
+
 vi.mock('@/lib/api-auth', () => ({ getAuth: vi.fn(async () => mockAuth) }));
+vi.mock('@/lib/kill-switch', () => ({ guardKill: guardKillMock }));
 vi.mock('@/lib/supabaseAdmin', () => ({ supabaseAdmin: supabaseMock }));
 vi.mock('@/lib/activity-log', () => ({ createActivityLog: vi.fn(async () => undefined) }));
 vi.mock('@/lib/track-event', () => ({ trackEvent: vi.fn(async () => undefined) }));
@@ -44,6 +47,19 @@ describe('POST /api/products/import', () => {
     supabaseMock.__reset();
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.mocked(getAuth).mockResolvedValue(mockAuth);
+    guardKillMock.mockResolvedValue(null);
+  });
+
+  it('devuelve 503 cuando el kill switch de importaciones esta activo', async () => {
+    guardKillMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ code: 'KILL_SWITCH_IMPORTS' }), { status: 503 })
+    );
+
+    const res = await POST(makeRequest({ products: [{ name: 'Coca' }] }));
+
+    expect(res.status).toBe(503);
+    expect(guardKillMock).toHaveBeenCalledWith('imports');
+    expect(supabaseMock.__calls).toHaveLength(0);
   });
 
   it('devuelve 401 sin sesion', async () => {

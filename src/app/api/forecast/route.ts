@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
 import { getForecast } from '@/lib/forecast';
+import { guardKill } from '@/lib/kill-switch';
 import { rateLimit } from '@/lib/rate-limit';
 import { fixResponse } from '@/lib/utils/encoding';
 import { trackEvent } from '@/lib/track-event';
 import { logger } from '@/lib/logger';
 
 export async function GET(request: Request) {
+  const killed = await guardKill('forecast');
+  if (killed) return killed;
+
   const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 

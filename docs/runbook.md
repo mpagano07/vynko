@@ -191,6 +191,43 @@ Diseno y SQL: `docs/background-jobs.md`.
 4. Un trabajo `running` con `locked_at` de hace mas de 15 minutos no existe:
    `claim_background_jobs` lo recupera solo en la proxima pasada.
 
+### 9. Cortar un area sin deploy (kill switch)
+
+Usalo cuando una sola funcion esta causando dano (ventas duplicadas, import que
+rompe stock, checkout que cobra mal) y no hay tiempo de arreglar y desplegar.
+No reemplaza al rollback si el problema es de codigo: apaga el sintoma mientras
+se prepara el fix.
+
+1. **Panel**: `/admin/ops` → `Matar` en el area afectada. Confirmar.
+   - `Ventas` → `POST /api/sales`
+   - `Pagos (Paddle)` → checkout, portal y downgrade (los webhooks siguen)
+   - `Pronóstico` → `GET /api/forecast`
+   - `Importación de productos` → `POST /api/products/import`
+   - `Mantenimiento global` → las cuatro areas + paginas a `/maintenance`
+2. **API** (si el panel no carga): `PUT /api/admin/feature-flags` como admin:
+   ```bash
+   curl -X PUT https://<app>/api/admin/feature-flags \
+     -H "Content-Type: application/json" -H "Cookie: <sesión admin>" \
+     -d '{"flag_key":"kill_sales","enabled":true,"rollout_percent":100}'
+   ```
+3. **SQL** (si la API tampoco responde):
+   ```sql
+   update public.feature_flags set enabled = true, updated_at = now()
+    where flag_key = 'kill_sales';
+   ```
+4. **Env** (si la base esta caida o lenta): `FEATURE_KILL_SALES=on` (o
+   `MAINTENANCE_MODE=on`) en Vercel y redeploy. La env solo fuerza ON.
+5. **Verificar**: la ruta afectada responde `503` con
+   `code: "KILL_SWITCH_<AREA>"` y `Retry-After: 60`; `/api/health`,
+   `/api/session` y los webhooks siguen respondiendo. En el peor caso tarda
+   ~10 s (cache del servidor) + 15 s (banner).
+6. **Revivir**: `/admin/ops` → `Revivir` (o `enabled=false` por API/SQL). Si el
+   area estaba forzada por env, primero sacar la variable y redeploy: el boton
+   aparece bloqueado con un candado.
+7. **Cierre**: dejar en el canal que se corto, por que, a que hora y cuando se
+   revivio. Si el corte fue por env, sacar la variable para no dejar el kill
+   pegado al proximo deploy.
+
 ## Mantenimiento / tareas programadas
 
 | Tarea | Cadencia | Como |

@@ -1,4 +1,5 @@
 import { getAuth } from '@/lib/api-auth';
+import { guardKill } from '@/lib/kill-switch';
 import { prepareImport } from '@/lib/product-service';
 import { logger } from '@/lib/logger';
 
@@ -20,6 +21,9 @@ import { logger } from '@/lib/logger';
  * única forma de avisar de un fallo es el evento `error`.
  */
 export async function POST(request: Request) {
+  const killed = await guardKill('imports');
+  if (killed) return killed;
+
   const auth = await getAuth(request);
   if (!auth) return Response.json({ error: 'Not authenticated' }, { status: 401 });
 

@@ -12,6 +12,7 @@ import {
 } from '@/lib/session-policy';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
+import { isMaintenanceMode } from '@/lib/kill-switch';
 import { getPaddleConfiguredCurrencies } from '@/lib/paddle-price-ids';
 import { PADDLE_CURRENCIES_COOKIE } from '@/lib/pricing/configured-currencies';
 import { PUBLIC_PATHS } from '@/lib/marketing/public-routes';
@@ -160,6 +161,30 @@ export async function proxy(request: NextRequest) {
   // el robots.txt y el layout raiz no puedan desincronizarse.
   if (PUBLIC_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))) {
     return next();
+  }
+
+  // Mantenimiento global. Va ANTES del gate de auth a proposito: si no, una
+  // ruta privada rebotaria a /login y la persona no veria nunca el aviso.
+  // `/maintenance` esta en PUBLIC_PATHS, asi que no vuelve a entrar aca.
+  // Se reescribe (no se redirige) para conservar la URL original y devolver un
+  // 503 real, que es lo que esperan los uptime checks.
+  //
+  // `/api` queda afuera aunque el matcher ya lo excluya: los handlers deciden
+  // por area (y los webhooks de pago NUNCA se bloquean). Depender solo del
+  // matcher haria que un cambio de config tumbara pagos y cron sin aviso.
+  const isApiPath = pathname === '/api' || pathname.startsWith('/api/');
+  if (!isApiPath && (await isMaintenanceMode())) {
+    const maintenanceUrl = request.nextUrl.clone();
+    maintenanceUrl.pathname = '/maintenance';
+    maintenanceUrl.search = '';
+    return withSecurityHeaders(
+      NextResponse.rewrite(maintenanceUrl, {
+        status: 503,
+        headers: { 'Retry-After': '60', 'Cache-Control': 'no-store' },
+        request: { headers: requestHeaders },
+      }),
+      nonce
+    );
   }
 
   const response = next();

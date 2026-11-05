@@ -11,6 +11,7 @@ import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
 
 import { NetworkStatusNotifier } from '@/components/ui/NetworkStatusNotifier';
 import CookieConsent from '@/components/cookies/CookieConsent';
+import { KillSwitchBanner } from '@/components/ui/kill-switch-banner';
 import { isShelllessPath } from '@/lib/marketing/public-routes';
 
 const LazyToaster = dynamic(() => import('@/components/ui/lazy-toaster'), { ssr: false });
@@ -189,6 +190,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
           <React.Suspense fallback={<HeaderSkeleton />}>
             <Header />
           </React.Suspense>
+          <KillSwitchBanner />
           <main className="flex-1 w-full overflow-auto bg-gray-50 dark:bg-gray-950">
             <div key={pageKey} className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full">
               {children}

@@ -16,9 +16,13 @@ const mockAuth = {
   role: 'owner',
 };
 
+const guardKillMock = vi.hoisted(() => vi.fn());
+
 vi.mock('@/lib/api-auth', () => ({
   getAuth: vi.fn(async () => mockAuth),
 }));
+
+vi.mock('@/lib/kill-switch', () => ({ guardKill: guardKillMock }));
 
 vi.mock('@/lib/supabaseAdmin', async () => {
   const mod = await import('@/test/supabase-mock');
@@ -95,6 +99,21 @@ describe('POST /api/sales', () => {
     vi.mocked(trackEvent).mockClear();
     afterCallbacks.length = 0;
     vi.mocked(getAuth).mockResolvedValue(mockAuth);
+    guardKillMock.mockResolvedValue(null);
+  });
+
+  it('devuelve 503 sin tocar la base cuando el kill switch de ventas esta activo', async () => {
+    guardKillMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'matado', code: 'KILL_SWITCH_SALES' }), {
+        status: 503,
+      })
+    );
+
+    const response = await POST(makeRequest({ items: [] }));
+
+    expect(response.status).toBe(503);
+    expect(guardKillMock).toHaveBeenCalledWith('sales');
+    expect(supabaseMock.rpc).not.toHaveBeenCalled();
   });
 
   it('registra una venta y reduce el stock', async () => {
