@@ -63,18 +63,30 @@ comprobacion de Origin aparte.
 ### 4. Checklist "Primeros pasos"
 
 Widget del dashboard (`src/components/dashboard/OnboardingChecklist.tsx`),
-dentro de `StockAndActivity`, montado con `LazyMount`.
+dentro de `StockAndActivity`, montado con `LazyMount`. Sigue el recorrido
+completo de una cuenta nueva: registro, empresa, datos comerciales, catálogo,
+stock y primera venta.
 
 | Paso | `done` cuando | Fuente del dato |
 |---|---|---|
-| Cargá tu primer producto | hay al menos un producto | `productCount > 0` |
+| Creá tu cuenta | siempre (se llega al dashboard con sesión) | constante |
+| Creá tu empresa | siempre (el dashboard exige tenant activo) | constante |
+| Completá los datos comerciales | la sucursal tiene `cuit` y `business_address` | `tenant` / `tenants` de `useAuth` |
+| Importá tus productos desde Excel | hubo al menos un intento de importación | RPC `get_product_counters` -> `has_imported` (lee `activity_logs`) |
+| Cargá el stock inicial | al menos un producto activo tiene `stock > 0` | RPC `get_product_counters` -> `has_stock` |
 | Registrá tu primera venta | el mes tiene ventas | `monthlyData.saleCount > 0` |
-| Revisá las alertas de stock | algun producto con `min_stock`/`max_stock` > 0 | `alertsConfigured` |
-| Creá una orden de compra | hay una orden **pendiente** | `pendingOrders.length > 0` (lo calcula `StockAndActivity`, no la pagina) |
+
+Los dos primeros hitos se muestran como cumplidos para dar contexto del
+recorrido; el progreso real arranca en 2/6. El paso de importación enlaza a
+`/products?import=1`, que abre el modal de importación una sola vez.
 
 Se oculta cuando esta todo completo o cuando el usuario lo descarto. Para
 volver a verlo: `localStorage` con
 `vynko_onboarding_force_show_<userId> = 'true'`.
+
+`get_product_counters` se extendió en la migración 069 para devolver
+`has_stock` y `has_imported` en el mismo round trip que el conteo de productos
+y las alertas configuradas.
 
 **Descartar es una preferencia de la cuenta**, no del navegador: el click en
 la X dispara `PATCH /api/onboarding/checklist` (CSRF + sesion por `getAuth`) y
@@ -82,11 +94,11 @@ la X dispara `PATCH /api/onboarding/checklist` (CSRF + sesion por `getAuth`) y
 **acotado al propio usuario**. Si el PATCH falla (offline), el estado local de
 la sesion respeta lo que acaba de elegir y se reintenta en el proximo intento.
 
-> Conocido: el cuarto paso mide una orden *pendiente*, no una orden creada.
-> Si se crea y se recibe, la casilla vuelve a quedar sin marcar. Es el
-> comportamiento actual, documentado a proposito: cambiarlo significa decidir
-> si "crear la primera orden" es un hito unico (y ahi habria que contar
-> eventos, no filas).
+> Conocido: el paso de importación mide que exista al menos un intento
+> registrado, no que el Excel haya cargado filas. Un import fallido también
+> marca la casilla. Se eligió así porque la intención de cargar catálogo en
+> volumen es la señal que interesa medir; el detalle de filas creadas queda en
+> el resultado del import.
 
 ## Cobertura
 

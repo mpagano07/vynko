@@ -99,7 +99,7 @@ function mockSuccessfulEndpoints() {
     if (url.includes('/api/products/counters')) {
       return Promise.resolve({
         ok: true,
-        json: async () => ({ count: 1, alertsConfigured: true }),
+        json: async () => ({ count: 1, alertsConfigured: true, hasStock: true, hasImported: true }),
       });
     }
     if (url.includes('/api/products')) {

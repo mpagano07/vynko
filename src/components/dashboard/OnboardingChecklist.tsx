@@ -1,16 +1,28 @@
 'use client';
 
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { Check, ChevronRight, X, Package, ShoppingCart, Bell, Users, EyeOff, ArrowRight } from 'lucide-react';
+import {
+  Check,
+  ChevronRight,
+  X,
+  UserPlus,
+  Building2,
+  ClipboardList,
+  FileSpreadsheet,
+  Boxes,
+  ShoppingCart,
+  EyeOff,
+  ArrowRight,
+} from 'lucide-react';
 import { IconAction } from '@/components/ui/icon-action';
 import { authFetch } from '@/lib/fetchWithTenant';
 import Link from 'next/link';
 
 interface OnboardingChecklistProps {
-  hasProducts: boolean;
+  hasCommercialData: boolean;
+  hasImported: boolean;
+  hasStock: boolean;
   hasSales: boolean;
-  hasAlerts: boolean;
-  hasPendingOrders: boolean;
   userId?: string;
   dismissedAt?: string | null;
   loading?: boolean;
@@ -52,7 +64,7 @@ async function persistDismissed(dismissed: boolean): Promise<void> {
   } catch { /* la preferencia queda solo en este dispositivo */ }
 }
 
-export default function OnboardingChecklist({ hasProducts, hasSales, hasAlerts, hasPendingOrders, userId, dismissedAt, loading, fallback }: OnboardingChecklistProps) {
+export default function OnboardingChecklist({ hasCommercialData, hasImported, hasStock, hasSales, userId, dismissedAt, loading, fallback }: OnboardingChecklistProps) {
   const dismissKey = userId ? `${DISMISS_KEY}_${userId}` : null;
   const forceShowKey = userId ? `${FORCE_SHOW_KEY}_${userId}` : null;
 
@@ -103,13 +115,48 @@ export default function OnboardingChecklist({ hasProducts, hasSales, hasAlerts, 
     };
   }, [confirmOpen]);
 
+  // Los dos primeros hitos ya ocurrieron antes de llegar al dashboard. Se
+  // muestran igual para que el usuario vea el recorrido completo y entienda
+  // dónde está parado dentro del onboarding.
   const steps: Step[] = useMemo(() => [
     {
-      id: 'products',
-      title: 'Cargá tu primer producto',
-      desc: 'Agregá un producto con nombre, precio y stock.',
-      icon: <Package className="h-3.5 w-3.5" />,
-      done: hasProducts,
+      id: 'signup',
+      title: 'Creá tu cuenta',
+      desc: 'Tu usuario ya está activo.',
+      icon: <UserPlus className="h-3.5 w-3.5" />,
+      done: true,
+      href: '/dashboard',
+    },
+    {
+      id: 'company',
+      title: 'Creá tu empresa',
+      desc: 'Tu empresa ya está configurada.',
+      icon: <Building2 className="h-3.5 w-3.5" />,
+      done: true,
+      href: '/settings?tab=empresa',
+    },
+    {
+      id: 'commercial',
+      title: 'Completá los datos comerciales',
+      desc: 'CUIT y domicilio fiscal para facturar.',
+      icon: <ClipboardList className="h-3.5 w-3.5" />,
+      done: hasCommercialData,
+      href: '/settings?tab=empresa',
+    },
+    {
+      id: 'import',
+      title: 'Importá tus productos desde Excel',
+      desc: 'Subí tu catálogo en .xlsx, .xls o .csv.',
+      icon: <FileSpreadsheet className="h-3.5 w-3.5" />,
+      done: hasImported,
+      href: '/products?import=1',
+    },
+    {
+      id: 'stock',
+      title: 'Cargá el stock inicial',
+      desc: 'Revisá las cantidades de cada producto.',
+      icon: <Boxes className="h-3.5 w-3.5" />,
+      done: hasStock,
       href: '/products',
     },
     {
@@ -120,23 +167,7 @@ export default function OnboardingChecklist({ hasProducts, hasSales, hasAlerts, 
       done: hasSales,
       href: '/sales',
     },
-    {
-      id: 'alerts',
-      title: 'Revisá las alertas de stock',
-      desc: 'Configurá el stock mínimo para recibir alertas.',
-      icon: <Bell className="h-3.5 w-3.5" />,
-      done: hasAlerts,
-      href: '/products',
-    },
-    {
-      id: 'purchase',
-      title: 'Creá una orden de compra',
-      desc: 'Pedí mercadería a tus proveedores.',
-      icon: <Users className="h-3.5 w-3.5" />,
-      done: hasPendingOrders,
-      href: '/providers?create_po=1',
-    },
-  ], [hasProducts, hasSales, hasAlerts, hasPendingOrders]);
+  ], [hasCommercialData, hasImported, hasStock, hasSales]);
 
   const completedCount = steps.filter((s) => s.done).length;
   const allDone = completedCount === steps.length;

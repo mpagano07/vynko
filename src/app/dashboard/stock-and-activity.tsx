@@ -51,9 +51,10 @@ export default function StockAndActivity({
   tenantId: string;
   allTenants?: boolean;
   onboarding?: {
-    hasProducts: boolean;
+    hasCommercialData: boolean;
+    hasImported: boolean;
+    hasStock: boolean;
     hasSales: boolean;
-    hasAlerts: boolean;
     userId?: string;
     dismissedAt?: string | null;
   };
@@ -243,10 +244,10 @@ export default function StockAndActivity({
       <div>
         {onboarding ? (
           <OnboardingChecklist
-            hasProducts={onboarding.hasProducts}
+            hasCommercialData={onboarding.hasCommercialData}
+            hasImported={onboarding.hasImported}
+            hasStock={onboarding.hasStock}
             hasSales={onboarding.hasSales}
-            hasAlerts={onboarding.hasAlerts}
-            hasPendingOrders={pendingOrders.length > 0}
             userId={onboarding.userId}
             dismissedAt={onboarding.dismissedAt}
             loading={loading}

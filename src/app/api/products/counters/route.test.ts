@@ -37,16 +37,26 @@ describe('GET /api/products/counters', () => {
     expect(supabaseMock.rpc).not.toHaveBeenCalled();
   });
 
-  it('resuelve conteo y alertas en un único RPC del tenant activo', async () => {
+  it('resuelve conteo y progreso del onboarding en un único RPC del tenant activo', async () => {
     supabaseMock.__rpcQueue('get_product_counters', {
-      data: [{ product_count: 42, alerts_configured: true }],
+      data: [{
+        product_count: 42,
+        alerts_configured: true,
+        has_stock: true,
+        has_imported: true,
+      }],
       error: null,
     });
 
     const res = await GET(makeRequest());
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ count: 42, alertsConfigured: true });
+    expect(await res.json()).toEqual({
+      count: 42,
+      alertsConfigured: true,
+      hasStock: true,
+      hasImported: true,
+    });
     expect(supabaseMock.rpc).toHaveBeenCalledTimes(1);
     expect(supabaseMock.rpc).toHaveBeenCalledWith('get_product_counters', {
       p_tenant_ids: ['tenant-1'],
@@ -62,14 +72,19 @@ describe('GET /api/products/counters', () => {
       tenantIds: ['tenant-1', 'tenant-2'],
     });
     supabaseMock.__rpcQueue('get_product_counters', {
-      data: [{ product_count: 10, alerts_configured: false }],
+      data: [{ product_count: 10, alerts_configured: false, has_stock: false, has_imported: false }],
       error: null,
     });
 
     const res = await GET(makeRequest());
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ count: 10, alertsConfigured: false });
+    expect(await res.json()).toEqual({
+      count: 10,
+      alertsConfigured: false,
+      hasStock: false,
+      hasImported: false,
+    });
     expect(supabaseMock.rpc).toHaveBeenCalledWith('get_product_counters', {
       p_tenant_ids: ['tenant-1', 'tenant-2'],
     });

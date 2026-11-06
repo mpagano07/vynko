@@ -282,10 +282,21 @@ function ProductsPageContent() {
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const importQueryHandled = useRef(false);
 
   useEffect(() => {
     searchInputRef.current?.focus();
   }, []);
+
+  // El checklist de onboarding enlaza a `/products?import=1` para que la
+  // persona caiga directo en el flujo de importación en vez de tener que
+  // buscar el botón. Se abre una sola vez por montaje: si el usuario cierra el
+  // modal, el parámetro que sigue en la URL no debe reabrirlo.
+  useEffect(() => {
+    if (searchParams?.get('import') !== '1' || importQueryHandled.current) return;
+    importQueryHandled.current = true;
+    setIsImportModalOpen(true);
+  }, [searchParams]);
 
   // Price Adjustment State
   const [isPriceAdjustModalOpen, setIsPriceAdjustModalOpen] = useState(false);

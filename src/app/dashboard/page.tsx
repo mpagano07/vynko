@@ -91,8 +91,8 @@ export default function DashboardPage() {
   const [perTenant, setPerTenant] = useState<Record<string, PerTenantData>>({});
   const [loadError, setLoadError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  const [productCount, setProductCount] = useState(0);
-  const [alertsConfigured, setAlertsConfigured] = useState(false);
+  const [hasImported, setHasImported] = useState(false);
+  const [hasStock, setHasStock] = useState(false);
 
   useEffect(() => {
     if (authLoading || !isAuthenticated) return;
@@ -144,7 +144,10 @@ export default function DashboardPage() {
               const md = monthly as MonthlyData | null;
               const cp = (critical as CriticalProduct[] || []);
               const po = (pending as PendingOrder[] || []);
-              const countersData = counters as { count?: number; alertsConfigured?: boolean } | null;
+              const countersData = counters as {
+                hasStock?: boolean;
+                hasImported?: boolean;
+              } | null;
 
               const data: PerTenantData = {
                 todayTotal,
@@ -168,8 +171,8 @@ export default function DashboardPage() {
                 prevTotal: md?.prevTotal || 0,
                 critical: cp,
                 pending: po,
-                productCount: Number(countersData?.count) || 0,
-                alertsConfigured: Boolean(countersData?.alertsConfigured),
+                hasStock: Boolean(countersData?.hasStock),
+                hasImported: Boolean(countersData?.hasImported),
               };
             })
           );
@@ -182,8 +185,8 @@ export default function DashboardPage() {
           let allPrevTotal = 0;
           let allCritical: { id: string; name: string; stock: number; min_stock: number }[] = [];
           let allPending: PendingOrder[] = [];
-          let totalProductCount = 0;
-          let alertsConfiguredCount = 0;
+          let anyStockLoaded = false;
+          let anyImportDone = false;
 
           for (const row of perTenantRows) {
             allSalesTotal += row.todayTotal;
@@ -193,8 +196,8 @@ export default function DashboardPage() {
             allPrevTotal += row.prevTotal;
             allCritical = [...allCritical, ...row.critical];
             allPending = [...allPending, ...row.pending.map((o) => ({ ...o, tenant_name: row.tenantName }))];
-            totalProductCount += row.productCount;
-            if (row.alertsConfigured) alertsConfiguredCount++;
+            if (row.hasStock) anyStockLoaded = true;
+            if (row.hasImported) anyImportDone = true;
 
             results[row.tenantId] = row.data;
           }
@@ -212,8 +215,8 @@ export default function DashboardPage() {
               });
               setCriticalProducts(allCritical);
               setPendingOrders(allPending);
-              setProductCount(totalProductCount);
-              setAlertsConfigured(alertsConfiguredCount > 0);
+              setHasStock(anyStockLoaded);
+              setHasImported(anyImportDone);
               setProductsLoading(false);
             });
           }
@@ -230,11 +233,14 @@ export default function DashboardPage() {
           if (!salesRes.ok || !monthlyRes.ok || !criticalRes.ok || !pendingRes.ok || !countersRes.ok) failed = true;
 
           if (countersRes.ok) {
-            const counters = await countersRes.json() as { count?: number; alertsConfigured?: boolean };
+            const counters = await countersRes.json() as {
+              hasStock?: boolean;
+              hasImported?: boolean;
+            };
             if (!cancelled) {
               startTransition(() => {
-                setProductCount(Number(counters.count) || 0);
-                setAlertsConfigured(Boolean(counters.alertsConfigured));
+                setHasStock(Boolean(counters.hasStock));
+                setHasImported(Boolean(counters.hasImported));
               });
             }
           }
@@ -288,6 +294,12 @@ export default function DashboardPage() {
   const criticalCount = criticalProducts.length;
   const todaySalesCount = salesData?.saleCount ?? 0;
   const hasSalesToday = todaySalesCount > 0;
+
+  // Para el checklist alcanza con que la sucursal tenga los dos datos fiscales
+  // mínimos. En modo consolidado, que al menos una sucursal los tenga cargados.
+  const hasCommercialData = allTenants
+    ? tenants.some((t) => Boolean(t.cuit?.trim() && t.business_address?.trim()))
+    : Boolean(tenant?.cuit?.trim() && tenant?.business_address?.trim());
 
   const tenantName = allTenants ? 'Todas las sucursales' : tenant?.name;
 
@@ -438,9 +450,10 @@ export default function DashboardPage() {
           allTenants={allTenants}
           loading={productsLoading}
           onboarding={{
-            hasProducts: productCount > 0,
+            hasCommercialData,
+            hasImported,
+            hasStock,
             hasSales: !!monthlyData && monthlyData.saleCount > 0,
-            hasAlerts: alertsConfigured,
             userId: profile?.id,
             dismissedAt: profile?.onboarding_checklist_dismissed_at,
           }}

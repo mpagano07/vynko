@@ -6,10 +6,10 @@ import OnboardingChecklist from './OnboardingChecklist';
 vi.mock('@/lib/fetchWithTenant', () => ({ authFetch: vi.fn(async () => new Response('{}')) }));
 
 const pending = {
-  hasProducts: false,
+  hasCommercialData: false,
+  hasImported: false,
+  hasStock: false,
   hasSales: false,
-  hasAlerts: false,
-  hasPendingOrders: false,
   userId: 'user-1',
 };
 
@@ -25,10 +25,16 @@ describe('OnboardingChecklist', () => {
     vi.mocked(authFetch).mockResolvedValue(new Response('{}'));
   });
 
-  it('muestra la guia cuando no hay flag ni pasos completados', () => {
+  it('muestra el recorrido completo con los hitos ya cumplidos al inicio', () => {
     render(<OnboardingChecklist {...pending} fallback={<p>panel</p>} />);
     expect(screen.getByText('Primeros pasos')).toBeTruthy();
-    expect(screen.getByText('Cargá tu primer producto')).toBeTruthy();
+    expect(screen.getByText('2/6')).toBeTruthy();
+    expect(screen.getByText('Creá tu cuenta')).toBeTruthy();
+    expect(screen.getByText('Creá tu empresa')).toBeTruthy();
+    expect(screen.getByText('Completá los datos comerciales')).toBeTruthy();
+    expect(screen.getByText('Importá tus productos desde Excel')).toBeTruthy();
+    expect(screen.getByText('Cargá el stock inicial')).toBeTruthy();
+    expect(screen.getByText('Registrá tu primera venta')).toBeTruthy();
   });
 
   it('NO la muestra si el flag del servidor esta puesto', () => {
@@ -63,10 +69,10 @@ describe('OnboardingChecklist', () => {
     render(
       <OnboardingChecklist
         {...pending}
-        hasProducts
+        hasCommercialData
+        hasImported
+        hasStock
         hasSales
-        hasAlerts
-        hasPendingOrders
         fallback={<p>panel</p>}
       />
     );
