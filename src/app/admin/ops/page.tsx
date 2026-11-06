@@ -9,6 +9,7 @@ import { isAdminProfile } from '@/lib/admin';
 import { authFetch } from '@/lib/fetchWithTenant';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { ConfirmModal } from '@/components/ui/confirm-modal';
 import {
   KILL_AREAS,
   KILL_SWITCH_DESCRIPTIONS,
@@ -75,6 +76,14 @@ export default function AdminOpsPage() {
   const [dbEnabled, setDbEnabled] = useState<Partial<Record<AreaKey, boolean>> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<AreaKey | null>(null);
+  // Área que espera confirmación en el modal. `null` = modal cerrado. No se
+  // usa `window.confirm`: en mobile el diálogo nativo bloquea el hilo, no se
+  // puede estilar y además no permite mostrar el estado de "guardando".
+  const [pendingKill, setPendingKill] = useState<AreaKey | null>(null);
+  // El error de un kill fallido se muestra dentro del modal: si quedaría sólo
+  // en la tarjeta de arriba, el overlay lo taparía y el usuario reintentaría a
+  // ciegas.
+  const [killError, setKillError] = useState<string | null>(null);
 
   const fetchStatus = useCallback(async () => {
     const response = await authFetch('/api/kill-switch/status', { cache: 'no-store' });
@@ -124,10 +133,12 @@ export default function AdminOpsPage() {
     return () => clearInterval(timer);
   }, [authLoading, user, profile, router, refresh]);
 
-  async function toggle(key: AreaKey) {
-    const next = !(dbEnabled?.[key] ?? killSwitches[key]);
-    if (next && !window.confirm(CONFIRMATION[key])) return;
-
+  /**
+   * Guarda el flag. Devuelve `null` si el PUT y el refresh de estado salieron
+   * bien, o el mensaje de error. El modal de confirmación usa eso para decidir
+   * si se cierra y qué mostrar.
+   */
+  async function saveToggle(key: AreaKey, enabled: boolean): Promise<string | null> {
     setPending(key);
     setError(null);
     try {
@@ -136,28 +147,53 @@ export default function AdminOpsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           flag_key: KILL_SWITCH_FLAG_KEYS[key],
-          enabled: next,
+          enabled,
           rollout_percent: 100,
         }),
       });
       const json = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(json.error ?? 'No se pudo guardar el flag');
 
-      setDbEnabled((prev) => ({ ...prev, [key]: next }));
+      setDbEnabled((prev) => ({ ...prev, [key]: enabled }));
       await fetchStatus();
       setError(null);
+      return null;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error desconocido');
+      const message = err instanceof Error ? err.message : 'Error desconocido';
+      setError(message);
+      return message;
     } finally {
       setPending(null);
     }
   }
 
+  function requestToggle(key: AreaKey) {
+    const next = !(dbEnabled?.[key] ?? killSwitches[key]);
+    // Matar rompe el flujo de alguien en ese momento: modal de confirmación.
+    // Revivir no necesita confirmación y se manda directo.
+    if (next) {
+      setKillError(null);
+      setPendingKill(key);
+      return;
+    }
+    void saveToggle(key, false);
+  }
+
+  async function confirmKill() {
+    if (pendingKill === null) return;
+    const failure = await saveToggle(pendingKill, true);
+    if (failure) {
+      setKillError(failure);
+      return;
+    }
+    setPendingKill(null);
+  }
+
   if (authLoading || dbEnabled === null) {
     return (
-      <div className="p-6 max-w-4xl mx-auto">
+      <div className="mx-auto w-full max-w-4xl p-4 sm:p-6">
         <div className="animate-pulse space-y-4">
-          <div className="h-8 w-56 bg-gray-200 dark:bg-gray-700 rounded" />
+          <div className="h-8 w-56 max-w-full bg-gray-200 dark:bg-gray-700 rounded" />
           <div className="h-40 bg-gray-200 dark:bg-gray-700 rounded-lg" />
           <div className="h-40 bg-gray-200 dark:bg-gray-700 rounded-lg" />
         </div>
@@ -167,8 +203,8 @@ export default function AdminOpsPage() {
 
   if (!user || !isAdminProfile(profile)) {
     return (
-      <div className="p-6 max-w-4xl mx-auto">
-        <Card className="p-8 text-center">
+      <div className="mx-auto w-full max-w-4xl p-4 sm:p-6">
+        <Card className="p-6 text-center sm:p-8">
           <p className="text-red-500 dark:text-red-400 text-lg font-medium">Acceso denegado</p>
           <Link href="/dashboard" className="text-cyan-600 hover:text-cyan-700 text-sm mt-2 inline-block">
             Volver al dashboard
@@ -179,26 +215,27 @@ export default function AdminOpsPage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center gap-3">
+    <div className="mx-auto w-full max-w-4xl space-y-4 p-4 sm:space-y-6 sm:p-6">
+      <div className="flex items-start gap-3">
         <Link
           href="/dashboard"
-          className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors"
+          aria-label="Volver al dashboard"
+          className="mt-1 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors"
         >
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Operaciones</h1>
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white sm:text-2xl">Operaciones</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Kill switches para cortar un área sin deploy
           </p>
         </div>
       </div>
 
-      <Card className="p-5">
+      <Card className="p-4 sm:p-5">
         <div className="flex items-start gap-3">
           <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
-          <div className="text-sm text-gray-600 dark:text-gray-300 space-y-1">
+          <div className="min-w-0 space-y-1 text-sm text-gray-600 dark:text-gray-300">
             <p>
               Matar un área hace que el servidor responda <code>503</code> con{' '}
               <code>Retry-After</code>. El cambio se ve en ~10 segundos.
@@ -212,10 +249,10 @@ export default function AdminOpsPage() {
       </Card>
 
       {error && (
-        <Card className="p-4 border border-red-200 dark:border-red-900">
-          <p className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
-            <AlertTriangle className="h-4 w-4" />
-            {error}
+        <Card className="border border-red-200 p-4 dark:border-red-900">
+          <p className="flex items-start gap-2 text-sm text-red-600 dark:text-red-400">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span className="min-w-0 break-words">{error}</span>
           </p>
         </Card>
       )}
@@ -231,12 +268,12 @@ export default function AdminOpsPage() {
             key={key}
             className={
               isMaintenance
-                ? 'p-5 border-2 border-amber-300 dark:border-amber-700'
-                : 'p-5'
+                ? 'border-2 border-amber-300 p-4 dark:border-amber-700 sm:p-5'
+                : 'p-4 sm:p-5'
             }
           >
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-base font-semibold text-gray-900 dark:text-white">
                     {KILL_SWITCH_LABELS[key]}
@@ -251,9 +288,9 @@ export default function AdminOpsPage() {
                     {killed ? 'MATADO' : 'VIVO'}
                   </span>
                   {forcedByEnv && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                      <Lock className="h-3 w-3" />
-                      Forzado por {KILL_SWITCH_ENV_NAMES[key]}
+                    <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                      <Lock className="h-3 w-3 shrink-0" />
+                      <span className="break-all">Forzado por {KILL_SWITCH_ENV_NAMES[key]}</span>
                     </span>
                   )}
                 </div>
@@ -261,7 +298,7 @@ export default function AdminOpsPage() {
                   {KILL_SWITCH_DESCRIPTIONS[key]}
                 </p>
                 <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                  Flag: <code>{KILL_SWITCH_FLAG_KEYS[key]}</code>
+                  Flag: <code className="break-all">{KILL_SWITCH_FLAG_KEYS[key]}</code>
                 </p>
               </div>
 
@@ -269,7 +306,8 @@ export default function AdminOpsPage() {
                 variant={killed ? 'secondary' : isMaintenance ? 'outline' : 'primary'}
                 size="sm"
                 disabled={isPending || forcedByEnv}
-                onClick={() => void toggle(key)}
+                onClick={() => requestToggle(key)}
+                className="w-full shrink-0 sm:w-auto"
                 title={
                   forcedByEnv
                     ? `Definido por ${KILL_SWITCH_ENV_NAMES[key]}; sacá la variable para controlarlo desde acá.`
@@ -288,6 +326,30 @@ export default function AdminOpsPage() {
         La variable de entorno solo puede forzar el kill. Para revivir un área forzada por env hay
         que sacar <code>FEATURE_KILL_*</code> o <code>MAINTENANCE_MODE</code> del deploy.
       </p>
+
+      {pendingKill && (
+        <ConfirmModal
+          open
+          title={
+            pendingKill === 'maintenance'
+              ? 'Activar mantenimiento global'
+              : `Matar ${KILL_SWITCH_LABELS[pendingKill].toLowerCase()}`
+          }
+          message={killError ?? CONFIRMATION[pendingKill]}
+          confirmLabel={
+            killError ? 'Reintentar' : pendingKill === 'maintenance' ? 'Activar' : 'Matar'
+          }
+          variant="danger"
+          loading={pending === pendingKill}
+          onConfirm={() => void confirmKill()}
+          onCancel={() => {
+            if (pending !== pendingKill) {
+              setPendingKill(null);
+              setKillError(null);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

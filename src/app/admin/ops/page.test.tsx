@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import AdminOpsPage from './page';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { authFetch } from '@/lib/fetchWithTenant';
@@ -79,7 +79,6 @@ beforeEach(() => {
     loading: false,
   } as ReturnType<typeof useAuth>);
   mockBackend();
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
 });
 
 describe('/admin/ops', () => {
@@ -108,10 +107,23 @@ describe('/admin/ops', () => {
     expect(screen.getAllByText('VIVO')).toHaveLength(4);
   });
 
-  it('matar un area pide confirmacion y hace el PUT con enabled=true', async () => {
+  it('matar un area abre el modal y manda el PUT al confirmar', async () => {
     await renderPage();
 
+    // El primer boton "Matar" es el de Ventas (Mantenimiento dice "Activar").
     fireEvent.click(screen.getAllByRole('button', { name: /Matar/i })[0]);
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/Matar ventas/i)).toBeTruthy();
+    expect(within(dialog).getByText(/Nadie va a poder registrar ventas nuevas/i)).toBeTruthy();
+
+    // Antes de confirmar no se disparo el PUT.
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/admin/feature-flags',
+      expect.objectContaining({ method: 'PUT' })
+    );
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Matar$/i }));
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
@@ -126,16 +138,17 @@ describe('/admin/ops', () => {
         })
       )
     );
-    expect(window.confirm).toHaveBeenCalled();
   });
 
-  it('no hace nada si se cancela la confirmacion', async () => {
-    vi.mocked(window.confirm).mockReturnValue(false);
+  it('cerrar el modal sin confirmar no hace el PUT', async () => {
     await renderPage();
 
     fireEvent.click(screen.getAllByRole('button', { name: /Matar/i })[0]);
 
-    await waitFor(() => expect(window.confirm).toHaveBeenCalled());
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: /Cancelar/i }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(fetchMock).not.toHaveBeenCalledWith(
       '/api/admin/feature-flags',
       expect.objectContaining({ method: 'PUT' })
@@ -166,7 +179,7 @@ describe('/admin/ops', () => {
         })
       )
     );
-    expect(window.confirm).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('muestra candado y deshabilita el boton si la env fuerza el kill', async () => {
@@ -179,18 +192,16 @@ describe('/admin/ops', () => {
     expect(forecastButton).toBeDisabled();
   });
 
-  it('muestra el error si el PUT falla', async () => {
+  it('muestra el error y deja el modal abierto si el PUT falla', async () => {
     mockBackend({ putOk: false });
     await renderPage();
 
     fireEvent.click(screen.getAllByRole('button', { name: /Matar/i })[0]);
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Matar$/i }));
 
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        '/api/admin/feature-flags',
-        expect.objectContaining({ method: 'PUT' })
-      )
-    );
-    expect(await screen.findByText('No se pudo guardar el flag.')).toBeTruthy();
+    expect(await within(dialog).findByText('No se pudo guardar el flag.')).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: /Reintentar/i })).toBeTruthy();
+    expect(screen.getByRole('dialog')).toBeTruthy();
   });
 });
