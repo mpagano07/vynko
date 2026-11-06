@@ -8,7 +8,7 @@ import type { Product } from '@/lib/types/product';
 import { rememberDriveIntent, takeDriveIntent } from '@/lib/google/drive-intent';
 
 const { searchParamsMock, replaceMock } = vi.hoisted(() => ({
-  searchParamsMock: { get: vi.fn(() => null) },
+  searchParamsMock: { get: vi.fn((_key: string): string | null => null) },
   replaceMock: vi.fn(),
 }));
 
@@ -152,6 +152,13 @@ describe('modal de producto: montos con separador de miles', () => {
     renderPage();
 
     expect(await screen.findByLabelText('Precio ($)')).toHaveValue('80.000');
+  });
+
+  it('el deep-link ?import=1 abre el modal de importación del checklist', async () => {
+    searchParamsMock.get.mockImplementation((key) => (key === 'import' ? '1' : null));
+    renderPage();
+
+    expect(await screen.findByText('Importar productos desde Excel o CSV')).toBeInTheDocument();
   });
 
   it('no arrastra el borrador al abrir otro producto', async () => {

@@ -152,7 +152,7 @@ function createSupabaseMock() {
     // `get_critical_products`/`get_product_counters` (migracion 064) devuelven
     // solo las filas que el dashboard necesita; el default es catalogo vacio.
     get_critical_products: { data: [], error: null },
-    get_product_counters: { data: [{ product_count: 0, alerts_configured: false }], error: null },
+    get_product_counters: { data: [{ product_count: 0, alerts_configured: false, has_stock: false, has_imported: false }], error: null },
     // `revoke_user_sessions_if_no_active_membership` (migracion 067) devuelve
     // true solo si borro sesiones. Para los tests de desactivacion alcanza con
     // el default false: la llamada no debe cambiar el resultado de la operacion.
@@ -255,7 +255,7 @@ function createSupabaseMock() {
       rpcResults.receive_transfer = { data: [], error: null };
       rpcResults.receive_po_stock = { data: [{ ok: true, code: null, row: { status: 'partial', received_date: null, all: false } }], error: null };
       rpcResults.get_critical_products = { data: [], error: null };
-      rpcResults.get_product_counters = { data: [{ product_count: 0, alerts_configured: false }], error: null };
+      rpcResults.get_product_counters = { data: [{ product_count: 0, alerts_configured: false, has_stock: false, has_imported: false }], error: null };
       vi.clearAllMocks();
     },
     get __calls() {

@@ -72,6 +72,8 @@ export type CriticalProductsResult =
 export interface ProductCounters {
   count: number;
   alertsConfigured: boolean;
+  hasStock: boolean;
+  hasImported: boolean;
 }
 
 export type ProductCountersResult =
@@ -201,8 +203,9 @@ function scopedTenantIds(auth: AuthInfo): string[] {
  * completo, hacía join con `product_stock` y firmaba cada URL de imagen. Con un
  * catálogo grande eso es payload y trabajo de storage tirados a la basura.
  *
- * Las dos COUNT corren en una sola pasada dentro de `get_product_counters`
- * (migración 064): un único RPC en vez de dos round trips a PostgREST.
+ * Desde la migración 069 la misma RPC también resuelve si hay stock cargado y
+ * si el tenant ya importó un Excel, que son dos pasos del checklist de
+ * onboarding. Sigue siendo un único round trip a PostgREST.
  */
 export async function getProductCounters(auth: AuthInfo): Promise<ProductCountersResult> {
   const { data, error } = await supabaseAdmin.rpc('get_product_counters', {
@@ -220,6 +223,8 @@ export async function getProductCounters(auth: AuthInfo): Promise<ProductCounter
     data: {
       count: Number(row?.product_count) || 0,
       alertsConfigured: Boolean(row?.alerts_configured),
+      hasStock: Boolean(row?.has_stock),
+      hasImported: Boolean(row?.has_imported),
     },
   };
 }
