@@ -1657,7 +1657,7 @@ function SettingsContent() {
                   </div>
                   {manageableTenants.length > 0 && selectedTenantIds.length === 0 && (
                     <p className="mt-2 text-xs text-gray-400">
-                      Elegí al menos una sucursal. No se envía nada hasta que lo hagas.
+                      Seleccioná al menos una sucursal para enviar la invitación.
                     </p>
                   )}
                 </div>
