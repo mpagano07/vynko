@@ -172,8 +172,16 @@ export async function proxy(request: NextRequest) {
   // `/api` queda afuera aunque el matcher ya lo excluya: los handlers deciden
   // por area (y los webhooks de pago NUNCA se bloquean). Depender solo del
   // matcher haria que un cambio de config tumbara pagos y cron sin aviso.
+  //
+  // `/admin/ops` tambien queda afuera: es el panel desde el que se revive el
+  // mantenimiento. Si se reescribiera a /maintenance, la unica forma de apagar
+  // `maintenance_mode` seria por SQL o por API, y el runbook quedaria mintiendo
+  // justo en el peor momento. La pagina no expone nada por si sola: el gate de
+  // auth de abajo sigue exigiendo sesion y `/api/admin/feature-flags` sigue
+  // exigiendo admin.
   const isApiPath = pathname === '/api' || pathname.startsWith('/api/');
-  if (!isApiPath && (await isMaintenanceMode())) {
+  const isOpsPath = pathname === '/admin/ops' || pathname.startsWith('/admin/ops/');
+  if (!isApiPath && !isOpsPath && (await isMaintenanceMode())) {
     const maintenanceUrl = request.nextUrl.clone();
     maintenanceUrl.pathname = '/maintenance';
     maintenanceUrl.search = '';
@@ -367,7 +375,11 @@ export async function proxy(request: NextRequest) {
   // Check subscription block (skip for billing page). Every branch of the same
   // owner shares a single subscription, so the block is evaluated against the
   // owner's consolidated subscription across all their tenants.
-  if (tenantIds.length > 0 && !pathname.startsWith(billingPath)) {
+  //
+  // `/admin/ops` tambien se salta el bloqueo: es el panel de incidentes y un
+  // admin con la suscripcion vencida tiene que poder cortar un area igual. El
+  // panel no muestra datos del tenant y la API sigue exigiendo `is_admin`.
+  if (tenantIds.length > 0 && !pathname.startsWith(billingPath) && !isOpsPath) {
     const { data: tenants } = await supabaseAdmin
       .from('tenants')
       .select('subscription_status, subscription_plan, created_at, subscription_current_period_end')

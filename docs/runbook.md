@@ -210,10 +210,13 @@ se prepara el fix.
      -H "Content-Type: application/json" -H "Cookie: <sesión admin>" \
      -d '{"flag_key":"kill_sales","enabled":true,"rollout_percent":100}'
    ```
-3. **SQL** (si la API tampoco responde):
+3. **SQL** (si la API tampoco responde): el upsert funciona exista o no la
+   fila semilla de la 068:
    ```sql
-   update public.feature_flags set enabled = true, updated_at = now()
-    where flag_key = 'kill_sales';
+   insert into public.feature_flags (flag_key, enabled, rollout_percent, description)
+   values ('kill_sales', true, 100, 'Kill switch manual')
+   on conflict (flag_key) do update
+     set enabled = excluded.enabled, updated_at = now();
    ```
 4. **Env** (si la base esta caida o lenta): `FEATURE_KILL_SALES=on` (o
    `MAINTENANCE_MODE=on`) en Vercel y redeploy. La env solo fuerza ON.
@@ -221,9 +224,11 @@ se prepara el fix.
    `code: "KILL_SWITCH_<AREA>"` y `Retry-After: 60`; `/api/health`,
    `/api/session` y los webhooks siguen respondiendo. En el peor caso tarda
    ~10 s (cache del servidor) + 15 s (banner).
-6. **Revivir**: `/admin/ops` → `Revivir` (o `enabled=false` por API/SQL). Si el
-   area estaba forzada por env, primero sacar la variable y redeploy: el boton
-   aparece bloqueado con un candado.
+6. **Revivir**: `/admin/ops` → `Revivir` (o `enabled=false` por API/SQL). El
+   panel sigue cargando aunque el mantenimiento global esté activo. Si el
+   area estaba forzada por env, primero sacar la variable **en Vercel** y
+   redeployar: el boton aparece bloqueado con un candado. Un `.env` local no
+   cambia nada en producción.
 7. **Cierre**: dejar en el canal que se corto, por que, a que hora y cuando se
    revivio. Si el corte fue por env, sacar la variable para no dejar el kill
    pegado al proximo deploy.

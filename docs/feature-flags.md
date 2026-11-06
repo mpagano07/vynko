@@ -94,20 +94,32 @@ suscripciones). El proxy excluye `/api`; cada handler decide por área.
 ### Cómo se opera
 
 1. **Panel**: `/admin/ops` (solo admin). Matar pide confirmación; revivir no.
-   El estado se refresca cada 15 s.
+   El estado se refresca cada 15 s. El panel sigue siendo accesible aunque
+   `maintenance_mode` esté activo: es la vía normal para apagarlo.
 2. **API**: el mismo `PUT /api/admin/feature-flags` con
    `{ "flag_key": "kill_sales", "enabled": true, "rollout_percent": 100 }`.
    El PUT invalida el cache de kill switches de esa instancia.
 3. **SQL** (si el panel no carga):
    ```sql
-   update public.feature_flags set enabled = true, updated_at = now()
-    where flag_key = 'kill_sales';
+   -- Funciona exista o no la fila semilla de la 068.
+   insert into public.feature_flags (flag_key, enabled, rollout_percent, description)
+   values ('kill_sales', true, 100, 'Kill switch manual')
+   on conflict (flag_key) do update
+     set enabled = excluded.enabled, updated_at = now();
    ```
+   Para revivir, el mismo upsert con `enabled = false`.
 4. **Env** (si la base está caída o lenta): `FEATURE_KILL_SALES=on`,
    `FEATURE_KILL_PAYMENTS=on`, `FEATURE_KILL_FORECAST=on`,
    `FEATURE_KILL_IMPORTS=on` o `MAINTENANCE_MODE=on`. La env **solo puede
    forzar ON**: un `off` no revive lo que la base mató (para revivir hay que
    apagar la fila o sacar la variable).
+
+   **En producción (Vercel) estas variables no se leen de `.env.local` ni de
+   `.env`**: esos archivos son solo para `next dev` local y no se despliegan.
+   Hay que cargarlas en Vercel → Project → Settings → Environment Variables
+   (entorno Production), guardar y **redeployar**: un cambio de env no aplica
+   al deployment que ya está corriendo. Para que el corte sea inmediato, usá el
+   panel o la API; la env queda para cuando la base no responde.
 
 ### Detalles
 

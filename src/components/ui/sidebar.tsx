@@ -302,7 +302,13 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
           <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
             Admin
           </p>
-          {[{ name: 'Analytics', href: '/admin/analytics' }].map((item) => (
+          {[
+            { name: 'Analytics', href: '/admin/analytics' },
+            // Panel de incidentes: kill switches. Sin este link, la unica forma
+            // de llegar era escribir la URL a mano (y el runbook asume que se
+            // llega desde el sidebar).
+            { name: 'Ops', href: '/admin/ops' },
+          ].map((item) => (
             <Link
               key={item.name}
               href={item.href}

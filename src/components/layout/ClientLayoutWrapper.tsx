@@ -53,15 +53,19 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
   const isPublicRoute = isShelllessPath(pathname ?? '');
 
   const isBillingRoute = pathname?.startsWith('/billing');
+  // El panel de incidentes no se bloquea por suscripcion: un admin con el plan
+  // vencido tiene que poder matar/revivir un area igual. La autorizacion real
+  // la hace `/api/admin/feature-flags` con `is_admin`.
+  const isOpsRoute = pathname?.startsWith('/admin/ops');
 
   useEffect(() => {
-    if (!loading && !isPublicRoute && !isBillingRoute && tenant) {
+    if (!loading && !isPublicRoute && !isBillingRoute && !isOpsRoute && tenant) {
       const result = checkSubscriptionBlocked(tenant);
       if (result.blocked) {
         router.replace(`/billing?blocked=${result.reason}`);
       }
     }
-  }, [loading, isPublicRoute, isBillingRoute, tenant, router]);
+  }, [loading, isPublicRoute, isBillingRoute, isOpsRoute, tenant, router]);
 
   // Register the service worker so mobile browsers (Chrome/Android) treat the
   // site as an installable PWA and show the "Add to Home Screen" banner.

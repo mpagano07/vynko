@@ -571,6 +571,18 @@ describe('proxy: X-Robots-Tag y robots de indexacion', () => {
       expect(res.status).toBe(200);
     });
 
+    it('deja cargar /admin/ops durante el mantenimiento: desde ahi se revive', async () => {
+      makeServerClient({ id: 'user-1' });
+      adminQueue.push({ data: [{ tenant_id: 't1' }], error: null });
+      adminQueue.push({ data: { onboarding_pending: false }, error: null });
+      adminQueue.push({ data: [{ subscription_status: 'active' }], error: null });
+
+      const res = await proxy(request('/admin/ops'));
+
+      expect(res.headers.get('x-middleware-rewrite')).toBeNull();
+      expect(res.status).toBe(200);
+    });
+
     it('no toca /api: los handlers deciden por area y los webhooks nunca se bloquean', async () => {
       makeServerClient({ id: 'user-1' });
 
