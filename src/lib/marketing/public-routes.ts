@@ -119,6 +119,7 @@ export const PUBLIC_PATHS: readonly string[] = [
   '/auth',
   '/accept-invite',
   '/no-access',
+  '/maintenance',
   '/precios',
   ...LEGAL_PATHS,
   ...SEO_LANDING_PATHS,
@@ -139,6 +140,7 @@ export const NOINDEX_PATHS: readonly string[] = [
   '/auth',
   '/accept-invite',
   '/no-access',
+  '/maintenance',
 ];
 
 /**

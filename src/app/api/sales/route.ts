@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
+import { guardKill } from '@/lib/kill-switch';
 import { createSale, getTodaySales, listSales } from '@/lib/sales-service';
 import { createElectronicInvoice } from '@/lib/arca-service';
 import type { CreateElectronicInvoiceRequest } from '@/lib/types/arca';
@@ -44,6 +45,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const killed = await guardKill('sales');
+  if (killed) return killed;
+
   const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 

@@ -11,10 +11,13 @@ const mockAuth = {
 };
 
 const rateLimitMock = vi.hoisted(() => vi.fn());
+const guardKillMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/api-auth', () => ({
   getAuth: vi.fn(async () => mockAuth),
 }));
+
+vi.mock('@/lib/kill-switch', () => ({ guardKill: guardKillMock }));
 
 vi.mock('@/lib/supabaseAdmin', () => ({
   supabaseAdmin: supabaseMock,
@@ -73,6 +76,19 @@ describe('GET /api/forecast', () => {
     supabaseMock.__reset();
     vi.mocked(getAuth).mockResolvedValue(mockAuth);
     rateLimitMock.mockReturnValue({ ok: true, retryAfterSeconds: 0 });
+    guardKillMock.mockResolvedValue(null);
+  });
+
+  it('devuelve 503 cuando el kill switch de pronóstico está activo', async () => {
+    guardKillMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ code: 'KILL_SWITCH_FORECAST' }), { status: 503 })
+    );
+
+    const res = await GET(makeRequest());
+
+    expect(res.status).toBe(503);
+    expect(guardKillMock).toHaveBeenCalledWith('forecast');
+    expect(supabaseMock.__calls).toHaveLength(0);
   });
 
   it('devuelve 401 sin autenticación', async () => {

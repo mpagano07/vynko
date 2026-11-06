@@ -191,6 +191,48 @@ Diseno y SQL: `docs/background-jobs.md`.
 4. Un trabajo `running` con `locked_at` de hace mas de 15 minutos no existe:
    `claim_background_jobs` lo recupera solo en la proxima pasada.
 
+### 9. Cortar un area sin deploy (kill switch)
+
+Usalo cuando una sola funcion esta causando dano (ventas duplicadas, import que
+rompe stock, checkout que cobra mal) y no hay tiempo de arreglar y desplegar.
+No reemplaza al rollback si el problema es de codigo: apaga el sintoma mientras
+se prepara el fix.
+
+1. **Panel**: `/admin/ops` → `Matar` en el area afectada. Confirmar.
+   - `Ventas` → `POST /api/sales`
+   - `Pagos (Paddle)` → checkout, portal y downgrade (los webhooks siguen)
+   - `Pronóstico` → `GET /api/forecast`
+   - `Importación de productos` → `POST /api/products/import`
+   - `Mantenimiento global` → las cuatro areas + paginas a `/maintenance`
+2. **API** (si el panel no carga): `PUT /api/admin/feature-flags` como admin:
+   ```bash
+   curl -X PUT https://<app>/api/admin/feature-flags \
+     -H "Content-Type: application/json" -H "Cookie: <sesión admin>" \
+     -d '{"flag_key":"kill_sales","enabled":true,"rollout_percent":100}'
+   ```
+3. **SQL** (si la API tampoco responde): el upsert funciona exista o no la
+   fila semilla de la 068:
+   ```sql
+   insert into public.feature_flags (flag_key, enabled, rollout_percent, description)
+   values ('kill_sales', true, 100, 'Kill switch manual')
+   on conflict (flag_key) do update
+     set enabled = excluded.enabled, updated_at = now();
+   ```
+4. **Env** (si la base esta caida o lenta): `FEATURE_KILL_SALES=on` (o
+   `MAINTENANCE_MODE=on`) en Vercel y redeploy. La env solo fuerza ON.
+5. **Verificar**: la ruta afectada responde `503` con
+   `code: "KILL_SWITCH_<AREA>"` y `Retry-After: 60`; `/api/health`,
+   `/api/session` y los webhooks siguen respondiendo. En el peor caso tarda
+   ~10 s (cache del servidor) + 15 s (banner).
+6. **Revivir**: `/admin/ops` → `Revivir` (o `enabled=false` por API/SQL). El
+   panel sigue cargando aunque el mantenimiento global esté activo. Si el
+   area estaba forzada por env, primero sacar la variable **en Vercel** y
+   redeployar: el boton aparece bloqueado con un candado. Un `.env` local no
+   cambia nada en producción.
+7. **Cierre**: dejar en el canal que se corto, por que, a que hora y cuando se
+   revivio. Si el corte fue por env, sacar la variable para no dejar el kill
+   pegado al proximo deploy.
+
 ## Mantenimiento / tareas programadas
 
 | Tarea | Cadencia | Como |

@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { isAdminProfile } from '@/lib/admin';
 import { isSameOriginRequest } from '@/lib/security/csrf';
 import { listFeatureFlags, setFeatureFlag } from '@/lib/feature-flags';
+import { invalidateKillSwitchCache } from '@/lib/kill-switch';
 import { logger } from '@/lib/logger';
 
 /**
@@ -93,6 +94,10 @@ export async function PUT(request: Request) {
   });
 
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 500 });
+
+  // El cache de kill switches es propio (10 s). Sin esto, la instancia que
+  // atiende el PUT seguiria sirviendo el estado viejo hasta que venza.
+  invalidateKillSwitchCache();
 
   logger.info('feature flag actualizado', {
     flag: result.flag.flag_key,

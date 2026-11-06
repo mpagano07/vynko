@@ -11,6 +11,7 @@ import { checkSubscriptionBlocked } from '@/lib/checkSubscription';
 
 import { NetworkStatusNotifier } from '@/components/ui/NetworkStatusNotifier';
 import CookieConsent from '@/components/cookies/CookieConsent';
+import { KillSwitchBanner } from '@/components/ui/kill-switch-banner';
 import { isShelllessPath } from '@/lib/marketing/public-routes';
 
 const LazyToaster = dynamic(() => import('@/components/ui/lazy-toaster'), { ssr: false });
@@ -52,15 +53,19 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
   const isPublicRoute = isShelllessPath(pathname ?? '');
 
   const isBillingRoute = pathname?.startsWith('/billing');
+  // El panel de incidentes no se bloquea por suscripcion: un admin con el plan
+  // vencido tiene que poder matar/revivir un area igual. La autorizacion real
+  // la hace `/api/admin/feature-flags` con `is_admin`.
+  const isOpsRoute = pathname?.startsWith('/admin/ops');
 
   useEffect(() => {
-    if (!loading && !isPublicRoute && !isBillingRoute && tenant) {
+    if (!loading && !isPublicRoute && !isBillingRoute && !isOpsRoute && tenant) {
       const result = checkSubscriptionBlocked(tenant);
       if (result.blocked) {
         router.replace(`/billing?blocked=${result.reason}`);
       }
     }
-  }, [loading, isPublicRoute, isBillingRoute, tenant, router]);
+  }, [loading, isPublicRoute, isBillingRoute, isOpsRoute, tenant, router]);
 
   // Register the service worker so mobile browsers (Chrome/Android) treat the
   // site as an installable PWA and show the "Add to Home Screen" banner.
@@ -189,6 +194,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
           <React.Suspense fallback={<HeaderSkeleton />}>
             <Header />
           </React.Suspense>
+          <KillSwitchBanner />
           <main className="flex-1 w-full overflow-auto bg-gray-50 dark:bg-gray-950">
             <div key={pageKey} className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full">
               {children}

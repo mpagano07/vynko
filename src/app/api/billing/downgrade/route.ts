@@ -4,12 +4,16 @@ import { createServerSupabaseClient } from '@/lib/supabase';
 import { downgradePlan } from '@/lib/billing-service';
 import type { PlanId } from '@/lib/plans';
 import { isSameOriginRequest } from '@/lib/security/csrf';
+import { guardKill } from '@/lib/kill-switch';
 
 const DowngradeSchema = z.object({
   plan: z.enum(['starter', 'free']),
 });
 
 export async function POST(request: Request) {
+  const killed = await guardKill('payments');
+  if (killed) return killed;
+
   if (!isSameOriginRequest(request)) {
     return NextResponse.json({ error: 'Origen no permitido' }, { status: 403 });
   }

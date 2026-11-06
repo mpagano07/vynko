@@ -3,12 +3,16 @@ import { z } from 'zod';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { createCheckoutSession } from '@/lib/billing-service';
 import { isSameOriginRequest } from '@/lib/security/csrf';
+import { guardKill } from '@/lib/kill-switch';
 
 const CreateCheckoutSchema = z.object({
   plan: z.enum(['starter', 'business']).nullable().optional(),
 });
 
 export async function POST(request: Request) {
+  const killed = await guardKill('payments');
+  if (killed) return killed;
+
   if (!isSameOriginRequest(request)) {
     return NextResponse.json({ error: 'Origen no permitido' }, { status: 403 });
   }

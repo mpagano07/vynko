@@ -12,6 +12,7 @@ import {
 } from '@/lib/session-policy';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
+import { isMaintenanceMode } from '@/lib/kill-switch';
 import { getPaddleConfiguredCurrencies } from '@/lib/paddle-price-ids';
 import { PADDLE_CURRENCIES_COOKIE } from '@/lib/pricing/configured-currencies';
 import { PUBLIC_PATHS } from '@/lib/marketing/public-routes';
@@ -160,6 +161,38 @@ export async function proxy(request: NextRequest) {
   // el robots.txt y el layout raiz no puedan desincronizarse.
   if (PUBLIC_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))) {
     return next();
+  }
+
+  // Mantenimiento global. Va ANTES del gate de auth a proposito: si no, una
+  // ruta privada rebotaria a /login y la persona no veria nunca el aviso.
+  // `/maintenance` esta en PUBLIC_PATHS, asi que no vuelve a entrar aca.
+  // Se reescribe (no se redirige) para conservar la URL original y devolver un
+  // 503 real, que es lo que esperan los uptime checks.
+  //
+  // `/api` queda afuera aunque el matcher ya lo excluya: los handlers deciden
+  // por area (y los webhooks de pago NUNCA se bloquean). Depender solo del
+  // matcher haria que un cambio de config tumbara pagos y cron sin aviso.
+  //
+  // `/admin/ops` tambien queda afuera: es el panel desde el que se revive el
+  // mantenimiento. Si se reescribiera a /maintenance, la unica forma de apagar
+  // `maintenance_mode` seria por SQL o por API, y el runbook quedaria mintiendo
+  // justo en el peor momento. La pagina no expone nada por si sola: el gate de
+  // auth de abajo sigue exigiendo sesion y `/api/admin/feature-flags` sigue
+  // exigiendo admin.
+  const isApiPath = pathname === '/api' || pathname.startsWith('/api/');
+  const isOpsPath = pathname === '/admin/ops' || pathname.startsWith('/admin/ops/');
+  if (!isApiPath && !isOpsPath && (await isMaintenanceMode())) {
+    const maintenanceUrl = request.nextUrl.clone();
+    maintenanceUrl.pathname = '/maintenance';
+    maintenanceUrl.search = '';
+    return withSecurityHeaders(
+      NextResponse.rewrite(maintenanceUrl, {
+        status: 503,
+        headers: { 'Retry-After': '60', 'Cache-Control': 'no-store' },
+        request: { headers: requestHeaders },
+      }),
+      nonce
+    );
   }
 
   const response = next();
@@ -342,7 +375,11 @@ export async function proxy(request: NextRequest) {
   // Check subscription block (skip for billing page). Every branch of the same
   // owner shares a single subscription, so the block is evaluated against the
   // owner's consolidated subscription across all their tenants.
-  if (tenantIds.length > 0 && !pathname.startsWith(billingPath)) {
+  //
+  // `/admin/ops` tambien se salta el bloqueo: es el panel de incidentes y un
+  // admin con la suscripcion vencida tiene que poder cortar un area igual. El
+  // panel no muestra datos del tenant y la API sigue exigiendo `is_admin`.
+  if (tenantIds.length > 0 && !pathname.startsWith(billingPath) && !isOpsPath) {
     const { data: tenants } = await supabaseAdmin
       .from('tenants')
       .select('subscription_status, subscription_plan, created_at, subscription_current_period_end')

@@ -2,8 +2,12 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { cancelSubscription } from '@/lib/billing-service';
 import { isSameOriginRequest } from '@/lib/security/csrf';
+import { guardKill } from '@/lib/kill-switch';
 
 export async function POST(request: Request) {
+  const killed = await guardKill('payments');
+  if (killed) return killed;
+
   if (!isSameOriginRequest(request)) {
     return NextResponse.json({ error: 'Origen no permitido' }, { status: 403 });
   }

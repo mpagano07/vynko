@@ -28,10 +28,14 @@ const { rateLimitMock, getClientIpMock } = vi.hoisted(() => ({
   getClientIpMock: vi.fn((_request: Request) => '203.0.113.5'),
 }));
 
+const isMaintenanceModeMock = vi.hoisted(() => vi.fn());
+
 vi.mock('@/lib/rate-limit', () => ({
   rateLimit: (key: string, limit: number, windowMs: number) => rateLimitMock(key, limit, windowMs),
   getClientIp: (request: Request) => getClientIpMock(request),
 }));
+
+vi.mock('@/lib/kill-switch', () => ({ isMaintenanceMode: isMaintenanceModeMock }));
 
 const serverClientMock = vi.mocked(createServerClient);
 const adminClientMock = vi.mocked(createClient);
@@ -88,6 +92,7 @@ describe('proxy: compuerta de onboarding (regresión: usuario con cuenta no debe
     makeAdminClient();
     rateLimitMock.mockResolvedValue({ ok: true, retryAfterSeconds: 0 });
     getClientIpMock.mockReturnValue('203.0.113.5');
+    isMaintenanceModeMock.mockResolvedValue(false);
   });
 
   it('no redirige a onboarding si el usuario tiene una empresa', async () => {
@@ -540,5 +545,63 @@ describe('proxy: X-Robots-Tag y robots de indexacion', () => {
     const res = await proxy(request('/login'));
 
     expect(res.headers.get('x-robots-tag')).toBeNull();
+  });
+
+  describe('mantenimiento global', () => {
+    beforeEach(() => {
+      isMaintenanceModeMock.mockResolvedValue(true);
+    });
+
+    it('reescribe una ruta privada a /maintenance con 503 y Retry-After', async () => {
+      makeServerClient({ id: 'user-1' });
+
+      const res = await proxy(request('/dashboard'));
+
+      expect(res.status).toBe(503);
+      expect(res.headers.get('Retry-After')).toBe('60');
+      expect(res.headers.get('x-middleware-rewrite')).toContain('/maintenance');
+    });
+
+    it('no reescribe /maintenance: evita el loop', async () => {
+      makeServerClient(null);
+
+      const res = await proxy(request('/maintenance'));
+
+      expect(res.headers.get('x-middleware-rewrite')).toBeNull();
+      expect(res.status).toBe(200);
+    });
+
+    it('deja cargar /admin/ops durante el mantenimiento: desde ahi se revive', async () => {
+      makeServerClient({ id: 'user-1' });
+      adminQueue.push({ data: [{ tenant_id: 't1' }], error: null });
+      adminQueue.push({ data: { onboarding_pending: false }, error: null });
+      adminQueue.push({ data: [{ subscription_status: 'active' }], error: null });
+
+      const res = await proxy(request('/admin/ops'));
+
+      expect(res.headers.get('x-middleware-rewrite')).toBeNull();
+      expect(res.status).toBe(200);
+    });
+
+    it('no toca /api: los handlers deciden por area y los webhooks nunca se bloquean', async () => {
+      makeServerClient({ id: 'user-1' });
+
+      for (const pathname of ['/api/sales', '/api/webhooks/paddle', '/api/health']) {
+        const res = await proxy(request(pathname));
+        expect(res.headers.get('x-middleware-rewrite'), pathname).toBeNull();
+        // En produccion el matcher ni siquiera invoca el proxy para /api; acá
+        // solo importa que el mantenimiento no lo reescriba a /maintenance.
+        expect(res.status, pathname).not.toBe(503);
+      }
+    });
+
+    it('no toca las landings publicas', async () => {
+      makeServerClient(null);
+
+      const res = await proxy(request('/precios'));
+
+      expect(res.headers.get('x-middleware-rewrite')).toBeNull();
+      expect(res.status).toBe(200);
+    });
   });
 });

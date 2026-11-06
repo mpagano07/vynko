@@ -61,3 +61,74 @@ const flags = await getFeatureFlags(['new_checkout', 'ai_forecast'], { userId: a
   asume "todo encendido").
 - API: `src/app/api/admin/feature-flags/route.ts` (admin fail closed + CSRF).
 - Tests: `src/lib/feature-flags.test.ts`.
+
+## Kill switches de incidente
+
+Los kill switches **no** son flags de release y no usan `isFeatureEnabled()`.
+Reusan la misma tabla (`migrations/068_kill_switch.sql`) con semántica
+**invertida**:
+
+| Fila / `enabled` | Efecto |
+|---|---|
+| sin fila o `enabled=false` | el área está **viva** (fail open) |
+| `enabled=true` | el área está **matada** |
+
+`rollout_percent` se ignora. Un kill switch no puede depender de un porcentaje
+ni de que alguien se acuerde de crear la fila.
+
+| Clave | Bloquea |
+|---|---|
+| `kill_sales` | `POST /api/sales` |
+| `kill_payments` | checkout, portal y downgrade de Paddle |
+| `kill_forecast` | `GET /api/forecast` |
+| `kill_imports` | `POST /api/products/import` |
+| `maintenance_mode` | las cuatro áreas + páginas de la app a `/maintenance` |
+
+La respuesta es `503` con `{ error, code: "KILL_SWITCH_<AREA>" }`,
+`Retry-After: 60` y `Cache-Control: no-store`.
+
+**Nunca se bloquean**: auth, `/api/session`, `/api/health`, `/api/version`,
+crons y los webhooks de Paddle/MercadoPago (son la fuente de verdad de las
+suscripciones). El proxy excluye `/api`; cada handler decide por área.
+
+### Cómo se opera
+
+1. **Panel**: `/admin/ops` (solo admin). Matar pide confirmación; revivir no.
+   El estado se refresca cada 15 s. El panel sigue siendo accesible aunque
+   `maintenance_mode` esté activo: es la vía normal para apagarlo.
+2. **API**: el mismo `PUT /api/admin/feature-flags` con
+   `{ "flag_key": "kill_sales", "enabled": true, "rollout_percent": 100 }`.
+   El PUT invalida el cache de kill switches de esa instancia.
+3. **SQL** (si el panel no carga):
+   ```sql
+   -- Funciona exista o no la fila semilla de la 068.
+   insert into public.feature_flags (flag_key, enabled, rollout_percent, description)
+   values ('kill_sales', true, 100, 'Kill switch manual')
+   on conflict (flag_key) do update
+     set enabled = excluded.enabled, updated_at = now();
+   ```
+   Para revivir, el mismo upsert con `enabled = false`.
+4. **Env** (si la base está caída o lenta): `FEATURE_KILL_SALES=on`,
+   `FEATURE_KILL_PAYMENTS=on`, `FEATURE_KILL_FORECAST=on`,
+   `FEATURE_KILL_IMPORTS=on` o `MAINTENANCE_MODE=on`. La env **solo puede
+   forzar ON**: un `off` no revive lo que la base mató (para revivir hay que
+   apagar la fila o sacar la variable).
+
+   **En producción (Vercel) estas variables no se leen de `.env.local` ni de
+   `.env`**: esos archivos son solo para `next dev` local y no se despliegan.
+   Hay que cargarlas en Vercel → Project → Settings → Environment Variables
+   (entorno Production), guardar y **redeployar**: un cambio de env no aplica
+   al deployment que ya está corriendo. Para que el corte sea inmediato, usá el
+   panel o la API; la env queda para cuando la base no responde.
+
+### Detalles
+
+- Helper: `src/lib/kill-switch.ts` (cache propio de 10 s, fail open: si la base
+  falla conserva el último snapshot y, sin snapshot, deja todo vivo).
+- Constantes puras para cliente: `src/lib/kill-switch-config.ts`.
+- Estado para la UI: `GET /api/kill-switch/status` + hook
+  `useKillSwitches` (15 s). No va en `/api/session` porque esa sesión se
+  revalida cada 5 min.
+- Banner: `src/components/ui/kill-switch-banner.tsx`.
+- Tests: `src/lib/kill-switch.test.ts`, `src/app/admin/ops/page.test.tsx` y
+  las guardas en los tests de cada ruta.
