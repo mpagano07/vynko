@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { supabaseMock } from '@/test/supabase-mock';
-import { getAuth } from '@/lib/api-auth';
+import { getAuth, type AuthInfo } from '@/lib/api-auth';
 
-const mockAuth = {
+const mockAuth: AuthInfo = {
   tenantId: 'tenant-1',
   userId: 'user-1',
   allTenants: false,

@@ -103,6 +103,7 @@ const VICTIM = {
   customer: null,
   document: null,
   notification: null,
+  invitation: null,
   movement: null,
   stock: null,
   storageObject: null,
@@ -246,6 +247,21 @@ async function setup() {
     .single();
   if (notifErr) throw new Error(`no se pudo crear notificacion victima: ${notifErr.message}`);
   VICTIM.notification = notification.id;
+
+  // La migracion 070 quita el SELECT de `invitations` para anon/authenticated.
+  // Esta fila prueba que un miembro de OTRO tenant no la puede leer.
+  const { data: invitation, error: invErr } = await admin
+    .from('invitations')
+    .insert({
+      tenant_id: tenant.id,
+      email: `rls-verify-invite-${stamp}@example.test`,
+      role: 'member',
+      invited_by: VICTIM_USER_ID,
+    })
+    .select()
+    .single();
+  if (invErr) throw new Error(`no se pudo crear invitacion victima: ${invErr.message}`);
+  VICTIM.invitation = invitation.id;
 }
 
 let VICTIM_USER_ID = null;
@@ -295,6 +311,7 @@ async function teardown() {
   if (VICTIM.storageObject) {
     await admin.storage.from('product-images').remove([VICTIM.storageObject]);
   }
+  if (VICTIM.invitation) await admin.from('invitations').delete().eq('id', VICTIM.invitation);
   if (VICTIM.notification) await admin.from('notifications').delete().eq('id', VICTIM.notification);
   if (VICTIM.document) await admin.from('commercial_documents').delete().eq('id', VICTIM.document);
   if (VICTIM.movement) await admin.from('stock_movements').delete().eq('id', VICTIM.movement);
@@ -385,6 +402,22 @@ await section('Aislamiento de lectura entre tenants', async () => {
     'commercial_documents: toda fila pertenece a un tenant propio',
     (docs ?? []).every((d) => ownTenants.includes(d.tenant_id)),
     `filtrado: ${JSON.stringify((docs ?? []).filter((d) => !ownTenants.includes(d.tenant_id)).map((d) => d.id))}`
+  );
+
+  // 070 revoca el SELECT de `invitations` para anon/authenticated. PostgREST
+  // puede responder error de permisos o una lista vacia; las dos cosas son
+  // "bloqueado". Lo que no puede pasar es que aparezca la fila victima.
+  const { data: invitations, error: invitationsError } = await user
+    .from('invitations')
+    .select('id, tenant_id, email');
+  check(
+    'invitations: el cliente no puede leer la tabla',
+    Boolean(invitationsError) || (invitations ?? []).length === 0,
+    `data=${JSON.stringify(invitations)}`
+  );
+  check(
+    'invitations NO expone la invitacion victima',
+    !(invitations ?? []).some((i) => i.id === VICTIM.invitation)
   );
 
   const { data: tenantRows } = await user.from('tenants').select('id');

@@ -77,7 +77,10 @@ export async function POST(request: Request) {
       rateLimit(ipKey, MAX_FAILED_ATTEMPTS_PER_IP, WINDOW_MS),
       rateLimit(accountKey, MAX_FAILED_ATTEMPTS, WINDOW_MS),
     ]);
-    logger.warn(`Login failed for ${normalizedEmail}`, { error: error.message, code: error.code });
+    // El email no va al log: es PII y no hace falta para diagnosticar. El codigo
+    // de Supabase alcanza para separar credenciales invalidas de email sin
+    // confirmar o cuenta bloqueada.
+    logger.warn('Login failed', { error: error.message, code: error.code });
 
     // Un unico caso se distingue del resto: cuando el email existe pero todavia
     // no esta verificado. Decirlo no revela si la cuenta esta registrada (el

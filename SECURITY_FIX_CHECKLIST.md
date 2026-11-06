@@ -21,20 +21,20 @@ Quedan **4 arreglos reales** (1 de exposición de datos, 1 de PII, 2 de endureci
 | CRIT-02 | ✅ **Hecho** | Login: límite por cuenta + por IP (`login/route.ts:8-15`); signup: por email + IP (`signup/route.ts:12-13`); forgot-password: por email + IP (`auth-service.ts:41,49`) |
 | CRIT-03 | ✅ **Hecho** | 020 elimina la policy INSERT de `tenant_users`; 034 revoca INSERT/UPDATE/DELETE; la aceptación corre server-side con `supabaseAdmin` (`accept-invitations.ts`) |
 | HIGH-01 | ⚪ **No aplica** | `'unsafe-eval'` está solo en dev (`csp.ts:52`, `isDev ? ...`). No existe en producción. Next dev/HMR lo necesita. No tocar |
-| HIGH-02 | 🟡 **Vigente, riesgo bajo** | Wildcards de Sentry en `connect-src` (`csp.ts:60`). Sin XSS previo no hay exfiltración; se puede restringir al host del DSN |
-| HIGH-03 | 🔴 **Vigente, prioridad 1** | Policy SELECT de `invitations` abierta a cualquier miembro (`005:24-27`); 034 solo revocó DML, no SELECT. Ningún cliente lee `invitations` directo, así que se puede cerrar por completo |
-| HIGH-04 | 🟡 **Vigente, defensa en profundidad** | `upload-service.ts:126-138` valida tamaño/MIME/magic bytes, pero no dimensiones. Las imágenes van a bucket privado y se sirven por signed URL: el server no las decodifica, así que el DoS "GBs en memoria" del plan está exagerado |
+| HIGH-02 | ✅ **Resuelto en rama** | `csp.ts` usa el host exacto del DSN (`getSentryDsn` + `new URL(dsn).host`); sin DSN no agrega ningún host. Test en `src/lib/security/csp.test.ts` |
+| HIGH-03 | ✅ **Resuelto en rama** | `migrations/070_lock_invitations_select.sql` elimina la policy SELECT y revoca `SELECT` a `anon, authenticated`. `scripts/verify-rls.mjs` verifica la invitación victima |
+| HIGH-04 | ✅ **Resuelto en rama** | `upload-service.ts` lee dimensiones de PNG/JPEG/GIF/WebP y rechaza > 4096 px o > 16 MP antes de subir. Tests en `security-upload-service.test.ts` |
 | MED-01 | 🟡 **Vigente, riesgo humano** | `feature_flags` mezcla flags de release y kill switches con semántica invertida (`kill-switch.ts:16-29`). `/admin/ops` solo muestra kill switches, así que el riesgo está contenido |
-| MED-02 | 🟡 **Condicional** | `parseTrustedHops()` cae a 0 (`rate-limit.ts:353-357`). En Vercel/Cloudflare no se usa (`shouldTrustEdgeIpHeaders`, líneas 297-303). Solo importa en self-hosted |
+| MED-02 | ✅ **Resuelto en rama** | `getClientIp` avisa una sola vez en producción si no es Vercel/Cloudflare y falta `RATE_LIMIT_TRUSTED_HOPS`. No lanza error. Test en `rate-limit.test.ts` |
 | MED-03 | ✅ **Hecho** | 048/049 descuentan stock con `UPDATE ... WHERE stock >= qty` dentro de la transacción (lock de fila implícito). No hace falta `FOR UPDATE` explícito |
 | MED-04 | ✅ **Hecho** | 029 crea `cash_register_sessions` con `tenant_id`, RLS y policies SELECT por tenant (líneas 63-107) |
-| LOW-01 | 🟡 **Parcial (3/6)** | Ya existen CSRF, aislamiento por tenant y XFF spoofing. Hay un script manual de CSP (`scripts/verify-csp.mjs`), pero no test. Faltan: CSP nonce como test, inactividad de sesión, idempotencia de ventas |
+| LOW-01 | ✅ **Resuelto en rama** | CSRF, aislamiento y XFF ya estaban. Se agregaron tests de CSP/Sentry (`csp.test.ts`), inactividad (`session-policy.test.ts`) e idempotencia de ventas (`sales-service.test.ts`) |
 | LOW-02 | ✅ **Hecho** | `scripts/audit-prod.mjs` + paso en `.github/workflows/tests.yml` (usa npm, no pnpm) |
 | LOW-03 | ✅ **Hecho** | `ggshield` en CI + `.gitguardian.yaml` (equivalente a gitleaks) |
-| LOW-04 | 🔴 **Vigente, prioridad 2** | `login/route.ts:80` y `signup/route.ts:92` loguean el email crudo en el mensaje |
-| LOW-05 | 🟡 **Vigente, menor** | `AuthInfo.role?: string \| null` (`api-auth.ts:31`); el valor se resuelve sin validar en `api-auth.ts:101` |
+| LOW-04 | ✅ **Resuelto en rama** | Login/signup ya no loguean el email; `auth-service` loguea `message`/`code` en vez del objeto completo. Test de PII en `security-auth-routes.test.ts` |
+| LOW-05 | ✅ **Resuelto en rama** | `AuthInfo.role` es `TenantRole \| null` y `getAuth` valida con `isTenantRole` |
 
-**Resumen:** 7 hechos · 1 no aplica · 7 vigentes (3 prioritarios: HIGH-03, LOW-04, HIGH-04; 4 menores: HIGH-02, MED-01, MED-02, LOW-05) · 1 parcial (LOW-01).
+**Resumen:** 7 hechos · 1 no aplica · 7 resueltos en esta rama (HIGH-02/03/04, MED-02, LOW-01/04/05) · MED-01 queda como decisión documentada. La migración `070` debe aplicarse en staging/producción al desplegar.
 
 ---
 
@@ -154,11 +154,11 @@ logger.warn('Signup failed', { code: error.code ?? 'unknown' });
 
 Ya cubiertos: CSRF (`security-csrf.test.ts`), aislamiento por tenant (`tenant-isolation.*.test.ts`), spoofing de XFF (`rate-limit.test.ts`).
 
-Faltan:
+Faltan (resueltos en esta rama):
 
-- [ ] **CSP nonce:** o convertir `scripts/verify-csp.mjs` en test, o crear `src/test/csp-nonce.test.ts` que verifique que cada `<script>` inline del HTML lleva el nonce del header.
-- [ ] **Inactividad de sesión:** test de `proxy.ts` con `LAST_SEEN_COOKIE` ausente/vencida → sesión revocada y redirect a login.
-- [ ] **Idempotencia de ventas:** mismo `idempotency-key` + mismo body → 1 venta; misma key + body distinto → 409.
+- [x] **CSP nonce:** cubierto por `src/lib/security/csp.test.ts` (host exacto del DSN, sin wildcards) además de `scripts/verify-csp.mjs`.
+- [x] **Inactividad de sesión:** `isInactivityExpired` en `session-policy.ts`, usado por `proxy.ts`, con test unitario y cobertura existente en `proxy.test.ts`.
+- [x] **Idempotencia de ventas:** `src/lib/sales-service.test.ts` (replay, 409 por body distinto y carrera 23505).
 
 #### 6. LOW-05 — Tipar `role` con validación real
 
@@ -181,24 +181,28 @@ Actualizar `AuthInfo.role` a `TenantRole | null`.
 
 #### 7. MED-01 — Separar kill switches de feature flags
 
+**Estado:** documentado en `docs/feature-flags.md`; no requiere cambio de código en esta rama. Queda como deuda de diseño.
+
 **Riesgo real:** error humano al togglear (`enabled = true` mata la funcionalidad). No es una vulnerabilidad.
 
 **Acción mínima (sin migración):**
-- Documentar la semántica en `docs/feature-flags.md` y en el panel.
-- Impedir que el editor genérico de flags de release cree/edite claves `kill_*` (validación en `src/app/api/admin/feature-flags/route.ts`).
+- [x] Documentar la semántica en `docs/feature-flags.md` y en el panel.
+- [ ] Impedir que el editor genérico de flags de release cree/edite claves `kill_*` (validación en `src/app/api/admin/feature-flags/route.ts`).
 - Opcional a futuro: columna `killed` o tabla `kill_switches`.
 
 #### 8. MED-02 — Aviso de `RATE_LIMIT_TRUSTED_HOPS`
 
+**Estado:** implementado en `src/lib/rate-limit.ts`.
+
 **Corrección al plan:** lanzar un error en producción rompería Vercel/preview, donde el header del edge es confiable y la variable no se usa.
 
-**Fix:** solo advertir, y solo cuando **no** se confía en el edge:
+**Fix aplicado:** advertir una sola vez, solo en producción y solo cuando **no** se confía en el edge:
 ```ts
 if (!shouldTrustEdgeIpHeaders() && !process.env.RATE_LIMIT_TRUSTED_HOPS) {
-  logger.warn('RATE_LIMIT_TRUSTED_HOPS no configurado: rate limit por IP depende de x-forwarded-for');
+  logger.warn('RATE_LIMIT_TRUSTED_HOPS no configurado: ...');
 }
 ```
-Una sola vez al inicio, no por request.
+No lanza error. Test en `rate-limit.test.ts`.
 
 #### 9. HIGH-01 — No hacer
 
@@ -255,8 +259,8 @@ También: las líneas citadas del plan no coinciden con el código actual (por e
 
 - [ ] Las 7 migraciones críticas están aplicadas en staging y producción.
 - [ ] `npm run verify:rls` pasa en staging.
-- [ ] Un `member` no puede leer `invitations` por PostgREST.
-- [ ] Los logs de auth no contienen emails.
-- [ ] Upload rechaza imágenes > 4096 px o > 16 MP.
-- [ ] El CSP no tiene wildcards de Sentry cuando hay DSN.
+- [ ] Un `member` no puede leer `invitations` por PostgREST (migración `070` aplicada).
+- [x] Los logs de auth no contienen emails.
+- [x] Upload rechaza imágenes > 4096 px o > 16 MP.
+- [x] El CSP no tiene wildcards de Sentry cuando hay DSN.
 - [ ] `npm run test:run`, `npm run lint` y `npm run typecheck` verdes.

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getAuth } from '@/lib/api-auth';
+import { getAuth, type AuthInfo } from '@/lib/api-auth';
 import { createActivityLog } from '@/lib/activity-log';
 import { trackEvent } from '@/lib/track-event';
 import { createElectronicInvoice } from '@/lib/arca-service';
@@ -8,7 +8,7 @@ import { supabaseMock } from '@/test/supabase-mock';
 import type { ElectronicInvoiceRecord } from '@/lib/types/arca';
 import { GET, POST } from './route';
 
-const mockAuth = {
+const mockAuth: AuthInfo = {
   tenantId: 'tenant-1',
   userId: 'user-1',
   allTenants: false,

@@ -62,7 +62,9 @@ export async function sendResetPasswordEmail(request: Request): Promise<ResetPas
   });
 
   if (error) {
-    logger.error('Error sending recovery email:', { error });
+    // Solo el mensaje y el codigo: serializar el objeto de error completo puede
+    // arrastrar el email o el cuerpo del request a los logs.
+    logger.error('Error sending recovery email:', { message: error.message, code: error.code });
   }
 
   return { data: { success: true, message: 'Email enviado' }, status: 200 };

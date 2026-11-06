@@ -4,9 +4,11 @@ import {
   ALLOWED_IMAGE_MIMES,
   detectImageMime,
   isAllowedImagePath,
+  MAX_IMAGE_DIMENSION,
   MAX_UPLOAD_BYTES,
   pathFromLegacyPublicUrl,
   PRODUCT_IMAGE_BUCKET,
+  readImageDimensions,
   signProductImageUrls,
   uploadImage,
 } from '@/lib/upload-service';
@@ -23,10 +25,60 @@ const auth: AuthInfo = {
   allTenantIds: ['11111111-1111-1111-1111-111111111111'],
 } as unknown as AuthInfo;
 
-const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
-const GIF89A = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 1, 2]);
-const GIF87A = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x37, 0x61, 1, 2]);
+const PNG_BYTES = pngBytes();
+const GIF89A = gifBytes(1, 1, 0x39);
+const GIF87A = gifBytes(1, 1, 0x37);
 const HTML_PAYLOAD = new Uint8Array([0x3c, 0x68, 0x74, 0x6d, 0x6c, 0x3e, 0x00]);
+
+// Headers minimos con dimensiones reales: `uploadImage` las lee antes de subir,
+// asi que un archivo con solo los magic bytes ya no es suficiente.
+function pngBytes(width = 1, height = 1): Uint8Array {
+  const bytes = new Uint8Array(29);
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
+  bytes.set([0x00, 0x00, 0x00, 0x0d], 8); // largo del IHDR
+  bytes.set([0x49, 0x48, 0x44, 0x52], 12); // "IHDR"
+  const view = new DataView(bytes.buffer);
+  view.setUint32(16, width);
+  view.setUint32(20, height);
+  bytes.set([8, 6, 0, 0, 0], 24); // bit depth, color type, etc.
+  return bytes;
+}
+
+function gifBytes(width = 1, height = 1, version: 0x37 | 0x39 = 0x39): Uint8Array {
+  const bytes = new Uint8Array(13);
+  bytes.set([0x47, 0x49, 0x46, 0x38, version, 0x61], 0);
+  bytes[6] = width & 0xff;
+  bytes[7] = (width >> 8) & 0xff;
+  bytes[8] = height & 0xff;
+  bytes[9] = (height >> 8) & 0xff;
+  return bytes;
+}
+
+function jpegBytes(width = 1, height = 1): Uint8Array {
+  const bytes = new Uint8Array(21);
+  bytes.set([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08], 0);
+  bytes[7] = (height >> 8) & 0xff;
+  bytes[8] = height & 0xff;
+  bytes[9] = (width >> 8) & 0xff;
+  bytes[10] = width & 0xff;
+  return bytes;
+}
+
+function webpBytes(width = 1, height = 1): Uint8Array {
+  const bytes = new Uint8Array(30);
+  bytes.set([0x52, 0x49, 0x46, 0x46], 0); // "RIFF"
+  bytes.set([0x57, 0x45, 0x42, 0x50], 8); // "WEBP"
+  bytes.set([0x56, 0x50, 0x38, 0x58], 12); // "VP8X"
+  const w = width - 1;
+  const h = height - 1;
+  bytes[24] = w & 0xff;
+  bytes[25] = (w >> 8) & 0xff;
+  bytes[26] = (w >> 16) & 0xff;
+  bytes[27] = h & 0xff;
+  bytes[28] = (h >> 8) & 0xff;
+  bytes[29] = (h >> 16) & 0xff;
+  return bytes;
+}
 
 // `Request`/`FormData` reales no se pueden construir de forma confiable en el
 // entorno jsdom (undici valida el body con su propio File/Blob). Como
@@ -77,6 +129,26 @@ describe('detectImageMime', () => {
   it('rejects non-images and truncated files', () => {
     expect(detectImageMime(HTML_PAYLOAD)).toBeNull();
     expect(detectImageMime(new Uint8Array([0x89, 0x50]))).toBeNull();
+  });
+});
+
+describe('readImageDimensions', () => {
+  it('lee dimensiones de PNG, GIF, JPEG y WebP', () => {
+    expect(readImageDimensions(pngBytes(800, 600), 'image/png')).toEqual({ width: 800, height: 600 });
+    expect(readImageDimensions(gifBytes(320, 240), 'image/gif')).toEqual({ width: 320, height: 240 });
+    expect(readImageDimensions(jpegBytes(1024, 768), 'image/jpeg')).toEqual({
+      width: 1024,
+      height: 768,
+    });
+    expect(readImageDimensions(webpBytes(640, 480), 'image/webp')).toEqual({
+      width: 640,
+      height: 480,
+    });
+  });
+
+  it('devuelve null si el header esta truncado o no coincide con el mime', () => {
+    expect(readImageDimensions(new Uint8Array([0x89, 0x50]), 'image/png')).toBeNull();
+    expect(readImageDimensions(PNG_BYTES, 'image/jpeg')).toBeNull();
   });
 });
 
@@ -133,6 +205,22 @@ describe('uploadImage', () => {
 
   it('rejects unsupported mime types', async () => {
     const result = await uploadImage(auth, uploadRequest(PNG_BYTES, 'image/svg+xml'));
+    expect(result).toMatchObject({ ok: false, status: 400 });
+  });
+
+  it('rejects an image whose declared dimensions exceed the cap', async () => {
+    const bomb = pngBytes(MAX_IMAGE_DIMENSION + 1, MAX_IMAGE_DIMENSION + 1);
+    const result = await uploadImage(auth, uploadRequest(bomb, 'image/png'));
+
+    expect(result).toMatchObject({ ok: false, status: 400 });
+    expect(supabaseMock.__storageCalls.some((c) => c.method === 'upload')).toBe(false);
+  });
+
+  it('rejects an image whose header has no readable dimensions', async () => {
+    // Solo el magic byte: no alcanza para descartar una bomba de descompresion.
+    const truncated = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const result = await uploadImage(auth, uploadRequest(truncated, 'image/png'));
+
     expect(result).toMatchObject({ ok: false, status: 400 });
   });
 

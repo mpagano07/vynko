@@ -183,6 +183,28 @@ describe('POST /api/auth/login', () => {
     await expect(response.json()).resolves.toEqual({ error: 'Credenciales inválidas' });
   });
 
+  it('no escribe el email en los logs de un login fallido', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const email = 'pii-en-login@example.com';
+    serverAuthMock.auth.signInWithPassword.mockResolvedValueOnce({
+      data: {},
+      error: { message: 'Invalid login credentials', code: 'invalid_credentials' },
+    });
+
+    try {
+      const response = await login(
+        post('https://app.test/api/auth/login', { email, password: 'bad' }, sameOrigin())
+      );
+      expect(response.status).toBe(401);
+
+      const output = warnSpy.mock.calls.map((call) => String(call[0])).join('\n');
+      expect(output).toContain('Login failed');
+      expect(output).not.toContain(email);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it('los logins exitosos no gastan presupuesto del limite', async () => {
     // Regresion: el contador se incrementaba antes de autenticar, asi que un
     // login correcto consumia presupuesto igual que uno fallido. Con el limite

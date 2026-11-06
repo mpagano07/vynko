@@ -265,6 +265,27 @@ describe('getClientIp', () => {
     expect(getClientIp(req({ 'x-forwarded-for': '5.5.5.5, 4.4.4.4, 3.3.3.3' }))).toBe('3.3.3.3');
   });
 
+  it('avisa una sola vez si falta RATE_LIMIT_TRUSTED_HOPS fuera de un edge', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('VERCEL', '');
+    vi.stubEnv('CF_PAGES', '');
+    vi.stubEnv('TRUST_EDGE_IP_HEADERS', '');
+    __resetRateLimitStateForTests();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      getClientIp(req({ 'x-forwarded-for': '9.9.9.9' }));
+      getClientIp(req({ 'x-forwarded-for': '9.9.9.9' }));
+
+      const warnings = warnSpy.mock.calls
+        .map((call) => String(call[0]))
+        .filter((line) => line.includes('RATE_LIMIT_TRUSTED_HOPS'));
+      expect(warnings).toHaveLength(1);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it('normaliza el IPv4 mapeado en IPv6 para no partir el limite en dos', () => {
     expect(getClientIp(req({ 'x-forwarded-for': '::ffff:1.2.3.4' }))).toBe('1.2.3.4');
   });
