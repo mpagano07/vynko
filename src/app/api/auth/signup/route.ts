@@ -89,7 +89,9 @@ export async function POST(request: Request) {
   });
 
   if (error) {
-    logger.warn(`Signup failed for ${normalizedEmail}`, { error: error.message, code: error.code });
+    // Sin email: el log no debe acumular PII. El codigo y el mensaje de GoTrue
+    // son suficientes para diagnosticar el fallo.
+    logger.warn('Signup failed', { error: error.message, code: error.code });
 
     // "Ya existe" se responde como un alta mas. GoTrue ofusca el alta repetida
     // cuando la confirmacion de email esta activa (devuelve el usuario con

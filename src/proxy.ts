@@ -6,7 +6,7 @@ import { checkSubscriptionBlocked, consolidateOwnerSubscription, type TenantSubs
 import { buildCsp } from '@/lib/security/csp';
 import { hardenSessionCookieOptions } from '@/lib/security/session-cookie';
 import {
-  INACTIVITY_TIMEOUT_MS,
+  isInactivityExpired,
   LAST_SEEN_COOKIE,
   LAST_SEEN_COOKIE_OPTIONS,
 } from '@/lib/session-policy';
@@ -284,7 +284,7 @@ export async function proxy(request: NextRequest) {
   // siempre. Las rutas que abren sesion (login, callback, /api/auth/session) la
   // escriben en el mismo response; una sesion vieja sin esta cookie se cierra
   // una unica vez y la persona vuelve a entrar.
-  if (!Number.isFinite(lastSeen) || Date.now() - lastSeen > INACTIVITY_TIMEOUT_MS) {
+  if (!Number.isFinite(lastSeen) || isInactivityExpired(lastSeen)) {
     await supabase.auth.signOut({ scope: 'local' });
     response.cookies.set(LAST_SEEN_COOKIE, '', { ...LAST_SEEN_COOKIE_OPTIONS, maxAge: 0 });
     const inactiveUrl = new URL('/login', request.url);

@@ -12,6 +12,21 @@
 export const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutos
 
 /**
+ * ¿La sesion vencio por inactividad?
+ *
+ * `lastSeenMs` es el valor de la cookie; `Number.NaN` (cookie ausente o basura)
+ * cuenta como vencida a proposito: si la ausencia se tratara como "recien
+ * activo", una cookie de sesion robada sin la cookie de last-seen esquivaria el
+ * plazo para siempre.
+ */
+export function isInactivityExpired(
+  lastSeenMs: number,
+  nowMs: number = Date.now()
+): boolean {
+  return !Number.isFinite(lastSeenMs) || nowMs - lastSeenMs > INACTIVITY_TIMEOUT_MS;
+}
+
+/**
  * Cookie HttpOnly con el instante de la ultima peticion autenticada.
  *
  * El cliente no la lee ni la escribe: la mantiene el proxy. Por eso no sirve

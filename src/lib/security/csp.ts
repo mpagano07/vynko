@@ -1,3 +1,5 @@
+import { getSentryDsn } from '@/lib/sentry/scrub';
+
 /**
  * Content Security Policy con nonce por request.
  *
@@ -43,9 +45,34 @@
  * Ver `scripts/verify-csp.mjs`, que comprueba contra el server real que todo
  * script inline de la pagina lleva el nonce vigente.
  */
+
+/**
+ * Host exacto del DSN de Sentry, para `connect-src`.
+ *
+ * Antes se permitian los wildcards `*.ingest.sentry.io`, `*.ingest.us...` y
+ * `*.ingest.de...`: cualquier subdominio de Sentry podia recibir los eventos del
+ * navegador, incluso uno de otra organizacion. El DSN ya dice el host real
+ * (`o123.ingest.sentry.io`), asi que se usa ese y nada mas. Si no hay DSN, no
+ * se agrega ningun host: sin Sentry configurado no hay a donde enviar errores.
+ */
+function sentryConnectSource(): string | null {
+  const dsn = getSentryDsn();
+  if (!dsn) return null;
+  try {
+    const { protocol, host } = new URL(dsn);
+    if (protocol !== 'https:' && protocol !== 'http:') return null;
+    return `${protocol}//${host}`;
+  } catch {
+    // Un DSN mal formado no debe tumbar el proxy: se omite el host y el resto
+    // de la policy sigue vigente.
+    return null;
+  }
+}
+
 export function buildCsp(nonce: string): string {
   const isDev = process.env.NODE_ENV !== 'production';
   const strictDynamic = isDev ? '' : " 'strict-dynamic'";
+  const sentrySource = sentryConnectSource();
 
   const directives = [
     "default-src 'self'",
@@ -57,7 +84,8 @@ export function buildCsp(nonce: string): string {
     "style-src 'self' 'unsafe-inline' https://*.paddle.com",
     "img-src 'self' blob: data: https://*.supabase.co https://*.supabase.in https://*.mercadopago.com https://http2.mlstatic.com https://*.gravatar.com https://images.unsplash.com",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.paddle.com https://apis.google.com https://*.googleapis.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io",
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.paddle.com https://apis.google.com https://*.googleapis.com" +
+      (sentrySource ? ` ${sentrySource}` : ''),
     // Google Picker se monta en un iframe de docs.google.com/drive.google.com.
     "frame-src https://*.mercadopago.com https://*.paddle.com https://docs.google.com https://drive.google.com",
     "media-src 'self' blob:",

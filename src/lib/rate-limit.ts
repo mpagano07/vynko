@@ -281,6 +281,7 @@ export function __resetRateLimitStateForTests(): void {
   buckets.clear();
   callsSinceCleanup = 0;
   postgresUnavailableLoggedAt = 0;
+  warnedAboutTrustedHops = false;
 }
 
 /**
@@ -323,7 +324,33 @@ function shouldTrustEdgeIpHeaders(): boolean {
  * saltos de confianza. Si el despliegue no esta detrás de Vercel ni Cloudflare, lo
  * correcto es configurar `RATE_LIMIT_TRUSTED_HOPS` con cuantos proxies hay.
  */
+let warnedAboutTrustedHops = false;
+
+/**
+ * Unico aviso, en produccion, cuando el despliegue no es Vercel/Cloudflare y no
+ * se configuro `RATE_LIMIT_TRUSTED_HOPS`.
+ *
+ * Sin ese dato `parseTrustedHops()` cae a 0 y asume un unico proxy de confianza:
+ * el ultimo salto de `x-forwarded-for` se toma como cliente. En un self-hosted
+ * con dos proxies (por ejemplo nginx -> app) el ultimo salto es nginx, asi que
+ * TODOS los clientes comparten un bucket y el limite por IP se vuelve un cupo
+ * global. No se lanza error porque el default sigue siendo correcto para el caso
+ * comun de un solo proxy; solo se deja la pista en los logs.
+ */
+function warnIfTrustedHopsUnset(): void {
+  if (warnedAboutTrustedHops) return;
+  if (process.env.NODE_ENV !== 'production') return;
+  if (shouldTrustEdgeIpHeaders()) return;
+  if ((process.env.RATE_LIMIT_TRUSTED_HOPS ?? '').trim() !== '') return;
+  warnedAboutTrustedHops = true;
+  logger.warn(
+    'RATE_LIMIT_TRUSTED_HOPS no configurado: se asume un unico proxy de confianza delante de la app'
+  );
+}
+
 export function getClientIp(request: Request): string {
+  warnIfTrustedHopsUnset();
+
   if (shouldTrustEdgeIpHeaders()) {
     for (const header of EDGE_IP_HEADERS) {
       const value = request.headers.get(header);

@@ -7,6 +7,22 @@ export const PRODUCT_IMAGE_BUCKET = 'product-images';
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 export const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
+/**
+ * Limites de dimension de una imagen de producto.
+ *
+ * El limite de 5MB no evita una bomba de descompresion: un PNG de pocos KB puede
+ * declarar 30000x30000 pixeles y hacer que el navegador (o cualquier consumidor
+ * del archivo) reserve gigabytes al decodificarlo. Se valida el header, que es
+ * barato, antes de aceptar el archivo.
+ */
+export const MAX_IMAGE_DIMENSION = 4096;
+export const MAX_IMAGE_PIXELS = 16_000_000;
+
+export interface ImageDimensions {
+  width: number;
+  height: number;
+}
+
 export type UploadResult<T = unknown> =
   | { ok: true; data: T }
   | { ok: false; error: string; status: number; headers?: Record<string, string> };
@@ -60,6 +76,142 @@ export function detectImageMime(bytes: Uint8Array): string | null {
     return 'image/webp';
   }
   return null;
+}
+
+function readUInt16BE(bytes: Uint8Array, offset: number): number {
+  return (bytes[offset] << 8) | bytes[offset + 1];
+}
+
+function readUInt32BE(bytes: Uint8Array, offset: number): number {
+  return (
+    ((bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3]) >>>
+    0
+  );
+}
+
+/** Marcadores JPEG que contienen las dimensiones (SOF). Se excluyen DHT/JPG/DAC. */
+function isJpegSofMarker(marker: number): boolean {
+  return (
+    (marker >= 0xc0 && marker <= 0xc3) ||
+    (marker >= 0xc5 && marker <= 0xc7) ||
+    (marker >= 0xc9 && marker <= 0xcb) ||
+    (marker >= 0xcd && marker <= 0xcf)
+  );
+}
+
+function readJpegDimensions(bytes: Uint8Array): ImageDimensions | null {
+  let offset = 2; // despues del SOI (FF D8)
+  while (offset + 4 <= bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+    const marker = bytes[offset + 1];
+    // Bytes de relleno entre segmentos.
+    if (marker === 0xff) {
+      offset += 1;
+      continue;
+    }
+    // Marcadores sin longitud: SOI, EOI, RSTn y TEM.
+    if (marker === 0xd8 || marker === 0xd9 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+      offset += 2;
+      continue;
+    }
+    if (offset + 4 > bytes.length) return null;
+    const length = readUInt16BE(bytes, offset + 2);
+    if (length < 2) return null;
+    if (isJpegSofMarker(marker)) {
+      if (offset + 9 > bytes.length) return null;
+      return {
+        height: readUInt16BE(bytes, offset + 5),
+        width: readUInt16BE(bytes, offset + 7),
+      };
+    }
+    offset += 2 + length;
+  }
+  return null;
+}
+
+function readWebpDimensions(bytes: Uint8Array): ImageDimensions | null {
+  const chunk = String.fromCharCode(bytes[12], bytes[13], bytes[14], bytes[15]);
+
+  if (chunk === 'VP8X') {
+    if (bytes.length < 30) return null;
+    return {
+      width: 1 + (bytes[24] | (bytes[25] << 8) | (bytes[26] << 16)),
+      height: 1 + (bytes[27] | (bytes[28] << 8) | (bytes[29] << 16)),
+    };
+  }
+
+  if (chunk === 'VP8L') {
+    if (bytes.length < 25 || bytes[20] !== 0x2f) return null;
+    const bits =
+      (bytes[21] | (bytes[22] << 8) | (bytes[23] << 16) | (bytes[24] << 24)) >>> 0;
+    return {
+      width: 1 + (bits & 0x3fff),
+      height: 1 + ((bits >>> 14) & 0x3fff),
+    };
+  }
+
+  if (chunk === 'VP8 ') {
+    if (bytes.length < 30) return null;
+    // Start code 9d 01 2a antes de las dimensiones.
+    if (bytes[23] !== 0x9d || bytes[24] !== 0x01 || bytes[25] !== 0x2a) return null;
+    return {
+      width: (bytes[26] | (bytes[27] << 8)) & 0x3fff,
+      height: (bytes[28] | (bytes[29] << 8)) & 0x3fff,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Lee ancho/alto del header del archivo, sin decodificar la imagen.
+ *
+ * Devuelve `null` si el formato es valido pero el header no alcanza para leer
+ * las dimensiones; el llamador trata ese caso como archivo invalido, porque sin
+ * dimensiones no se puede descartar una bomba de descompresion.
+ */
+export function readImageDimensions(
+  bytes: Uint8Array,
+  mime: string
+): ImageDimensions | null {
+  if (mime === 'image/png') {
+    if (bytes.length < 24) return null;
+    if (bytes[12] !== 0x49 || bytes[13] !== 0x48 || bytes[14] !== 0x44 || bytes[15] !== 0x52) {
+      return null; // falta el chunk IHDR
+    }
+    return { width: readUInt32BE(bytes, 16), height: readUInt32BE(bytes, 20) };
+  }
+
+  if (mime === 'image/gif') {
+    if (bytes.length < 10) return null;
+    return {
+      width: bytes[6] | (bytes[7] << 8),
+      height: bytes[8] | (bytes[9] << 8),
+    };
+  }
+
+  if (mime === 'image/jpeg') {
+    return readJpegDimensions(bytes);
+  }
+
+  if (mime === 'image/webp') {
+    return readWebpDimensions(bytes);
+  }
+
+  return null;
+}
+
+function exceedsDimensionLimits({ width, height }: ImageDimensions): boolean {
+  return (
+    width <= 0 ||
+    height <= 0 ||
+    width > MAX_IMAGE_DIMENSION ||
+    height > MAX_IMAGE_DIMENSION ||
+    width * height > MAX_IMAGE_PIXELS
+  );
 }
 
 function isFileLike(value: unknown): value is File {
@@ -135,6 +287,25 @@ export async function uploadImage(auth: AuthInfo, request: Request): Promise<Upl
 
   if (mime !== file.type) {
     return { ok: false, error: 'El contenido del archivo no coincide con su tipo.', status: 400 };
+  }
+
+  // El tamano en bytes no alcanza: un PNG de pocos KB puede declarar miles de
+  // millones de pixeles y reventar al decodificarse. Se leen las dimensiones del
+  // header (sin decodificar) y se rechaza antes de guardar el objeto.
+  const dimensions = readImageDimensions(buffer, mime);
+  if (!dimensions) {
+    return {
+      ok: false,
+      error: 'No se pudieron leer las dimensiones de la imagen. Usá JPG, PNG, WebP o GIF válidos.',
+      status: 400,
+    };
+  }
+  if (exceedsDimensionLimits(dimensions)) {
+    return {
+      ok: false,
+      error: `La imagen supera el tamaño máximo permitido (${MAX_IMAGE_DIMENSION}px por lado).`,
+      status: 400,
+    };
   }
 
   const storagePath = `${tenantId}/${crypto.randomUUID()}.${EXT_BY_MIME[mime]}`;

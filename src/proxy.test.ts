@@ -453,7 +453,12 @@ describe('proxy: rate limit global de paginas (F1-6)', () => {
     getClientIpMock.mockReturnValue('203.0.113.5');
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('usa la IP real del cliente como clave del bucket', async () => {
+    vi.stubEnv('SENTRY_DSN', 'https://clave@o456.ingest.sentry.io/1');
     adminQueue.push({ data: [{ tenant_id: 't1' }], error: null });
     adminQueue.push({ data: { onboarding_pending: false }, error: null });
 
@@ -461,8 +466,11 @@ describe('proxy: rate limit global de paginas (F1-6)', () => {
 
     expect(res.status).toBe(200);
     expect(rateLimitMock).toHaveBeenCalledWith('proxy:ip:203.0.113.5', expect.any(Number), expect.any(Number));
-    // Sin este host el navegador bloquea el envio de errores a Sentry.
-    expect(res.headers.get('Content-Security-Policy')).toContain('https://*.ingest.sentry.io');
+    // Sin este host el navegador bloquea el envio de errores a Sentry. Se usa el
+    // host exacto del DSN, no el wildcard `*.ingest.sentry.io`.
+    const csp = res.headers.get('Content-Security-Policy') ?? '';
+    expect(csp).toContain('https://o456.ingest.sentry.io');
+    expect(csp).not.toContain('*.ingest.sentry.io');
   });
 
   it('bloquea con 429 y Retry-After cuando una IP supera el tope', async () => {

@@ -4,6 +4,7 @@ import { isSameOriginRequest } from '@/lib/security/csrf';
 import { enterLogContext, resolveRequestId } from '@/lib/log-context';
 import { pickDefaultTenantId } from '@/lib/tenant-selection';
 import { logger } from '@/lib/logger';
+import { isTenantRole, type TenantRole } from '@/lib/roles';
 
 function requestPath(request?: Request): string | null {
   if (!request) return null;
@@ -27,8 +28,13 @@ export interface AuthInfo {
    *
    * Es opcional para no romper objetos `AuthInfo` construidos a mano en tests
    * o scripts; ausente equivale a "sin permisos".
+   *
+   * El tipo es `TenantRole | null` y no `string | null`: el valor viene de la
+   * base y un rol escrito a mano (o una fila corrupta) no debe colarse como una
+   * cadena arbitraria en los gates de capacidades. `getAuth` lo valida con
+   * `isTenantRole` y lo normaliza a `null` si no es un rol conocido.
    */
-  role?: string | null;
+  role?: TenantRole | null;
 }
 
 export async function getAuth(request?: Request): Promise<AuthInfo | null> {
@@ -98,6 +104,9 @@ export async function getAuth(request?: Request): Promise<AuthInfo | null> {
   }
 
   enterLogContext({ userId: user.id, tenantId, tenantIds });
-  const role = (tu ?? []).find((t) => t.tenant_id === tenantId)?.role ?? null;
+  const rawRole = (tu ?? []).find((t) => t.tenant_id === tenantId)?.role ?? null;
+  // Solo roles conocidos llegan a `AuthInfo`. Un valor inesperado en la base se
+  // trata como "sin permisos" en vez de viajar como string sin validar.
+  const role: TenantRole | null = isTenantRole(rawRole) ? rawRole : null;
   return { tenantId, userId: user.id, role, allTenants, tenantIds };
 }
