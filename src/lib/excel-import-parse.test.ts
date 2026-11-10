@@ -9,6 +9,7 @@ import {
   mapImportColumns,
   normalizeImportRow,
   parseImportRows,
+  parsePartyWorkbookFile,
   parseSpreadsheetNumber,
   parseWorkbookFile,
   validateSpreadsheetFile,
@@ -370,6 +371,87 @@ describe('parseWorkbookFile: plantilla multipestaña de Mercado Libre', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.rows).toEqual([{ 'Columna A': 'x', 'Columna B': 'y' }]);
+  });
+});
+
+/**
+ * El import de terceros comparte la maquinaria de lectura con el de productos
+ * pero cambia los alias y las reglas: sin columnas numericas y con un minimo
+ * de columnas reconocidas de 1 (una planilla con la sola columna "Nombre" ya
+ * es un import valido de clientes).
+ */
+describe('parsePartyWorkbookFile', () => {
+  it('reconoce los alias de terceros: razon social, mail, dni, celular, domicilio y observaciones', async () => {
+    const buf = workbookBuffer([
+      {
+        'Razón Social': 'Distribuidora SA',
+        'CUIT': '30-12345678-9',
+        'Condición IVA': 'Responsable Inscripto',
+        'DNI': '30123456',
+        'Mail': 'ventas@dist.com',
+        'Celular': '11 1234-5678',
+        'Domicilio': 'Av. Siempreviva 742',
+        'Observaciones': 'Entrega los martes',
+        'Contacto': 'María Gómez',
+      },
+    ]);
+    const result = await parsePartyWorkbookFile(buf, { fileName: 'clientes.xlsx' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rows[0]).toEqual({
+      name: 'Distribuidora SA',
+      cuit: '30-12345678-9',
+      iva_condition: 'Responsable Inscripto',
+      document_number: '30123456',
+      email: 'ventas@dist.com',
+      phone: '11 1234-5678',
+      address: 'Av. Siempreviva 742',
+      notes: 'Entrega los martes',
+      contact_name: 'María Gómez',
+    });
+  });
+
+  it('no interpreta como numero las columnas de terceros', async () => {
+    const buf = workbookBuffer([
+      { 'Nombre': 'Juan', 'CUIT': '20-12345678-9', 'DNI': 'AB1234', 'Teléfono': '011 4455-6677' },
+    ]);
+    const result = await parsePartyWorkbookFile(buf, { fileName: 'clientes.xlsx' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Un DNI alfanumerico, un telefono con guiones o un CUIT con puntos y
+    // guiones tienen que llegar como vinieron: en terceros no hay columnas
+    // numericas que convertir.
+    expect(result.rows[0].cuit).toBe('20-12345678-9');
+    expect(result.rows[0].document_number).toBe('AB1234');
+    expect(result.rows[0].phone).toBe('011 4455-6677');
+  });
+
+  it('no aplica los alias de productos a una planilla de terceros', async () => {
+    const buf = workbookBuffer([{ 'Nombre': 'Juan', 'Categoría': 'Mayorista', 'Código': 'ABC-1' }]);
+    const result = await parsePartyWorkbookFile(buf, { fileName: 'clientes.xlsx' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rows[0]).toEqual({ name: 'Juan', 'Categoría': 'Mayorista', 'Código': 'ABC-1' });
+  });
+
+  it('detecta la fila de encabezado debajo de un titulo, con una sola columna reconocida', async () => {
+    const buf = workbookBuffer([
+      ['Listado de clientes al 2026-11-10'],
+      ['Razón Social'],
+      ['Juan Pérez'],
+    ]);
+    const result = await parsePartyWorkbookFile(buf, { fileName: 'clientes.xlsx' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rows).toEqual([{ name: 'Juan Pérez' }]);
+  });
+
+  it('lee el CSV de un export de clientes', async () => {
+    const csv = 'Nombre,Email\r\nJuan Pérez,juan@ejemplo.com\r\n';
+    const result = await parsePartyWorkbookFile(csvBuffer(csv), { fileName: 'clientes.csv' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rows).toEqual([{ name: 'Juan Pérez', email: 'juan@ejemplo.com' }]);
   });
 });
 

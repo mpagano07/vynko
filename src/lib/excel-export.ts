@@ -162,8 +162,11 @@ export function exportFileName(platform: ExportPlatform, format: ExportFormat, n
 /**
  * Dispara la descarga de un Blob. El BOM va solo en CSV: sin el, Excel en
  * Windows abre el UTF-8 y muestra los acentos rotos ("CategorÃ­as").
+ *
+ * Es la misma mecánica para cualquier planilla (productos, clientes,
+ * proveedores), así que vive exportada acá para el resto de los exportadores.
  */
-function downloadBlob(blob: Blob, fileName: string): void {
+export function downloadBlob(blob: Blob, fileName: string): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -175,10 +178,32 @@ function downloadBlob(blob: Blob, fileName: string): void {
 }
 
 /**
- * Genera el Blob de la planilla sin descargarla.
+ * Serializa filas ya armadas a un Blob de planilla.
  * Para XLS se escribe un BIFF8 real (la extension .xls es la que aceptan los
  * importadores de TN y ML); para CSV se serializa con separador coma y
  * comillas donde hace falta.
+ */
+export async function sheetToBlob(
+  rows: Record<string, unknown>[],
+  sheetName: string,
+  format: ExportFormat
+): Promise<Blob> {
+  const XLSX = await import('xlsx');
+  if (format === 'csv') {
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const csv = XLSX.utils.sheet_to_csv(ws);
+    return new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' });
+  }
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  const data = XLSX.write(wb, { type: 'array', bookType: 'xls' }) as ArrayBuffer;
+  return new Blob([data], { type: 'application/vnd.ms-excel' });
+}
+
+/**
+ * Genera el Blob de la planilla sin descargarla.
  */
 export async function generateExportBlob(options: {
   products: Product[];
@@ -187,25 +212,11 @@ export async function generateExportBlob(options: {
   format: ExportFormat;
   now?: Date;
 }): Promise<{ blob: Blob; fileName: string }> {
-  const { products, categories, platform, format, now = new Date() } = options;
+  const { products, categories, platform, format } = options;
   const rows = buildExportRows(products, categories, platform);
-  const XLSX = await import('xlsx');
-  const fileName = exportFileName(platform, format, now);
   const sheetName = platform === 'generico' ? 'Productos' : EXPORT_PLATFORM_LABELS[platform];
-
-  if (format === 'csv') {
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const csv = XLSX.utils.sheet_to_csv(ws);
-    const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' });
-    return { blob, fileName };
-  }
-
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, sheetName);
-  const data = XLSX.write(wb, { type: 'array', bookType: 'xls' }) as ArrayBuffer;
-  const blob = new Blob([data], { type: 'application/vnd.ms-excel' });
-  return { blob, fileName };
+  const blob = await sheetToBlob(rows, sheetName, format);
+  return { blob, fileName: exportFileName(platform, format, options.now) };
 }
 
 /**

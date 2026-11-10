@@ -2,8 +2,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamicImport from 'next/dynamic';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { authFetch } from '@/lib/fetchWithTenant';
+import { useExport } from '@/lib/hooks/useExport';
 import { Button } from '@/components/ui/button';
 import { ShortLabel } from '@/components/ui/short-label';
 import { Card } from '@/components/ui/card';
@@ -28,6 +30,8 @@ import {
   Trash2,
   Loader2,
   Check,
+  Upload,
+  Download,
 } from 'lucide-react';
 import { PO_STATUS_LABELS, PO_STATUS_TONES, type Supplier, type PurchaseOrder } from '@/lib/types/supplier';
 import type { CommercialDocument } from '@/lib/types/document';
@@ -47,6 +51,19 @@ import {
   formatDocumentNumberInput,
   validatePartyTaxFields,
 } from '@/lib/tax-fields';
+import type { ExportFormat } from '@/lib/excel-export';
+
+// Modales de import/export fuera del bundle inicial de la página: el parser de
+// planillas arrastra SheetJS (~1MB) y sólo hace falta cuando el usuario abre el
+// modal.
+const ImportPartiesModal = dynamicImport(
+  () => import('@/components/parties/import-parties-modal').then((m) => ({ default: m.ImportPartiesModal })),
+  { ssr: false },
+);
+const ExportPartiesModal = dynamicImport(
+  () => import('@/components/parties/export-parties-modal').then((m) => ({ default: m.ExportPartiesModal })),
+  { ssr: false },
+);
 
 const PO_INTENT_KEY = 'create_po_intent';
 
@@ -330,6 +347,33 @@ export default function ProvidersPage() {
     matchesQuery(s.document_number, searchTerm)
   );
 
+  // Import / Export
+  const { exporting, busy, run } = useExport();
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+  const openExportModal = () => {
+    if (filteredSuppliers.length === 0) {
+      toast.error('No hay proveedores para exportar');
+      return;
+    }
+    setIsExportModalOpen(true);
+  };
+
+  // Export client-side de la lista filtrada (mismo criterio que productos):
+  // el archivo se arma en el navegador con SheetJS y se descarga directo.
+  const handleExport = async (format: ExportFormat) => {
+    await run(async () => {
+      try {
+        const { exportPartiesFile } = await import('@/lib/party-export');
+        await exportPartiesFile({ parties: filteredSuppliers, kind: 'suppliers', format });
+        setIsExportModalOpen(false);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Error al exportar proveedores');
+      }
+    });
+  };
+
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
@@ -438,6 +482,12 @@ export default function ProvidersPage() {
         subtitle="Administra tus proveedores."
         actions={
           <>
+            <Button variant="outline" onClick={() => setIsImportModalOpen(true)} className="flex items-center gap-2">
+              <Upload className="h-4 w-4" /> Importar
+            </Button>
+            <Button variant="outline" onClick={openExportModal} disabled={busy} className="flex items-center gap-2">
+              <Download className="h-4 w-4" /> Exportar
+            </Button>
             <Button onClick={openPoModal} className="flex items-center gap-2">
               <Plus className="h-4 w-4" />
               Nueva compra
@@ -940,6 +990,28 @@ export default function ProvidersPage() {
         variant="danger"
         confirmLabel="Eliminar"
       />
+
+      {/* IMPORT MODAL */}
+      {isImportModalOpen && (
+        <ImportPartiesModal
+          kind="suppliers"
+          open
+          onClose={() => setIsImportModalOpen(false)}
+          onImported={refreshSuppliers}
+        />
+      )}
+
+      {/* EXPORT MODAL */}
+      {isExportModalOpen && (
+        <ExportPartiesModal
+          kind="suppliers"
+          open
+          onClose={() => setIsExportModalOpen(false)}
+          onExport={handleExport}
+          exporting={exporting}
+          count={filteredSuppliers.length}
+        />
+      )}
     </div>
   );
 }

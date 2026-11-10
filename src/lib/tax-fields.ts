@@ -171,3 +171,52 @@ export function validatePartyTaxFields(
 
   return null;
 }
+
+/**
+ * Plega un texto para comparar valores de planilla: minúsculas, sin acentos y
+ * con los espacios colapsados. Es el mismo criterio que `foldImportHeader`
+ * del import, replicado acá para no acoplar tax-fields al parser.
+ */
+function foldLabel(value: unknown): string {
+  return String(value ?? '')
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * Interpreta una celda de "Condición IVA": acepta el código interno
+ * (`responsable_inscripto`), el label legible (`Responsable Inscripto`) y
+ * hasta la versión con guiones que usan algunas planillas viejas. Devuelve
+ * `null` cuando no matchea ninguno, para que el import pueda omitir la fila
+ * con un mensaje claro en vez de guardar basura.
+ */
+export function matchIvaCondition(value: unknown): IvaCondition | null {
+  const folded = foldLabel(value);
+  if (!folded) return null;
+  for (const condition of IVA_CONDITIONS) {
+    if (foldLabel(condition) === folded || foldLabel(IVA_CONDITION_LABELS[condition]) === folded) {
+      return condition;
+    }
+  }
+  return null;
+}
+
+/**
+ * Interpreta una celda de "Tipo de documento": el código (`DNI`, `CUIT`) o el
+ * label (`Cédula de Identidad`). Mismo contrato que `matchIvaCondition`.
+ */
+export function matchPartyDocumentType(value: unknown): PartyDocumentType | null {
+  const folded = foldLabel(value);
+  if (!folded) return null;
+  for (const type of PARTY_DOCUMENT_TYPES) {
+    if (foldLabel(type) === folded || foldLabel(PARTY_DOCUMENT_TYPE_LABELS[type]) === folded) {
+      return type;
+    }
+  }
+  // "Cédula" a secas es el CE en el habla cotidiana.
+  if (folded === 'cedula' || folded === 'ci') return 'CE';
+  return null;
+}
