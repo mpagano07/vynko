@@ -199,7 +199,7 @@ export default function SalesPage() {
   const [checkoutSettings, setCheckoutSettings] = useState<CheckoutSettings>(DEFAULT_CHECKOUT_SETTINGS);
   const [arcaConfig, setArcaConfig] = useState<ArcaConfig | null>(null);
   const [lastSale, setLastSale] = useState<ReceiptSale | null>(null);
-  const [paperSize] = useState<'58mm' | '80mm'>(() => {
+  const [paperSize, setPaperSize] = useState<'58mm' | '80mm'>(() => {
     if (typeof window === 'undefined') return '58mm';
     return window.localStorage.getItem('vynko:paper-size') === '80mm' ? '80mm' : '58mm';
   });
@@ -315,7 +315,13 @@ export default function SalesPage() {
       if (settingsRes.ok) {
         const data = await settingsRes.json();
         if (cancelled) return;
-        setCheckoutSettings(normalizeCheckoutSettings(data?.checkout));
+        const settings = normalizeCheckoutSettings(data?.checkout);
+        setCheckoutSettings(settings);
+        // El tamaño de papel se configura en Ajustes y vive en el tenant. Antes
+        // acá sólo se leía `localStorage`, por lo que la opción no tenía efecto
+        // sobre el ticket. Se guarda una copia local para el primer render.
+        setPaperSize(settings.paper_size);
+        window.localStorage.setItem('vynko:paper-size', settings.paper_size);
       }
       if (arcaRes.ok) {
         setArcaConfig(await arcaRes.json());
