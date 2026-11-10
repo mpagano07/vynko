@@ -14,17 +14,28 @@ interface BarcodeScannerProps {
 const SCAN_THROTTLE_MS = 2000;
 
 // Zoom que se aplica apenas arranca la cámara (si el dispositivo lo soporta):
-// agranda el código dentro del frame y es lo que más ayuda con los códigos de
-// barras 1D, cuyas barras finas necesitan muchos píxeles para decodificarse.
+// agranda el código dentro del frame. Las cámaras traseras actuales son gran
+// angular y a 1280x720 el código queda chico; con 2x las barras finas de un
+// EAN/CODE_128 pasan de ~3px a ~13px por módulo y se decodifican al toque.
 const AUTO_ZOOM = 2;
+
+// Si pasan estos ms sin leer NADA con zoom activo, volvemos a 1x: algunos
+// teléfonos al hacer zoom cambian a la lente telefoto, que no enfoca de cerca.
+const ZOOM_FALLBACK_MS = 6000;
 
 const PERMISSION_HINT =
   'Abrí los ajustes del sitio en tu navegador (el candado o el ícono de ajustes junto a la dirección) y habilitá la cámara. En el celular también podés revisar Ajustes del sistema → tu navegador → Cámara.';
 
 // Formatos que tiene sentido leer en un escáner de productos. Limitar la lista
 // hace que cada frame se decodifique más rápido (por defecto ZXing prueba
-// TODOS los formatos, incluidos RSS-14/RSS-Expanded que son lentos y generan
-// falsos positivos) y por lo tanto haya más intentos por segundo.
+// TODOS los formatos, incluidos RSS-14/RSS-Expanded que son lentos) y además
+// deja el lector 1D primero en la cola.
+//
+// OJO: NO activamos TRY_HARDER. Con TRY_HARDER el lector 1D recorre todas las
+// filas del frame y re-intenta con el frame rotado 90°: el costo por intento
+// fallido se multiplica ~15x (medido: ~600ms vs ~40ms por frame en desktop,
+// peor en celular) y el escaneo se siente muerto. La detección en productos
+// reales la resuelve la resolución (720p) + zoom, no el hint.
 const POSSIBLE_FORMATS: BarcodeFormat[] = [
   BarcodeFormat.QR_CODE,
   BarcodeFormat.DATA_MATRIX,
@@ -68,24 +79,20 @@ function describeCameraError(err: unknown): { message: string; hint?: string } {
 function createReader(): BrowserMultiFormatReader {
   const hints = new Map<DecodeHintType, unknown>();
   hints.set(DecodeHintType.POSSIBLE_FORMATS, POSSIBLE_FORMATS);
-  // TRY_HARDER hace que el lector 1D recorra todas las filas del frame (en
-  // vez de saltearse la mitad) y pruebe estrategias extra: es clave para que
-  // un código de barras "normal" se tome al primer intento y no después de
-  // varios.
-  hints.set(DecodeHintType.TRY_HARDER, true);
   return new BrowserMultiFormatReader(hints);
 }
 
 async function openCamera(): Promise<MediaStream> {
   const constraints: MediaStreamConstraints = {
     audio: false,
-    // Sin una resolución explícita el navegador suele entregar 640x480, donde
-    // las barras finas de un EAN/CODE_128 quedan en 1-2 píxeles y ZXing no
-    // las resuelve. Pedimos alta resolución; `ideal` nunca falla.
+    // Sin resolución explícita el navegador suele entregar 640x480, donde las
+    // barras finas de un EAN/CODE_128 quedan en ~3px por módulo y ZXing no
+    // las resuelve. 1280x720 es el punto dulce medido: el doble de resolución
+    // lineal que la default sin encarecer cada intento de decodificación.
     video: {
       facingMode: { ideal: 'environment' },
-      width: { ideal: 1920 },
-      height: { ideal: 1080 },
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
     },
   };
 
@@ -187,6 +194,8 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
   const onErrorRef = useRef(onError);
   const lastScanRef = useRef<{ code: string; time: number } | null>(null);
   const trackRef = useRef<MediaStreamTrack | null>(null);
+  const lastDecodeAtRef = useRef<number>(0);
+  const zoomFallbackDoneRef = useRef(false);
   const [status, setStatus] = useState<'initializing' | 'scanning' | 'error' | 'idle'>('initializing');
   const [statusMessage, setStatusMessage] = useState('Inicializando cámara...');
   const [errorHint, setErrorHint] = useState<string | null>(null);
@@ -212,6 +221,7 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
   }, []);
 
   const handleDecode = useCallback((text: string) => {
+    lastDecodeAtRef.current = Date.now();
     const now = Date.now();
     const last = lastScanRef.current;
     if (last && last.code === text && now - last.time < SCAN_THROTTLE_MS) return;
@@ -236,6 +246,8 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
     setZoomSteps([]);
     setZoomIndex(0);
     lastScanRef.current = null;
+    lastDecodeAtRef.current = Date.now();
+    zoomFallbackDoneRef.current = false;
 
     // Reader nuevo en cada arranque: deja el stream anterior limpio y evita
     // estados residuales al reintentar.
@@ -263,8 +275,7 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
       }
 
       // Zoom digital: si la cámara lo soporta arrancamos con AUTO_ZOOM para
-      // que el código ocupe más del frame (las cámaras traseras actuales son
-      // gran angular y el código queda muy chico).
+      // que el código ocupe más del frame.
       const steps = buildZoomSteps(caps);
       if (steps.length > 0) {
         const autoIndex = steps.indexOf(AUTO_ZOOM);
@@ -307,10 +318,33 @@ export function BarcodeScanner({ onResult, onError, className }: BarcodeScannerP
     };
   }, [start, stop]);
 
+  // Red de seguridad del zoom: si pasan ZOOM_FALLBACK_MS sin leer ningún
+  // código estando con zoom, volvemos a 1x (la lente zoom puede no enfocar
+  // de cerca en algunos teléfonos).
+  useEffect(() => {
+    if (status !== 'scanning' || zoomIndex <= 0 || zoomFallbackDoneRef.current) return;
+
+    const id = window.setInterval(() => {
+      if (zoomFallbackDoneRef.current) return;
+      if (Date.now() - lastDecodeAtRef.current < ZOOM_FALLBACK_MS) return;
+      const oneIndex = zoomSteps.indexOf(1);
+      if (oneIndex < 0) return;
+      zoomFallbackDoneRef.current = true;
+      applyTrackConstraint(trackRef.current, { zoom: 1 }).then((applied) => {
+        if (applied) setZoomIndex(oneIndex);
+      });
+    }, 1000);
+
+    return () => window.clearInterval(id);
+  }, [status, zoomIndex, zoomSteps]);
+
   const toggleZoom = useCallback(async () => {
     const nextIndex = (zoomIndex + 1) % zoomSteps.length;
     const applied = await applyTrackConstraint(trackRef.current, { zoom: zoomSteps[nextIndex] });
-    if (applied) setZoomIndex(nextIndex);
+    if (applied) {
+      zoomFallbackDoneRef.current = true; // el usuario tomó control manual
+      setZoomIndex(nextIndex);
+    }
   }, [zoomIndex, zoomSteps]);
 
   const toggleTorch = useCallback(async () => {
