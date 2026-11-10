@@ -420,6 +420,9 @@ function SettingsContent() {
     if (!res.ok) {
       throw new Error(data.error || 'Error al guardar la configuración');
     }
+    // La caja lee el tamaño de papel del tenant al cargar; esta copia local
+    // evita que el primer render use el valor viejo.
+    window.localStorage.setItem('vynko:paper-size', checkoutPaperSize);
   }, [checkoutForm, checkoutPaperSize, checkoutShowReceipt]);
 
   const handleSaveCheckout = useCallback(async (e: React.FormEvent) => {
