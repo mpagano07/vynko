@@ -52,6 +52,7 @@ import { getTenantHeaders, authFetch } from '@/lib/fetchWithTenant';
 import { filterProducts } from '@/lib/product-search';
 import { IMPORT_FILE_ERROR } from '@/lib/excel-import-errors';
 import type { ExportFormat, ExportPlatform } from '@/lib/excel-export';
+import { readImportStream, type ImportProgressState } from '@/lib/import-stream';
 import type { DriveExportResult } from '@/components/products/export-products-modal';
 import { rememberDriveIntent, takeDriveIntent, clearDriveIntent, type DriveIntent } from '@/lib/google/drive-intent';
 import { matchesQuery } from '@/lib/utils/text';
@@ -69,13 +70,6 @@ const TransferInbox = dynamicImport(
   { ssr: false },
 );
 
-type ImportProgressState = { processed: number; total: number };
-
-type ImportStreamResult = {
-  results: { row: number; status: string; name?: string; error?: string }[];
-  summary: { created: number; updated: number; skipped: number; total: number };
-};
-
 const DRIVE_ERROR_MESSAGES: Record<string, string> = {
   missing_drive_scope:
     'No se otorgó el permiso de archivos de Drive. Reconectá y dejá tildado el permiso de Drive.',
@@ -89,55 +83,9 @@ const DRIVE_ERROR_MESSAGES: Record<string, string> = {
 };
 
 /**
- * Lee el NDJSON que streamea /api/products/import.
- *
- * El servidor manda una linea por evento: `progress` mientras escribe cada
- * fila y un `done` final con el reporte. Se corta por '\n' a medida que llegan
- * los chunks (y no al final) justamente para que el contador avance durante el
- * import; un chunk de red puede traer varias lineas o media linea, por eso el
- * sobrante queda en `buffer` hasta el proximo chunk.
+ * El import lee el NDJSON con `readImportStream` (`@/lib/import-stream`), que
+ * ahora también usan clientes y proveedores.
  */
-async function readImportStream(
-  body: ReadableStream<Uint8Array>,
-  onProgress: (progress: ImportProgressState) => void,
-): Promise<ImportStreamResult> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  const collected: { result: ImportStreamResult | null } = { result: null };
-  let buffer = '';
-
-  const handleLine = (line: string) => {
-    if (!line.trim()) return;
-    const event = JSON.parse(line) as Record<string, unknown>;
-    if (event.type === 'progress') {
-      onProgress({ processed: Number(event.processed), total: Number(event.total) });
-    } else if (event.type === 'done') {
-      collected.result = {
-        results: (event.results ?? []) as ImportStreamResult['results'],
-        summary: event.summary as ImportStreamResult['summary'],
-      };
-    } else if (event.type === 'error') {
-      throw new Error(String(event.error || 'Error al importar'));
-    }
-  };
-
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let newline = buffer.indexOf('\n');
-    while (newline !== -1) {
-      handleLine(buffer.slice(0, newline));
-      buffer = buffer.slice(newline + 1);
-      newline = buffer.indexOf('\n');
-    }
-  }
-  if (buffer.trim()) handleLine(buffer);
-
-  if (!collected.result) throw new Error('La importacion no devolvio resultados');
-  return collected.result;
-}
-
 function marginPercent(price: number, cost: number): number {
   return ((price - cost) / cost) * 100;
 }

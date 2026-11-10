@@ -1,13 +1,17 @@
 /**
- * Lectura y normalizacion de la planilla que alimenta la importacion de
- * productos.
+ * Lectura y normalizacion de la planilla que alimenta las importaciones.
  *
  * Vive fuera del componente de productos por dos razones: la pagina es un
  * archivo de 1800 lineas y la logica de columnas no se podia testear, y
  * sobre todo porque el parseo es la unica frontera donde un archivo de
  * terceros puede meter basura en la base. Todo lo que llega de aca vuelve a
- * ser validado por `importProducts`, pero un default destructivo en esta capa
- * (un precio vacido convertido a 0) llega intacto hasta el write.
+ * ser validado por el servicio de import correspondiente, pero un default
+ * destructivo en esta capa (un precio vacio convertido a 0) llega intacto
+ * hasta el write.
+ *
+ * Los alias de columnas son por dominio: `parseWorkbookFile` lee planillas de
+ * productos y `parsePartyWorkbookFile` las de clientes/proveedores. El resto
+ * (firmas de archivo, CSV, limites) es compartido.
  */
 
 // Solo tipos: se borran al compilar, no arrastran la libreria al bundle.
@@ -98,8 +102,79 @@ const IMPORT_COLUMN_ALIASES_FOLDED: Record<string, string> = Object.fromEntries(
   Object.entries(IMPORT_COLUMN_ALIASES).map(([key, target]) => [foldImportHeader(key), target])
 );
 
+/**
+ * Alias de encabezados para la importación de terceros (clientes y
+ * proveedores). Las claves se plegan igual que las de productos: escribir
+ * "Teléfono" o "Telefono" da lo mismo. Comparten mapa los dos tipos porque la
+ * lista blanca de cada servicio se encarga de ignorar lo que no le corresponde
+ * (un archivo de clientes con columna "Contacto" no rompe nada).
+ *
+ * "CUIT" y "Número de documento" viajan como texto: el servicio los normaliza
+ * con `normalizePartyTaxFields`, que ya sabe quedarse sólo con los dígitos.
+ */
+const PARTY_IMPORT_COLUMN_ALIASES: Record<string, string> = {
+  nombre: 'name',
+  name: 'name',
+  'razon social': 'name',
+  cliente: 'name',
+  proveedor: 'name',
+  contacto: 'contact_name',
+  'contacto nombre': 'contact_name',
+  'persona de contacto': 'contact_name',
+  contact_name: 'contact_name',
+  email: 'email',
+  mail: 'email',
+  correo: 'email',
+  'correo electronico': 'email',
+  telefono: 'phone',
+  celular: 'phone',
+  phone: 'phone',
+  direccion: 'address',
+  domicilio: 'address',
+  address: 'address',
+  notas: 'notes',
+  observaciones: 'notes',
+  notes: 'notes',
+  cuit: 'cuit',
+  'condicion iva': 'iva_condition',
+  'condicion frente al iva': 'iva_condition',
+  iva: 'iva_condition',
+  'tipo de documento': 'document_type',
+  'numero de documento': 'document_number',
+  'nro documento': 'document_number',
+  dni: 'document_number',
+  document_number: 'document_number',
+};
+
 /** Columnas cuyo valor se interpreta como numero. */
 const NUMERIC_COLUMNS = ['price', 'cost', 'stock', 'min_stock', 'max_stock'] as const;
+
+/**
+ * Configuración del parseo por dominio. Los alias pliegan distinto (productos
+ * vs terceros), las columnas numéricas sólo existen en productos y el mínimo de
+ * columnas reconocidas para dar por buena una fila de encabezado baja a 1 en
+ * terceros: una planilla con la sola columna "Nombre" ya es un import válido de
+ * clientes.
+ */
+type ParserConfig = {
+  aliasesFolded: Record<string, string>;
+  numericColumns: readonly string[];
+  minRecognizedColumns: number;
+};
+
+const PRODUCTS_PARSER: ParserConfig = {
+  aliasesFolded: IMPORT_COLUMN_ALIASES_FOLDED,
+  numericColumns: NUMERIC_COLUMNS,
+  minRecognizedColumns: 2,
+};
+
+const PARTY_PARSER: ParserConfig = {
+  aliasesFolded: Object.fromEntries(
+    Object.entries(PARTY_IMPORT_COLUMN_ALIASES).map(([key, target]) => [foldImportHeader(key), target])
+  ),
+  numericColumns: [],
+  minRecognizedColumns: 1,
+};
 
 export { IMPORT_FILE_ERROR, IMPORT_EMPTY_FILE_ERROR } from '@/lib/excel-import-errors';
 
@@ -157,15 +232,20 @@ export function parseSpreadsheetNumber(value: unknown): number | undefined {
 }
 
 /**
- * Mapea los encabezados de una fila a las claves que entiende
- * `importProducts`. Los encabezados desconocidos se conservan tal cual: la
+ * Mapea los encabezados de una fila a las claves que entiende el servicio de
+ * import de productos. Los encabezados desconocidos se conservan tal cual: la
  * lista blanca del servicio los ignora, pero asi el preview muestra
  * exactamente lo que vino del archivo.
  */
 export function mapImportColumns(row: Record<string, unknown>): Record<string, unknown> {
+  return mapImportColumnsWith(row, PRODUCTS_PARSER);
+}
+
+/** Mapeo de encabezados parametrizado por dominio (ver `ParserConfig`). */
+function mapImportColumnsWith(row: Record<string, unknown>, config: ParserConfig): Record<string, unknown> {
   const mapped: Record<string, unknown> = {};
   for (const [col, val] of Object.entries(row)) {
-    const key = IMPORT_COLUMN_ALIASES_FOLDED[foldImportHeader(col)] || col;
+    const key = config.aliasesFolded[foldImportHeader(col)] || col;
     mapped[key] = val;
   }
   return mapped;
@@ -181,7 +261,11 @@ export function mapImportColumns(row: Record<string, unknown>): Record<string, u
  * lo que sale de este modulo son strings, numeros y booleanos.
  */
 export function normalizeImportRow(row: Record<string, unknown>): Record<string, unknown> {
-  const mapped = mapImportColumns(row);
+  return normalizeImportRowWith(row, PRODUCTS_PARSER);
+}
+
+function normalizeImportRowWith(row: Record<string, unknown>, config: ParserConfig): Record<string, unknown> {
+  const mapped = mapImportColumnsWith(row, config);
 
   for (const [key, value] of Object.entries(mapped)) {
     if (value !== null && typeof value === 'object') {
@@ -189,7 +273,7 @@ export function normalizeImportRow(row: Record<string, unknown>): Record<string,
     }
   }
 
-  for (const col of NUMERIC_COLUMNS) {
+  for (const col of config.numericColumns) {
     if (mapped[col] === undefined) continue;
     const parsed = parseSpreadsheetNumber(mapped[col]);
     if (parsed === undefined) {
@@ -213,8 +297,12 @@ export type ParsedImportFile = {
  * contrario reportar fila por fila.
  */
 export function parseImportRows(raw: Record<string, unknown>[]): ParsedImportFile {
+  return parseRowsWith(raw, PRODUCTS_PARSER);
+}
+
+function parseRowsWith(raw: Record<string, unknown>[], config: ParserConfig): ParsedImportFile {
   const columns = raw.length > 0 ? Object.keys(raw[0]) : [];
-  return { rows: raw.map(normalizeImportRow), columns };
+  return { rows: raw.map((row) => normalizeImportRowWith(row, config)), columns };
 }
 
 export type ParseWorkbookResult =
@@ -343,7 +431,7 @@ function decodeCsvText(buf: ArrayBuffer): string | null {
  * reconocida y al menos otra de la lista blanca, para no confundir una fila de
  * ayuda suelta con los encabezados. Devuelve -1 cuando no encuentra ninguna.
  */
-function findImportHeaderRow(matrix: unknown[][]): number {
+function findImportHeaderRow(matrix: unknown[][], config: ParserConfig): number {
   for (let r = 0; r < matrix.length; r++) {
     const row = matrix[r];
     if (!Array.isArray(row)) continue;
@@ -351,12 +439,12 @@ function findImportHeaderRow(matrix: unknown[][]): number {
     let recognized = 0;
     for (const cell of row) {
       if (typeof cell !== 'string') continue;
-      const target = IMPORT_COLUMN_ALIASES_FOLDED[foldImportHeader(cell)];
+      const target = config.aliasesFolded[foldImportHeader(cell)];
       if (!target) continue;
       recognized++;
       if (target === 'name') hasName = true;
     }
-    if (hasName && recognized >= 2) return r;
+    if (hasName && recognized >= config.minRecognizedColumns) return r;
   }
   return -1;
 }
@@ -364,14 +452,15 @@ function findImportHeaderRow(matrix: unknown[][]): number {
 /** Filas de una hoja, ya detectada la fila de encabezado. */
 function extractSheetRows(
   XLSX: typeof import('xlsx'),
-  ws: WorkSheet
+  ws: WorkSheet,
+  config: ParserConfig
 ): { rows: Record<string, unknown>[]; detectedHeader: boolean } {
   const matrix = XLSX.utils.sheet_to_json(ws, {
     header: 1,
     defval: '',
     blankrows: false,
   }) as unknown[][];
-  const headerRow = findImportHeaderRow(matrix);
+  const headerRow = findImportHeaderRow(matrix, config);
   const rows = XLSX.utils.sheet_to_json(ws, {
     range: headerRow >= 0 ? headerRow : 0,
     defval: '',
@@ -390,7 +479,8 @@ function extractSheetRows(
  */
 function extractWorkbookRows(
   XLSX: typeof import('xlsx'),
-  wb: WorkBook
+  wb: WorkBook,
+  config: ParserConfig
 ): Record<string, unknown>[] {
   const sheets = wb.SheetNames.map((name) => wb.Sheets[name]).filter(
     (ws): ws is WorkSheet => Boolean(ws)
@@ -399,7 +489,7 @@ function extractWorkbookRows(
   const detected: Record<string, unknown>[] = [];
   let firstNonEmpty: Record<string, unknown>[] | null = null;
   for (const ws of sheets) {
-    const { rows, detectedHeader } = extractSheetRows(XLSX, ws);
+    const { rows, detectedHeader } = extractSheetRows(XLSX, ws, config);
     if (rows.length > 0 && firstNonEmpty === null) firstNonEmpty = rows;
     if (detectedHeader && rows.length > 0) detected.push(...rows);
   }
@@ -409,7 +499,7 @@ function extractWorkbookRows(
 
 /**
  * Lee el buffer de un archivo .xlsx/.xls/.csv y devuelve las filas ya
- * normalizadas.
+ * normalizadas para el import de productos.
  *
  * El formato se decide por contenido: una firma de zip/OLE2 es un Excel; si no
  * y la extension declarada es `.csv`, se decodifica como texto delimitado. Una
@@ -427,6 +517,26 @@ function extractWorkbookRows(
 export async function parseWorkbookFile(
   buf: ArrayBuffer,
   options: { fileName?: string } = {}
+): Promise<ParseWorkbookResult> {
+  return parseWorkbookFor(buf, options, PRODUCTS_PARSER);
+}
+
+/**
+ * La misma lectura de planilla para la importación de clientes y proveedores:
+ * mismos formatos, mismos límites de peso y filas, otros alias de columnas
+ * (ver `PARTY_IMPORT_COLUMN_ALIASES`).
+ */
+export async function parsePartyWorkbookFile(
+  buf: ArrayBuffer,
+  options: { fileName?: string } = {}
+): Promise<ParseWorkbookResult> {
+  return parseWorkbookFor(buf, options, PARTY_PARSER);
+}
+
+async function parseWorkbookFor(
+  buf: ArrayBuffer,
+  options: { fileName?: string },
+  config: ParserConfig
 ): Promise<ParseWorkbookResult> {
   if (buf.byteLength === 0) {
     return { ok: false, error: IMPORT_EMPTY_FILE_ERROR };
@@ -448,7 +558,7 @@ export async function parseWorkbookFile(
       if (text === null) return { ok: false, error: IMPORT_FILE_ERROR };
       wb = XLSX.read(text, { type: 'string' });
     }
-    raw = extractWorkbookRows(XLSX, wb);
+    raw = extractWorkbookRows(XLSX, wb, config);
   } catch {
     return { ok: false, error: IMPORT_FILE_ERROR };
   }
@@ -464,6 +574,6 @@ export async function parseWorkbookFile(
     };
   }
 
-  const { rows, columns } = parseImportRows(raw);
+  const { rows, columns } = parseRowsWith(raw, config);
   return { ok: true, rows, columns };
 }
