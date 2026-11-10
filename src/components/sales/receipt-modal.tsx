@@ -1,5 +1,6 @@
 'use client';
 
+import { createPortal } from 'react-dom';
 import { getPaymentMethodLabel } from '@/lib/payment-methods';
 import { formatARS } from '@/lib/utils/currency';
 import {
@@ -8,25 +9,57 @@ import {
   type ReceiptTenant,
 } from '@/lib/sales-receipt';
 
+const PAPER_PADDING: Record<'58mm' | '80mm', string> = {
+  // El cabezal de una térmica de 58mm imprime ~48mm y el de 80mm ~72mm. El
+  // relleno deja el contenido dentro de esa zona: con el ancho completo del
+  // papel los importes alineados a la derecha quedaban fuera del área imprimible.
+  '58mm': '4mm 5.5mm 2mm',
+  '80mm': '4mm 4.5mm 2mm',
+};
+
+/**
+ * CSS de impresión del ticket.
+ *
+ * El ticket se monta por portal como hijo directo de `body` y, al imprimir, se
+ * ocultan los demás hijos con `display: none`. Antes se usaba
+ * `body * { visibility: hidden }`, que deja el layout del resto de la app: con
+ * la página scrolleada el ticket quedaba posicionado fuera del área que Chrome
+ * manda a la impresora y en 58mm la hoja salía completamente en blanco. Sin el
+ * resto del layout, el único contenido es el ticket, siempre al tope de la hoja.
+ */
 function PrintStyles() {
   return (
     <style>{`
+      #receipt-print-portal { display: none; }
       @media print {
-        body * { visibility: hidden !important; }
-        #receipt-print-area, #receipt-print-area * { visibility: visible !important; }
-        #receipt-print-area { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; box-shadow: none !important; margin: 0 !important; border: none !important; }
+        @page { margin: 0; }
+        html, body { background: #fff !important; }
+        body > *:not(#receipt-print-portal) { display: none !important; }
+        #receipt-print-portal { display: block !important; }
+        #receipt-print-area {
+          margin: 0 !important;
+          border: none !important;
+          box-shadow: none !important;
+        }
       }
-      @page { margin: 4mm; }
     `}</style>
   );
 }
 
-function ReceiptBody({ sale, tenant }: { sale: ReceiptSale; tenant: ReceiptTenant }) {
+function ReceiptBody({
+  sale,
+  tenant,
+  paperSize,
+}: {
+  sale: ReceiptSale;
+  tenant: ReceiptTenant;
+  paperSize: '58mm' | '80mm';
+}) {
   const businessName = tenant.company_name || tenant.name || '';
   const hasAdjustments = Object.values(sale.adjustments_applied ?? {}).some((v) => v !== 0);
 
   return (
-    <div className="px-3">
+    <div style={{ padding: PAPER_PADDING[paperSize] }}>
       <p className="text-center font-bold text-[12px]">{businessName}</p>
       {tenant.business_address && (
         <p className="text-center">{tenant.business_address}</p>
@@ -114,18 +147,23 @@ export function PrintReceipt({
   tenant: ReceiptTenant;
   paperSize: '58mm' | '80mm';
 }) {
-  return (
+  // El portal necesita `document`; el componente sólo se monta en el cliente
+  // (cuando hay una venta para imprimir), pero SSR puede evaluarlo igual.
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <>
       <PrintStyles />
-      <div className="hidden print:block" aria-hidden="true">
+      <div id="receipt-print-portal" aria-hidden="true">
         <div
           id="receipt-print-area"
           className="bg-white text-gray-900 font-mono text-[11px] leading-relaxed"
-          style={{ width: paperSize === '58mm' ? '58mm' : '80mm' }}
+          style={{ width: paperSize }}
         >
-          <ReceiptBody sale={sale} tenant={tenant} />
+          <ReceiptBody sale={sale} tenant={tenant} paperSize={paperSize} />
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 }
