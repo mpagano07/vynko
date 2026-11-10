@@ -74,28 +74,12 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   orden_venta: 'Orden de Venta',
 };
 
-export const DOCUMENT_TYPE_ICONS: Record<DocumentType, string> = {
-  remito_salida: '📤',
-  remito_ingreso: '📥',
-  presupuesto: '📋',
-  orden_compra: '🛒',
-  orden_venta: '💰',
-};
-
 export const DOCUMENT_STATUS_LABELS: Record<DocumentStatus, string> = {
   pending: 'Pendiente',
   approved: 'Aprobado',
   rejected: 'Rechazado',
   completed: 'Completado',
   cancelled: 'Cancelado',
-};
-
-export const DOCUMENT_STATUS_COLORS: Record<DocumentStatus, string> = {
-  pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
-  approved: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-  rejected: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
-  completed: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-  cancelled: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
 };
 
 export const VALID_STATUSES_PER_TYPE: Record<DocumentType, DocumentStatus[]> = {

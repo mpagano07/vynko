@@ -4,7 +4,7 @@ import type { GooglePickerResponse } from '@/types/google';
 
 const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
 
-export async function loadGooglePickerScript(): Promise<void> {
+async function loadGooglePickerScript(): Promise<void> {
   if (typeof window === 'undefined') return;
   if (window.gapi && window.google?.picker) return;
 

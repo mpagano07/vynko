@@ -17,7 +17,7 @@
 export const MAGIC_PATH = '/auth/magic';
 
 /** Tipos de link que traen una sesión de invitación en el fragmento. */
-export const INVITATION_TYPES = ['invite', 'magiclink', 'signup'] as const;
+const INVITATION_TYPES = ['invite', 'magiclink', 'signup'] as const;
 
 const INVITATION_TYPE_SET = new Set<string>(INVITATION_TYPES);
 

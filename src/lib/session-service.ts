@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
 import { pickDefaultTenantId } from '@/lib/tenant-selection';
+import { scheduleAfterBackground } from '@/lib/after-background';
 
 type SessionPayload = Record<string, unknown>;
 
@@ -91,24 +92,30 @@ export async function getSessionData(request: Request): Promise<{ ok: true; data
     return { ok: true, data: anonPayload() };
   }
 
-  const { data: profileData } = await supabaseAdmin
-    .from('profiles')
-    .select(PROFILE_SESSION_COLUMNS)
-    .eq('id', user.id)
-    .maybeSingle();
-  const profile = profileData as {
+  // Perfil y membresías son independientes: se piden en paralelo. Encadenados
+  // sumaban un round trip entero a Supabase en el camino crítico del login, que
+  // es justo el que más se nota cuando la red va lenta.
+  //
+  // Las membresías inactivas no cuentan para la sesión: la persona sigue
+  // existiendo, pero no tiene ninguna sucursal activa a la que entrar.
+  const [profileResult, tenantUsersResult] = await Promise.all([
+    supabaseAdmin
+      .from('profiles')
+      .select(PROFILE_SESSION_COLUMNS)
+      .eq('id', user.id)
+      .maybeSingle(),
+    supabaseAdmin
+      .from('tenant_users')
+      .select('tenant_id, role')
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .order('joined_at', { ascending: true }),
+  ]);
+  const profile = profileResult.data as {
     onboarding_pending?: boolean | null;
     [key: string]: unknown;
   } | null;
-
-  // Las membresías inactivas no cuentan para la sesión: la persona sigue
-  // existiendo, pero no tiene ninguna sucursal activa a la que entrar.
-  const { data: tenantUsers } = await supabaseAdmin
-    .from('tenant_users')
-    .select('tenant_id, role')
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .order('joined_at', { ascending: true });
+  const tenantUsers = tenantUsersResult.data;
 
   const activeTenantId = request.headers.get('x-active-tenant-id');
 
@@ -151,8 +158,14 @@ export async function getSessionData(request: Request): Promise<{ ok: true; data
   // Self-healing (espejo del proxy): si el usuario ya tiene empresa pero el
   // flag quedó en TRUE, lo alineamos para que el guard de onboarding sea
   // directo la próxima vez.
+  //
+  // No se espera la escritura: la respuesta ya lleva `onboardingPending = false`
+  // y hacer esperar al usuario por un UPDATE de mantenimiento es sumarle otro
+  // round trip al login. Es el mismo criterio que el resto de la bitácora.
   if ((tenantUsers?.length ?? 0) > 0 && profile?.onboarding_pending === true) {
-    await supabaseAdmin.from('profiles').update({ onboarding_pending: false }).eq('id', user.id);
+    scheduleAfterBackground(() =>
+      supabaseAdmin.from('profiles').update({ onboarding_pending: false }).eq('id', user.id)
+    );
     onboardingPending = false;
   }
 

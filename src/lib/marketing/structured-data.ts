@@ -25,7 +25,7 @@ import { SOCIAL_PROFILE_URLS } from './social';
 export const APP_URL = SITE_URL;
 
 export const ORGANIZATION_ID = `${APP_URL}/#organization`;
-export const WEBSITE_ID = `${APP_URL}/#website`;
+const WEBSITE_ID = `${APP_URL}/#website`;
 export const SOFTWARE_APPLICATION_ID = `${APP_URL}/#software`;
 
 const PRODUCT_DESCRIPTION =
@@ -33,7 +33,7 @@ const PRODUCT_DESCRIPTION =
 
 const AREA_SERVED = { '@type': 'Country', name: 'Argentina' };
 
-export function buildOrganizationJsonLd(): Record<string, unknown> {
+function buildOrganizationJsonLd(): Record<string, unknown> {
   return {
     '@type': 'Organization',
     '@id': ORGANIZATION_ID,
@@ -46,7 +46,7 @@ export function buildOrganizationJsonLd(): Record<string, unknown> {
   };
 }
 
-export function buildWebSiteJsonLd(): Record<string, unknown> {
+function buildWebSiteJsonLd(): Record<string, unknown> {
   return {
     '@type': 'WebSite',
     '@id': WEBSITE_ID,

@@ -55,7 +55,7 @@ export function formatReceiptDate(iso?: string | null): string {
   });
 }
 
-export function buildWhatsAppText(sale: ReceiptSale, tenant: ReceiptTenant): string {
+function buildWhatsAppText(sale: ReceiptSale, tenant: ReceiptTenant): string {
   const lines: string[] = [];
   lines.push('🧾 *COMPROBANTE DE VENTA*');
   lines.push('');

@@ -337,7 +337,7 @@ export function InvoiceDocument({
   return <TicketDocument invoice={invoice} tenant={tenant} />;
 }
 
-export function InvoicePrintStyles({ paperSize }: { paperSize: InvoicePaperSize }) {
+function InvoicePrintStyles({ paperSize }: { paperSize: InvoicePaperSize }) {
   return (
     <style>{`
       @media print {

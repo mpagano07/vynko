@@ -46,11 +46,11 @@ export type PlanPromo =
   | { type: 'free'; until?: string; badge: string }
   | { type: 'discount'; percent: number; until?: string; badge: string };
 
-export const PROMOS: Partial<Record<PlanId, PlanPromo>> = {
+const PROMOS: Partial<Record<PlanId, PlanPromo>> = {
   business: { type: 'trial', days: 45, badge: '45 días gratis' },
 };
 
-export const getPromo = (planId: PlanId | string | undefined | null): PlanPromo | undefined =>
+const getPromo = (planId: PlanId | string | undefined | null): PlanPromo | undefined =>
   planId ? PROMOS[planId as PlanId] : undefined;
 
 export const getTrialPlan = (): PlanId | null => {
@@ -106,7 +106,7 @@ const isPromoTimedOut = (promo: PlanPromo | undefined): boolean => {
  * (El trial de 45 días por cuenta sigue siendo independiente de la fecha
  * de la oferta comercial.)
  */
-export const isPromoActive = (planId: PlanId | string | undefined | null): boolean => {
+const isPromoActive = (planId: PlanId | string | undefined | null): boolean => {
   const promo = getPromo(planId);
   return !!promo && !isPromoTimedOut(promo);
 };

@@ -18,6 +18,8 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { SearchInput } from '@/components/ui/search-input';
 import { Thead, Th } from '@/components/ui/table-header';
 import { FormLabel } from '@/components/ui/form-label';
+import { Pagination } from '@/components/ui/pagination';
+import { usePagination } from '@/lib/hooks/usePagination';
 import toast from 'react-hot-toast';
 import {
   ShieldAlert, Package, TrendingDown, AlertTriangle,
@@ -45,6 +47,10 @@ const reasonMap = Object.fromEntries(reasonOptions.map(r => [r.value, r]));
 // Motivos que suman stock; el resto resta. Centralizado para que agregar un
 // motivo nuevo no deje el formulario y el envio con criterios distintos.
 const POSITIVE_REASONS = new Set(['found', 'stock_in', 'correction']);
+
+// Mismo tamaño de página que /invoices: el historial puede traer hasta 500
+// ajustes (12 meses), así que la tabla necesita cortarse igual que el resto.
+const ADJUSTMENTS_PER_PAGE = 15;
 
 interface StockAdjustment {
   id: string;
@@ -107,6 +113,34 @@ export default function LossPreventionPage() {
     }
   }, [authLoading, isStarterPlan, router]);
 
+  // El filtrado y la paginación se calculan antes del guard de plan: son hooks
+  // y no pueden quedar detrás de un `return` condicional.
+  const filtered = history.filter(h => {
+    if (search && !matchesQuery(h.productName, search)) return false;
+    if (reasonFilter && (h.reason?.split(':')[0] || '') !== reasonFilter) return false;
+    const day = h.createdAt.slice(0, 10);
+    if (dateFrom && day < dateFrom) return false;
+    if (dateTo && day > dateTo) return false;
+    return true;
+  });
+
+  const hasFilters = Boolean(search || reasonFilter || dateFrom || dateTo);
+
+  const {
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    pageItems: paginatedHistory,
+  } = usePagination(filtered, ADJUSTMENTS_PER_PAGE);
+
+  const clearFilters = () => {
+    setSearch('');
+    setReasonFilter('');
+    setDateFrom('');
+    setDateTo('');
+    setCurrentPage(1);
+  };
+
   if (authLoading || isStarterPlan) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -165,23 +199,6 @@ export default function LossPreventionPage() {
       return { name: info.label, value, color: info.hex };
     })
     .sort((a, b) => b.value - a.value);
-
-  const filtered = history.filter(h => {
-    if (search && !matchesQuery(h.productName, search)) return false;
-    if (reasonFilter && (h.reason?.split(':')[0] || '') !== reasonFilter) return false;
-    const day = h.createdAt.slice(0, 10);
-    if (dateFrom && day < dateFrom) return false;
-    if (dateTo && day > dateTo) return false;
-    return true;
-  });
-
-  const hasFilters = Boolean(search || reasonFilter || dateFrom || dateTo);
-  const clearFilters = () => {
-    setSearch('');
-    setReasonFilter('');
-    setDateFrom('');
-    setDateTo('');
-  };
 
   return (
     <div className="space-y-6">
@@ -318,10 +335,10 @@ export default function LossPreventionPage() {
       <Card className="overflow-hidden border border-gray-100 dark:border-gray-800 p-0">
         <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex flex-col lg:flex-row gap-3">
           <div className="flex-1">
-            <SearchInput ref={searchInputRef} placeholder="Buscar por producto..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            <SearchInput ref={searchInputRef} placeholder="Buscar por producto..." value={search} onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }} />
           </div>
           <div className="w-full sm:w-48">
-            <Select value={reasonFilter} onChange={(e) => setReasonFilter(e.target.value)}>
+            <Select value={reasonFilter} onChange={(e) => { setReasonFilter(e.target.value); setCurrentPage(1); }}>
               <option value="">Motivo: Todos</option>
               {reasonOptions.map((r) => (
                 <option key={r.value} value={r.value}>{r.label}</option>
@@ -330,10 +347,10 @@ export default function LossPreventionPage() {
           </div>
           <div className="flex gap-2">
             <div className="flex-1">
-              <Input type="date" aria-label="Desde" value={dateFrom} max={dateTo || undefined} onChange={(e) => setDateFrom(e.target.value)} />
+              <Input type="date" aria-label="Desde" value={dateFrom} max={dateTo || undefined} onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }} />
             </div>
             <div className="flex-1">
-              <Input type="date" aria-label="Hasta" value={dateTo} min={dateFrom || undefined} onChange={(e) => setDateTo(e.target.value)} />
+              <Input type="date" aria-label="Hasta" value={dateTo} min={dateFrom || undefined} onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }} />
             </div>
           </div>
           {hasFilters && (
@@ -359,7 +376,7 @@ export default function LossPreventionPage() {
                 <Th dense>Nota</Th>
               </Thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
-                {filtered.map((h) => {
+                {paginatedHistory.map((h) => {
                   const reasonInfo = reasonMap[h.reason?.split(':')[0] || ''] || reasonMap.correction;
                   const note = h.reason?.includes(':') ? h.reason.split(':').slice(1).join(':').trim() : '';
                   const cost = costOfProduct(h.productId);
@@ -397,6 +414,13 @@ export default function LossPreventionPage() {
             </table>
           </div>
         )}
+
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+          resultInfo={`Mostrando ${(currentPage - 1) * ADJUSTMENTS_PER_PAGE + 1}–${Math.min(currentPage * ADJUSTMENTS_PER_PAGE, filtered.length)} de ${filtered.length} ajustes`}
+        />
       </Card>
 
       {/* Report Form Modal */}

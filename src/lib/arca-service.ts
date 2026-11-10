@@ -41,7 +41,7 @@ interface ServiceResult<T> {
   status: number;
 }
 
-export function isSandboxConfig(config?: { cert_pem?: string | null; key_encrypted?: string | null } | null): boolean {
+function isSandboxConfig(config?: { cert_pem?: string | null; key_encrypted?: string | null } | null): boolean {
   return config?.cert_pem === 'SANDBOX_DEMO_CERT' || config?.key_encrypted === 'SANDBOX_DEMO_KEY';
 }
 

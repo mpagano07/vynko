@@ -104,7 +104,7 @@ function parseCodeMessageList(xml: string, containerTag: string): { codigo: numb
 /**
  * Generates and signs a Login Ticket Request (TRA) using PKCS#7 / CMS (node-forge).
  */
-export function createSignedLoginTicket(certPem: string, keyPem: string): string {
+function createSignedLoginTicket(certPem: string, keyPem: string): string {
   const now = Date.now();
   // Compensar posible desincronización de reloj con ARCA (10 minutos antes y después)
   const genTime = new Date(now - 10 * 60 * 1000).toISOString();

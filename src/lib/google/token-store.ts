@@ -51,23 +51,11 @@ export async function saveGoogleDriveRefreshToken(
   }
 }
 
-export async function deleteGoogleDriveRefreshToken(userId: string): Promise<void> {
+async function deleteGoogleDriveRefreshToken(userId: string): Promise<void> {
   const { error } = await supabaseAdmin.from('google_drive_tokens').delete().eq('user_id', userId);
   if (error) {
     logger.error('No se pudo borrar el token de Google Drive:', { error });
   }
-}
-
-/**
- * Indica si el usuario tiene una conexión utilizable con Drive.
- *
- * No alcanza con mirar la fila local: el usuario pudo revocar el acceso desde
- * su Cuenta de Google. Pedir un access token valida la conexión y, si ya no
- * sirve, `getGoogleDriveAccessToken` limpia la fila.
- */
-export async function isGoogleDriveConnected(userId: string): Promise<boolean> {
-  const token = await getGoogleDriveAccessToken(userId);
-  return token !== null;
 }
 
 /**

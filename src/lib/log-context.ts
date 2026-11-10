@@ -27,15 +27,6 @@ export function enterLogContext(context: LogFields): void {
   storage.enterWith({ ...storage.getStore(), ...context });
 }
 
-/** Envuelve una operacion completa con contexto propio (jobs, crons). */
-export function withLogContext<T>(context: LogFields, run: () => T): T {
-  return storage.run({ ...storage.getStore(), ...context }, run);
-}
-
-export function currentLogContext(): LogFields {
-  return storage.getStore() ?? {};
-}
-
 /**
  * Id del request para poder cruzar un log con la invocacion de Vercel.
  *

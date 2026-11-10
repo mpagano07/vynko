@@ -10,7 +10,6 @@ import {
   type KillSwitchState,
 } from './kill-switch-config';
 
-export { KILL_AREAS, KILL_SWITCH_ENV_NAMES, KILL_SWITCH_FLAG_KEYS };
 export type { KillArea, KillSwitchEnvOverrides, KillSwitchState };
 
 /**

@@ -79,9 +79,6 @@ export const MANAGER_ASSIGNABLE_ROLES: TenantRole[] = ASSIGNABLE_ROLES.filter(
   (role) => role !== 'manager'
 );
 
-/** Roles con permiso para administrar la empresa (settings, plan, sucursales). */
-export const MANAGE_ROLES: TenantRole[] = ['owner', 'manager'];
-
 /**
  * Normaliza un rol que llega del cliente o de una invitación. Sólo se aceptan
  * roles asignables: el `owner` no se transfiere por esta vía y un valor

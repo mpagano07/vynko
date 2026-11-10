@@ -5,7 +5,7 @@ import { logger } from '@/lib/logger';
 
 export const PRODUCT_IMAGE_BUCKET = 'product-images';
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
-export const SIGNED_URL_TTL_SECONDS = 60 * 60;
+const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
 /**
  * Limites de dimension de una imagen de producto.
@@ -16,7 +16,7 @@ export const SIGNED_URL_TTL_SECONDS = 60 * 60;
  * barato, antes de aceptar el archivo.
  */
 export const MAX_IMAGE_DIMENSION = 4096;
-export const MAX_IMAGE_PIXELS = 16_000_000;
+const MAX_IMAGE_PIXELS = 16_000_000;
 
 export interface ImageDimensions {
   width: number;

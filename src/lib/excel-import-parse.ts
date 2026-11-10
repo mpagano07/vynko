@@ -22,7 +22,7 @@ import {
  * (minusculas, sin acentos) antes de indexarse, asi que la variante acentuada y
  * la pelada conviven sin problema y quedan igualadas.
  */
-export const IMPORT_COLUMN_ALIASES: Record<string, string> = {
+const IMPORT_COLUMN_ALIASES: Record<string, string> = {
   nombre: 'name',
   producto: 'name',
   name: 'name',
@@ -307,7 +307,7 @@ export function validateSpreadsheetFile(
  * extension cambiada, se leen como una planilla sin filas: sin este chequeo el
  * usuario ve "el archivo está vacío" y reintenta para siempre.
  */
-export function looksLikeSpreadsheet(buf: ArrayBuffer): boolean {
+function looksLikeSpreadsheet(buf: ArrayBuffer): boolean {
   const bytes = new Uint8Array(buf, 0, Math.min(8, buf.byteLength));
   const matches = (signature: number[]) => signature.every((b, i) => bytes[i] === b);
   return matches(ZIP_SIGNATURE) || matches(OLE2_SIGNATURE);
