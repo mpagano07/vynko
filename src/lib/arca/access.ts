@@ -5,7 +5,7 @@ import { isAdminProfile, type AdminCapableProfile } from '@/lib/admin';
  * todo. Hoy todavía no se usa: durante las pruebas la feature es sólo para la
  * cuenta admin.
  */
-export const FACTURACION_PLANS: readonly string[] = ['business', 'enterprise'];
+const FACTURACION_PLANS: readonly string[] = ['business', 'enterprise'];
 
 /**
  * Interruptor de lanzamiento.

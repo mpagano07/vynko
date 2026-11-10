@@ -14,7 +14,6 @@ export const TENANT_A = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa';
 export const TENANT_B = 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb';
 
 export const USER_A = '11111111-1111-4111-8111-111111111111';
-export const USER_B = '22222222-2222-4222-8222-222222222222';
 
 /** Id de un recurso que pertenece a la Empresa B. */
 export const FOREIGN_ID = '33333333-3333-4333-8333-333333333333';
@@ -26,18 +25,6 @@ export function authAsTenantA(overrides: Partial<AuthInfo> = {}): AuthInfo {
     userId: USER_A,
     allTenants: false,
     tenantIds: [TENANT_A],
-    role: 'owner',
-    ...overrides,
-  };
-}
-
-/** Usuario de la Empresa B: sirve para probar escrituras sobre sus filas. */
-export function authAsTenantB(overrides: Partial<AuthInfo> = {}): AuthInfo {
-  return {
-    tenantId: TENANT_B,
-    userId: USER_B,
-    allTenants: false,
-    tenantIds: [TENANT_B],
     role: 'owner',
     ...overrides,
   };
@@ -84,20 +71,6 @@ export function routeParams(id: string): never {
 /** `{ params }` para `products/barcode/[code]`. */
 export function barcodeParams(code: string): never {
   return { params: Promise.resolve({ code }) } as never;
-}
-
-/**
- * Encola una fila que pertenece a la Empresa B. El mock tenant-aware la oculta
- * a un servicio que si filtra por `tenant_id`, y se la deja ver a uno que no lo
- * hace: exactamente la diferencia entre "aislado" y "filtrando".
- */
-export function queueForeignRow(table: string, row: Record<string, unknown>) {
-  return { data: [{ tenant_id: TENANT_B, ...row }], error: null as unknown };
-}
-
-/** Encola una fila que pertenece a la Empresa A. */
-export function queueOwnRow(table: string, row: Record<string, unknown>) {
-  return { data: [{ tenant_id: TENANT_A, ...row }], error: null as unknown };
 }
 
 /**

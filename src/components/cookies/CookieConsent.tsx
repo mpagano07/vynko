@@ -4,8 +4,6 @@ import { useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { getCookieConsent, saveCookieConsent, subscribeToConsent } from '@/lib/cookie-consent';
 
-export { getCookieConsent, resetCookieConsent } from '@/lib/cookie-consent';
-
 function consentCookieSnapshot() {
   return getCookieConsent() !== null;
 }

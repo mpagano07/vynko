@@ -50,16 +50,15 @@ import type { ArcaConfig } from '@/lib/types/arca';
 import type { CheckoutPayload } from '@/components/sales/checkout-modal';
 import type { ReceiptSale, ReceiptTenant } from '@/lib/sales-receipt';
 import { buildWhatsAppUrl } from '@/lib/sales-receipt';
+import { PrintReceipt } from '@/components/sales/receipt-modal';
 
-// Los modales de cobro y de ticket son los componentes más pesados de la
-// página y solo hacen falta cuando el usuario cobra o reimprime. Se cargan
-// bajo demanda para no inflar el bundle inicial de /sales en mobile.
+// El modal de cobro es el componente más pesado de la página y solo hace falta
+// cuando el usuario cobra, así que se carga bajo demanda para no inflar el
+// bundle inicial de /sales en mobile. El ticket, en cambio, se importa estático
+// (ver `printWhenReady`): la vista previa de impresión necesita que el ticket ya
+// esté montado en el momento exacto en que se abre.
 const CheckoutModal = dynamicImport(
   () => import('@/components/sales/checkout-modal').then((m) => ({ default: m.CheckoutModal })),
-  { ssr: false },
-);
-const PrintReceipt = dynamicImport(
-  () => import('@/components/sales/receipt-modal').then((m) => ({ default: m.PrintReceipt })),
   { ssr: false },
 );
 import {
@@ -72,6 +71,7 @@ import { usePagination } from '@/lib/hooks/usePagination';
 import { trackClientEvent } from '@/lib/analytics-client';
 import { validateFacturaReceptor } from '@/lib/arca/validation';
 import { canUseFacturacion } from '@/lib/arca/access';
+import { printWhenReady } from '@/lib/print-when-ready';
 
 interface CartItem {
   product_id: string;
@@ -326,6 +326,14 @@ export default function SalesPage() {
 
   useEffect(() => {
     searchInputRef.current?.focus();
+  }, []);
+
+  // El ticket vive en el DOM sólo para imprimir. Se limpia al cerrar el diálogo
+  // para que un Ctrl+P posterior imprima la página normal y no una venta vieja.
+  useEffect(() => {
+    const clearReceipt = () => setLastSale(null);
+    window.addEventListener('afterprint', clearReceipt);
+    return () => window.removeEventListener('afterprint', clearReceipt);
   }, []);
 
   const filteredProducts = products.filter(
@@ -662,7 +670,7 @@ export default function SalesPage() {
           trackClientEvent('whatsapp_ticket', { saleId: sale.id, resend: false });
         }
         if (printReceipt) {
-          window.setTimeout(() => window.print(), 250);
+          void printWhenReady('receipt-print-area');
         }
       }
 
@@ -1276,7 +1284,7 @@ export default function SalesPage() {
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             setLastSale(saleToReceipt(sale, customers));
-                                            window.setTimeout(() => window.print(), 200);
+                                            void printWhenReady('receipt-print-area');
                                           }}
                                           className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md text-xs font-semibold text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
                                           title="Reimprimir el ticket"

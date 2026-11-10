@@ -12,7 +12,7 @@ Fecha: 2026-09-24. Rama origen: `feature/modal-gestionar-categorias`.
 | 3 | No existen secrets hardcodeados | ✅ OK | Sin keys literales en `src/`, `scripts/`, `e2e/` |
 | 4 | No existen API keys en el frontend | ✅ OK | Solo `NEXT_PUBLIC_*` públicas (anon key, MP public key). Service role solo server-side |
 | 5 | Migraciones de DB versionadas | ✅ OK | `migrations/001_..031` SQL numeradas |
-| 6 | Código muerto eliminado | 🟡 Hay limpieza | 4 deps sin uso (`@vercel/nft`, `@zxing/browser`, `class-variance-authority`, `date-fns`) + exports muertos |
+| 6 | Código muerto eliminado | ✅ OK | Knip no reporta exports muertos. Se quitaron los probes de debug, helpers E2E sin referencias y `autoprefixer`. `supabaseClient.ts` se conserva como canario intencional |
 | 7 | `console.log` innecesarios eliminados | 🟡 Hay leftover | 5 logs de DEBUG con PII en `src/app/auth/callback/route.ts:46-75` |
 | 8 | Errores manejados correctamente | 🟡 Faltan | `res.json()` sin chequear `res.ok` (scanning, sales, settings, billing); errores tragados; `isError` confundido con vacío |
 | 9 | Error boundaries implementados | 🟡 Incompleto | Solo `error.tsx` raíz; sin `global-error.tsx`, sin nested boundaries |
@@ -39,7 +39,7 @@ Fecha: 2026-09-24. Rama origen: `feature/modal-gestionar-categorias`.
 
 - [x] **2.1 Borrar `console.log` PII** — `src/app/auth/callback/route.ts:46-75` (logs de user_id/email/metadata/companyName eliminados; se conserva el `console.error`).
 - [x] **2.2 Quitar deps sin uso** — `@vercel/nft`, `@zxing/browser`, `class-variance-authority`, `date-fns` (ninguna se importa en `src/`; `@zxing/library` se mantiene porque el scanner la usa).
-- [x] **2.3 Limpiar exports muertos** — Evaluado y cerrado: `ReceiptModal` SÍ se usa en `sales/page.tsx` (falso positivo del plan original). Tipos `*Result` se conservan (son la API pública de los services). No hay nada que limpiar.
+- [x] **2.3 Limpiar exports muertos** — Revisado con Knip: se eliminó `ReceiptModal` (solo se usaba `PrintReceipt` en `sales/page.tsx`), helpers E2E sin referencias y constantes/exportaciones internas que no se consumían fuera de su módulo. Tipos `*Result` se conservan (son la API pública de los services). `supabaseClient.ts` se mantiene a propósito como canario de seguridad (ver `security-session-cookie.test.ts`).
 
 ## Fase 3 — UX y robustez (media)
 

@@ -103,15 +103,6 @@ function getStoredActiveTenantId(): string | null {
   }
 }
 
-export function isAllTenantsMode(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    return localStorage.getItem(ACTIVE_TENANT_KEY) === '__all__';
-  } catch {
-    return false;
-  }
-}
-
 function setStoredActiveTenantId(id: string) {
   try {
     localStorage.setItem(ACTIVE_TENANT_KEY, id);
@@ -196,7 +187,12 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 // the token refresh it may trigger) can hang on a cold serverless start, and
 // `authLoading` gates both the landing redirect and the dashboard gate: if it
 // stays true the app settles on "logged-in but stuck" until a manual reload.
-const PROFILE_LOAD_TIMEOUT_MS = 10_000;
+//
+// Es el mismo techo que el probe: las dos peticiones son la misma consulta, y
+// con una red lenta (o Supabase lejos) el servidor puede tardar varios segundos
+// en cada round trip. Un techo más corto acá deja el perfil sin cargar aunque el
+// login haya funcionado.
+const PROFILE_LOAD_TIMEOUT_MS = 20_000;
 
 // Resolucion de sesion contra el servidor.
 //
@@ -209,7 +205,13 @@ const PROFILE_LOAD_TIMEOUT_MS = 10_000;
 // respuesta del servidor es definitiva. "sin usuario" significa deslogueado de
 // verdad y no se reintenta; solo se reintenta cuando el request fallo, que es
 // el unico caso indistinguible de un problema de red.
-const SESSION_PROBE_TIMEOUT_MS = 8000;
+//
+// El techo tiene que superar lo que tarda el servidor en el peor caso: resolver
+// la cookie (getUser) mas leer perfil, membresias y empresas. Con una red lenta
+// esos round trips se cuentan en segundos y un techo corto convierte un login
+// exitoso en "No se pudo iniciar sesión" (el probe falla, `resolveSessionUser`
+// devuelve null y el login lo interpreta como sesion inexistente).
+const SESSION_PROBE_TIMEOUT_MS = 20_000;
 
 type SessionProbe = { kind: 'user'; user: User } | { kind: 'anonymous' } | { kind: 'error' };
 
@@ -228,7 +230,9 @@ async function probeSession(): Promise<SessionProbe> {
 }
 
 async function resolveSessionUser(): Promise<User | null> {
-  for (let attempt = 0; attempt < 3; attempt++) {
+  // Dos intentos, no tres: cada uno puede costar el techo entero, y el tercero
+  // solo alargaba la espera del usuario cuando la red directamente no responde.
+  for (let attempt = 0; attempt < 2; attempt++) {
     if (attempt > 0) {
       await new Promise((r) => setTimeout(r, 1000));
     }

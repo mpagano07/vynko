@@ -435,7 +435,6 @@ Los tests de productos, stock y ventas usan helpers reutilizables definidos en `
 - `editProductViaUI()`: Editar producto
 - `deleteProductViaUI()`: Eliminar producto con confirmación
 - `searchProduct()`: Buscar en listado
-- `filterByCategory()`: Filtrar por categoría
 - `countProductsInTable()`: Contar filas en tabla
 - `isProductVisibleInTable()`: Verificar si producto está visible
 - `getStockInfo()`: Leer stock y badge de estado de un producto
@@ -446,7 +445,6 @@ Los tests de productos, stock y ventas usan helpers reutilizables definidos en `
 - `addProductToCart()` / `getCartItem()`: Agregar un producto al carrito de `/sales` y obtener su ítem
 - `openSalesHistory()` / `getNewestSaleRowText()`: Abrir "Últimas Ventas" y leer la venta más reciente
 - `cleanupSalesData()`: Borrar ventas (service role) y productos de prueba de la batería de ventas
-- `mockMercadoPagoCheckout()`: Interceptar redirect a MercadoPago para evitar pagos reales
 - `cleanupBillingData()`: Restaurar estado de billing del tenant vía service role
 
 #### Prerequisitos adicionales

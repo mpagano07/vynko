@@ -35,7 +35,7 @@ export interface PartyTaxFields {
   document_number?: string | null;
 }
 
-export function onlyDigits(value?: string | null): string {
+function onlyDigits(value?: string | null): string {
   return (value || '').replace(/\D/g, '');
 }
 

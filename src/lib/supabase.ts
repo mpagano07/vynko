@@ -3,8 +3,6 @@ import { hardenSessionCookieOptions } from '@/lib/security/session-cookie';
 
 type CookieOptions = Record<string, unknown>;
 
-export { hardenSessionCookieOptions };
-
 export interface ServerCookie {
   name: string;
   value: string;

@@ -99,10 +99,10 @@ export const SEO_LANDING_PAGES = [
 export type SeoPageSlug = (typeof SEO_LANDING_PAGES)[number]['slug'];
 
 /** Rutas de las landings SEO (con barra inicial), derivadas del registro. */
-export const SEO_LANDING_PATHS: readonly string[] = SEO_LANDING_PAGES.map((page) => '/' + page.slug);
+const SEO_LANDING_PATHS: readonly string[] = SEO_LANDING_PAGES.map((page) => '/' + page.slug);
 
 /** Paginas legales publicas. */
-export const LEGAL_PATHS = ['/privacidad', '/terminos', '/reembolsos', '/cookies'] as const;
+const LEGAL_PATHS = ['/privacidad', '/terminos', '/reembolsos', '/cookies'] as const;
 
 /**
  * Rutas que se sirven sin sesion.
@@ -179,7 +179,7 @@ export const PRIVATE_ROUTE_PREFIXES: readonly string[] = [
  * (tiene su propio control de suscripcion), pero visualmente es una pantalla
  * de bienvenida, no una pagina del panel.
  */
-export const SHELLLESS_PATHS: readonly string[] = [...PUBLIC_PATHS, '/onboarding'];
+const SHELLLESS_PATHS: readonly string[] = [...PUBLIC_PATHS, '/onboarding'];
 
 /**
  * Coincidencia por prefijo de ruta, con frontera de segmento.

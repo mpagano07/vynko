@@ -17,7 +17,7 @@ interface AuthFixture {
  * al contenido, interceptando los clics: los tests agotaban el timeout sin
  * llegar a interactuar con la app. Se acepta por defecto en E2E.
  */
-export async function acceptCookies(page: Page) {
+async function acceptCookies(page: Page) {
   await page.addInitScript(() => {
     window.localStorage.setItem(
       'vynko_cookie_consent',
@@ -287,33 +287,6 @@ export async function isProductVisibleInTable(page: Page, productName: string): 
   }
 }
 
-/**
- * Helper para filtrar por categoría
- */
-export async function filterByCategory(page: Page, categoryName: string) {
-  // Buscar el select de categorías (primer select en la página de productos)
-  const selects = page.locator('select');
-  const categorySelect = selects.nth(0); // Primera opción es categoría
-  
-  await categorySelect.click();
-  
-  // Seleccionar la opción por nombre
-  await page.getByRole('option', { name: categoryName }).click();
-
-  // Esperar a que se filtre
-  await page.waitForTimeout(500);
-}
-
-/**
- * Helper para obtener precios de un producto en la tabla
- */
-export async function getProductPriceFromTable(page: Page, productName: string): Promise<string> {
-  const productRow = page.locator(`tr, div[class*="row"]`).filter({ hasText: productName }).first();
-  // Buscar celda de precio (típicamente la segunda o tercera columna)
-  const priceCell = productRow.locator('td').nth(3);
-  return (await priceCell.textContent()) ?? '';
-}
-
 // ===== Helpers de Stock =====
 
 /**
@@ -445,7 +418,7 @@ async function toggleTenantSwitcher(page: Page) {
  * Abre el desplegable del selector de sucursales y espera a que las opciones
  * estén montadas.
  */
-export async function openTenantSwitcher(page: Page) {
+async function openTenantSwitcher(page: Page) {
   if (!(await page.locator(TENANT_SWITCHER_DROPDOWN).isVisible().catch(() => false))) {
     await toggleTenantSwitcher(page);
   }
@@ -458,7 +431,7 @@ export async function openTenantSwitcher(page: Page) {
  * El overlay es `fixed inset-0` y queda por encima del trigger, así que sin
  * esto el clic siguiente sobre el switcher lo intercepta y el test expira.
  */
-export async function closeTenantSwitcher(page: Page) {
+async function closeTenantSwitcher(page: Page) {
   const overlay = page.locator('.fixed.inset-0.z-10');
   if (await overlay.first().isVisible().catch(() => false)) {
     await overlay.first().click({ position: { x: 4, y: 4 }, force: true });
@@ -595,45 +568,6 @@ export async function loginAsUser(page: Page, email: string, password: string) {
 // ===== Helpers de Billing / MercadoPago =====
 
 /**
- * Intercepta la redirección a MercadoPago checkout para evitar pagos reales.
- * Devuelve la URL de checkout que se intentó abrir.
- *
- * Uso:
- *   const url = await mockMercadoPagoCheckout(page);
- *   // ... interactuar con la UI ...
- *   expect(url).toContain('mercadopago');
- */
-export async function mockMercadoPagoCheckout(page: Page): Promise<string> {
-  let capturedUrl = '';
-
-  await page.route('**/*', async (route) => {
-    const url = route.request().url();
-
-    // Intercept navigation to MercadoPago checkout
-    if (url.includes('mercadopago') || url.includes('sandbox.mercadopago')) {
-      capturedUrl = url;
-      await route.abort();
-      return;
-    }
-
-    await route.continue();
-  });
-
-  // Also capture window.location.assign calls via console
-  page.on('framenavigated', (frame) => {
-    if (frame === page.mainFrame()) {
-      const navUrl = frame.url();
-      if (navUrl.includes('mercadopago')) {
-        capturedUrl = navUrl;
-      }
-    }
-  });
-
-  // Return a function that retrieves the captured URL
-  return capturedUrl;
-}
-
-/**
  * Aplica un estado de billing a TODAS las sucursales del usuario E2E vía
  * service role (bypass RLS).
  *
@@ -697,48 +631,6 @@ export async function setTenantBilling(
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- page kept for API consistency with callers
 export function cleanupBillingData(_page?: Page) {
   return setTenantBilling('business', 'active');
-}
-
-/**
- * Elimina de la base de pruebas los productos creados por los tests E2E.
- *
- * Busca por el patrón " E2E " en el nombre (usado por los specs como sufijo)
- * y borra el producto y su stock asociado. Se invoca SIEMPRE, incluso cuando
- * un test de la serie falla en medio, para evitar acumular residuales.
- */
-export async function cleanupE2EProducts() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
-  if (!url || !key) return 0;
-
-  try {
-    const { createClient } = await import('@supabase/supabase-js');
-    const admin = createClient(url, key, { auth: { persistSession: false } });
-
-    const { data: products } = await admin
-      .from('products')
-      .select('id')
-      .ilike('name', '%E2E%');
-    const ids = (products ?? []).map((p) => p.id);
-    if (ids.length === 0) return 0;
-
-    const { data: items } = await admin
-      .from('sale_items')
-      .select('sale_id')
-      .in('product_id', ids);
-    const saleIds = [...new Set((items ?? []).map((i: { sale_id: string }) => i.sale_id))];
-    if (saleIds.length > 0) {
-      await admin.from('sales').delete().in('id', saleIds);
-    }
-    await admin.from('product_stock').delete().in('product_id', ids);
-    for (const id of ids) {
-      await admin.from('products').delete().eq('id', id);
-    }
-    return ids.length;
-  } catch (e) {
-    console.log('cleanupE2EProducts: error limpiando productos E2E:', e);
-    return 0;
-  }
 }
 
 // ===== Helpers de Permisos / Roles =====

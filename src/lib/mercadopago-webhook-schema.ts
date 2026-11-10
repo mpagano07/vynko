@@ -32,7 +32,7 @@ export type ParseResult =
  */
 const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
-export function isValidId(value: unknown): value is string {
+function isValidId(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && ID_PATTERN.test(value);
 }
 

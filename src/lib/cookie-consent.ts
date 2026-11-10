@@ -4,8 +4,8 @@
 // logica de lectura/escritura de la cookie entre consumidores.
 
 export const CONSENT_COOKIE = 'vynko_cookie_consent';
-export const CONSENT_VERSION = '1.1';
-export const CONSENT_CHANGED_EVENT = 'vynko:consent-changed';
+const CONSENT_VERSION = '1.1';
+const CONSENT_CHANGED_EVENT = 'vynko:consent-changed';
 
 export type ConsentState = {
   version: string;

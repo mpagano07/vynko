@@ -47,7 +47,7 @@ function readLevel(): number {
   return LEVEL_VALUE[key] ?? LEVEL_VALUE.info;
 }
 
-export function isLogLevelEnabled(level: LogLevel): boolean {
+function isLogLevelEnabled(level: LogLevel): boolean {
   return LEVEL_VALUE[level] >= readLevel();
 }
 

@@ -9,7 +9,7 @@ export interface KillSwitchStatus {
   env_overrides: KillSwitchEnvOverrides;
 }
 
-export const EMPTY_KILL_SWITCH_STATE: KillSwitchState = {
+const EMPTY_KILL_SWITCH_STATE: KillSwitchState = {
   sales: false,
   payments: false,
   forecast: false,

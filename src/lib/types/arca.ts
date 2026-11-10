@@ -52,18 +52,6 @@ export const VOUCHER_TYPE_CODES: Record<string, ArcaVoucherType> = {
   NC_C: 13,
 };
 
-export const CODE_TO_INVOICE_TYPE: Record<ArcaVoucherType, string> = {
-  1: 'A',
-  2: 'ND_A',
-  3: 'NC_A',
-  6: 'B',
-  7: 'ND_B',
-  8: 'NC_B',
-  11: 'C',
-  12: 'ND_C',
-  13: 'NC_C',
-};
-
 export type ArcaDocType =
   | 80 // CUIT
   | 86 // CUIL
@@ -85,15 +73,6 @@ export type ArcaIvaRateId =
   | 6 // 27%
   | 8 // 5%
   | 9; // 2.5%
-
-export const IVA_PERCENTAGES: Record<ArcaIvaRateId, number> = {
-  3: 0,
-  4: 10.5,
-  5: 21,
-  6: 27,
-  8: 5,
-  9: 2.5,
-};
 
 export const PERCENTAGE_TO_IVA_ID: Record<number, ArcaIvaRateId> = {
   0: 3,
