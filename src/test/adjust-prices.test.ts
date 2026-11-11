@@ -77,9 +77,12 @@ describe('adjustPrices', () => {
     // ...y nada de `.in(id, [todos los ids del tenant])` que revienta la URL.
     expect(inFilters).not.toContain('id');
 
-    // La categoría llega como filtro eq sobre la misma query.
+    // La categoría llega como filtro eq sobre la misma query. Se filtra por
+    // `product_stock.category_id` (migración 071): la global del producto
+    // apunta a UNA categoría de UNA sucursal y dejaba fuera a los productos
+    // recibidos por transferencia.
     const eqs = callsTo(supabaseMock.__calls, 'products', 'eq');
-    expect(eqs.map((call) => call.args[0])).toContain('category_id');
+    expect(eqs.map((call) => call.args[0])).toContain('product_stock.category_id');
 
     // Se aplica en UN solo upsert (las filas van en el body) con el precio
     // y el costo recalculados; costo null no se manda. `name` va siempre:

@@ -132,6 +132,58 @@ describe('listProducts con catálogo más grande que el tope de PostgREST', () =
     expect(result.products).toHaveLength(12);
     expect(callsTo(supabaseMock.__calls, 'products', 'range')).toHaveLength(1);
   });
+
+  it('pide la categoría dentro del embed de product_stock', async () => {
+    supabaseMock.__queue('products', { data: productRows(1), error: null });
+
+    const result = await listProducts(authAsTenantA());
+
+    expect(result.ok).toBe(true);
+    // Migración 071: el select tiene que pedir la columna nueva o PostgREST
+    // la recorta del embed (y /api/products rompe con PGRST108 si la columna
+    // aún no existe en la base).
+    const selectArg = String(callsTo(supabaseMock.__calls, 'products', 'select')[0].args[0]);
+    expect(selectArg).toContain('category_id');
+  });
+});
+
+describe('listProducts: la categoría viene del catálogo del tenant', () => {
+  // `products` es GLOBAL y `categories` es por-tenant: `products.category_id`
+  // apunta a UNA categoría de UNA sucursal, invisible para las demás. El
+  // síntoma era recibir una transferencia y ver el producto "Sin categoría".
+  const rowWithCategories = (globalCategoryId: string, stockCategoryId: string | null) => ({
+    id: 'p-1',
+    name: 'Producto 1',
+    price_cents: 1000,
+    category_id: globalCategoryId,
+    stock_data: [{ stock: 5, min_stock: 0, max_stock: 10, category_id: stockCategoryId }],
+  });
+
+  it('pisa la categoría global del producto con la de su fila de product_stock', async () => {
+    supabaseMock.__queue('products', {
+      data: [rowWithCategories('cat-de-la-sucursal-origen', 'cat-propia')],
+      error: null,
+    });
+
+    const result = await listProducts(authAsTenantA());
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.products[0].category_id).toBe('cat-propia');
+  });
+
+  it('sin categoría en el catálogo del tenant no hereda la global de otra sucursal', async () => {
+    supabaseMock.__queue('products', {
+      data: [rowWithCategories('cat-de-la-sucursal-origen', null)],
+      error: null,
+    });
+
+    const result = await listProducts(authAsTenantA());
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.products[0].category_id).toBeNull();
+  });
 });
 
 describe('listCustomers con más de 1000 clientes', () => {

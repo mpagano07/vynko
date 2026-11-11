@@ -963,7 +963,14 @@ function ProductsPageContent() {
 
       {/* Transfer Inbox — active transfers for multi-branch */}
       {multiBranch && tenantId && (
-        <TransferInbox currentTenantId={tenantId} trigger={transfersTrigger} onAction={() => mutateProducts()} />
+        /* Al recibir, la réplica de categoría (migración 071) puede crear una
+           categoría nueva en este tenant: el filtro y los badges la resuelven
+           contra la lista de categorías, así que también se refresca. */
+        <TransferInbox
+          currentTenantId={tenantId}
+          trigger={transfersTrigger}
+          onAction={() => { mutateProducts(); mutateCategories(); }}
+        />
       )}
 
       {/* Filters Card */}
