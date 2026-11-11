@@ -103,6 +103,7 @@ interface SaleRecord {
   surcharge_cents?: number;
   created_at: string;
   items: { id: string; product_id: string; product_name?: string; quantity: number; unit_price_cents: number; subtotal_cents: number }[];
+  payments?: { method: string; amount_cents: number; received_cents: number; change_cents: number }[];
 }
 
 type ProductView = 'grid' | 'list';
@@ -161,6 +162,9 @@ function saleToReceipt(sale: SaleRecord, customers: Customer[]): ReceiptSale {
       unit_price_cents: item.unit_price_cents,
       subtotal_cents: item.subtotal_cents,
     })),
+    // Sin esto el ticket reimpreso perdía los pagos divididos y el componente
+    // caía en el fallback de `payment_method` (todo como efectivo).
+    payments: sale.payments,
   };
 }
 

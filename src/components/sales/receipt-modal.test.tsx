@@ -100,4 +100,34 @@ describe('PrintReceipt', () => {
     // 80/58 ≈ 1,379: la tipografía crece con el papel en vez de quedar chica.
     expect(area().style.fontSize).toBe('4mm');
   });
+
+  it('no repite el importe del producto cuando la cantidad es 1', () => {
+    render(
+      <PrintReceipt
+        sale={{
+          ...sale,
+          items: [
+            {
+              product_name: 'Cámara Seguridad WiFi',
+              quantity: 1,
+              unit_price_cents: 4046988,
+              subtotal_cents: 4046988,
+            },
+          ],
+        }}
+        tenant={tenant}
+        paperSize="58mm"
+      />
+    );
+
+    // Con cantidad 1 el precio unitario y el subtotal son el mismo número:
+    // el ticket debe mostrar una sola línea de importe.
+    expect(screen.queryByText(/c\/u/)).toBeNull();
+  });
+
+  it('muestra precio unitario y subtotal cuando la cantidad es mayor a 1', () => {
+    render(<PrintReceipt sale={sale} tenant={tenant} paperSize="58mm" />);
+
+    expect(screen.getByText(/c\/u/)).toBeInTheDocument();
+  });
 });

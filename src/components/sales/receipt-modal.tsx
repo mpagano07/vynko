@@ -112,12 +112,18 @@ function ReceiptBody({
           <p>
             {item.quantity} x {item.product_name}
           </p>
-          <p className="flex justify-between">
-            <span className="pl-[1.09em]">
-              {formatARS(item.unit_price_cents / 100)} c/u
-            </span>
-            <span>{formatARS(item.subtotal_cents / 100)}</span>
-          </p>
+          {/* Con cantidad 1 el precio unitario y el subtotal son el mismo
+              número: mostrarlo dos veces confunde y alarga el ticket. */}
+          {item.quantity > 1 ? (
+            <p className="flex justify-between">
+              <span className="pl-[1.09em]">
+                {formatARS(item.unit_price_cents / 100)} c/u
+              </span>
+              <span>{formatARS(item.subtotal_cents / 100)}</span>
+            </p>
+          ) : (
+            <p className="text-right">{formatARS(item.subtotal_cents / 100)}</p>
+          )}
         </div>
       ))}
 
