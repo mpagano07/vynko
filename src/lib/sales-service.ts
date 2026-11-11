@@ -29,6 +29,10 @@ function formatTodayDate(tz: string) {
 function flattenSale(row: Record<string, unknown>) {
   const customer = row.customer as Record<string, unknown> | undefined;
   const items = (row.items as Record<string, unknown>[] | undefined) ?? [];
+  // Los pagos divididos viven en `sale_payments`: sin exponerlos acá, el ticket
+  // reimpreso desde el historial cae en el fallback de `payment_method` y
+  // muestra todo como efectivo.
+  const payments = (row.payments as Record<string, unknown>[] | undefined) ?? [];
   return {
     ...row,
     customer_name: customer?.name ?? null,
@@ -36,6 +40,12 @@ function flattenSale(row: Record<string, unknown>) {
       const product = i.product as Record<string, unknown> | undefined;
       return { ...i, product_name: product?.name ?? null };
     }),
+    payments: payments.map((p) => ({
+      method: p.method as string,
+      amount_cents: Number(p.amount_cents) || 0,
+      received_cents: Number(p.received_cents) || 0,
+      change_cents: Number(p.change_cents) || 0,
+    })),
   };
 }
 
@@ -52,7 +62,8 @@ export async function getSaleById(auth: AuthInfo, id: string): Promise<GetSaleRe
         *,
         product:products(name)
       ),
-      customer:customers(name)
+      customer:customers(name),
+      payments:sale_payments(method, amount_cents, received_cents, change_cents)
     `)
     .eq('id', id)
     .eq('tenant_id', auth.tenantId)
@@ -314,7 +325,8 @@ export async function listSales(
           *,
           product:products(name)
         ),
-        customer:customers(name)
+        customer:customers(name),
+        payments:sale_payments(method, amount_cents, received_cents, change_cents)
       `,
       hasPagination ? { count: 'exact' } : undefined
     )

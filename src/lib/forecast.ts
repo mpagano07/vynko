@@ -60,6 +60,86 @@ function trendPct(current: number, prior: number): number | null {
   return Math.round(((current - prior) / prior) * 100);
 }
 
+// PostgREST devuelve como maximo 1000 filas por respuesta (`db-max-rows`) y
+// rechaza URLs de mas de ~25 KB. Por eso el catalogo y las ventas se leen por
+// paginas con `.range()` en vez de armar un `.in('id', [...])` con todo el
+// catalogo: con ~650 productos ese `in` superaba el limite de URL, PostgREST
+// respondia 400 y el pronostico se mostraba vacio ("Sin datos suficientes")
+// como si la sucursal no tuviera ventas.
+const PAGE_SIZE = 1000;
+
+interface ForecastProductRow {
+  id: string;
+  name: string | null;
+  price_cents: number | null;
+  cost: number | null;
+  category_id: string | null;
+}
+
+interface ForecastStockRow {
+  product_id: string;
+  stock: number | null;
+  min_stock: number | null;
+  max_stock: number | null;
+  products: ForecastProductRow | null;
+}
+
+interface ForecastSaleItemRow {
+  product_id: string;
+  quantity: number | null;
+  sales: { tenant_id?: string | null; created_at?: string | null } | null;
+}
+
+/**
+ * Trae el catalogo activo del tenant con el producto global embebido. El embed
+ * evita el `.in('id', productIds)` y el `.range()` evita el tope de 1000 filas.
+ */
+async function fetchStockRows(tenantId: string): Promise<ForecastStockRow[]> {
+  const rows: ForecastStockRow[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabaseAdmin
+      .from('product_stock')
+      .select('product_id, stock, min_stock, max_stock, products(id, name, price_cents, cost, category_id)')
+      .eq('tenant_id', tenantId)
+      .eq('active', true)
+      .order('product_id')
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error(`No se pudo leer el stock: ${error.message}`);
+    // El cliente no tiene tipos generados de la base: el parser de supabase-js
+    // infiere el embed como arreglo, pero PostgREST devuelve un objeto porque
+    // product_stock.product_id -> products.id es muchos-a-uno.
+    const page = (data as unknown as ForecastStockRow[] | null) ?? [];
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) return rows;
+  }
+}
+
+/** Trae los items vendidos en una ventana, paginados por si superan 1000. */
+async function fetchSaleItems(
+  tenantId: string,
+  from: Date,
+  to?: Date
+): Promise<ForecastSaleItemRow[]> {
+  const rows: ForecastSaleItemRow[] = [];
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    let query = supabaseAdmin
+      .from('sale_items')
+      .select(`
+        product_id, quantity,
+        sales!inner(tenant_id, created_at)
+      `)
+      .eq('sales.tenant_id', tenantId)
+      .gte('sales.created_at', from.toISOString());
+    if (to) query = query.lt('sales.created_at', to.toISOString());
+
+    const { data, error } = await query.order('id').range(offset, offset + PAGE_SIZE - 1);
+    if (error) throw new Error(`No se pudieron leer las ventas: ${error.message}`);
+    const page = (data as ForecastSaleItemRow[] | null) ?? [];
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) return rows;
+  }
+}
+
 export async function getForecast(tenantId: string): Promise<ForecastPayload> {
   const now = new Date();
   const thirtyDaysAgo = new Date(now);
@@ -67,54 +147,36 @@ export async function getForecast(tenantId: string): Promise<ForecastPayload> {
   const sixtyDaysAgo = new Date(now);
   sixtyDaysAgo.setDate(now.getDate() - 60);
 
-  const stockData = await supabaseAdmin
-    .from('product_stock')
-    .select('product_id, stock, min_stock, max_stock')
-    .eq('tenant_id', tenantId)
-    .eq('active', true);
+  const stockRows = await fetchStockRows(tenantId);
+  const productIds = stockRows.map((row) => String(row.product_id));
 
-  const productIds = ((stockData.data as unknown[] | null) ?? []).map(
-    (row) => (row as Record<string, unknown>).product_id as string
-  );
-
-  const [productsData, saleItemsData, salesData, priorSaleItemsData, priorSalesData] = await Promise.all([
-    productIds.length > 0
-      ? supabaseAdmin.from('products').select('id, name, price_cents, cost, category_id').in('id', productIds)
-      : Promise.resolve({ data: [] }),
-    supabaseAdmin.from('sale_items').select(`
-      product_id, quantity,
-      sales!inner(tenant_id, created_at)
-    `).eq('sales.tenant_id', tenantId).gte('sales.created_at', thirtyDaysAgo.toISOString()),
+  const [saleItems, salesData, priorSaleItems, priorSalesData] = await Promise.all([
+    fetchSaleItems(tenantId, thirtyDaysAgo),
     supabaseAdmin.from('sales_daily_totals').select('total, sale_count').eq('tenant_id', tenantId).gte('day', thirtyDaysAgo.toISOString().slice(0, 10)),
-    supabaseAdmin.from('sale_items').select(`
-      product_id, quantity,
-      sales!inner(tenant_id, created_at)
-    `).eq('sales.tenant_id', tenantId).gte('sales.created_at', sixtyDaysAgo.toISOString()).lt('sales.created_at', thirtyDaysAgo.toISOString()),
+    fetchSaleItems(tenantId, sixtyDaysAgo, thirtyDaysAgo),
     supabaseAdmin.from('sales_daily_totals').select('total, sale_count')
       .eq('tenant_id', tenantId)
       .gte('day', sixtyDaysAgo.toISOString().slice(0, 10))
       .lt('day', thirtyDaysAgo.toISOString().slice(0, 10)),
   ]);
 
-  const stockMap = new Map<string, Record<string, unknown>>(
-    ((stockData.data as unknown[] | null) ?? []).map((row) => {
-      const s = row as Record<string, unknown>;
-      return [String(s.product_id), s];
-    })
-  );
-  const productMap = new Map<string, Record<string, unknown>>(
-    ((productsData.data as unknown[] | null) ?? []).map((row) => {
-      const p = row as Record<string, unknown>;
-      const s = stockMap.get(String(p.id)) || {};
-      return [String(p.id), { ...p, stock: Number(s.stock) || 0, min_stock: Number(s.min_stock) || 0, max_stock: Number(s.max_stock) || 0 }];
-    })
-  );
+  const productMap = new Map<string, Record<string, unknown>>();
+  for (const row of stockRows) {
+    // `products` es global y product_stock.product_id lo referencia, asi que el
+    // embed siempre resuelve; si faltara, no hay nombre ni precio que mostrar.
+    if (!row.products) continue;
+    const productId = String(row.product_id);
+    productMap.set(productId, {
+      ...row.products,
+      stock: Number(row.stock) || 0,
+      min_stock: Number(row.min_stock) || 0,
+      max_stock: Number(row.max_stock) || 0,
+    });
+  }
   const dailySales = new Map<string, { totalQty: number; daysWithSales: Set<string> }>();
 
-  for (const row of (saleItemsData.data as unknown[] | null) ?? []) {
-    const item = row as Record<string, unknown>;
-    const sales = (item.sales ?? null) as Record<string, unknown> | null;
-    const day = typeof sales?.created_at === 'string' ? sales.created_at.slice(0, 10) : undefined;
+  for (const item of saleItems) {
+    const day = typeof item.sales?.created_at === 'string' ? item.sales.created_at.slice(0, 10) : undefined;
     if (!day) continue;
     const productId = String(item.product_id ?? '');
     if (!dailySales.has(productId)) {
@@ -190,8 +252,7 @@ export async function getForecast(tenantId: string): Promise<ForecastPayload> {
     }));
 
   const priorDailySales = new Map<string, number>();
-  for (const row of (priorSaleItemsData.data as unknown[] | null) ?? []) {
-    const item = row as Record<string, unknown>;
+  for (const item of priorSaleItems) {
     const pid = String(item.product_id ?? '');
     if (!pid) continue;
     priorDailySales.set(pid, (priorDailySales.get(pid) || 0) + (Number(item.quantity) || 0));

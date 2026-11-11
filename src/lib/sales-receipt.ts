@@ -68,7 +68,11 @@ function buildWhatsAppText(sale: ReceiptSale, tenant: ReceiptTenant): string {
   lines.push('------------------------------');
   for (const item of sale.items) {
     lines.push(`${item.quantity} x ${item.product_name}`);
-    lines.push(`    ${formatARS(item.unit_price_cents / 100)} c/u = ${formatARS(item.subtotal_cents / 100)}`);
+    if (item.quantity > 1) {
+      lines.push(`    ${formatARS(item.unit_price_cents / 100)} c/u = ${formatARS(item.subtotal_cents / 100)}`);
+    } else {
+      lines.push(`    ${formatARS(item.subtotal_cents / 100)}`);
+    }
   }
   lines.push('------------------------------');
   if (sale.discount_cents > 0) lines.push(`Descuento: -${formatARS(sale.discount_cents / 100)}`);

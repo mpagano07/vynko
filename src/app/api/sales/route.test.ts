@@ -830,6 +830,37 @@ describe('GET /api/sales', () => {
     expect(json[0].items[0].product_name).toBe('Coca');
     expect(json[0].items[1].product_name).toBeNull();
   });
+
+  it('incluye los pagos divididos para reimprimir el ticket', async () => {
+    supabaseMock.__queue('sales', {
+      data: [
+        {
+          id: 's1',
+          total_cents: 5563976,
+          payment_method: 'cash',
+          payments: [
+            { method: 'cash', amount_cents: 2063976, received_cents: 2063976, change_cents: 0 },
+            { method: 'transfer', amount_cents: 3500000, received_cents: 3500000, change_cents: 0 },
+          ],
+          items: [],
+        },
+      ],
+    });
+
+    const res = await GET(makeGetRequest('http://localhost/api/sales'));
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json[0].payments).toEqual([
+      { method: 'cash', amount_cents: 2063976, received_cents: 2063976, change_cents: 0 },
+      { method: 'transfer', amount_cents: 3500000, received_cents: 3500000, change_cents: 0 },
+    ]);
+
+    const select = supabaseMock.__calls.find(
+      (c) => c.table === 'sales' && c.method === 'select'
+    );
+    expect(select?.args[0]).toContain('payments:sale_payments');
+  });
 });
 
 describe('trabajo en segundo plano', () => {
