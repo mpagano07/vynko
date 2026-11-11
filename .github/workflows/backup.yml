@@ -82,10 +82,38 @@ jobs:
           npm install -g supabase@2.122.1
           supabase --version
 
-      # psql para el restore test (solo si hay DEV_DB_URL) y age para cifrar.
-      - name: Install psql and age
+      # psql (solo para el restore test) ya viene en la imagen ubuntu-24.04.
+      # age no: va por el binario estatico oficial + SHA256 para no depender del
+      # mirror de apt. El 2026-11-11 `apt-get update` fallo resolviendo
+      # azure.archive.ubuntu.com y se llevo puesto el job entero.
+      - name: Install age and check psql
         if: steps.backup-secret.outputs.configured == 'true'
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client age
+        env:
+          AGE_VERSION: '1.3.2'
+          AGE_SHA256: 'cbe24006683f8eb669266162894b9a522a1af52f2665fbc63a4bb032ed26ac10'
+        run: |
+          set -euo pipefail
+          url="https://github.com/FiloSottile/age/releases/download/v${AGE_VERSION}/age-v${AGE_VERSION}-linux-amd64.tar.gz"
+          curl -fsSL -o /tmp/age.tgz "$url"
+          echo "${AGE_SHA256}  /tmp/age.tgz" | sha256sum -c -
+          tar -xzf /tmp/age.tgz -C /tmp
+          sudo install -m 0755 /tmp/age/age /usr/local/bin/age
+          age --version
+
+          # Si la imagen dejara de traer psql, se instala con reintentos.
+          if command -v psql >/dev/null 2>&1; then
+            psql --version
+          else
+            for i in 1 2 3; do
+              if sudo apt-get update -o Acquire::Retries=5 \
+                 && sudo apt-get install -y postgresql-client; then
+                break
+              fi
+              echo "apt fallo (intento $i); reintentando en 15s..."
+              sleep 15
+            done
+            command -v psql
+          fi
 
       # El script lee .env.db (ignorado por git), igual que en local.
       - name: Write .env.db
