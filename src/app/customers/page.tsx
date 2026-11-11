@@ -13,9 +13,11 @@ import { Select } from '@/components/ui/select';
 import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SearchInput } from '@/components/ui/search-input';
+import { Pagination } from '@/components/ui/pagination';
 import { Thead, Th } from '@/components/ui/table-header';
 import { PageHeader } from '@/components/ui/page-header';
 import { IconAction } from '@/components/ui/icon-action';
+import { usePagination } from '@/lib/hooks/usePagination';
 import { Plus, Edit, Trash2, Users, Loader2, ShoppingBag, DollarSign, CalendarDays, Upload, Download } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import { formatDate } from '@/lib/utils/format';
@@ -48,6 +50,8 @@ const ExportPartiesModal = dynamicImport(
 );
 
 type SortKey = 'name' | 'email' | 'phone' | 'address';
+
+const CUSTOMERS_PER_PAGE = 15;
 
 interface Customer {
   id: string;
@@ -274,6 +278,8 @@ export default function CustomersPage() {
       })
     : filtered;
 
+  const { currentPage, setCurrentPage, totalPages, pageItems: paginatedCustomers } = usePagination(sortedCustomers, CUSTOMERS_PER_PAGE);
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -297,7 +303,7 @@ export default function CustomersPage() {
       />
 
       <Card className="p-4 border border-gray-100 dark:border-gray-800">
-        <SearchInput ref={searchInputRef} placeholder="Buscar por nombre, CUIT, documento, email o teléfono..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        <SearchInput ref={searchInputRef} placeholder="Buscar por nombre, CUIT, documento, email o teléfono..." value={search} onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }} />
       </Card>
 
       <Card className="overflow-hidden border border-gray-100 dark:border-gray-800 p-0">
@@ -306,6 +312,7 @@ export default function CustomersPage() {
         ) : filtered.length === 0 ? (
           <EmptyState icon={Users} title="No se encontraron clientes" description="Agrega tu primer cliente para comenzar." />
         ) : (
+          <>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <Thead>
@@ -317,7 +324,7 @@ export default function CustomersPage() {
                 <Th align="right">Acciones</Th>
               </Thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
-                {sortedCustomers.map((c) => (
+                {paginatedCustomers.map((c) => (
                   <tr key={c.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
                     <td className="py-4 px-6 font-semibold text-gray-900 dark:text-gray-100">{c.name}</td>
                     <td className="py-4 px-6 text-gray-600 dark:text-gray-400 whitespace-nowrap">
@@ -360,6 +367,13 @@ export default function CustomersPage() {
               </tbody>
             </table>
           </div>
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            resultInfo={`Mostrando ${(currentPage - 1) * CUSTOMERS_PER_PAGE + 1}–${Math.min(currentPage * CUSTOMERS_PER_PAGE, filtered.length)} de ${filtered.length} clientes`}
+          />
+          </>
         )}
       </Card>
 

@@ -18,9 +18,11 @@ import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
 import { SearchInput } from '@/components/ui/search-input';
+import { Pagination } from '@/components/ui/pagination';
 import { Thead, Th } from '@/components/ui/table-header';
 import { PageHeader } from '@/components/ui/page-header';
 import { IconAction } from '@/components/ui/icon-action';
+import { usePagination } from '@/lib/hooks/usePagination';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import {
@@ -66,6 +68,8 @@ const ExportPartiesModal = dynamicImport(
 );
 
 const PO_INTENT_KEY = 'create_po_intent';
+
+const SUPPLIERS_PER_PAGE = 15;
 
 type SortKey = 'name' | 'contact' | 'email' | 'address';
 
@@ -134,6 +138,8 @@ export default function ProvidersPage() {
 
   // Purchase order modal state
   const [products, setProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const productsPromiseRef = useRef<Promise<Product[] | null> | null>(null);
   const [isPoModalOpen, setIsPoModalOpen] = useState(false);
   const [poSupplierId, setPoSupplierId] = useState('');
   const [poExpectedDate, setPoExpectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -142,6 +148,39 @@ export default function ProvidersPage() {
   const [isSubmittingPo, setIsSubmittingPo] = useState(false);
   const [poStatus, setPoStatus] = useState<'draft' | 'sent'>('draft');
   const pendingPoItemRef = useRef<{ productId: string; qty: number } | null>(null);
+
+  /**
+   * Carga el catálogo de productos on demand (y una sola vez): se dispara al
+   * abrir el modal de pedido de compra o al retomar un intento pendiente, no
+   * al montar la página. Si falla, el siguiente intento vuelve a intentar.
+   */
+  const ensureProductsLoaded = () => {
+    if (!productsPromiseRef.current) {
+      const load = async (): Promise<Product[] | null> => {
+        setProductsLoading(true);
+        try {
+          const res = await authFetch('/api/products');
+          if (!res.ok) return null;
+          const allProducts: Product[] = await res.json();
+          const active = allProducts.filter((p) => p.is_active !== false);
+          setProducts(active);
+          return active;
+        } catch {
+          return null;
+        } finally {
+          setProductsLoading(false);
+        }
+      };
+      productsPromiseRef.current = load().then((result) => {
+        if (result === null) {
+          productsPromiseRef.current = null;
+          toast.error('Error al cargar productos');
+        }
+        return result;
+      });
+    }
+    return productsPromiseRef.current;
+  };
 
   useEffect(() => {
     const readIntent = () => {
@@ -181,6 +220,17 @@ export default function ProvidersPage() {
     const productId = intent.productId;
     if (productId && intent.qty > 0) pendingPoItemRef.current = { productId, qty: intent.qty };
     setIsPoModalOpen(true);
+    // El modal abre de una: el catálogo se carga on demand y con eso se
+    // completa el ítem pendiente que venía en el intent.
+    void ensureProductsLoaded().then((allProducts) => {
+      const pending = pendingPoItemRef.current;
+      pendingPoItemRef.current = null;
+      if (!allProducts || !pending) return;
+      const product = allProducts.find((p) => p.id === pending.productId);
+      if (product) {
+        setPoItems((prev) => [...prev, { product_id: product.id, quantity: pending.qty, unit_cost: product.cost || 0 }]);
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -189,29 +239,17 @@ export default function ProvidersPage() {
     let failed = false;
 
     (async () => {
-      const [supRes, prodRes] = await Promise.all([
-        authFetch('/api/suppliers'),
-        authFetch('/api/products'),
-      ]);
+      // El catálogo de productos NO se baja acá: con cientos de productos es
+      // un payload enorme que sólo hace falta al abrir el modal de pedido de
+      // compra (ver `ensureProductsLoaded`).
+      const supRes = await authFetch('/api/suppliers');
 
       if (cancelled) return;
-      if (!supRes.ok && !prodRes.ok) failed = true;
-      if (supRes.ok) setSuppliers(await supRes.json());
-      if (prodRes.ok) {
-        const allProducts: Product[] = await prodRes.json();
-        setProducts(allProducts.filter(p => p.is_active !== false));
-        const pending = pendingPoItemRef.current;
-        if (pending) {
-          const product = allProducts.find((p) => p.id === pending.productId);
-          pendingPoItemRef.current = null;
-          if (product) {
-            setPoItems((prev) => [...prev, { product_id: product.id, quantity: pending.qty, unit_cost: product.cost || 0 }]);
-          }
-        }
-      }
+      if (!supRes.ok) failed = true;
+      else setSuppliers(await supRes.json());
     })().catch(() => {
       failed = true;
-      toast.error('Error al cargar proveedores y productos');
+      toast.error('Error al cargar proveedores');
     }).finally(() => {
       if (!cancelled) {
         setLoading(false);
@@ -267,6 +305,7 @@ export default function ProvidersPage() {
   const openPoModal = () => {
     resetPoForm();
     setIsPoModalOpen(true);
+    void ensureProductsLoaded();
   };
 
   const addPoItemFromProduct = (productId: string) => {
@@ -402,6 +441,8 @@ export default function ProvidersPage() {
       })
     : filteredSuppliers;
 
+  const { currentPage, setCurrentPage, totalPages, pageItems: paginatedSuppliers } = usePagination(sortedSuppliers, SUPPLIERS_PER_PAGE);
+
   const openSupplierModal = (supplier: Supplier | null = null) => {
     setEditingSupplier(supplier);
     setSupplierForm(supplier ? supplierFormFrom(supplier) : emptySupplierForm());
@@ -505,7 +546,7 @@ export default function ProvidersPage() {
           ref={searchInputRef}
           placeholder="Buscar proveedor por nombre, CUIT, contacto o email..."
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
         />
       </Card>
 
@@ -524,6 +565,7 @@ export default function ProvidersPage() {
         ) : filteredSuppliers.length === 0 ? (
           <EmptyState icon={Truck} title="No hay proveedores registrados" />
         ) : (
+          <>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <Thead>
@@ -535,7 +577,7 @@ export default function ProvidersPage() {
                 <Th align="right">Acciones</Th>
               </Thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
-                {sortedSuppliers.map((supplier) => (
+                {paginatedSuppliers.map((supplier) => (
                   <React.Fragment key={supplier.id}>
                     <tr
                       onClick={() => handleSelectSupplier(supplier.id)}
@@ -642,6 +684,13 @@ export default function ProvidersPage() {
               </tbody>
             </table>
           </div>
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            resultInfo={`Mostrando ${(currentPage - 1) * SUPPLIERS_PER_PAGE + 1}–${Math.min(currentPage * SUPPLIERS_PER_PAGE, filteredSuppliers.length)} de ${filteredSuppliers.length} proveedores`}
+          />
+          </>
         )}
       </Card>
 
@@ -862,7 +911,7 @@ export default function ProvidersPage() {
                     }}
                     className="text-xs"
                   >
-                    <option value="">+ Agregar producto...</option>
+                    <option value="">{productsLoading ? 'Cargando productos...' : '+ Agregar producto...'}</option>
                     {products.map(p => (
                       <option key={p.id} value={p.id}>
                         {p.name} - {formatARS(p.cost || 0)}

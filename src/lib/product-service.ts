@@ -12,6 +12,7 @@ import { trackEvent } from '@/lib/track-event';
 import { rateLimit } from '@/lib/rate-limit';
 import { MAX_IMPORT_ROWS } from '@/lib/excel-import-parse';
 import { logger } from '@/lib/logger';
+import { selectAllRows } from '@/lib/supabase-paging';
 
 export type ListProductsResult =
   | { ok: true; products: Array<Record<string, unknown>> }
@@ -153,26 +154,37 @@ async function requireStockManager(
 }
 
 export async function listProducts(auth: AuthInfo): Promise<ListProductsResult> {
-  let q = supabaseAdmin
-    .from('products')
-    .select(`
-      *,
-      stock_data:product_stock!inner(
-        stock,
-        min_stock,
-        max_stock,
-        deposito,
-        pasillo,
-        estanteria
-      )
-    `);
-  if (auth.allTenants) {
-    q = q.in('product_stock.tenant_id', auth.tenantIds);
-  } else {
-    q = q.eq('product_stock.tenant_id', auth.tenantId);
-  }
-  q = q.eq('product_stock.active', true);
-  const { data, error } = await q;
+  // El orden es determinístico (created_at desc + id como tiebreak) para que
+  // el loop de `selectAllRows` páginaee sin solapamientos ni huecos. Sin un
+  // order propio, el orden es el que decida Postgres y puede cambiar entre
+  // páginas. "Más nuevos primero" además deja arriba lo recién importado.
+  const buildPage = (from: number, to: number) => {
+    let q = supabaseAdmin
+      .from('products')
+      .select(`
+        *,
+        stock_data:product_stock!inner(
+          stock,
+          min_stock,
+          max_stock,
+          deposito,
+          pasillo,
+          estanteria
+        )
+      `)
+      .order('created_at', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: true });
+    if (auth.allTenants) {
+      q = q.in('product_stock.tenant_id', auth.tenantIds);
+    } else {
+      q = q.eq('product_stock.tenant_id', auth.tenantId);
+    }
+    return q.eq('product_stock.active', true).range(from, to);
+  };
+  // PostgREST corta todo SELECT en 1000 filas (db-max-rows) sin avisar: hay
+  // que recorrer el catálogo por rangos o los productos de más allá del tope
+  // nunca llegan al cliente.
+  const { data, error } = await selectAllRows(buildPage);
   if (error) {
     logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
@@ -1309,41 +1321,36 @@ export async function adjustPrices(auth: AuthInfo, body: {
   const multiplier = 1 + percentage / 100;
 
   const scopeTenantIds = auth.allTenants ? auth.tenantIds : [tenantId];
-  const { data: stockRows, error: stockError } = await supabaseAdmin
-    .from('product_stock')
-    .select('product_id')
-    .in('tenant_id', scopeTenantIds);
 
-  if (stockError) {
-    logger.error('DB error:', { error: stockError });
-    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
-  }
+  // Los productos del tenant se resuelven con el mismo join que listProducts.
+  //
+  // Antes se traían TODOS los product_id del tenant y después se filtraba
+  // `products` con `.in(id, [...])`: con 1000+ productos la URL del filtro
+  // llegaba a ~37KB y el gateway de Supabase la rechazaba con "Bad Request"
+  // (el "Ocurrio un error inesperado" al ajustar precios por categoría). El
+  // join además choca contra el tope de 1000 filas por SELECT: selectAllRows
+  // recorre el catálogo por rangos, así que se ajustan TODOS los productos.
+  const buildPage = (from: number, to: number) => {
+    let query = supabaseAdmin
+      .from('products')
+      .select(`
+        id, name, price_cents, cost, category_id,
+        stock_data:product_stock!inner(product_id)
+      `)
+      .in('product_stock.tenant_id', scopeTenantIds)
+      .order('id', { ascending: true });
+    if (product_ids && product_ids.length > 0) query = query.in('id', product_ids);
+    if (category_id) query = query.eq('category_id', category_id);
+    return query.range(from, to);
+  };
 
-  const tenantProductIds = new Set((stockRows ?? []).map((row) => row.product_id as string));
-  const allowedIds = product_ids && product_ids.length > 0
-    ? product_ids.filter((id) => tenantProductIds.has(id))
-    : Array.from(tenantProductIds);
-
-  if (allowedIds.length === 0) {
-    return { ok: false, error: 'No hay productos', status: 404 };
-  }
-
-  let productsQuery = supabaseAdmin
-    .from('products')
-    .select('id, name, price_cents, cost, category_id')
-    .in('id', allowedIds);
-
-  if (category_id) {
-    productsQuery = productsQuery.eq('category_id', category_id);
-  }
-
-  const { data: products, error: fetchError } = await productsQuery;
+  const { data: products, error: fetchError } = await selectAllRows(buildPage);
 
   if (fetchError) {
     logger.error('DB error:', { error: fetchError });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
-  if (!products || products.length === 0) {
+  if (products.length === 0) {
     return { ok: false, error: 'No hay productos', status: 404 };
   }
 
@@ -1356,23 +1363,46 @@ export async function adjustPrices(auth: AuthInfo, body: {
     new_cost: p.cost ? Math.round(p.cost * multiplier) : null,
   }));
 
+  // Aplicación en tandas con upsert sobre la PK. Antes era UN PATCH por
+  // producto, y cada uno arrastraba el `.in(id, todos los ids del tenant)` en
+  // la URL (mismo problema de longitud) más 1000+ requests secuenciales —
+  // lento y con timeout garantizado en serverless. El upsert manda las filas
+  // en el body del request.
+  //
+  // OJO: hay que mandar `name` aunque no cambie. El upsert es un
+  // INSERT ... ON CONFLICT (id) DO UPDATE, y el INSERT construye la fila con
+  // SOLO las columnas enviadas: `name` es NOT NULL sin default, así que sin
+  // ella Postgres rechaza la fila con 23502 antes de llegar al UPDATE (era
+  // el "0 de N actualizados" con 41 errores). El resto de las columnas
+  // NOT NULL tienen default, y las no enviadas no se pisan en el DO UPDATE.
   const errors: { id: string; name: string; error: string }[] = [];
+  const UPSERT_CHUNK = 500;
+  const updatedAt = new Date().toISOString();
 
-  for (const update of updates) {
-    const updateData: Record<string, unknown> = {
-      price_cents: update.new_price_cents,
-      updated_at: new Date().toISOString(),
-    };
-    if (update.new_cost !== null) updateData.cost = update.new_cost;
+  for (let i = 0; i < updates.length; i += UPSERT_CHUNK) {
+    const chunk = updates.slice(i, i + UPSERT_CHUNK);
+    const rows = chunk.map((update) => {
+      const row: Record<string, unknown> = {
+        id: update.id,
+        name: update.name,
+        price_cents: update.new_price_cents,
+        updated_at: updatedAt,
+      };
+      if (update.new_cost !== null) row.cost = update.new_cost;
+      return row;
+    });
 
-    const { error: updateError } = await supabaseAdmin
+    const { error: upsertError } = await supabaseAdmin
       .from('products')
-      .update(updateData)
-      .eq('id', update.id)
-      .in('id', allowedIds);
+      .upsert(rows, { onConflict: 'id' });
 
-    if (updateError) {
-      errors.push({ id: update.id, name: update.name, error: 'Error al aplicar el precio' });
+    if (upsertError) {
+      // El error real de PostgREST no puede quedar mudo: el "0 de N
+      // actualizados" de antes salió justo de no ver esta causa.
+      logger.error('DB error:', { error: upsertError });
+      for (const update of chunk) {
+        errors.push({ id: update.id, name: update.name, error: 'Error al aplicar el precio' });
+      }
     }
   }
 
