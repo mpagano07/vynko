@@ -1398,7 +1398,7 @@ export async function adjustPrices(auth: AuthInfo, body: {
     let query = supabaseAdmin
       .from('products')
       .select(`
-        id, name, price_cents, cost, category_id,
+        id, name, sku, price_cents, cost, category_id,
         stock_data:product_stock!inner(product_id)
       `)
       .in('product_stock.tenant_id', scopeTenantIds)
@@ -1425,6 +1425,10 @@ export async function adjustPrices(auth: AuthInfo, body: {
   const updates = products.map((p) => ({
     id: p.id,
     name: p.name,
+    // `sku` viaja aunque no cambie: en PROD la columna es NOT NULL sin
+    // default (drift respecto de las migraciones, ver el import de Excel),
+    // así que el INSERT del upsert la necesita igual que `name`.
+    sku: p.sku ?? '',
     old_price_cents: p.price_cents,
     new_price_cents: Math.round(p.price_cents * multiplier),
     old_cost: p.cost,
@@ -1437,12 +1441,15 @@ export async function adjustPrices(auth: AuthInfo, body: {
   // lento y con timeout garantizado en serverless. El upsert manda las filas
   // en el body del request.
   //
-  // OJO: hay que mandar `name` aunque no cambie. El upsert es un
+  // OJO: hay que mandar `name` y `sku` aunque no cambien. El upsert es un
   // INSERT ... ON CONFLICT (id) DO UPDATE, y el INSERT construye la fila con
-  // SOLO las columnas enviadas: `name` es NOT NULL sin default, así que sin
-  // ella Postgres rechaza la fila con 23502 antes de llegar al UPDATE (era
-  // el "0 de N actualizados" con 41 errores). El resto de las columnas
-  // NOT NULL tienen default, y las no enviadas no se pisan en el DO UPDATE.
+  // SOLO las columnas enviadas: `name` y `sku` son NOT NULL sin default, así
+  // que sin ellas Postgres rechaza la fila con 23502 antes de llegar al UPDATE.
+  // Ese fue el "0 de N actualizados" con 41 errores (name) y volvió a
+  // aparecer con catálogos enteros cuando faltó `sku` (PROD tiene `sku NOT
+  // NULL` sin default por drift; en DEV es nullable, por eso no se vio antes).
+  // El resto de las columnas NOT NULL tienen default, y las no enviadas no se
+  // pisan en el DO UPDATE.
   const errors: { id: string; name: string; error: string }[] = [];
   const UPSERT_CHUNK = 500;
   const updatedAt = new Date().toISOString();
@@ -1453,6 +1460,7 @@ export async function adjustPrices(auth: AuthInfo, body: {
       const row: Record<string, unknown> = {
         id: update.id,
         name: update.name,
+        sku: update.sku,
         price_cents: update.new_price_cents,
         updated_at: updatedAt,
       };

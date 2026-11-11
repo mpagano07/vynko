@@ -42,6 +42,7 @@ import { SUPABASE_MAX_ROWS } from '@/lib/supabase-paging';
 const productRow = (index: number, overrides: Record<string, unknown> = {}) => ({
   id: `p-${index}`,
   name: `Producto ${index}`,
+  sku: `SKU-${index}`,
   price_cents: 1000,
   cost: 500,
   category_id: 'cat-redes',
@@ -85,19 +86,45 @@ describe('adjustPrices', () => {
     expect(eqs.map((call) => call.args[0])).toContain('product_stock.category_id');
 
     // Se aplica en UN solo upsert (las filas van en el body) con el precio
-    // y el costo recalculados; costo null no se manda. `name` va siempre:
-    // es NOT NULL sin default y sin ella el INSERT del ON CONFLICT falla
-    // con 23502 antes de llegar al UPDATE.
+    // y el costo recalculados; costo null no se manda. `name` y `sku` van
+    // siempre: son NOT NULL sin default y sin ellas el INSERT del ON CONFLICT
+    // falla con 23502 antes de llegar al UPDATE.
     const upserts = callsTo(supabaseMock.__calls, 'products', 'upsert');
     expect(upserts).toHaveLength(1);
     const [rows, options] = upserts[0].args as [Array<Record<string, unknown>>, { onConflict: string }];
     expect(rows).toEqual([
-      { id: 'p-1', name: 'Producto 1', price_cents: 1100, updated_at: expect.any(String), cost: 550 },
-      { id: 'p-2', name: 'Producto 2', price_cents: 1100, updated_at: expect.any(String) },
+      { id: 'p-1', name: 'Producto 1', sku: 'SKU-1', price_cents: 1100, updated_at: expect.any(String), cost: 550 },
+      { id: 'p-2', name: 'Producto 2', sku: 'SKU-2', price_cents: 1100, updated_at: expect.any(String) },
     ]);
     expect(options).toEqual({ onConflict: 'id' });
     // Ni un PATCH por producto.
     expect(callsTo(supabaseMock.__calls, 'products', 'update')).toHaveLength(0);
+  });
+
+  it('manda sku aunque no cambie y normaliza null a vacio', async () => {
+    // En PROD `products.sku` es NOT NULL sin default por drift de esquema
+    // (el import de Excel ya lo documenta). Si el upsert la omite, el INSERT
+    // del ON CONFLICT muere con 23502 y TODO el catálogo queda en 0 de N.
+    // En DEV es nullable, así que este test es el que cubre la diferencia.
+    supabaseMock.__queue('tenant_users', { data: { role: 'owner' }, error: null });
+    supabaseMock.__queue(
+      'products',
+      {
+        data: [productRow(1, { sku: null }), productRow(2, { sku: 'SKU-EXISTENTE' })],
+        error: null,
+      },
+      { data: null, error: null }
+    );
+
+    const result = await adjustPrices(authAsTenantA(), { percentage: 10 });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const [rows] = callsTo(supabaseMock.__calls, 'products', 'upsert')[0].args as [
+      Array<Record<string, unknown>>,
+      { onConflict: string },
+    ];
+    expect(rows.map((row) => row.sku)).toEqual(['', 'SKU-EXISTENTE']);
   });
 
   it('recorre el catálogo por rangos y aplica en tandas de 500', async () => {
