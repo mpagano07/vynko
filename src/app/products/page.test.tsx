@@ -41,6 +41,11 @@ const productsMock = vi.mocked(useProducts);
 const categoriesMock = vi.mocked(useCategories);
 const authFetchMock = vi.mocked(authFetch);
 
+/** Respuesta mínima de fetch para los mocks de `authFetch`: jsdom no arma el
+ *  `Response` completo, y el código bajo test sólo lee `ok`/`status`/`json`. */
+const jsonResponse = (body: unknown, status = 200): Response =>
+  ({ ok: true, status, json: async () => body } as unknown as Response);
+
 const product = (overrides: Partial<Product> = {}): Product => ({
   id: 'p1',
   name: 'TV 100 Pulgadas',
@@ -318,7 +323,7 @@ describe('modal de nueva transferencia', () => {
     searchParamsMock.get.mockReturnValue(null);
     window.history.replaceState({}, '', '/products');
     // Default inofensivo: los tests que necesitan datos lo pisan.
-    authFetchMock.mockImplementation(async () => ({ ok: true, json: async () => ({}) }));
+    authFetchMock.mockImplementation(async () => jsonResponse({}));
   });
 
   it('busca en el catálogo en memoria de la sucursal activa, sin bajar nada', async () => {
@@ -346,12 +351,9 @@ describe('modal de nueva transferencia', () => {
   it('baja el catálogo slim cuando el origen es otra sucursal', async () => {
     authFetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       if (String(input) === '/api/products/slim') {
-        return {
-          ok: true,
-          json: async () => [{ id: 'p9', name: 'Termo Lumilagro', sku: 'TERMO-9', barcode: null }],
-        };
+        return jsonResponse([{ id: 'p9', name: 'Termo Lumilagro', sku: 'TERMO-9', barcode: null }]);
       }
-      return { ok: true, json: async () => ({}) };
+      return jsonResponse({});
     });
     renderMultiBranch([product({ id: 'p1', name: 'TV 100 Pulgadas' })]);
     await openTransferModal();
@@ -386,11 +388,7 @@ describe('modal de nueva transferencia', () => {
   });
 
   it('crea la transferencia con origen, destino e items', async () => {
-    authFetchMock.mockImplementation(async () => ({
-      ok: true,
-      status: 201,
-      json: async () => ({ id: 'tr-1' }),
-    }));
+    authFetchMock.mockImplementation(async () => jsonResponse({ id: 'tr-1' }, 201));
     renderMultiBranch([product({ id: 'p1', name: 'TV 100 Pulgadas' })]);
     await openTransferModal();
 

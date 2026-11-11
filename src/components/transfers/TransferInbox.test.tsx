@@ -13,6 +13,11 @@ vi.mock('react-hot-toast', () => ({
 
 const authFetchMock = vi.mocked(authFetch);
 
+/** Respuesta mínima de fetch para los mocks de `authFetch`: jsdom no arma el
+ *  `Response` completo, y el componente sólo lee `ok`/`json`. */
+const jsonResponse = (body: unknown, status = 200): Response =>
+  ({ ok: true, status, json: async () => body } as unknown as Response);
+
 const transfer = (overrides: Record<string, unknown> = {}) => ({
   id: 'tr1',
   from_tenant_id: 't1',
@@ -33,13 +38,12 @@ describe('TransferInbox', () => {
   });
 
   it('trae los estados activos en un único GET y ordena pendientes antes que en tránsito', async () => {
-    authFetchMock.mockImplementation(async () => ({
-      ok: true,
-      json: async () => [
+    authFetchMock.mockImplementation(async () =>
+      jsonResponse([
         transfer({ id: 'tr2', from_tenant_name: 'Sur', to_tenant_name: 'Este', status: 'in_transit' }),
         transfer({ id: 'tr1', from_tenant_name: 'Central', to_tenant_name: 'Norte', status: 'pending' }),
-      ],
-    }));
+      ])
+    );
 
     const { container } = render(<TransferInbox currentTenantId="t1" />);
 
@@ -64,7 +68,7 @@ describe('TransferInbox', () => {
   });
 
   it('no renderiza nada cuando no hay transferencias activas', async () => {
-    authFetchMock.mockImplementation(async () => ({ ok: true, json: async () => [] }));
+    authFetchMock.mockImplementation(async () => jsonResponse([]));
 
     const { container } = render(<TransferInbox currentTenantId="t1" />);
 
@@ -75,10 +79,7 @@ describe('TransferInbox', () => {
   it('muestra error con reintentar cuando la carga falla, y se recupera', async () => {
     authFetchMock
       .mockRejectedValueOnce(new Error('network down'))
-      .mockImplementation(async () => ({
-        ok: true,
-        json: async () => [transfer()],
-      }));
+      .mockImplementation(async () => jsonResponse([transfer()]));
 
     const { container } = render(<TransferInbox currentTenantId="t1" />);
 
@@ -93,9 +94,9 @@ describe('TransferInbox', () => {
   it('confirma la recepción con PATCH y refresca la bandeja y la página', async () => {
     authFetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === 'PATCH') {
-        return { ok: true, json: async () => ({ id: 'tr1', status: 'received' }) };
+        return jsonResponse({ id: 'tr1', status: 'received' });
       }
-      return { ok: true, json: async () => [transfer({ status: 'in_transit', from_tenant_id: 't2', to_tenant_id: 't1', from_tenant_name: 'Sur', to_tenant_name: 'Central' })] };
+      return jsonResponse([transfer({ status: 'in_transit', from_tenant_id: 't2', to_tenant_id: 't1', from_tenant_name: 'Sur', to_tenant_name: 'Central' })]);
     });
     const onAction = vi.fn();
 
