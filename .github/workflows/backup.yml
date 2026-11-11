@@ -38,7 +38,9 @@ permissions:
 
 jobs:
   backup:
-    runs-on: ubuntu-latest
+    # Runner fijo: ubuntu-latest esta migrando a Ubuntu 26 y este job depende de
+    # pwsh + paquetes de apt (postgresql-client, age). Actualizar a proposito.
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Check backup secrets
@@ -60,17 +62,25 @@ jobs:
 
       - name: Checkout
         if: steps.backup-secret.outputs.configured == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
         if: steps.backup-secret.outputs.configured == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 24
 
+      # Version PINEADA a proposito. `npm install -g supabase` instalo la 3.0.0
+      # el 2026-11-02 y rompio el backup: en v3 `db query` contra una base remota
+      # exige `--yes` o `--read-only` (HostedMutationConsentRequiredError) y dejo
+      # de aceptar `--db-url`, que es lo que usa backup-db.ps1 para los conteos
+      # del manifiesto. Migrar el script a `--remote=<url>` + `--read-only` es
+      # tarea aparte; hasta entonces, no despinear (v2.stable = 2.122.1).
       - name: Install supabase CLI
         if: steps.backup-secret.outputs.configured == 'true'
-        run: npm install -g supabase
+        run: |
+          npm install -g supabase@2.122.1
+          supabase --version
 
       # psql para el restore test (solo si hay DEV_DB_URL) y age para cifrar.
       - name: Install psql and age

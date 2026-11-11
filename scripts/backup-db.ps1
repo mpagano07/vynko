@@ -20,9 +20,15 @@
 #      PROD_DB_URL y, para verificar restore, DEV_DB_URL (o pasar -RestoreUrl).
 #   2) .\scripts\backup-db.ps1 [-RestoreUrl <db-url>]
 #
-# Requisitos: CLI de Supabase (npm i -g supabase) para los dumps y, para el
-# restore test, el cliente `psql` (solo con -RestoreUrl/DEV_DB_URL). No
+# Requisitos: CLI de Supabase 2.x (npm i -g supabase@2.122.1) para los dumps y,
+# para el restore test, el cliente `psql` (solo con -RestoreUrl/DEV_DB_URL). No
 # necesita Docker ni login.
+#
+# El CLI va PINEADO a 2.x a proposito: la v3 (publicada el 2026-11-02) cambio
+# `db query` para exigir `--yes`/`--read-only` contra una base remota y dejo de
+# aceptar `--db-url`. Con la v3 los conteos del manifiesto fallan con
+# HostedMutationConsentRequiredError. Migrar el script a `--remote=<url>` es
+# tarea aparte.
 # =============================================================================
 
 param(
@@ -167,7 +173,19 @@ function Get-CountTargets {
 # -----------------------------------------------------------------------------
 if (!(Get-Command supabase -ErrorAction SilentlyContinue)) {
     Write-Host 'supabase CLI no esta instalado.' -ForegroundColor Red
-    Write-Host '  Instalalo con: npm i -g supabase   (o: scoop install supabase / choco install supabase)' -ForegroundColor Yellow
+    Write-Host '  Instalalo con: npm i -g supabase@2.122.1   (o: scoop install supabase / choco install supabase)' -ForegroundColor Yellow
+    exit 1
+}
+
+# La v3 rompe los conteos del manifiesto (ver comentario de cabecera). Fallar
+# temprano con un mensaje util en vez de dejar que `db query` explote.
+$supabaseVersion = (& supabase --version 2>$null | Out-String).Trim()
+$supabaseMajor = 0
+if ($supabaseVersion -match '^(\d+)\.') { $supabaseMajor = [int]$matches[1] }
+if ($supabaseMajor -ge 3) {
+    Write-Host "supabase CLI $supabaseVersion no es compatible con este script." -ForegroundColor Red
+    Write-Host '  La v3 exige --read-only/--yes en db query y ya no acepta --db-url.' -ForegroundColor Yellow
+    Write-Host '  Instala la ultima 2.x: npm i -g supabase@2.122.1' -ForegroundColor Yellow
     exit 1
 }
 
