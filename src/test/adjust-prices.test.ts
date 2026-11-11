@@ -9,17 +9,34 @@ vi.mock('@/lib/supabaseAdmin', async () => {
 
 vi.mock('@/lib/activity-log', () => ({ createActivityLog: vi.fn(async () => undefined) }));
 
+vi.mock('@/lib/logger', () => ({
+  logger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
 import { adjustPrices } from '@/lib/product-service';
+import { logger } from '@/lib/logger';
 import { SUPABASE_MAX_ROWS } from '@/lib/supabase-paging';
 
 /**
- * Bug real: ajustar precios por categoría con 1000+ productos fallaba con
- * "Ocurrio un error inesperado". La causa: adjustPrices traía TODOS los
+ * Bug real (parte 1): ajustar precios por categoría con 1000+ productos fallaba
+ * con "Ocurrio un error inesperado". La causa: adjustPrices traía TODOS los
  * product_id del tenant y filtraba `products` con `.in(id, [...])` — con 1000
  * IDs la URL del filtro llegaba a ~37KB y el gateway de Supabase la
  * rechazaba ("Bad Request"). Además cada update del loop arrastraba el mismo
  * `.in(...)` gigante en su URL, y el escaneo de product_stock chocaba contra
  * el tope silencioso de 1000 filas por SELECT.
+ *
+ * Bug real (parte 2): con el join arreglado, el ajuste corría pero quedaba en
+ * "0 de 41 productos actualizados" con 41 errores silenciosos. El upsert de
+ * PostgREST es un INSERT ... ON CONFLICT (id) DO UPDATE, y el INSERT construye
+ * la fila con SOLO las columnas enviadas: `name` es NOT NULL sin default, así
+ * que Postgres rechazaba cada tanda con 23502 antes de llegar al UPDATE. Por
+ * eso las filas del upsert llevan `name` aunque no cambie.
  */
 
 const productRow = (index: number, overrides: Record<string, unknown> = {}) => ({
@@ -34,6 +51,7 @@ const productRow = (index: number, overrides: Record<string, unknown> = {}) => (
 
 beforeEach(() => {
   supabaseMock.__reset();
+  vi.mocked(logger.error).mockClear();
 });
 
 describe('adjustPrices', () => {
@@ -64,13 +82,15 @@ describe('adjustPrices', () => {
     expect(eqs.map((call) => call.args[0])).toContain('category_id');
 
     // Se aplica en UN solo upsert (las filas van en el body) con el precio
-    // y el costo recalculados; costo null no se manda.
+    // y el costo recalculados; costo null no se manda. `name` va siempre:
+    // es NOT NULL sin default y sin ella el INSERT del ON CONFLICT falla
+    // con 23502 antes de llegar al UPDATE.
     const upserts = callsTo(supabaseMock.__calls, 'products', 'upsert');
     expect(upserts).toHaveLength(1);
     const [rows, options] = upserts[0].args as [Array<Record<string, unknown>>, { onConflict: string }];
     expect(rows).toEqual([
-      { id: 'p-1', price_cents: 1100, updated_at: expect.any(String), cost: 550 },
-      { id: 'p-2', price_cents: 1100, updated_at: expect.any(String) },
+      { id: 'p-1', name: 'Producto 1', price_cents: 1100, updated_at: expect.any(String), cost: 550 },
+      { id: 'p-2', name: 'Producto 2', price_cents: 1100, updated_at: expect.any(String) },
     ]);
     expect(options).toEqual({ onConflict: 'id' });
     // Ni un PATCH por producto.
@@ -125,12 +145,12 @@ describe('adjustPrices', () => {
     expect(callsTo(supabaseMock.__calls, 'products', 'upsert')).toHaveLength(0);
   });
 
-  it('un fallo del upsert queda en la lista de errores sin romper el resultado', async () => {
+  it('un fallo del upsert queda en la lista de errores y se loguea, sin romper el resultado', async () => {
     supabaseMock.__queue('tenant_users', { data: { role: 'owner' }, error: null });
     supabaseMock.__queue(
       'products',
       { data: [productRow(1), productRow(2)], error: null },
-      { data: null, error: { message: 'boom' } }
+      { data: null, error: { message: 'null value in column "name" violates not-null constraint', code: '23502' } }
     );
 
     const result = await adjustPrices(authAsTenantA(), { percentage: 10 });
@@ -139,6 +159,14 @@ describe('adjustPrices', () => {
     if (!result.ok) return;
     expect(result.data.updated).toBe(0);
     expect(result.data.errors).toHaveLength(2);
+    // El error real de PostgREST no puede quedar mudo: es lo que escondió
+    // el "0 de 41 actualizados" hasta encontrar la causa.
+    expect(logger.error).toHaveBeenCalled();
+    const loggedCalls = vi.mocked(logger.error).mock.calls as unknown as Array<
+      [string, Record<string, unknown>?]
+    >;
+    const logged = loggedCalls.find(([msg]) => msg === 'DB error:');
+    expect(logged?.[1]).toMatchObject({ error: { code: '23502' } });
   });
 
   it('sin productos en el alcance responde 404', async () => {

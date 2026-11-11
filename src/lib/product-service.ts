@@ -1368,6 +1368,13 @@ export async function adjustPrices(auth: AuthInfo, body: {
   // la URL (mismo problema de longitud) más 1000+ requests secuenciales —
   // lento y con timeout garantizado en serverless. El upsert manda las filas
   // en el body del request.
+  //
+  // OJO: hay que mandar `name` aunque no cambie. El upsert es un
+  // INSERT ... ON CONFLICT (id) DO UPDATE, y el INSERT construye la fila con
+  // SOLO las columnas enviadas: `name` es NOT NULL sin default, así que sin
+  // ella Postgres rechaza la fila con 23502 antes de llegar al UPDATE (era
+  // el "0 de N actualizados" con 41 errores). El resto de las columnas
+  // NOT NULL tienen default, y las no enviadas no se pisan en el DO UPDATE.
   const errors: { id: string; name: string; error: string }[] = [];
   const UPSERT_CHUNK = 500;
   const updatedAt = new Date().toISOString();
@@ -1377,6 +1384,7 @@ export async function adjustPrices(auth: AuthInfo, body: {
     const rows = chunk.map((update) => {
       const row: Record<string, unknown> = {
         id: update.id,
+        name: update.name,
         price_cents: update.new_price_cents,
         updated_at: updatedAt,
       };
@@ -1389,6 +1397,9 @@ export async function adjustPrices(auth: AuthInfo, body: {
       .upsert(rows, { onConflict: 'id' });
 
     if (upsertError) {
+      // El error real de PostgREST no puede quedar mudo: el "0 de N
+      // actualizados" de antes salió justo de no ver esta causa.
+      logger.error('DB error:', { error: upsertError });
       for (const update of chunk) {
         errors.push({ id: update.id, name: update.name, error: 'Error al aplicar el precio' });
       }
