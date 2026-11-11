@@ -22,10 +22,39 @@
 -- existe la crea con el mismo nombre/descripción/icono/color. Así una
 -- transferencia llega CON su categoría.
 --
+-- ============================================================
+-- INCORPORADO DE LAS CORRECTIVAS 072/073 (incidente de prod)
+-- ============================================================
+-- Tras desplegar el código de esta migración, recibir una transferencia daba
+-- 500 en PROD con "42P10: there is no unique or exclusion constraint
+-- matching the ON CONFLICT specification". Dos causas, ambas cubiertas acá:
+--
+-- 1) PROD tenía drift de esquema: su tabla `categories` se creó ANTES de que
+--    001 incluyera `UNIQUE(tenant_id, name)`. El `ON CONFLICT (tenant_id,
+--    name)` de la réplica exige ese unique. Como el drift puede repetirse en
+--    cualquier entorno, esta migración lo asegura por sí misma: primero
+--    consolida duplicados exactos (re-apuntando `product_stock.category_id` y
+--    `products.category_id` a la fila más vieja antes de borrar las repetidas
+--    — la app ya trata nombres iguales en un tenant como la misma categoría)
+--    y después crea el índice unique que exige el ON CONFLICT. Como índice y
+--    no constraint para que sea idempotente (`IF NOT EXISTS`); en entornos
+--    con el constraint de 001 conviven sin conflicto.
+-- 2) La función se crea con DROP + CREATE (y no CREATE OR REPLACE) para
+--    garantizar un estado limpio aunque existiera una versión previa
+--    distinta, con los grants explícitos: tras un DROP, EXECUTE vuelve a
+--    PUBLIC y hay que revocarlo de `anon`/`authenticated` y re-grantearlo a
+--    `service_role`.
+--
+-- Idempotente de punta a punta: re-ejecutarla sobre un esquema que ya la
+-- tiene aplicada (PROD/DEV) es no-op. Validada en Postgres 18 local
+-- reproduciendo el drift de PROD y el flujo completo de recepción.
+--
 -- ORDEN DE DEPLOY: esta migración va ANTES que el código que la usa (el select
 -- de `listProducts` pide la columna nueva; sin ella /api/products rompe con
 -- PGRST108). Migración-first es backward compatible: el código viejo no
 -- selecciona la columna nueva y `receive_transfer` mantiene firma y contrato.
+-- (PROD y DEV ya la tienen aplicada con el estado final; entornos nuevos la
+-- aplican completa desde acá.)
 
 -- 1. Columna por-tenant de categoría en el catálogo de cada sucursal.
 ALTER TABLE public.product_stock
@@ -60,9 +89,62 @@ AS $$
     'AAAAAAaaaaaaEEEEeeeeIIIIiiiiOOOOOOooooooUUUUuuuuNnCcYyy'));
 $$;
 
--- 4. receive_transfer con réplica de categoría. Todo lo demás es el cuerpo de
---    la 050: mismo lock, mismos códigos de error, misma bitácora.
-CREATE OR REPLACE FUNCTION receive_transfer(
+-- 4. Consolidar duplicados exactos (tenant_id, name) en la fila más vieja.
+--    Sin esto, el índice unique del paso 5 no podría crearse si un entorno
+--    (como PROD) acumuló repetidos al no tener el constraint de 001.
+WITH dupes AS (
+  SELECT id,
+         first_value(id) OVER (
+           PARTITION BY tenant_id, name
+           ORDER BY created_at NULLS LAST, id
+         ) AS keep_id
+  FROM public.categories
+)
+UPDATE public.product_stock ps
+   SET category_id = d.keep_id
+  FROM dupes d
+ WHERE ps.category_id = d.id
+   AND d.id <> d.keep_id;
+
+WITH dupes AS (
+  SELECT id,
+         first_value(id) OVER (
+           PARTITION BY tenant_id, name
+           ORDER BY created_at NULLS LAST, id
+         ) AS keep_id
+  FROM public.categories
+)
+UPDATE public.products p
+   SET category_id = d.keep_id
+  FROM dupes d
+ WHERE p.category_id = d.id
+   AND d.id <> d.keep_id;
+
+WITH dupes AS (
+  SELECT id,
+         first_value(id) OVER (
+           PARTITION BY tenant_id, name
+           ORDER BY created_at NULLS LAST, id
+         ) AS keep_id
+  FROM public.categories
+)
+DELETE FROM public.categories c
+  USING dupes d
+ WHERE c.id = d.id
+   AND d.id <> d.keep_id;
+
+-- 5. El unique que exige el `ON CONFLICT (tenant_id, name)` de
+--    receive_transfer. En entornos con el constraint de 001 convive sin
+--    conflicto (ON CONFLICT infiere desde cualquiera de los dos).
+CREATE UNIQUE INDEX IF NOT EXISTS uq_categories_tenant_name
+  ON public.categories (tenant_id, name);
+
+-- 6. receive_transfer con réplica de categoría. Cuerpo de la 050 (mismo lock,
+--    mismos códigos de error, misma bitácora) más la réplica. DROP + CREATE
+--    para partir de un estado limpio aunque existiera una versión previa.
+DROP FUNCTION IF EXISTS public.receive_transfer(UUID, UUID);
+
+CREATE FUNCTION public.receive_transfer(
   p_transfer_id UUID,
   p_by          UUID
 )
@@ -86,7 +168,7 @@ BEGIN
   SELECT * INTO v_transfer
     FROM public.stock_transfers
    WHERE id = p_transfer_id
-   FOR UPDATE;
+    FOR UPDATE;
 
   IF NOT FOUND THEN
     RETURN QUERY SELECT false, 'not_found', NULL::TEXT, NULL::JSONB;
@@ -196,6 +278,11 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION vynko_norm_name(TEXT) FROM PUBLIC;
-REVOKE ALL ON FUNCTION vynko_norm_name(TEXT) FROM anon, authenticated;
-GRANT EXECUTE ON FUNCTION vynko_norm_name(TEXT) TO service_role;
+REVOKE ALL ON FUNCTION public.receive_transfer(UUID, UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.receive_transfer(UUID, UUID) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.receive_transfer(UUID, UUID) TO service_role;
+
+-- 7. Grants de vynko_norm_name.
+REVOKE ALL ON FUNCTION public.vynko_norm_name(TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.vynko_norm_name(TEXT) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.vynko_norm_name(TEXT) TO service_role;
