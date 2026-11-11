@@ -237,7 +237,7 @@ se prepara el fix.
 
 | Tarea | Cadencia | Como |
 |---|---|---|
-| Backup de prod | diario 03:30 UTC | `.github/workflows/backup.yml` (verifica estructura, sube artifact) |
+| Backup de prod | diario 03:30 UTC | `.github/workflows/backup.yml` (verifica estructura, publica Release cifrado y rota los viejos) |
 | Reconciliacion de suscripciones | diario 05:17 UTC | cron de `vercel.json` → `/api/cron/reconcile-subscriptions` |
 | Cola de trabajos de fondo | diario 05:23 UTC | cron de `vercel.json` → `/api/cron/process-jobs` (playbook 8) |
 | Drill de restore | trimestral | `docs/continuity.md` → Drill |

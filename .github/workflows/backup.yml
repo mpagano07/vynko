@@ -3,9 +3,15 @@ name: Backup de produccion
 # Backup diario con verificacion + almacenamiento offsite.
 #
 # Corre el backup (roles + schema + data) mediante scripts/backup-db.ps1, lo
-# cifra con age y lo publica como GitHub Release (retencion indefinida) para no
-# depender del backup pago de Supabase ni de la retencion de 30 dias de los
-# artifacts.
+# cifra con age y lo publica como GitHub Release para no depender del backup
+# pago de Supabase ni de la retencion de 30 dias de los artifacts.
+#
+# Retencion (rotacion GFS): cada corrida borra los Releases que ya no entran en
+# la ventana. Se conservan ~14 diarios + 8 semanales + 12 mensuales (~34 como
+# maximo), no todo el historico. No se guardan solo los ultimos: los snapshots
+# viejos sirven para detectar corrupcion silenciosa o ransomware, donde el
+# backup mas reciente ya esta contaminado. Los limites estan en el paso
+# "Rotar backups viejos" (KEEP_*), editables sin tocar la logica.
 #
 # Opt-in: si no hay secret PROD_DB_URL el workflow se saltea y no falla el CI
 # (GitHub no permite `secrets` adentro de un `if:` a nivel de job, por eso el
@@ -21,6 +27,11 @@ on:
     # 03:30 UTC = 00:30 ART: ventana de menor trafico.
     - cron: '30 3 * * *'
   workflow_dispatch:
+    inputs:
+      prune_dry_run:
+        description: 'Solo listar los Releases que se borrarian (no borrar nada)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -110,3 +121,80 @@ jobs:
             --title "Backup $ts" \
             --notes "Backup automatico cifrado con age. Contenido: roles.sql, schema.sql, data.sql y manifest.json (tar.gz)." \
             release/*.age release/*.age.sha256
+
+      # Rotacion GFS: sin esto los Releases se acumulan para siempre.
+      # Se conservan los de la ventana diaria completos, uno por semana ISO y
+      # uno por mes calendario; el resto (release + tag) se borra. Los limites
+      # son por edad en dias, asi que la ventana "rueda" sola en cada corrida.
+      - name: Rotar backups viejos
+        if: steps.backup-secret.outputs.configured == 'true' && steps.backup-secret.outputs.has_age == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ inputs.prune_dry_run }}
+          KEEP_DAILY_DAYS: '14'    # todos los backups de los ultimos 14 dias
+          KEEP_WEEKLY_DAYS: '70'   # hasta 70 dias: 1 por semana ISO (~8)
+          KEEP_MONTHLY_DAYS: '365' # hasta 365 dias: 1 por mes (~12)
+          KEEP_MIN: '7'            # piso de seguridad: nunca borrar los 7 mas nuevos
+        run: |
+          set -euo pipefail
+          now="$(date -u +%s)"
+
+          # `gh` devuelve los Releases mas nuevos primero. Solo se tocan tags con
+          # el formato exacto backup-YYYYMMDD-HHMMSS: cualquier otro Release del
+          # repo queda intacto.
+          releases="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName,createdAt)"
+
+          plan="$(jq -r \
+            --argjson now "$now" \
+            --argjson daily "$KEEP_DAILY_DAYS" \
+            --argjson weekly "$KEEP_WEEKLY_DAYS" \
+            --argjson monthly "$KEEP_MONTHLY_DAYS" \
+            --argjson min "$KEEP_MIN" '
+              (sort_by(.createdAt) | reverse
+               | map(select(.tagName | test("^backup-[0-9]{8}-[0-9]{6}$")))) as $all
+              | ($all | to_entries | map(
+                    .key as $idx
+                    | .value as $r
+                    | ($r.createdAt | fromdateiso8601) as $t
+                    | {
+                        tag: $r.tagName,
+                        idx: $idx,
+                        age: (($now - $t) / 86400 | floor),
+                        week: ($t | gmtime | strftime("%G-W%V")),
+                        month: ($t | gmtime | strftime("%Y-%m"))
+                      }
+                  )) as $rows
+              | (reduce $rows[] as $r ({keep: [], seen: {}};
+                    if $r.idx < $min or $r.age < $daily then
+                      .keep += [$r.tag]
+                    elif $r.age < $weekly then
+                      ("w:" + $r.week) as $b
+                      | if .seen[$b] then . else .seen[$b] = true | .keep += [$r.tag] end
+                    elif $r.age < $monthly then
+                      ("m:" + $r.month) as $b
+                      | if .seen[$b] then . else .seen[$b] = true | .keep += [$r.tag] end
+                    else . end
+                ).keep) as $keep
+              | $all[]
+              | .tagName as $t
+              | (if ($keep | index($t)) then "KEEP" else "DELETE" end) + "\t" + $t
+            ' <<< "$releases")"
+
+          kept=0
+          deleted=0
+          while IFS=$'\t' read -r action tag; do
+            if [ -z "${tag:-}" ]; then continue; fi
+            if [ "$action" = "KEEP" ]; then
+              kept=$((kept + 1))
+              continue
+            fi
+            if [ "${DRY_RUN:-false}" = "true" ]; then
+              echo "dry-run: se borraria $tag"
+            else
+              echo "Borrando Release viejo: $tag"
+              gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+            fi
+            deleted=$((deleted + 1))
+          done <<< "$plan"
+
+          echo "Retencion: $kept conservados, $deleted $( [ "${DRY_RUN:-false}" = "true" ] && echo "a borrar (dry-run)" || echo "borrados" )."

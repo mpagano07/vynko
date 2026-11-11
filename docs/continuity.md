@@ -20,7 +20,8 @@
    no el limite. Revisar Dashboard → Database → Backups y **anotar el resultado
    en esta tabla**. Sin PITR, RPO = 24 h.
 2. **Retencion de dumps**: los dumps cifrados se publican como GitHub Release
-   por corrida (retencion indefinida). **No** se sube ninguna copia en claro a
+   por corrida y se **rotan** en la misma corrida (ver "Retencion" abajo). No se
+   acumula historico indefinido. **No** se sube ninguna copia en claro a
    artifacts: el repo es publico y los `.sql` contienen PII de clientes. Si
    algun dia hace falta almacenamiento realmente offsite, migrar el Release a
    un bucket con lifecycle propio.
@@ -38,7 +39,7 @@
 ### Estado actual
 
 - [x] Backup programado diario (roles + schema + data) con manifiesto + SHA256 (`.github/workflows/backup.yml`)
-- [x] Cifrado con `age` y publicacion como GitHub Release (retencion indefinida)
+- [x] Cifrado con `age` y publicacion como GitHub Release (retencion GFS, ver abajo)
 - [x] Keepalive mensual (re-habilita workflows via API) para el auto-disable en repos publicos (`.github/workflows/keepalive.yml`)
 - [x] Verificacion estructural de los dumps (CREATE TABLE / COPY / INSERT INTO)
 - [x] Verificacion de restore contra base scratch cuando hay `DEV_DB_URL`
@@ -70,6 +71,38 @@ completo) mas un manifiesto:
 Los tres `.sql` + el manifiesto se empaquetan en `vynko-backup-<ts>.tar.gz`,
 se cifran a `vynko-backup-<ts>.tar.gz.age` y se adjuntan a un GitHub Release
 (`backup-<ts>`) junto a un `.sha256`.
+
+### Retencion (rotacion GFS)
+
+Cada corrida, despues de publicar el Release nuevo, borra los Releases
+`backup-<ts>` que ya no entran en la ventana (release + tag). Se usa una
+politica grandfather-father-son para no acumular un Release por dia para
+siempre:
+
+| Ventana | Se conserva | Cantidad aprox. |
+|---|---|---|
+| Ultimos 14 dias | todos | 14 |
+| 14 a 70 dias | 1 por semana ISO | ~8 |
+| 70 a 365 dias | 1 por mes calendario | ~12 |
+
+Maximo ~34 Releases. Los limites viven en el paso **"Rotar backups viejos"**
+(`KEEP_DAILY_DAYS`, `KEEP_WEEKLY_DAYS`, `KEEP_MONTHLY_DAYS`, `KEEP_MIN`) y se
+pueden ajustar sin tocar la logica. Para una ventana mas corta, bajar
+`KEEP_MONTHLY_DAYS` (por ejemplo a `90`); para no guardar nada viejo, ponerlo en
+`0` (queda solo diarios + semanales).
+
+No se guardan *solo* los ultimos a proposito: si un dato se corrompe o hay
+ransomware, el backup mas reciente ya esta contaminado y hace falta un snapshot
+anterior limpio. La rotacion mantiene esa red sin crecer indefinidamente.
+
+Para simular sin borrar nada: `workflow_dispatch` con `prune_dry_run: true`.
+El paso solo toca tags con el formato exacto `backup-YYYYMMDD-HHMMSS`; cualquier
+otro Release del repo queda intacto.
+
+Los Releases no son parte del clon de git (son assets), asi que no inflan el
+repo; el limite sirve igual para no acumular almacenamiento y para que la lista
+de Releases siga siendo usable. La primera corrida despues de este cambio limpia
+todo el backlog de una vez.
 
 ### A mano
 
