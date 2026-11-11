@@ -515,7 +515,7 @@ export async function updateProduct(auth: AuthInfo, id: string, body: Record<str
             productId: id,
             quantity: delta,
             type: 'adjustment',
-            reason: 'Edición de producto',
+            reason: 'correction: Edición de producto',
             createdBy: auth.userId,
           });
           const { error: histError } = await supabaseAdmin
@@ -1253,7 +1253,7 @@ async function insertStockMovement(
     productId,
     quantity,
     type,
-    reason: 'Importación de productos',
+    reason: 'correction: Importación de productos',
     createdBy: auth.userId,
   });
   const { error } = await supabaseAdmin.from('stock_history').insert(movement);

@@ -49,8 +49,10 @@ const adjustment = (index: number) => ({
 });
 
 function renderPage(count: number) {
-  const items = Array.from({ length: count }, (_, i) => adjustment(i + 1));
+  renderItems(Array.from({ length: count }, (_, i) => adjustment(i + 1)));
+}
 
+function renderItems(items: ReturnType<typeof adjustment>[]) {
   authMock.mockReturnValue({
     tenant: { id: 't1', name: 'Central', subscription_plan: 'business' },
     tenants: [{ id: 't1', name: 'Central' }],
@@ -130,5 +132,26 @@ describe('historial de antipérdidas: paginación', () => {
     fireEvent.change(search, { target: { value: '' } });
     expect(screen.getByText(/Página/)).toHaveTextContent('Página 1 de 3');
     expect(visibleProducts()[0]).toBe('Ajuste 01');
+  });
+});
+
+describe('historial de antipérdidas: filtro por motivo', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('agrupa en Corrección los motivos que no vienen del formulario', async () => {
+    renderItems([
+      { ...adjustment(1), quantity: -10, productName: 'Mouse Inalámbrico Logitech M185', reason: 'Edición de producto' },
+      { ...adjustment(2), productName: 'Otro producto', reason: 'damaged' },
+    ]);
+    await screen.findByRole('table');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Motivo: Todos' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Corrección' }));
+
+    await waitFor(() => expect(visibleProducts()).toEqual(['Mouse Inalámbrico Logitech M185']));
+    // La nota conserva el texto original: es lo que explica de dónde salió la pérdida.
+    expect(screen.getByText('Edición de producto')).toBeInTheDocument();
   });
 });
