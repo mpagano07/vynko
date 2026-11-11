@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { supabaseMock } from '@/test/supabase-mock';
-import { receivePurchaseOrder } from './purchase-order-service';
+import { listPurchaseOrders, listPendingPurchaseOrders, receivePurchaseOrder } from './purchase-order-service';
 import type { AuthInfo } from '@/lib/api-auth';
 
 vi.mock('@/lib/supabaseAdmin', () => ({
@@ -198,5 +198,122 @@ describe('receivePurchaseOrder con numeracion', () => {
     });
 
     expect(result).toMatchObject({ ok: false, status: 404, error: 'Pedido no encontrado' });
+  });
+});
+
+describe('listas de pedidos de compra', () => {
+  beforeEach(() => {
+    supabaseMock.__reset();
+    mockCreateActivityLog.mockClear();
+  });
+
+  it('listPurchaseOrders aplana proveedor y producto por item', async () => {
+    supabaseMock.__queue('purchase_orders', {
+      data: [
+        {
+          id: 'po-1',
+          tenant_id: 'tenant-1',
+          status: 'sent',
+          supplier: { name: 'Proveedor Uno' },
+          items: [
+            { id: 'pitem-1', product: { name: 'Producto A' } },
+            { id: 'pitem-2', product: { name: 'Producto B' } },
+          ],
+        },
+      ],
+      error: null,
+    });
+
+    const result = await listPurchaseOrders(AUTH, null);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Conserva los campos del join (spread) y agrega los aplanados.
+    expect(result.data).toEqual([
+      {
+        id: 'po-1',
+        tenant_id: 'tenant-1',
+        status: 'sent',
+        supplier: { name: 'Proveedor Uno' },
+        supplier_name: 'Proveedor Uno',
+        items: [
+          { id: 'pitem-1', product: { name: 'Producto A' }, product_name: 'Producto A' },
+          { id: 'pitem-2', product: { name: 'Producto B' }, product_name: 'Producto B' },
+        ],
+      },
+    ]);
+  });
+
+  it('listPurchaseOrders filtra por proveedor cuando se pide', async () => {
+    supabaseMock.__queue('purchase_orders', { data: [], error: null });
+
+    const result = await listPurchaseOrders(AUTH, 'sup-1');
+
+    expect(result.ok).toBe(true);
+    const supplierFilter = supabaseMock.__calls.find(
+      (c) => c.table === 'purchase_orders' && c.method === 'select'
+    );
+    expect(supplierFilter).toBeDefined();
+  });
+
+  it('listPendingPurchaseOrders deja sólo items con cantidad pendiente', async () => {
+    supabaseMock.__queue('purchase_orders', {
+      data: [
+        {
+          id: 'po-1',
+          status: 'partial',
+          expected_date: '2026-11-20',
+          created_at: '2026-11-01',
+          supplier: { name: 'Proveedor Uno' },
+          items: [
+            // 10 pedidos, 4 recibidos: quedan 6 pendientes.
+            { quantity_ordered: 10, quantity_received: 4, product: { id: 'prod-1', name: 'Producto A' } },
+            // Este item ya está completo: se filtra del resultado.
+            { quantity_ordered: 5, quantity_received: 5, product: { id: 'prod-2', name: 'Producto B' } },
+          ],
+        },
+        // Pedido totalmente recibido: queda sin items y se descarta entero.
+        {
+          id: 'po-2',
+          status: 'received',
+          expected_date: null,
+          created_at: '2026-11-02',
+          supplier: null,
+          items: [{ quantity_ordered: 3, quantity_received: 3, product: null }],
+        },
+      ],
+      error: null,
+    });
+
+    const result = await listPendingPurchaseOrders(AUTH);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data).toEqual([
+      {
+        id: 'po-1',
+        status: 'partial',
+        expected_date: '2026-11-20',
+        created_at: '2026-11-01',
+        supplier_name: 'Proveedor Uno',
+        items: [
+          {
+            product_id: 'prod-1',
+            product_name: 'Producto A',
+            quantity_ordered: 10,
+            quantity_received: 4,
+            quantity_pending: 6,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('listPendingPurchaseOrders propaga el error de la consulta', async () => {
+    supabaseMock.__queue('purchase_orders', { data: null, error: { message: 'boom', code: 'XX000' } });
+
+    const result = await listPendingPurchaseOrders(AUTH);
+
+    expect(result).toMatchObject({ ok: false, status: 500, error: 'Ocurrio un error inesperado. Intenta de nuevo.' });
   });
 });
