@@ -19,7 +19,9 @@
 #   -SkipData    No copiar los datos.
 #
 # Requisitos:
-#   - CLI de Supabase: npm i -g supabase  (o scoop install supabase)
+#   - CLI de Supabase 2.x: npm i -g supabase@2.122.1  (o scoop install supabase)
+#     La v3 no acepta --db-url ni corre `db query`/`db push` sin --yes o
+#     --read-only; este script es de la generacion v2.
 # =============================================================================
 
 param(
@@ -135,7 +137,17 @@ function ConvertTo-SqlLiteral {
 # -----------------------------------------------------------------------------
 if (!(Get-Command supabase -ErrorAction SilentlyContinue)) {
     Write-Host 'supabase CLI no esta instalado.' -ForegroundColor Red
-    Write-Host '  Instalalo con: npm i -g supabase   (o: scoop install supabase / choco install supabase)' -ForegroundColor Yellow
+    Write-Host '  Instalalo con: npm i -g supabase@2.122.1   (o: scoop install supabase / choco install supabase)' -ForegroundColor Yellow
+    exit 1
+}
+
+# Ver el comentario de requisitos: la v3 rompe `db query --db-url`.
+$supabaseVersion = (& supabase --version 2>$null | Out-String).Trim()
+$supabaseMajor = 0
+if ($supabaseVersion -match '^(\d+)\.') { $supabaseMajor = [int]$matches[1] }
+if ($supabaseMajor -ge 3) {
+    Write-Host "supabase CLI $supabaseVersion no es compatible con este script." -ForegroundColor Red
+    Write-Host '  Instala la ultima 2.x: npm i -g supabase@2.122.1' -ForegroundColor Yellow
     exit 1
 }
 

@@ -107,8 +107,9 @@ todo el backlog de una vez.
 ### A mano
 
 ```powershell
-# Requiere: CLI de Supabase (npm i -g supabase) y .env.db en la raiz
-# (a partir de scripts/.env.db.example). El restore test necesita ademas psql.
+# Requiere: CLI de Supabase 2.x (npm i -g supabase@2.122.1) y .env.db en la
+# raiz (a partir de scripts/.env.db.example). El restore test necesita psql.
+# La v3 del CLI no acepta --db-url y exige --read-only/--yes en db query.
 .\scripts\backup-db.ps1                       # dumps + manifiesto + verificacion
 .\scripts\backup-db.ps1 -RestoreUrl <url-db-vacia>   # ademas prueba el restore
 ```
