@@ -254,6 +254,24 @@ describe('Stock Transfers API', () => {
       expect(statusEq?.args[1]).toBe('completed');
     });
 
+    it('acepta varios estados en un solo filtro (in) para traer los activos de una', async () => {
+      supabaseMock.__queue('stock_transfers', { data: [] });
+
+      const res = await GET(makeGetRequest('?status=pending,in_transit'));
+      expect(res.status).toBe(200);
+
+      const statusIn = supabaseMock.__calls.find(
+        (c) => c.table === 'stock_transfers' && c.method === 'in' && c.args[0] === 'status'
+      );
+      expect(statusIn?.args[1]).toEqual(['pending', 'in_transit']);
+
+      // Un solo estado sigue siendo eq, no in.
+      const statusEq = supabaseMock.__calls.find(
+        (c) => c.table === 'stock_transfers' && c.method === 'eq' && c.args[0] === 'status'
+      );
+      expect(statusEq).toBeUndefined();
+    });
+
     it('aplica el filtro de estado para una sucursal individual', async () => {
       supabaseMock.__queue('stock_transfers', { data: [] });
 

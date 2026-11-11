@@ -23,7 +23,15 @@ export async function listTransfers(auth: AuthInfo, statusFilter: string | null)
   const filter = `from_tenant_id.in.(${ids}),to_tenant_id.in.(${ids})`;
   q = q.or(filter);
   if (statusFilter) {
-    q = q.eq('status', statusFilter);
+    // `?status=pending,in_transit` trae los estados activos en UNA llamada:
+    // la bandeja hacía dos GET secuenciales (uno por estado), que con la
+    // latencia de PostgREST duplicaban la espera de cada actualización.
+    const statuses = statusFilter.split(',').map((s) => s.trim()).filter(Boolean);
+    if (statuses.length === 1) {
+      q = q.eq('status', statuses[0]);
+    } else if (statuses.length > 1) {
+      q = q.in('status', statuses);
+    }
   }
 
   q = q.order('created_at', { ascending: false });

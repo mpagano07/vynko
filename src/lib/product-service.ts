@@ -203,6 +203,50 @@ export async function listProducts(auth: AuthInfo): Promise<ListProductsResult> 
   return { ok: true, products: await signProductImageUrls(products, auth.tenantId) };
 }
 
+/**
+ * Catálogo "slim" para selectores de productos (transferencias, y cualquier
+ * pantalla que sólo necesite buscar y elegir): id, nombre, SKU y código de
+ * barras.
+ *
+ * `listProducts` manda TODAS las columnas de `products` más el join de stock y
+ * firma las URLs de imagen: con ~1000 artículos son ~500 KB y varios segundos
+ * para llenar un buscador. Esta versión devuelve la misma población de filas
+ * (mismo join por `product_stock`, mismo `active`, mismo orden determinístico
+ * para el paging de `selectAllRows`) en ~4 veces menos bytes y sin trabajo de
+ * storage.
+ */
+export async function listProductsSlim(
+  auth: AuthInfo
+): Promise<{ ok: true; products: Array<{ id: string; name: string; sku: string | null; barcode: string | null }> } | { ok: false; error: string }> {
+  const buildPage = (from: number, to: number) => {
+    let q = supabaseAdmin
+      .from('products')
+      // `product_stock!inner()` sin columnas: el join embebido existe para
+      // poder filtrar por tenant, pero no arrastra datos a la respuesta.
+      .select('id, name, sku, barcode, product_stock!inner()')
+      .order('created_at', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: true });
+    if (auth.allTenants) {
+      q = q.in('product_stock.tenant_id', auth.tenantIds);
+    } else {
+      q = q.eq('product_stock.tenant_id', auth.tenantId);
+    }
+    return q.eq('product_stock.active', true).range(from, to);
+  };
+  const { data, error } = await selectAllRows(buildPage);
+  if (error) {
+    logger.error('DB error:', { error });
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
+  }
+  const products = (data ?? []).map((p) => ({
+    id: String(p.id),
+    name: String(p.name ?? ''),
+    sku: (p.sku ?? null) as string | null,
+    barcode: (p.barcode ?? null) as string | null,
+  }));
+  return { ok: true, products };
+}
+
 function scopedTenantIds(auth: AuthInfo): string[] {
   return auth.allTenants ? auth.tenantIds : [auth.tenantId];
 }
