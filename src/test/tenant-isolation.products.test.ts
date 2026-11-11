@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { supabaseMock } from '@/test/supabase-mock';
 import {
   FOREIGN_ID,
+  TENANT_A,
   TENANT_B,
   apiRequest,
   barcodeParams,
@@ -205,5 +206,79 @@ describe('productos: las consultas del tenant se acotan a su propia empresa', ()
     expect(stockQuery.length).toBeGreaterThan(0);
     const tenantPredicates = stockQuery.filter((call) => call.method === 'eq' && call.args[0] === 'tenant_id');
     expect(tenantPredicates.length).toBeGreaterThan(0);
+  });
+});
+
+describe('productos: la categoría se escribe en el catálogo del tenant (migración 071)', () => {
+  // `products` es GLOBAL y `categories` es por-tenant: la categoría de cada
+  // sucursal vive en su fila de `product_stock`. El alta y la edición tienen
+  // que escribir la fila del tenant ACTIVO, no sólo la global.
+
+  it('el alta guarda la categoría en la fila de product_stock del tenant', async () => {
+    supabaseMock.__queue('tenant_users', { data: { role: 'owner' }, error: null });
+    supabaseMock.__queue('tenants', {
+      data: { id: TENANT_A, subscription_plan: 'business' },
+      error: null,
+    });
+    supabaseMock.__queue('product_stock', { data: [], error: null }); // tope del plan
+    supabaseMock.__queue('products', { data: [{ id: 'new-1', name: 'Producto de A' }], error: null });
+    supabaseMock.__queue('product_stock', { data: { id: 'stock-1' }, error: null }); // insert
+
+    const res = await createProductRoute(
+      apiRequest('http://localhost/api/products', 'POST', {
+        name: 'Producto de A',
+        category_id: 'cat-propia',
+      })
+    );
+
+    expect(res.status).toBe(201);
+    // La fila global lleva la categoría como respaldo (fuente de la réplica)...
+    const productInsert = callsTo(supabaseMock.__calls, 'products', 'insert')[0];
+    expect(productInsert?.args[0]).toMatchObject({ category_id: 'cat-propia' });
+    // ...y el catálogo del tenant también, que es la que el listado lee.
+    const stockInsert = callsTo(supabaseMock.__calls, 'product_stock', 'insert')[0];
+    expect(stockInsert?.args[0]).toMatchObject({
+      product_id: 'new-1',
+      tenant_id: TENANT_A,
+      category_id: 'cat-propia',
+    });
+  });
+
+  it('editar la categoría la escribe en la fila de product_stock del tenant', async () => {
+    supabaseMock.__queue('tenant_users', { data: { role: 'owner' }, error: null });
+    supabaseMock.__queue('product_stock', { data: { product_id: 'p-1' }, error: null }); // pertenencia
+    supabaseMock.__queue('products', { data: { id: 'p-1', name: 'Coca', price_cents: 1000 }, error: null });
+    supabaseMock.__queue('product_stock', { data: null, error: null }); // upsert
+    supabaseMock.__queue('product_stock', { data: { stock: 5, min_stock: 0, max_stock: 0 }, error: null }); // relectura
+
+    const res = await updateProductRoute(
+      apiRequest('http://localhost/api/products/p-1', 'PATCH', { category_id: 'cat-propia' }),
+      routeParams('p-1')
+    );
+
+    expect(res.status).toBe(200);
+    const upsert = callsTo(supabaseMock.__calls, 'product_stock', 'upsert')[0];
+    expect(upsert?.args[0]).toMatchObject({
+      product_id: 'p-1',
+      tenant_id: TENANT_A,
+      category_id: 'cat-propia',
+    });
+  });
+
+  it('limpiar la categoría también la limpia en el catálogo del tenant', async () => {
+    supabaseMock.__queue('tenant_users', { data: { role: 'owner' }, error: null });
+    supabaseMock.__queue('product_stock', { data: { product_id: 'p-1' }, error: null });
+    supabaseMock.__queue('products', { data: { id: 'p-1', name: 'Coca', price_cents: 1000 }, error: null });
+    supabaseMock.__queue('product_stock', { data: null, error: null });
+    supabaseMock.__queue('product_stock', { data: { stock: 5, min_stock: 0, max_stock: 0 }, error: null });
+
+    const res = await updateProductRoute(
+      apiRequest('http://localhost/api/products/p-1', 'PATCH', { category_id: '' }),
+      routeParams('p-1')
+    );
+
+    expect(res.status).toBe(200);
+    const upsert = callsTo(supabaseMock.__calls, 'product_stock', 'upsert')[0];
+    expect(upsert?.args[0]).toMatchObject({ product_id: 'p-1', category_id: null });
   });
 });

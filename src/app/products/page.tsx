@@ -55,7 +55,7 @@ import type { ExportFormat, ExportPlatform } from '@/lib/excel-export';
 import { readImportStream, type ImportProgressState } from '@/lib/import-stream';
 import type { DriveExportResult } from '@/components/products/export-products-modal';
 import { rememberDriveIntent, takeDriveIntent, clearDriveIntent, type DriveIntent } from '@/lib/google/drive-intent';
-import { matchesQuery } from '@/lib/utils/text';
+import { normalizeForSearch } from '@/lib/utils/text';
 import { SortableTh, SortDir } from '@/components/ui/sortable-th';
 import { FormLabel } from '@/components/ui/form-label';
 
@@ -121,7 +121,7 @@ export default function ProductsPage() {
 }
 
 function ProductsPageContent() {
-  const { tenant, tenants, loading: authLoading } = useAuth();
+  const { tenant, tenants, loading: authLoading, allTenants } = useAuth();
   const tenantId = tenant?.id ?? null;
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -963,7 +963,14 @@ function ProductsPageContent() {
 
       {/* Transfer Inbox — active transfers for multi-branch */}
       {multiBranch && tenantId && (
-        <TransferInbox currentTenantId={tenantId} trigger={transfersTrigger} onAction={() => mutateProducts()} />
+        /* Al recibir, la réplica de categoría (migración 071) puede crear una
+           categoría nueva en este tenant: el filtro y los badges la resuelven
+           contra la lista de categorías, así que también se refresca. */
+        <TransferInbox
+          currentTenantId={tenantId}
+          trigger={transfersTrigger}
+          onAction={() => { mutateProducts(); mutateCategories(); }}
+        />
       )}
 
       {/* Filters Card */}
@@ -1923,6 +1930,8 @@ function ProductsPageContent() {
         <NewTransferModal
           tenants={tenants || []}
           currentTenantId={tenant?.id}
+          allTenants={allTenants}
+          products={products}
           onClose={() => setIsTransferModalOpen(false)}
           onSuccess={() => {
             setIsTransferModalOpen(false);
@@ -1937,11 +1946,15 @@ function ProductsPageContent() {
 function NewTransferModal({
   tenants,
   currentTenantId,
+  allTenants,
+  products,
   onClose,
   onSuccess,
 }: {
   tenants: { id: string; name: string }[];
   currentTenantId?: string;
+  allTenants: boolean;
+  products?: Product[];
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -1952,50 +1965,84 @@ function NewTransferModal({
   const [searchTerm, setSearchTerm] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const [allProducts, setAllProducts] = useState<TransferProduct[]>([]);
+  // Catálogo del origen por sucursal. Se recuerda de qué tenant es cada lista
+  // para no mostrar el de una sucursal mientras carga el de otra.
+  const [remoteCatalog, setRemoteCatalog] = useState<{ tenantId: string; products: TransferProduct[] } | null>(null);
   const [loadingProducts, setLoadingProducts] = useState(false);
 
   const otherTenants = tenants.filter((t) => t.id !== fromTenantId);
 
+  // Si el origen es la sucursal ACTIVA, el catálogo ya está en memoria (el
+  // `useProducts` de la página) y no se baja nada. En el consolidado no se
+  // puede reusar: esa lista es la unión de todas las sucursales y mostraría
+  // productos que el origen no tiene stock (el POST los rechazaría).
+  const reuseInMemoryCatalog =
+    !allTenants && !!currentTenantId && fromTenantId === currentTenantId && products != null;
+  const needsRemoteCatalog = !!fromTenantId && !reuseInMemoryCatalog;
+
   useEffect(() => {
-    if (!fromTenantId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setAllProducts([]);
-      return;
-    }
+    if (!needsRemoteCatalog) return;
+    let cancelled = false;
     const loadProducts = async () => {
       setLoadingProducts(true);
       try {
-        const res = await authFetch('/api/products', {
+        // Versión slim del catálogo (id, nombre, SKU, código): la completa son
+        // ~500 KB y varios segundos con ~1000 artículos, para llenar un
+        // buscador que sólo necesita estos cuatro campos.
+        const res = await authFetch('/api/products/slim', {
           headers: {
             'x-active-tenant-id': fromTenantId,
           }
         });
-        if (res.ok) {
-          const data = await res.json();
-          setAllProducts(data || []);
-        }
+        if (!res.ok) throw new Error('fetch failed');
+        const data = await res.json();
+        if (!cancelled) setRemoteCatalog({ tenantId: fromTenantId, products: Array.isArray(data) ? data : [] });
       } catch {
-        toast.error('Error al cargar los productos de la sucursal');
+        if (!cancelled) toast.error('Error al cargar los productos de la sucursal');
       } finally {
-        setLoadingProducts(false);
+        if (!cancelled) setLoadingProducts(false);
       }
     };
     loadProducts();
-  }, [fromTenantId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [needsRemoteCatalog, fromTenantId]);
+
+  const catalog: TransferProduct[] = React.useMemo(() => {
+    if (reuseInMemoryCatalog && products) return products;
+    if (remoteCatalog && remoteCatalog.tenantId === fromTenantId) return remoteCatalog.products;
+    return [];
+  }, [reuseInMemoryCatalog, products, remoteCatalog, fromTenantId]);
+
+  // Índice pre-normalizado (sin acentos, minúsculas): normalizar los tres
+  // campos de cada producto en cada tecla, con catálogos de 1000+, hacía que
+  // el buscador se sintiera pesado. Ahora se normaliza una vez por catálogo y
+  // cada tecla sólo compara substrings.
+  const searchIndex = React.useMemo(
+    () =>
+      catalog.map((p) => ({
+        product: p,
+        name: normalizeForSearch(p.name),
+        sku: p.sku ? normalizeForSearch(p.sku) : '',
+        barcode: p.barcode ? normalizeForSearch(p.barcode) : '',
+      })),
+    [catalog]
+  );
 
   const searchResults = React.useMemo(() => {
-    if (!searchTerm.trim()) return [];
+    const query = normalizeForSearch(searchTerm.trim());
+    if (!query) return [];
     const alreadyAdded = new Set(items.map(i => i.product_id));
-    return allProducts.filter(p => {
-      if (alreadyAdded.has(p.id)) return false;
-      return (
-        matchesQuery(p.name, searchTerm) ||
-        matchesQuery(p.sku, searchTerm) ||
-        matchesQuery(p.barcode, searchTerm)
-      );
-    }).slice(0, 8);
-  }, [searchTerm, allProducts, items]);
+    return searchIndex
+      .filter(
+        (e) =>
+          !alreadyAdded.has(e.product.id) &&
+          (e.name.includes(query) || e.sku.includes(query) || e.barcode.includes(query))
+      )
+      .slice(0, 8)
+      .map((e) => e.product);
+  }, [searchTerm, searchIndex, items]);
 
   const addItem = (product: TransferProduct) => {
     setItems(prev => [...prev, { product_id: product.id, product_name: product.name, quantity: 1 }]);

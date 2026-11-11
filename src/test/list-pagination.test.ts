@@ -9,7 +9,7 @@ vi.mock('@/lib/supabaseAdmin', async () => {
 });
 
 import { listCustomers } from '@/lib/customer-service';
-import { listProducts } from '@/lib/product-service';
+import { listProducts, listProductsSlim } from '@/lib/product-service';
 import { listSuppliers } from '@/lib/supplier-service';
 import { SUPABASE_MAX_ROWS, selectAllRows, type SelectAllPage } from '@/lib/supabase-paging';
 
@@ -132,6 +132,58 @@ describe('listProducts con catálogo más grande que el tope de PostgREST', () =
     expect(result.products).toHaveLength(12);
     expect(callsTo(supabaseMock.__calls, 'products', 'range')).toHaveLength(1);
   });
+
+  it('pide la categoría dentro del embed de product_stock', async () => {
+    supabaseMock.__queue('products', { data: productRows(1), error: null });
+
+    const result = await listProducts(authAsTenantA());
+
+    expect(result.ok).toBe(true);
+    // Migración 071: el select tiene que pedir la columna nueva o PostgREST
+    // la recorta del embed (y /api/products rompe con PGRST108 si la columna
+    // aún no existe en la base).
+    const selectArg = String(callsTo(supabaseMock.__calls, 'products', 'select')[0].args[0]);
+    expect(selectArg).toContain('category_id');
+  });
+});
+
+describe('listProducts: la categoría viene del catálogo del tenant', () => {
+  // `products` es GLOBAL y `categories` es por-tenant: `products.category_id`
+  // apunta a UNA categoría de UNA sucursal, invisible para las demás. El
+  // síntoma era recibir una transferencia y ver el producto "Sin categoría".
+  const rowWithCategories = (globalCategoryId: string, stockCategoryId: string | null) => ({
+    id: 'p-1',
+    name: 'Producto 1',
+    price_cents: 1000,
+    category_id: globalCategoryId,
+    stock_data: [{ stock: 5, min_stock: 0, max_stock: 10, category_id: stockCategoryId }],
+  });
+
+  it('pisa la categoría global del producto con la de su fila de product_stock', async () => {
+    supabaseMock.__queue('products', {
+      data: [rowWithCategories('cat-de-la-sucursal-origen', 'cat-propia')],
+      error: null,
+    });
+
+    const result = await listProducts(authAsTenantA());
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.products[0].category_id).toBe('cat-propia');
+  });
+
+  it('sin categoría en el catálogo del tenant no hereda la global de otra sucursal', async () => {
+    supabaseMock.__queue('products', {
+      data: [rowWithCategories('cat-de-la-sucursal-origen', null)],
+      error: null,
+    });
+
+    const result = await listProducts(authAsTenantA());
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.products[0].category_id).toBeNull();
+  });
 });
 
 describe('listCustomers con más de 1000 clientes', () => {
@@ -175,5 +227,65 @@ describe('listSuppliers con más de 1000 proveedores', () => {
       [0, SUPABASE_MAX_ROWS - 1],
       [SUPABASE_MAX_ROWS, 2 * SUPABASE_MAX_ROWS - 1],
     ]);
+  });
+});
+
+describe('listProductsSlim con catálogo más grande que el tope de PostgREST', () => {
+  const slimRows = (count: number, offset = 0) =>
+    Array.from({ length: count }, (_, i) => ({
+      id: `p-${offset + i}`,
+      name: `Producto ${offset + i}`,
+      sku: `SKU-${offset + i}`,
+      barcode: null,
+    }));
+
+  it('recorre por rangos y devuelve las cuatro columnas del picker', async () => {
+    supabaseMock.__queue('products', { data: slimRows(SUPABASE_MAX_ROWS), error: null });
+    supabaseMock.__queue('products', { data: slimRows(77, SUPABASE_MAX_ROWS), error: null });
+
+    const result = await listProductsSlim(authAsTenantA());
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.products).toHaveLength(SUPABASE_MAX_ROWS + 77);
+    expect(result.products[SUPABASE_MAX_ROWS + 76]).toEqual({
+      id: `p-${SUPABASE_MAX_ROWS + 76}`,
+      name: `Producto ${SUPABASE_MAX_ROWS + 76}`,
+      sku: `SKU-${SUPABASE_MAX_ROWS + 76}`,
+      barcode: null,
+    });
+
+    const ranges = callsTo(supabaseMock.__calls, 'products', 'range').map((call) => call.args);
+    expect(ranges).toEqual([
+      [0, SUPABASE_MAX_ROWS - 1],
+      [SUPABASE_MAX_ROWS, 2 * SUPABASE_MAX_ROWS - 1],
+    ]);
+
+    // Mismo orden determinístico que listProducts: sin él, los rangos se
+    // pueden solapar o dejar filas afuera.
+    const orders = callsTo(supabaseMock.__calls, 'products', 'order').map((call) => call.args);
+    expect(orders[0]).toEqual(['created_at', { ascending: false, nullsFirst: false }]);
+    expect(orders[1]).toEqual(['id', { ascending: true }]);
+  });
+
+  it('filtra por el tenant activo como listProducts', async () => {
+    supabaseMock.__queue('products', { data: slimRows(3), error: null });
+
+    const result = await listProductsSlim(authAsTenantA());
+
+    expect(result.ok).toBe(true);
+    const eqs = callsTo(supabaseMock.__calls, 'products', 'eq').map((call) => call.args);
+    expect(eqs).toContainEqual(['product_stock.tenant_id', authAsTenantA().tenantId]);
+    expect(eqs).toContainEqual(['product_stock.active', true]);
+  });
+
+  it('propaga el error de base de datos', async () => {
+    supabaseMock.__queue('products', { data: null, error: { message: 'db down' } });
+
+    const result = await listProductsSlim(authAsTenantA());
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe('Ocurrio un error inesperado. Intenta de nuevo.');
   });
 });

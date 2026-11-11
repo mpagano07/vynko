@@ -634,6 +634,43 @@ describe('importProducts: categorías nuevas', () => {
 
     expect(insertedProductRows()[0]).not.toHaveProperty('category_id');
   });
+
+  it('el alta también escribe la categoría en el catálogo del tenant (product_stock)', async () => {
+    // Migración 071: la fila global de `products` ya lleva la categoría como
+    // respaldo, pero el listado lee `product_stock.category_id` — sin esta
+    // escritura el producto nacía "Sin categoría" para su propia sucursal.
+    supabaseMock.__queue('categories', { data: [{ id: 'cat-existente', name: 'Bebidas', color: null }], error: null });
+    supabaseMock.__queue('products', { data: null, error: null });
+    supabaseMock.__queue('products', { data: { id: 'prod-1' }, error: null });
+
+    await importProducts(auth, [{ name: 'Coca', sku: 'COC-1', category_name: 'Bebidas', stock: 4 }]);
+
+    // El id del alta se genera en el cliente (el insert de `products` lo lleva
+    // en el payload): la fila de stock tiene que apuntar a ese mismo producto.
+    const createdId = insertedProductRows()[0].id;
+    const stockRows = insertsOn('product_stock')[0].args[0] as Record<string, unknown>[];
+    expect(stockRows).toEqual([
+      expect.objectContaining({
+        product_id: createdId,
+        tenant_id: 'tenant-1',
+        category_id: 'cat-existente',
+      }),
+    ]);
+  });
+
+  it('el re-import actualiza la categoría del catálogo del tenant', async () => {
+    supabaseMock.__queue('categories', { data: [{ id: 'cat-existente', name: 'Bebidas', color: null }], error: null });
+    supabaseMock.__queue('products', { data: [{ id: 'prod-9', sku: 'COC-1' }], error: null });
+    supabaseMock.__queue('product_stock', { data: { stock: 5, min_stock: 0, max_stock: 0 }, error: null });
+
+    await importProducts(auth, [{ name: 'Coca', sku: 'COC-1', category_name: 'Bebidas', stock: 12 }]);
+
+    expect(upsertsOn('product_stock')[0].args[0]).toMatchObject({
+      product_id: 'prod-9',
+      tenant_id: 'tenant-1',
+      category_id: 'cat-existente',
+    });
+  });
 });
 
 describe('importProducts: productos duplicados', () => {

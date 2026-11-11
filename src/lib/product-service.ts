@@ -169,7 +169,8 @@ export async function listProducts(auth: AuthInfo): Promise<ListProductsResult> 
           max_stock,
           deposito,
           pasillo,
-          estanteria
+          estanteria,
+          category_id
         )
       `)
       .order('created_at', { ascending: false, nullsFirst: false })
@@ -191,6 +192,11 @@ export async function listProducts(auth: AuthInfo): Promise<ListProductsResult> 
   }
   const products = data?.map((p) => ({
     ...p,
+    // La categoría se lee del catálogo del tenant activo (`product_stock`),
+    // no de la fila global: `products.category_id` apunta a UNA categoría de
+    // UNA sucursal y para las demás era invisible ("Sin categoría" al recibir
+    // una transferencia). Migración 071.
+    category_id: p.stock_data?.[0]?.category_id ?? null,
     stock: p.stock_data?.[0]?.stock ?? 0,
     min_stock: p.stock_data?.[0]?.min_stock ?? 0,
     max_stock: p.stock_data?.[0]?.max_stock ?? 0,
@@ -201,6 +207,50 @@ export async function listProducts(auth: AuthInfo): Promise<ListProductsResult> 
     price: p.price_cents != null ? p.price_cents / 100 : 0,
   })) || [];
   return { ok: true, products: await signProductImageUrls(products, auth.tenantId) };
+}
+
+/**
+ * Catálogo "slim" para selectores de productos (transferencias, y cualquier
+ * pantalla que sólo necesite buscar y elegir): id, nombre, SKU y código de
+ * barras.
+ *
+ * `listProducts` manda TODAS las columnas de `products` más el join de stock y
+ * firma las URLs de imagen: con ~1000 artículos son ~500 KB y varios segundos
+ * para llenar un buscador. Esta versión devuelve la misma población de filas
+ * (mismo join por `product_stock`, mismo `active`, mismo orden determinístico
+ * para el paging de `selectAllRows`) en ~4 veces menos bytes y sin trabajo de
+ * storage.
+ */
+export async function listProductsSlim(
+  auth: AuthInfo
+): Promise<{ ok: true; products: Array<{ id: string; name: string; sku: string | null; barcode: string | null }> } | { ok: false; error: string }> {
+  const buildPage = (from: number, to: number) => {
+    let q = supabaseAdmin
+      .from('products')
+      // `product_stock!inner()` sin columnas: el join embebido existe para
+      // poder filtrar por tenant, pero no arrastra datos a la respuesta.
+      .select('id, name, sku, barcode, product_stock!inner()')
+      .order('created_at', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: true });
+    if (auth.allTenants) {
+      q = q.in('product_stock.tenant_id', auth.tenantIds);
+    } else {
+      q = q.eq('product_stock.tenant_id', auth.tenantId);
+    }
+    return q.eq('product_stock.active', true).range(from, to);
+  };
+  const { data, error } = await selectAllRows(buildPage);
+  if (error) {
+    logger.error('DB error:', { error });
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
+  }
+  const products = (data ?? []).map((p) => ({
+    id: String(p.id),
+    name: String(p.name ?? ''),
+    sku: (p.sku ?? null) as string | null,
+    barcode: (p.barcode ?? null) as string | null,
+  }));
+  return { ok: true, products };
 }
 
 function scopedTenantIds(auth: AuthInfo): string[] {
@@ -309,6 +359,9 @@ export async function createProduct(auth: AuthInfo, body: Record<string, unknown
         deposito: body.deposito ?? null,
         pasillo: body.pasillo ?? null,
         estanteria: body.estanteria ?? null,
+        // La categoría por sucursal (migración 071): la global del producto
+        // sólo la ve el tenant dueño de la categoría.
+        category_id: body.category_id || null,
       });
     if (stockError) {
       await supabaseAdmin.from('products').delete().eq('id', created.id);
@@ -417,7 +470,7 @@ export async function updateProduct(auth: AuthInfo, id: string, body: Record<str
       return { ok: false, error: 'Producto no encontrado o sin permisos', status: 403 };
     }
 
-    if (data && (body.stock !== undefined || body.min_stock !== undefined || body.max_stock !== undefined || body.deposito !== undefined || body.pasillo !== undefined || body.estanteria !== undefined)) {
+    if (data && (body.stock !== undefined || body.min_stock !== undefined || body.max_stock !== undefined || body.deposito !== undefined || body.pasillo !== undefined || body.estanteria !== undefined || body.category_id !== undefined)) {
       const stockUpdate: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (body.stock !== undefined) stockUpdate.stock = body.stock;
       if (body.min_stock !== undefined) stockUpdate.min_stock = body.min_stock;
@@ -425,6 +478,9 @@ export async function updateProduct(auth: AuthInfo, id: string, body: Record<str
       if (body.deposito !== undefined) stockUpdate.deposito = body.deposito;
       if (body.pasillo !== undefined) stockUpdate.pasillo = body.pasillo;
       if (body.estanteria !== undefined) stockUpdate.estanteria = body.estanteria;
+      // La categoría del catálogo de ESTE tenant (migración 071): la fila global
+      // ya se escribió arriba, pero la ve solo el tenant dueño de la categoría.
+      if (body.category_id !== undefined) stockUpdate.category_id = updateData.category_id ?? null;
 
       let previousStock: number | null = null;
       if (body.stock !== undefined) {
@@ -1014,6 +1070,9 @@ const execute = async (onProgress?: ImportProgressCallback) => {
             deposito: item.candidate.deposito,
             pasillo: item.candidate.pasillo,
             estanteria: item.candidate.estanteria,
+            // Categoría por sucursal (migración 071): la fila global sólo la ve
+            // el tenant dueño de la categoría.
+            category_id: item.candidate.productData.category_id ?? null,
           })),
         );
         if (stockError) {
@@ -1119,6 +1178,11 @@ const execute = async (onProgress?: ImportProgressCallback) => {
           stockUpdate.deposito = candidate.deposito;
           stockUpdate.pasillo = candidate.pasillo;
           stockUpdate.estanteria = candidate.estanteria;
+        }
+        // La categoría del re-import también cae en el catálogo del tenant
+        // (migración 071), igual que en el alta.
+        if (candidate.productData.category_id !== undefined) {
+          stockUpdate.category_id = candidate.productData.category_id;
         }
 
         await supabaseAdmin
@@ -1340,7 +1404,11 @@ export async function adjustPrices(auth: AuthInfo, body: {
       .in('product_stock.tenant_id', scopeTenantIds)
       .order('id', { ascending: true });
     if (product_ids && product_ids.length > 0) query = query.in('id', product_ids);
-    if (category_id) query = query.eq('category_id', category_id);
+    // La categoría se filtra por el catálogo del tenant (`product_stock`),
+    // no por la fila global: `products.category_id` apunta a UNA categoría de
+    // UNA sucursal y dejaba fuera a los productos recibidos por transferencia
+    // (migración 071).
+    if (category_id) query = query.eq('product_stock.category_id', category_id);
     return query.range(from, to);
   };
 

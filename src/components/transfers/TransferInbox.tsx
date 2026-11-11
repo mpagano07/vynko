@@ -20,20 +20,7 @@ import { StatusBadge as StatusPill } from '@/components/ui/status-badge';
 import { IconAction } from '@/components/ui/icon-action';
 import { formatDate } from '@/lib/utils/format';
 import toast from 'react-hot-toast';
-import { TRANSFER_STATUS_LABELS, type Transfer, type TransferItem } from '@/lib/types/stock-transfer';
-
-// Fetch product names for items that don't have them
-async function enrichItems(items: TransferItem[]): Promise<TransferItem[]> {
-  const productIds = items.filter(i => !i.product_name).map(i => i.product_id);
-  if (productIds.length === 0) return items;
-
-  const res = await authFetch(`/api/products?ids=${productIds.join(',')}`);
-  if (!res.ok) return items;
-
-  const products: { id: string; name: string }[] = await res.json();
-  const nameMap = new Map(products.map(p => [p.id, p.name]));
-  return items.map(i => ({ ...i, product_name: nameMap.get(i.product_id) || i.product_id }));
-}
+import { TRANSFER_STATUS_LABELS, type Transfer } from '@/lib/types/stock-transfer';
 
 function StatusBadge({ status }: { status: Transfer['status'] }) {
   if (status === 'pending') {
@@ -313,23 +300,16 @@ export function TransferInbox({ currentTenantId, trigger = 0, onAction }: Transf
       if (silent) setRefreshing(true);
       setError(false);
 
-      const res = await authFetch('/api/stock-transfers?status=pending');
-      const pendingData: Transfer[] = res.ok ? await res.json() : [];
+      // Los estados activos viajan en un único GET (`?status=pending,in_transit`):
+      // antes eran dos requests secuenciales, uno por estado.
+      const res = await authFetch('/api/stock-transfers?status=pending,in_transit');
+      const data: Transfer[] = res.ok ? await res.json() : [];
 
-      const res2 = await authFetch('/api/stock-transfers?status=in_transit');
-      const transitData: Transfer[] = res2.ok ? await res2.json() : [];
+      // Mismo orden que cuando eran dos listas separadas: pendientes arriba,
+      // en tránsito abajo; cada grupo conserva el created_at desc del server.
+      const all = [...data.filter(t => t.status === 'pending'), ...data.filter(t => t.status === 'in_transit')];
 
-      const all = [...pendingData, ...transitData];
-
-      // Enrich items with product names
-      const enriched: Transfer[] = await Promise.all(
-        all.map(async t => ({
-          ...t,
-          items: await enrichItems(t.items),
-        }))
-      );
-
-      setTransfers(enriched);
+      setTransfers(all);
     } catch {
       setError(true);
     } finally {

@@ -1,9 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import ProductsPage from './page';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useProducts } from '@/lib/hooks/useProducts';
 import { useCategories } from '@/lib/hooks/useCategories';
+import { authFetch } from '@/lib/fetchWithTenant';
 import type { Product } from '@/lib/types/product';
 import { rememberDriveIntent, takeDriveIntent } from '@/lib/google/drive-intent';
 
@@ -38,6 +39,12 @@ vi.mock('@/components/transfers/TransferInbox', () => ({
 const authMock = vi.mocked(useAuth);
 const productsMock = vi.mocked(useProducts);
 const categoriesMock = vi.mocked(useCategories);
+const authFetchMock = vi.mocked(authFetch);
+
+/** Respuesta mínima de fetch para los mocks de `authFetch`: jsdom no arma el
+ *  `Response` completo, y el código bajo test sólo lee `ok`/`status`/`json`. */
+const jsonResponse = (body: unknown, status = 200): Response =>
+  ({ ok: true, status, json: async () => body } as unknown as Response);
 
 const product = (overrides: Partial<Product> = {}): Product => ({
   id: 'p1',
@@ -265,5 +272,150 @@ describe('retomar el flujo de Google Drive al volver del OAuth', () => {
     expect(await screen.findByText('TV 100 Pulgadas')).toBeInTheDocument();
     // Se descarta la intención para que no se reanude en una próxima visita.
     expect(takeDriveIntent()).toBeNull();
+  });
+});
+
+describe('modal de nueva transferencia', () => {
+  const BRANCHES = [
+    { id: 't1', name: 'Central' },
+    { id: 't2', name: 'Norte' },
+  ];
+
+  const renderMultiBranch = (
+    items: Product[],
+    authOverrides: Record<string, unknown> = {}
+  ) => {
+    productsMock.mockReturnValue({
+      products: items,
+      isLoading: false,
+      isError: false,
+      mutate: vi.fn(),
+    } as unknown as ReturnType<typeof useProducts>);
+    categoriesMock.mockReturnValue({
+      categories: [{ id: 'c1', name: 'Tv' }],
+      mutate: vi.fn(),
+    } as unknown as ReturnType<typeof useCategories>);
+    authMock.mockReturnValue({
+      tenant: { id: 't1', name: 'Central' },
+      tenants: BRANCHES,
+      allTenants: false,
+      loading: false,
+      ...authOverrides,
+    } as unknown as ReturnType<typeof useAuth>);
+    render(<ProductsPage />);
+  };
+
+  /** Abre Gestionar → Transferencias y devuelve el input de búsqueda del modal. */
+  const openTransferModal = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: /gestionar/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Transferencias' }));
+    return screen.findByPlaceholderText(/buscar productos/i);
+  };
+
+  /** Elige una opción del `Select` custom (botón + listbox) por su etiqueta. */
+  const pickSelectOption = (triggerName: string | RegExp, optionName: string) => {
+    fireEvent.click(screen.getByRole('button', { name: triggerName }));
+    fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: optionName }));
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    searchParamsMock.get.mockReturnValue(null);
+    window.history.replaceState({}, '', '/products');
+    // Default inofensivo: los tests que necesitan datos lo pisan.
+    authFetchMock.mockImplementation(async () => jsonResponse({}));
+  });
+
+  it('busca en el catálogo en memoria de la sucursal activa, sin bajar nada', async () => {
+    renderMultiBranch([
+      product({ id: 'p1', name: 'Café La Morenita', sku: 'CAFE-1' }),
+      product({ id: 'p2', name: 'Yerba Playadito', barcode: '7791234567890' }),
+    ]);
+    const search = await openTransferModal();
+
+    // Sin acento matchea el nombre con acento, como el buscador de la tabla.
+    fireEvent.change(search, { target: { value: 'cafe' } });
+    const dialog = screen.getByRole('dialog');
+    expect(await within(dialog).findByRole('button', { name: /café la morenita/i })).toBeInTheDocument();
+
+    // También por código de barras.
+    fireEvent.change(search, { target: { value: '7791' } });
+    expect(await within(dialog).findByRole('button', { name: /yerba playadito/i })).toBeInTheDocument();
+
+    // El catálogo de la sucursal activa ya está en la página: no se re-baja.
+    expect(
+      authFetchMock.mock.calls.filter(([url]) => String(url).includes('/api/products'))
+    ).toHaveLength(0);
+  });
+
+  it('baja el catálogo slim cuando el origen es otra sucursal', async () => {
+    authFetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/products/slim') {
+        return jsonResponse([{ id: 'p9', name: 'Termo Lumilagro', sku: 'TERMO-9', barcode: null }]);
+      }
+      return jsonResponse({});
+    });
+    renderMultiBranch([product({ id: 'p1', name: 'TV 100 Pulgadas' })]);
+    await openTransferModal();
+
+    pickSelectOption('Central', 'Norte');
+
+    await waitFor(() =>
+      expect(authFetchMock).toHaveBeenCalledWith('/api/products/slim', {
+        headers: { 'x-active-tenant-id': 't2' },
+      })
+    );
+
+    const search = screen.getByPlaceholderText(/buscar productos/i);
+    await waitFor(() => expect(search).not.toBeDisabled());
+    fireEvent.change(search, { target: { value: 'termo' } });
+    expect(await screen.findByRole('button', { name: /termo lumilagro/i })).toBeInTheDocument();
+    // Nunca pidió el catálogo completo: sólo la versión slim.
+    expect(authFetchMock.mock.calls.some(([url]) => String(url) === '/api/products')).toBe(false);
+  });
+
+  it('en el consolidado no reusa la unión de sucursales: pide el slim del origen', async () => {
+    renderMultiBranch([product()], { tenant: null, allTenants: true });
+    await openTransferModal();
+
+    pickSelectOption('Seleccionar origen...', 'Central');
+
+    await waitFor(() =>
+      expect(authFetchMock).toHaveBeenCalledWith('/api/products/slim', {
+        headers: { 'x-active-tenant-id': 't1' },
+      })
+    );
+  });
+
+  it('crea la transferencia con origen, destino e items', async () => {
+    authFetchMock.mockImplementation(async () => jsonResponse({ id: 'tr-1' }, 201));
+    renderMultiBranch([product({ id: 'p1', name: 'TV 100 Pulgadas' })]);
+    await openTransferModal();
+
+    pickSelectOption('Seleccionar destino...', 'Norte');
+
+    const search = screen.getByPlaceholderText(/buscar productos/i);
+    fireEvent.change(search, { target: { value: 'tv' } });
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(await within(dialog).findByRole('button', { name: /tv 100 pulgadas/i }));
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Enviar transferencia' }));
+
+    await waitFor(() =>
+      expect(authFetchMock).toHaveBeenCalledWith('/api/stock-transfers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from_tenant_id: 't1',
+          to_tenant_id: 't2',
+          items: [{ product_id: 'p1', quantity: 1 }],
+        }),
+      })
+    );
+
+    // onSuccess cierra el modal.
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Enviar transferencia' })).not.toBeInTheDocument()
+    );
   });
 });
