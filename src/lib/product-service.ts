@@ -1321,41 +1321,36 @@ export async function adjustPrices(auth: AuthInfo, body: {
   const multiplier = 1 + percentage / 100;
 
   const scopeTenantIds = auth.allTenants ? auth.tenantIds : [tenantId];
-  const { data: stockRows, error: stockError } = await supabaseAdmin
-    .from('product_stock')
-    .select('product_id')
-    .in('tenant_id', scopeTenantIds);
 
-  if (stockError) {
-    logger.error('DB error:', { error: stockError });
-    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
-  }
+  // Los productos del tenant se resuelven con el mismo join que listProducts.
+  //
+  // Antes se traían TODOS los product_id del tenant y después se filtraba
+  // `products` con `.in(id, [...])`: con 1000+ productos la URL del filtro
+  // llegaba a ~37KB y el gateway de Supabase la rechazaba con "Bad Request"
+  // (el "Ocurrio un error inesperado" al ajustar precios por categoría). El
+  // join además choca contra el tope de 1000 filas por SELECT: selectAllRows
+  // recorre el catálogo por rangos, así que se ajustan TODOS los productos.
+  const buildPage = (from: number, to: number) => {
+    let query = supabaseAdmin
+      .from('products')
+      .select(`
+        id, name, price_cents, cost, category_id,
+        stock_data:product_stock!inner(product_id)
+      `)
+      .in('product_stock.tenant_id', scopeTenantIds)
+      .order('id', { ascending: true });
+    if (product_ids && product_ids.length > 0) query = query.in('id', product_ids);
+    if (category_id) query = query.eq('category_id', category_id);
+    return query.range(from, to);
+  };
 
-  const tenantProductIds = new Set((stockRows ?? []).map((row) => row.product_id as string));
-  const allowedIds = product_ids && product_ids.length > 0
-    ? product_ids.filter((id) => tenantProductIds.has(id))
-    : Array.from(tenantProductIds);
-
-  if (allowedIds.length === 0) {
-    return { ok: false, error: 'No hay productos', status: 404 };
-  }
-
-  let productsQuery = supabaseAdmin
-    .from('products')
-    .select('id, name, price_cents, cost, category_id')
-    .in('id', allowedIds);
-
-  if (category_id) {
-    productsQuery = productsQuery.eq('category_id', category_id);
-  }
-
-  const { data: products, error: fetchError } = await productsQuery;
+  const { data: products, error: fetchError } = await selectAllRows(buildPage);
 
   if (fetchError) {
     logger.error('DB error:', { error: fetchError });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
-  if (!products || products.length === 0) {
+  if (products.length === 0) {
     return { ok: false, error: 'No hay productos', status: 404 };
   }
 
@@ -1368,23 +1363,35 @@ export async function adjustPrices(auth: AuthInfo, body: {
     new_cost: p.cost ? Math.round(p.cost * multiplier) : null,
   }));
 
+  // Aplicación en tandas con upsert sobre la PK. Antes era UN PATCH por
+  // producto, y cada uno arrastraba el `.in(id, todos los ids del tenant)` en
+  // la URL (mismo problema de longitud) más 1000+ requests secuenciales —
+  // lento y con timeout garantizado en serverless. El upsert manda las filas
+  // en el body del request.
   const errors: { id: string; name: string; error: string }[] = [];
+  const UPSERT_CHUNK = 500;
+  const updatedAt = new Date().toISOString();
 
-  for (const update of updates) {
-    const updateData: Record<string, unknown> = {
-      price_cents: update.new_price_cents,
-      updated_at: new Date().toISOString(),
-    };
-    if (update.new_cost !== null) updateData.cost = update.new_cost;
+  for (let i = 0; i < updates.length; i += UPSERT_CHUNK) {
+    const chunk = updates.slice(i, i + UPSERT_CHUNK);
+    const rows = chunk.map((update) => {
+      const row: Record<string, unknown> = {
+        id: update.id,
+        price_cents: update.new_price_cents,
+        updated_at: updatedAt,
+      };
+      if (update.new_cost !== null) row.cost = update.new_cost;
+      return row;
+    });
 
-    const { error: updateError } = await supabaseAdmin
+    const { error: upsertError } = await supabaseAdmin
       .from('products')
-      .update(updateData)
-      .eq('id', update.id)
-      .in('id', allowedIds);
+      .upsert(rows, { onConflict: 'id' });
 
-    if (updateError) {
-      errors.push({ id: update.id, name: update.name, error: 'Error al aplicar el precio' });
+    if (upsertError) {
+      for (const update of chunk) {
+        errors.push({ id: update.id, name: update.name, error: 'Error al aplicar el precio' });
+      }
     }
   }
 
