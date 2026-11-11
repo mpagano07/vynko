@@ -39,19 +39,26 @@ function saleItem(productId: string, quantity: number, day: string) {
   };
 }
 
+function product(id: string, name: string, priceCents: number, cost: number) {
+  return { id, name, price_cents: priceCents, cost, category_id: null };
+}
+
+function stockRow(
+  productId: string,
+  stock: number,
+  minStock: number,
+  maxStock: number,
+  embeddedProduct: ReturnType<typeof product>
+) {
+  return { product_id: productId, stock, min_stock: minStock, max_stock: maxStock, products: embeddedProduct };
+}
+
 function queueForecastData() {
   supabaseMock.__queue('product_stock', {
     data: [
-      { product_id: 'p1', stock: 3, min_stock: 0, max_stock: 30 },
-      { product_id: 'p2', stock: 2, min_stock: 5, max_stock: 20 },
-      { product_id: 'p3', stock: 5, min_stock: 0, max_stock: 10 },
-    ],
-  });
-  supabaseMock.__queue('products', {
-    data: [
-      { id: 'p1', name: 'Top', price_cents: 10000, cost: 90, category_id: null },
-      { id: 'p2', name: 'Lento', price_cents: 5000, cost: 40, category_id: null },
-      { id: 'p3', name: 'Micro', price_cents: 2000, cost: 10, category_id: null },
+      stockRow('p1', 3, 0, 30, product('p1', 'Top', 10000, 90)),
+      stockRow('p2', 2, 5, 20, product('p2', 'Lento', 5000, 40)),
+      stockRow('p3', 5, 0, 10, product('p3', 'Micro', 2000, 10)),
     ],
   });
   supabaseMock.__queue('sale_items', {
@@ -219,10 +226,7 @@ describe('GET /api/forecast', () => {
 
   it('cuenta en riesgo de quiebre los productos que se agotan en <= 7 días', async () => {
     supabaseMock.__queue('product_stock', {
-      data: [{ product_id: 'p1', stock: 1, min_stock: 0, max_stock: 30 }],
-    });
-    supabaseMock.__queue('products', {
-      data: [{ id: 'p1', name: 'Top', price_cents: 10000, cost: 90, category_id: null }],
+      data: [stockRow('p1', 1, 0, 30, product('p1', 'Top', 10000, 90))],
     });
     supabaseMock.__queue('sale_items', {
       data: [
@@ -252,10 +256,7 @@ describe('GET /api/forecast', () => {
 
   it('excluye de "Próximo a agotarse" productos con cobertura mayor a 15 días', async () => {
     supabaseMock.__queue('product_stock', {
-      data: [{ product_id: 'p1', stock: 50, min_stock: 0, max_stock: 200 }],
-    });
-    supabaseMock.__queue('products', {
-      data: [{ id: 'p1', name: 'Amplio', price_cents: 10000, cost: 90, category_id: null }],
+      data: [stockRow('p1', 50, 0, 200, product('p1', 'Amplio', 10000, 90))],
     });
     supabaseMock.__queue('sale_items', {
       data: [saleItem('p1', 2, '01')],
@@ -274,5 +275,40 @@ describe('GET /api/forecast', () => {
     // p1: 2u/30d = 0.1/día (mostrado); stock 50 -> cobertura ~500 días -> excluido
     expect(json.predictions[0].daysUntilStockout).toBe(500);
     expect(json.upcomingStockout).toHaveLength(0);
+  });
+
+  it('pagina el catálogo y no arma un .in() gigante con todos los productos', async () => {
+    // Regresión: con ~650 productos el `.in('id', [...])` superaba el límite
+    // de URL de PostgREST (~25 KB) y la consulta volvía 400. El pronóstico
+    // quedaba vacío como si no hubiera ventas.
+    const pageOne = Array.from({ length: 1000 }, (_, i) =>
+      stockRow(`p-${i}`, 1, 0, 10, product(`p-${i}`, `Producto ${i}`, 1000, 10))
+    );
+    const pageTwo = [stockRow('p-1000', 1, 0, 10, product('p-1000', 'Producto 1000', 1000, 10))];
+    supabaseMock.__queue('product_stock', { data: pageOne }, { data: pageTwo });
+    supabaseMock.__queue('sale_items', { data: [] });
+    supabaseMock.__queue('sales_daily_totals', { data: [] });
+    supabaseMock.__queue('sale_items', { data: [] });
+    supabaseMock.__queue('sales_daily_totals', { data: [] });
+
+    const res = await GET(makeRequest());
+    expect(res.status).toBe(200);
+    const json = await res.json();
+
+    expect(json.summary.totalProducts).toBe(1001);
+    expect(json.predictions).toHaveLength(1001);
+
+    const rangeCalls = supabaseMock.__calls
+      .filter((call) => call.table === 'product_stock' && call.method === 'range')
+      .map((call) => call.args);
+    expect(rangeCalls).toEqual([
+      [0, 999],
+      [1000, 1999],
+    ]);
+
+    // El producto global viaja embebido en product_stock: no se consulta
+    // `products` por separado ni se filtra con `.in('id', [...])`.
+    expect(supabaseMock.__calls.filter((call) => call.table === 'products')).toHaveLength(0);
+    expect(supabaseMock.__calls.filter((call) => call.method === 'in')).toHaveLength(0);
   });
 });
