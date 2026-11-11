@@ -12,6 +12,7 @@ import { trackEvent } from '@/lib/track-event';
 import { rateLimit } from '@/lib/rate-limit';
 import { MAX_IMPORT_ROWS } from '@/lib/excel-import-parse';
 import { logger } from '@/lib/logger';
+import { selectAllRows } from '@/lib/supabase-paging';
 
 export type ListProductsResult =
   | { ok: true; products: Array<Record<string, unknown>> }
@@ -153,26 +154,37 @@ async function requireStockManager(
 }
 
 export async function listProducts(auth: AuthInfo): Promise<ListProductsResult> {
-  let q = supabaseAdmin
-    .from('products')
-    .select(`
-      *,
-      stock_data:product_stock!inner(
-        stock,
-        min_stock,
-        max_stock,
-        deposito,
-        pasillo,
-        estanteria
-      )
-    `);
-  if (auth.allTenants) {
-    q = q.in('product_stock.tenant_id', auth.tenantIds);
-  } else {
-    q = q.eq('product_stock.tenant_id', auth.tenantId);
-  }
-  q = q.eq('product_stock.active', true);
-  const { data, error } = await q;
+  // El orden es determinístico (created_at desc + id como tiebreak) para que
+  // el loop de `selectAllRows` páginaee sin solapamientos ni huecos. Sin un
+  // order propio, el orden es el que decida Postgres y puede cambiar entre
+  // páginas. "Más nuevos primero" además deja arriba lo recién importado.
+  const buildPage = (from: number, to: number) => {
+    let q = supabaseAdmin
+      .from('products')
+      .select(`
+        *,
+        stock_data:product_stock!inner(
+          stock,
+          min_stock,
+          max_stock,
+          deposito,
+          pasillo,
+          estanteria
+        )
+      `)
+      .order('created_at', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: true });
+    if (auth.allTenants) {
+      q = q.in('product_stock.tenant_id', auth.tenantIds);
+    } else {
+      q = q.eq('product_stock.tenant_id', auth.tenantId);
+    }
+    return q.eq('product_stock.active', true).range(from, to);
+  };
+  // PostgREST corta todo SELECT en 1000 filas (db-max-rows) sin avisar: hay
+  // que recorrer el catálogo por rangos o los productos de más allá del tope
+  // nunca llegan al cliente.
+  const { data, error } = await selectAllRows(buildPage);
   if (error) {
     logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };

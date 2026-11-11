@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { selectAllRows } from '@/lib/supabase-paging';
 import type { AuthInfo } from '@/lib/api-auth';
 import { logger } from '@/lib/logger';
 import { createActivityLog } from '@/lib/activity-log';
@@ -25,14 +26,20 @@ export type CustomerResult<T = unknown> =
   | { ok: false; error: string; status: number };
 
 export async function listCustomers(auth: AuthInfo): Promise<CustomerResult> {
-  let query = supabaseAdmin
-    .from('customers')
-    .select('*')
-    .order('name', { ascending: true });
-  if (auth.allTenants) query = query.in('tenant_id', auth.tenantIds);
-  else query = query.eq('tenant_id', auth.tenantId);
-
-  const { data, error } = await query;
+  const buildPage = (from: number, to: number) => {
+    let query = supabaseAdmin
+      .from('customers')
+      .select('*')
+      .order('name', { ascending: true })
+      // Tiebreak único: sin él el loop de rangos puede solapar filas.
+      .order('id', { ascending: true });
+    if (auth.allTenants) query = query.in('tenant_id', auth.tenantIds);
+    else query = query.eq('tenant_id', auth.tenantId);
+    return query.range(from, to);
+  };
+  // PostgREST corta todo SELECT en 1000 filas (db-max-rows) sin avisar, así
+  // que el listado se recorre por rangos hasta agotar el tenant.
+  const { data, error } = await selectAllRows(buildPage);
 
   if (error) {
     logger.error('DB error:', { error });
