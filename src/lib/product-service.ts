@@ -228,13 +228,13 @@ export async function listProducts(auth: AuthInfo): Promise<ListProductsResult> 
  */
 export async function listProductsSlim(
   auth: AuthInfo
-): Promise<{ ok: true; products: Array<{ id: string; name: string; sku: string | null; barcode: string | null }> } | { ok: false; error: string }> {
+): Promise<{ ok: true; products: Array<{ id: string; name: string; sku: string | null; barcode: string | null; stock: number }> } | { ok: false; error: string }> {
   const buildPage = (from: number, to: number) => {
     let q = supabaseAdmin
       .from('products')
-      // `product_stock!inner()` sin columnas: el join embebido existe para
-      // poder filtrar por tenant, pero no arrastra datos a la respuesta.
-      .select('id, name, sku, barcode, product_stock!inner()')
+      // `product_stock!inner()` filtra por tenant; además trae el stock para
+      // que el selector de transferencias pueda limitar la cantidad a enviar.
+      .select('id, name, sku, barcode, product_stock!inner(stock)')
       .order('created_at', { ascending: false, nullsFirst: false })
       .order('id', { ascending: true });
     if (auth.allTenants) {
@@ -249,12 +249,16 @@ export async function listProductsSlim(
     logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
   }
-  const products = (data ?? []).map((p) => ({
-    id: String(p.id),
-    name: String(p.name ?? ''),
-    sku: (p.sku ?? null) as string | null,
-    barcode: (p.barcode ?? null) as string | null,
-  }));
+  const products = (data ?? []).map((p) => {
+    const stockRows = (p.product_stock ?? []) as Array<{ stock?: number | null }>;
+    return {
+      id: String(p.id),
+      name: String(p.name ?? ''),
+      sku: (p.sku ?? null) as string | null,
+      barcode: (p.barcode ?? null) as string | null,
+      stock: stockRows.reduce((sum, row) => sum + (Number(row.stock) || 0), 0),
+    };
+  });
   return { ok: true, products };
 }
 

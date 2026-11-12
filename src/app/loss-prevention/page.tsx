@@ -33,13 +33,16 @@ import { matchesQuery } from '@/lib/utils/text';
 import { NEW_ACCOUNT_PLAN } from '@/lib/plans';
 
 const reasonOptions = [
+  // El `hex` es solo para el donut: la paleta categórica evita tonos
+  // repetidos (ámbar/naranja, rojo/rosa) que hacían indistinguibles porciones
+  // distintas. El badge de la tabla conserva el color semántico de `color`.
   { value: 'damaged', label: 'Dañado', color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30', hex: '#f59e0b' },
   { value: 'lost', label: 'Perdido', color: 'text-red-600 bg-red-50 dark:bg-red-950/30', hex: '#ef4444' },
-  { value: 'stolen', label: 'Robado', color: 'text-rose-600 bg-rose-50 dark:bg-rose-950/30', hex: '#e11d48' },
-  { value: 'expired', label: 'Vencido', color: 'text-orange-600 bg-orange-50 dark:bg-orange-950/30', hex: '#f97316' },
+  { value: 'stolen', label: 'Robado', color: 'text-rose-600 bg-rose-50 dark:bg-rose-950/30', hex: '#8b5cf6' },
+  { value: 'expired', label: 'Vencido', color: 'text-orange-600 bg-orange-50 dark:bg-orange-950/30', hex: '#0ea5e9' },
   { value: 'found', label: 'Encontrado', color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30', hex: '#10b981' },
-  { value: 'stock_in', label: 'Ingreso de mercadería', color: 'text-teal-600 bg-teal-50 dark:bg-teal-950/30', hex: '#14b8a6' },
-  { value: 'correction', label: 'Corrección', color: 'text-blue-600 bg-blue-50 dark:bg-blue-950/30', hex: '#3b82f6' },
+  { value: 'stock_in', label: 'Ingreso de mercadería', color: 'text-teal-600 bg-teal-50 dark:bg-teal-950/30', hex: '#84cc16' },
+  { value: 'correction', label: 'Corrección', color: 'text-blue-600 bg-blue-50 dark:bg-blue-950/30', hex: '#64748b' },
 ];
 
 const reasonMap = Object.fromEntries(reasonOptions.map(r => [r.value, r]));
@@ -318,10 +321,10 @@ export default function LossPreventionPage() {
                       variant="ghost"
                       size="sm"
                       onClick={() => router.push(`/products?search=${encodeURIComponent(product.productName)}`)}
-                      className="shrink-0 gap-1"
+                      className="group shrink-0 gap-1 transition-colors hover:text-indigo-600 dark:hover:text-indigo-400"
                       aria-label={`Revisar ${product.productName}`}
                     >
-                      <ExternalLink className="h-3.5 w-3.5" />
+                      <ExternalLink className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
                       Ver
                     </Button>
                   </div>

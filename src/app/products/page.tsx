@@ -106,6 +106,8 @@ interface TransferProduct {
   name: string;
   sku?: string;
   barcode?: string;
+  /** Unidades disponibles en la sucursal origen. */
+  stock?: number;
 }
 
 export default function ProductsPage() {
@@ -2188,7 +2190,7 @@ function NewTransferModal({
   const [fromTenantId, setFromTenantId] = useState(currentTenantId || '');
   const [toTenantId, setToTenantId] = useState('');
   const [notes, setNotes] = useState('');
-  const [items, setItems] = useState<{ product_id: string; product_name: string; quantity: number }[]>([]);
+  const [items, setItems] = useState<{ product_id: string; product_name: string; quantity: number; stock?: number }[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -2272,12 +2274,28 @@ function NewTransferModal({
   }, [searchTerm, searchIndex, items]);
 
   const addItem = (product: TransferProduct) => {
-    setItems(prev => [...prev, { product_id: product.id, product_name: product.name, quantity: 1 }]);
+    if (product.stock !== undefined && product.stock <= 0) {
+      toast.error(`${product.name} no tiene stock en la sucursal origen`);
+      return;
+    }
+    setItems(prev => [...prev, {
+      product_id: product.id,
+      product_name: product.name,
+      quantity: 1,
+      stock: product.stock,
+    }]);
     setSearchTerm('');
   };
 
   const updateQuantity = (productId: string, qty: number) => {
-    setItems(prev => prev.map(i => i.product_id === productId ? { ...i, quantity: Math.max(1, qty) } : i));
+    setItems(prev => prev.map(i => {
+      if (i.product_id !== productId) return i;
+      // Si el catálogo no informa stock (respuesta vieja), no se recorta acá:
+      // el backend sigue siendo la autoridad y devuelve un error claro.
+      const max = i.stock !== undefined && i.stock > 0 ? i.stock : Number.MAX_SAFE_INTEGER;
+      const next = Math.min(max, Math.max(1, Math.floor(qty) || 1));
+      return { ...i, quantity: next };
+    }));
   };
 
   const removeItem = (productId: string) => {
@@ -2292,6 +2310,11 @@ function NewTransferModal({
     }
     if (items.length === 0) {
       toast.error('Agregá al menos un producto');
+      return;
+    }
+    const overStock = items.find(i => i.stock !== undefined && i.quantity > i.stock);
+    if (overStock) {
+      toast.error(`Stock insuficiente de ${overStock.product_name}. Disponible: ${overStock.stock}`);
       return;
     }
 
@@ -2376,17 +2399,30 @@ function NewTransferModal({
 
             {searchResults.length > 0 && (
               <div className="mb-3 border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-800 max-h-48 overflow-y-auto">
-                {searchResults.map((p) => (
-                  <button
-                    key={p.id as string}
-                    type="button"
-                    onClick={() => addItem(p)}
-                    className="flex items-center justify-between w-full px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50 text-left"
-                  >
-                    <span className="font-medium text-gray-900 dark:text-gray-100">{p.name as string}</span>
-                    <span className="text-xs text-indigo-500 font-medium">Agregar</span>
-                  </button>
-                ))}
+                {searchResults.map((p) => {
+                  const outOfStock = p.stock !== undefined && p.stock <= 0;
+                  return (
+                    <button
+                      key={p.id as string}
+                      type="button"
+                      onClick={() => addItem(p)}
+                      disabled={outOfStock}
+                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-sm text-left hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent dark:hover:bg-gray-800/50"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium text-gray-900 dark:text-gray-100">{p.name as string}</span>
+                        {p.stock !== undefined && (
+                          <span className={`block text-xs ${outOfStock ? 'text-rose-600 dark:text-rose-400' : 'text-gray-400'}`}>
+                            {outOfStock ? 'Sin stock en origen' : `${p.stock} u. disponibles`}
+                          </span>
+                        )}
+                      </span>
+                      <span className={`shrink-0 text-xs font-medium ${outOfStock ? 'text-gray-400' : 'text-indigo-500'}`}>
+                        {outOfStock ? 'Sin stock' : 'Agregar'}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             )}
 
@@ -2394,15 +2430,24 @@ function NewTransferModal({
               <div className="border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-800">
                 {items.map((item) => (
                   <div key={item.product_id} className="flex items-center justify-between px-3 py-2">
-                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate flex-1">
-                      {item.product_name}
-                    </span>
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                        {item.product_name}
+                      </span>
+                      {item.stock !== undefined && (
+                        <span className="block text-xs text-gray-400">
+                          Stock disponible: {item.stock} u.
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2 ml-3">
                       <Input
                         type="number"
                         min="1"
+                        max={item.stock}
                         value={item.quantity}
                         onChange={(e) => updateQuantity(item.product_id, parseInt(e.target.value) || 1)}
+                        aria-label={`Cantidad de ${item.product_name}`}
                         className="w-20 text-center text-sm"
                       />
                       <IconAction

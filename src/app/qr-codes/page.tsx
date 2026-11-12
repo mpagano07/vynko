@@ -79,11 +79,12 @@ export default function CodigosPage() {
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [qrs, setQrs] = useState<Map<string, string>>(new Map());
   const [printing, setPrinting] = useState(false);
-  const [preview, setPreview] = useState<{ id: string; name: string; code: string; qrUrl: string } | null>(null);
+  const [preview, setPreview] = useState<{ id: string; name: string; code: string; qrUrl: string; price: number } | null>(null);
   const [labelTemplate, setLabelTemplate] = useState<LabelTemplate>('a4-24');
   const [showName, setShowName] = useState(true);
   const [showPrice, setShowPrice] = useState(true);
   const [showSku, setShowSku] = useState(true);
+  const [showCategory, setShowCategory] = useState(true);
   const printRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -337,7 +338,7 @@ export default function CodigosPage() {
       box-shadow: inset 0 0 0 1px #e2e8f0;
       line-height: 0;
     }
-    .qr-card img { width: ${printConfig.qr}px; height: ${printConfig.qr}px; }
+    .qr-card img { display: block; width: ${printConfig.qr}px; height: ${printConfig.qr}px; object-fit: contain; }
     .qr-name {
       font-size: ${printConfig.nameFont};
       font-weight: 600;
@@ -512,6 +513,7 @@ export default function CodigosPage() {
             </div>
             <div className="flex flex-wrap items-center gap-3">
               {[
+                { key: 'category' as const, label: 'Categoría', checked: showCategory, set: setShowCategory },
                 { key: 'name' as const, label: 'Nombre', checked: showName, set: setShowName },
                 { key: 'price' as const, label: 'Precio', checked: showPrice, set: setShowPrice },
                 { key: 'sku' as const, label: 'SKU', checked: showSku, set: setShowSku },
@@ -556,8 +558,8 @@ export default function CodigosPage() {
                   <button
                     type="button"
                     disabled={!qrUrl}
-                    onClick={() => qrUrl && setPreview({ id: p.id, name: p.name, code, qrUrl })}
-                    className="relative cursor-zoom-in rounded-xl bg-white p-1.5 shadow-sm ring-1 ring-gray-200/80 transition-all hover:ring-indigo-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-default dark:ring-gray-700 dark:hover:ring-indigo-500/50"
+                    onClick={() => qrUrl && setPreview({ id: p.id, name: p.name, code, qrUrl, price: p.price })}
+                    className="relative max-w-full cursor-zoom-in rounded-xl bg-white p-1.5 shadow-sm ring-1 ring-gray-200/80 transition-all hover:ring-indigo-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-default dark:ring-gray-700 dark:hover:ring-indigo-500/50"
                     aria-label={qrUrl ? `Ampliar QR de ${p.name}` : undefined}
                     title={qrUrl ? 'Ampliar QR' : undefined}
                   >
@@ -567,31 +569,40 @@ export default function CodigosPage() {
                         alt={`QR ${p.name}`}
                         width={360}
                         height={360}
-                        className="h-28 w-28 sm:h-32 sm:w-32 md:h-40 md:w-40"
+                        className="aspect-square h-auto w-28 max-w-full object-contain sm:w-32 md:w-40"
                         unoptimized
                       />
                     ) : (
-                      <div className="h-28 w-28 animate-pulse rounded-lg bg-gray-100 dark:bg-gray-800 sm:h-32 sm:w-32 md:h-40 md:w-40" />
+                      <div className="aspect-square h-auto w-28 max-w-full animate-pulse rounded-lg bg-gray-100 dark:bg-gray-800 sm:w-32 md:w-40" />
                     )}
                   </button>
                   <div className="flex w-full min-w-0 flex-1 flex-col text-center">
-                    {categoryName && (
+                    {showCategory && categoryName && (
                       <p className="mb-0.5 truncate text-xs font-semibold uppercase tracking-wide text-indigo-500 dark:text-indigo-400">
                         {categoryName}
                       </p>
                     )}
-                    <p
-                      className="line-clamp-2 min-h-[2.5rem] text-sm font-semibold leading-5 text-gray-900 dark:text-gray-100"
-                      title={p.name}
-                    >
-                      {p.name}
-                    </p>
-                    <p
-                      className="mt-1 w-full truncate rounded-md bg-gray-100 px-2 py-1 text-center font-mono text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300"
-                      title={code}
-                    >
-                      {code}
-                    </p>
+                    {showName && (
+                      <p
+                        className="line-clamp-2 min-h-[2.5rem] text-sm font-semibold leading-5 text-gray-900 dark:text-gray-100"
+                        title={p.name}
+                      >
+                        {p.name}
+                      </p>
+                    )}
+                    {showPrice && (
+                      <p className="mt-1 text-sm font-bold tabular-nums text-gray-900 dark:text-gray-100">
+                        {formatARS(p.price)}
+                      </p>
+                    )}
+                    {showSku && (
+                      <p
+                        className="mt-1 w-full truncate rounded-md bg-gray-100 px-2 py-1 text-center font-mono text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                        title={code}
+                      >
+                        {code}
+                      </p>
+                    )}
                   </div>
                   <Button
                     variant="outline"
@@ -642,16 +653,25 @@ export default function CodigosPage() {
                 alt={`QR ${preview.name}`}
                 width={360}
                 height={360}
-                className="h-64 w-64 rounded-xl sm:h-72 sm:w-72"
+                className="aspect-square h-auto w-64 max-w-full rounded-xl object-contain sm:w-72"
                 unoptimized
               />
               <div className="w-full text-center">
-                <p className="truncate text-base font-semibold text-gray-900 dark:text-gray-100" title={preview.name}>
-                  {preview.name}
-                </p>
-                <p className="mx-auto mt-1 w-full truncate rounded-md bg-gray-100 px-2 py-1 font-mono text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                  {preview.code}
-                </p>
+                {showName && (
+                  <p className="truncate text-base font-semibold text-gray-900 dark:text-gray-100" title={preview.name}>
+                    {preview.name}
+                  </p>
+                )}
+                {showPrice && (
+                  <p className="mt-1 text-base font-bold tabular-nums text-gray-900 dark:text-gray-100">
+                    {formatARS(preview.price)}
+                  </p>
+                )}
+                {showSku && (
+                  <p className="mx-auto mt-1 w-full truncate rounded-md bg-gray-100 px-2 py-1 font-mono text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                    {preview.code}
+                  </p>
+                )}
               </div>
               <p className="text-xs text-gray-500 dark:text-gray-400">Apuntá la cámara al código para escanearlo.</p>
               <Button

@@ -29,6 +29,7 @@ const slimRows = (count: number, offset = 0) =>
     name: `Producto ${offset + i}`,
     sku: `SKU-${offset + i}`,
     barcode: null,
+    product_stock: [{ stock: 2 }, { stock: 3 }],
   }));
 
 describe('GET /api/products/slim', () => {
@@ -55,10 +56,10 @@ describe('GET /api/products/slim', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toHaveLength(1037);
-    // Sólo los cuatro campos que usa el selector: nada de descripción,
-    // imágenes ni join de stock en el payload.
-    expect(json[0]).toEqual({ id: 'p-0', name: 'Producto 0', sku: 'SKU-0', barcode: null });
-    expect(json[1036]).toEqual({ id: 'p-1036', name: 'Producto 1036', sku: 'SKU-1036', barcode: null });
+    // Sólo los campos que usa el selector (incluido el stock para limitar
+    // transferencias): nada de descripción, imágenes ni storage.
+    expect(json[0]).toEqual({ id: 'p-0', name: 'Producto 0', sku: 'SKU-0', barcode: null, stock: 5 });
+    expect(json[1036]).toEqual({ id: 'p-1036', name: 'Producto 1036', sku: 'SKU-1036', barcode: null, stock: 5 });
 
     // Mismo scoping que listProducts: el tenant activo y el stock activo.
     const eqs = callsTo(supabaseMock.__calls, 'products', 'eq').map((call) => call.args);

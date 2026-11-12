@@ -107,22 +107,60 @@ export async function createTransfer(
     return { ok: false, error: 'Debe incluir al menos un producto', status: 400 };
   }
 
+  // Normaliza y agrupa las líneas antes de tocar la base. El body puede traer
+  // cantidades negativas, decimales o el mismo producto repetido; dos líneas
+  // de 6 contra un stock de 10 pasaban el chequeo por separado y el envío
+  // fallaba recién al descontar 12.
+  const quantities = new Map<string, number>();
+  for (const item of items) {
+    const productId = typeof item.product_id === 'string' ? item.product_id : '';
+    const quantity = typeof item.quantity === 'number' ? item.quantity : Number(item.quantity);
+    if (!productId || !Number.isInteger(quantity) || quantity <= 0) {
+      return { ok: false, error: 'Las cantidades deben ser enteros mayores a 0', status: 400 };
+    }
+    quantities.set(productId, (quantities.get(productId) ?? 0) + quantity);
+  }
+
   // `products` es global y `product_id` viene del body: sin exigir la fila de
   // `product_stock` del tenant ORIGEN, A puede mover un producto que solo
   // existe para B y el alta de stock en destino lo deja expuesto en el
   // catalogo y en el forecast de una empresa que nunca lo compro.
-  const productIds = [...new Set(items.map((item) => item.product_id).filter(Boolean))];
-  if (productIds.length === 0) {
-    return { ok: false, error: 'Debe incluir al menos un producto', status: 400 };
-  }
-  const { data: ownedStock } = await supabaseAdmin
-    .from('product_stock')
-    .select('product_id')
-    .in('product_id', productIds)
-    .eq('tenant_id', from_tenant_id);
-  const ownedIds = new Set((ownedStock ?? []).map((row) => row.product_id as string));
-  if (productIds.some((id) => !ownedIds.has(id as string))) {
+  const productIds = [...quantities.keys()];
+  const [{ data: ownedStock }, { data: productRows }] = await Promise.all([
+    supabaseAdmin
+      .from('product_stock')
+      .select('product_id, stock')
+      .in('product_id', productIds)
+      .eq('tenant_id', from_tenant_id),
+    supabaseAdmin
+      .from('products')
+      .select('id, name')
+      .in('id', productIds),
+  ]);
+  const stockById = new Map(
+    (ownedStock ?? []).map((row) => [row.product_id as string, Number(row.stock) || 0])
+  );
+  const nameById = new Map(
+    (productRows ?? []).map((row) => [row.id as string, row.name as string])
+  );
+  if (productIds.some((id) => !stockById.has(id))) {
     return { ok: false, error: 'Uno o mas productos no pertenecen a la sucursal origen', status: 400 };
+  }
+
+  // Se valida contra el stock actual para no crear una transferencia que ya
+  // nace imposible: antes se aceptaba y el error aparecía recién al confirmar
+  // el envío. El `send_transfer` vuelve a chequear bajo lock por si el stock
+  // cambió entre la creación y el envío.
+  for (const [productId, quantity] of quantities) {
+    const available = stockById.get(productId) ?? 0;
+    if (quantity > available) {
+      const name = nameById.get(productId) || productId;
+      return {
+        ok: false,
+        error: `Stock insuficiente de "${name}". Disponible: ${available}, requerido: ${quantity}`,
+        status: 400,
+      };
+    }
   }
 
   const { data: transfer, error: transferError } = await supabaseAdmin
@@ -145,10 +183,10 @@ export async function createTransfer(
     };
   }
 
-  const transferItems = items.map((item) => ({
+  const transferItems = [...quantities].map(([productId, quantity]) => ({
     transfer_id: transfer.id,
-    product_id: item.product_id,
-    quantity: item.quantity,
+    product_id: productId,
+    quantity,
   }));
 
   const { error: itemsError } = await supabaseAdmin

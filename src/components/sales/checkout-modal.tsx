@@ -378,7 +378,8 @@ return (
         </h3>
       }
     >
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
           <div>
             <div className="flex items-end justify-between">
               <div>
@@ -787,39 +788,41 @@ return (
               </span>
             ))}
           </p>
-
-          {/* El pie queda fijo dentro de la hoja para confirmar sin scrollear. */}
-          <div
-            className="sticky bottom-0 z-10 -mx-5 -mb-5 mt-1 flex items-center justify-between gap-3 border-t border-gray-200 bg-white px-5 pt-3 dark:border-gray-700 dark:bg-gray-900"
-            style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
-          >
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-11 rounded-md px-4 text-sm font-medium text-gray-600 border border-gray-300 transition-colors hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={confirmPayment}
-              disabled={!canConfirm}
-              className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-md bg-indigo-600 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50"
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Procesando...
-                </>
-              ) : (
-                <>
-                  Confirmar pago
-                  <kbd className="hidden px-1.5 py-0.5 rounded bg-indigo-700/80 text-xs font-mono sm:inline-block">Enter</kbd>
-                </>
-              )}
-            </button>
-          </div>
         </div>
-      </Modal>
+
+        {/* Pie fuera del área scrolleable: así no tapa el último contenido
+            (atajos, vuelto o notas) al desplazarse. */}
+        <div
+          className="flex items-center justify-between gap-3 border-t border-gray-200 bg-white px-5 pt-3 dark:border-gray-700 dark:bg-gray-900"
+          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-11 rounded-md px-4 text-sm font-medium text-gray-600 border border-gray-300 transition-colors hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={confirmPayment}
+            disabled={!canConfirm}
+            className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-md bg-indigo-600 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50"
+          >
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Procesando...
+              </>
+            ) : (
+              <>
+                Confirmar pago
+                <kbd className="hidden px-1.5 py-0.5 rounded bg-indigo-700/80 text-xs font-mono sm:inline-block">Enter</kbd>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </Modal>
     );
 }
