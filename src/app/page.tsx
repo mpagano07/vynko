@@ -183,7 +183,7 @@ export default function LandingPage() {
                   </Link>
                   <Link
                     href="/auth/signup"
-                    className="text-xs sm:text-sm font-medium bg-cyan-500 hover:bg-cyan-400 text-black px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg transition-colors whitespace-nowrap"
+                    className="text-xs sm:text-sm font-medium bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg transition-colors whitespace-nowrap"
                   >
                     Comenzar gratis
                   </Link>
@@ -196,21 +196,21 @@ export default function LandingPage() {
 
       {/* Hero Section */}
       <section className="relative pt-36 pb-20 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-cyan-500/5 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/5 via-transparent to-transparent" />
         {/* El círculo difuminado de 800px se oculta en mobile: pintar un blur
             tan grande fuera de viewport es de los efectos más caros al
             scrollear. En desktop suma ambiente, en mobile solo cuesta. */}
-        <div className="hidden sm:block absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-cyan-500/5 rounded-full blur-3xl" />
+        <div className="hidden sm:block absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-indigo-500/5 rounded-full blur-3xl" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-medium mb-6">
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-medium mb-6">
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
                 Gestión de stock
               </div>
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight tracking-tight">
                 Sistema de gestión de{' '}
-                <span className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">stock y ventas</span>{' '}
+                <span className="bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">stock y ventas</span>{' '}
                 para comercios
               </h1>
               <p className="mt-6 text-lg text-gray-400 leading-relaxed max-w-lg">
@@ -224,14 +224,14 @@ export default function LandingPage() {
                       value={email}
                       onChange={e => { setEmail(e.target.value); setEmailError(''); }}
                       placeholder="tu@email.com"
-                      className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-gray-900 border border-gray-800 rounded-lg text-white placeholder:text-gray-400 focus:outline-none focus:border-cyan-500/50 text-sm"
+                      className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-gray-900 border border-gray-800 rounded-lg text-white placeholder:text-gray-400 focus:outline-none focus:border-indigo-500/50 text-sm"
                     />
                     {emailError && <p className="text-xs text-red-400 mt-1.5">{emailError}</p>}
                   </div>
                   <button
                     type="submit"
                     disabled={waitlistLoading}
-                    className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-3 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-colors text-sm disabled:opacity-50 whitespace-nowrap"
+                    className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white font-semibold rounded-lg transition-colors text-sm disabled:opacity-50 whitespace-nowrap"
                   >
                     {waitlistLoading ? 'Enviando...' : 'Comenzar gratis'}
                   </button>
@@ -247,7 +247,7 @@ export default function LandingPage() {
 
             {/* Dashboard Preview */}
             <div className="relative">
-              <div className="hidden sm:block absolute inset-0 bg-gradient-to-tr from-cyan-500/10 via-transparent to-blue-500/10 rounded-2xl blur-2xl" />
+              <div className="hidden sm:block absolute inset-0 bg-gradient-to-tr from-indigo-500/10 via-transparent to-blue-500/10 rounded-2xl blur-2xl" />
               <div className="relative bg-gray-900/90 backdrop-blur-sm sm:bg-gray-900/80 sm:backdrop-blur-xl border border-gray-800 rounded-2xl p-6 shadow-2xl">
                 <div className="flex items-center gap-2 mb-6">
                   <div className="w-3 h-3 rounded-full bg-red-500" />
@@ -257,7 +257,7 @@ export default function LandingPage() {
                 </div>
                 <div className="grid grid-cols-3 gap-3 mb-6">
                   {[
-                    { label: 'Ventas hoy', value: '$4.850', color: 'text-cyan-400' },
+                    { label: 'Ventas hoy', value: '$4.850', color: 'text-indigo-400' },
                     { label: 'Productos', value: '1.247', color: 'text-blue-400' },
                     { label: 'Alertas', value: '3', color: 'text-amber-400' },
                   ].map(k => (
@@ -271,7 +271,7 @@ export default function LandingPage() {
                   {PREVIEW_BARS.map((d) => (
                     <div
                       key={d.name}
-                      className="flex-1 bg-cyan-900/40 rounded-t"
+                      className="flex-1 bg-indigo-900/40 rounded-t"
                       style={{ height: `${(d.ventas / 6300) * 100}%` }}
                     />
                   ))}
@@ -286,7 +286,7 @@ export default function LandingPage() {
           <div className="mt-16 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm text-gray-300">
             {['Stock en tiempo real', 'Caja en segundos', 'Multi-sucursal', 'Control de mermas'].map((item) => (
               <div key={item} className="flex items-center gap-2">
-                <span className="text-cyan-400">✓</span>
+                <span className="text-indigo-400">✓</span>
                 {item}
               </div>
             ))}
@@ -302,7 +302,7 @@ export default function LandingPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
               Probá ahora — sin registro
             </div>
-            <h2 className="text-3xl sm:text-4xl font-bold">Probá Vynko <span className="text-cyan-400">en acción</span></h2>
+            <h2 className="text-3xl sm:text-4xl font-bold">Probá Vynko <span className="text-indigo-400">en acción</span></h2>
             <p className="mt-4 text-gray-400 max-w-lg mx-auto">Sumá productos al carrito, simulá una venta y experimentá la interfaz. Sin crear cuenta, sin compromiso.</p>
           </div>
           <div className="max-w-5xl mx-auto">
@@ -317,7 +317,7 @@ export default function LandingPage() {
       <section className="py-20" id="comparison">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold">Excel + papel vs <span className="text-cyan-400">Vynko</span></h2>
+            <h2 className="text-3xl sm:text-4xl font-bold">Excel + papel vs <span className="text-indigo-400">Vynko</span></h2>
             <p className="mt-4 text-gray-400">La diferencia entre sobrevivir y escalar tu negocio.</p>
           </div>
           <div className="overflow-x-auto rounded-2xl border border-gray-800">
@@ -326,7 +326,7 @@ export default function LandingPage() {
                 <tr className="bg-gray-900/60">
                   <th className="p-4 text-xs font-semibold uppercase tracking-wider text-gray-500">&nbsp;</th>
                   <th className="p-4 text-sm font-bold text-gray-300">Excel + papel</th>
-                  <th className="p-4 text-sm font-bold text-cyan-400">Vynko</th>
+                  <th className="p-4 text-sm font-bold text-indigo-400">Vynko</th>
                 </tr>
               </thead>
               <tbody>
@@ -346,7 +346,7 @@ export default function LandingPage() {
                       {row.excel}
                     </td>
                     <td className="p-4 text-sm text-gray-200">
-                      <span className="mr-2 text-cyan-400">✓</span>
+                      <span className="mr-2 text-indigo-400">✓</span>
                       {row.vynko}
                     </td>
                   </tr>
@@ -407,7 +407,7 @@ export default function LandingPage() {
                 desc: 'Cada acción queda registrada: quién la hizo, cuándo y qué cambió. Exportá el historial a Excel cuando necesites revisarlo.',
               },
             ].map(f => (
-              <div key={f.title} className="bg-gray-950 border border-gray-800 rounded-2xl p-6 hover:border-cyan-500/30 transition-colors">
+              <div key={f.title} className="bg-gray-950 border border-gray-800 rounded-2xl p-6 hover:border-indigo-500/30 transition-colors">
                 <div className="text-3xl mb-4">{f.icon}</div>
                 <h3 className="text-base font-bold mb-3">{f.title}</h3>
                 <p className="text-sm text-gray-400 leading-relaxed">{f.desc}</p>
@@ -437,7 +437,7 @@ export default function LandingPage() {
       <section className="py-20 bg-gray-950" id="roi">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <h2 className="text-3xl sm:text-4xl font-bold">¿Cuánto <span className="text-cyan-400">podés ahorrar</span>?</h2>
+            <h2 className="text-3xl sm:text-4xl font-bold">¿Cuánto <span className="text-indigo-400">podés ahorrar</span>?</h2>
             <p className="mt-4 text-gray-400">Ingresá los datos de tu negocio y calculá el impacto real.</p>
           </div>
           <div className="max-w-4xl mx-auto">
@@ -452,7 +452,7 @@ export default function LandingPage() {
       <section className="py-20" id="how-it-works">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold">Empezá en <span className="text-cyan-400">3 pasos</span></h2>
+            <h2 className="text-3xl sm:text-4xl font-bold">Empezá en <span className="text-indigo-400">3 pasos</span></h2>
             <p className="mt-4 text-gray-400">Menos de 5 minutos y ya estás operando.</p>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
@@ -462,8 +462,8 @@ export default function LandingPage() {
               { step: '03', title: 'Mantené todo al día', desc: 'Cada venta, compra o transferencia actualiza el stock automáticamente.' },
             ].map(s => (
               <div key={s.step} className="text-center">
-                <div className="w-16 h-16 mx-auto rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mb-6">
-                  <span className="text-2xl font-bold text-cyan-400">{s.step}</span>
+                <div className="w-16 h-16 mx-auto rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mb-6">
+                  <span className="text-2xl font-bold text-indigo-400">{s.step}</span>
                 </div>
                 <h3 className="text-lg font-bold mb-3">{s.title}</h3>
                 <p className="text-sm text-gray-400 leading-relaxed">{s.desc}</p>
@@ -502,7 +502,7 @@ export default function LandingPage() {
                 cta = (
                   <a
                     href={`mailto:${SALES_EMAIL}?subject=${encodeURIComponent('Cotización Plan Enterprise - Vynko')}`}
-                    className="block text-center w-full py-3 rounded-lg font-semibold text-sm transition-colors bg-amber-500 hover:bg-amber-400 text-black"
+                    className="block text-center w-full py-3 rounded-lg font-semibold text-sm transition-colors bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
                   >
                     Hablar con Ventas
                   </a>
@@ -513,8 +513,8 @@ export default function LandingPage() {
                     href={isTrialPlan && trialExpired ? '/billing' : '/auth/signup'}
                     className={`block text-center w-full py-3 rounded-lg font-semibold text-sm transition-colors ${
                       isPopular
-                        ? 'bg-cyan-500 hover:bg-cyan-400 text-black shadow-lg shadow-cyan-500/25'
-                        : 'bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                        ? 'bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white shadow-lg shadow-indigo-500/25'
+                        : 'bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
                     }`}
                   >
                     {isTrialPlan && trialExpired
@@ -533,19 +533,19 @@ export default function LandingPage() {
                     plan.comingSoon
                       ? 'bg-gray-950 border border-dashed border-gray-700'
                       : isPopular
-                        ? 'bg-gradient-to-b from-cyan-500/10 via-gray-900 to-gray-900 border-2 border-cyan-400 shadow-[0_0_60px_-12px_rgba(34,211,238,0.55)] md:scale-[1.06] md:z-10'
+                        ? 'bg-gradient-to-b from-indigo-500/10 via-gray-900 to-gray-900 border-2 border-indigo-400 shadow-[0_0_60px_-12px_rgba(99,102,241,0.55)] md:scale-[1.06] md:z-10'
                         : 'bg-gray-950 border border-gray-800'
                   }`}
                 >
                   {isPopular && (
-                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap px-5 py-1.5 rounded-full bg-gradient-to-r from-orange-500 to-amber-400 text-black text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-orange-500/30">
+                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap px-5 py-1.5 rounded-full bg-gradient-to-r from-indigo-500 to-cyan-400 text-white text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-indigo-500/30">
                       🔥 Más popular — {trialDays} días gratis
                     </div>
                   )}
                   {badge && !isPopular && (
                     <div
                       className={`absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 text-xs font-bold rounded-full whitespace-nowrap ${
-                        plan.comingSoon ? 'bg-gray-700 text-gray-300' : 'bg-cyan-500 text-black'
+                        plan.comingSoon ? 'bg-gray-700 text-gray-300' : 'bg-indigo-500 text-white'
                       }`}
                     >
                       {badge}
@@ -562,12 +562,12 @@ export default function LandingPage() {
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-base text-gray-500 line-through">{formatPriceByCountry({ amount: price, country, configuredCurrencies })}</span>
                           <span className="text-sm text-gray-400">/mes</span>
-                          <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
+                          <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
                             Oferta
                           </span>
                         </div>
                         <div className="mt-2 flex flex-wrap items-baseline gap-x-2">
-                          <span className="text-5xl font-extrabold text-cyan-400">$0</span>
+                          <span className="text-5xl font-extrabold text-indigo-400">$0</span>
                           <span className="text-xl font-bold text-white">GRATIS</span>
                           <span className="text-sm text-gray-400">por {trialDays} días</span>
                         </div>
@@ -588,7 +588,7 @@ export default function LandingPage() {
                         key={i}
                         className={`flex items-start gap-3 text-sm ${f.included ? 'text-gray-400' : 'text-gray-500'}`}
                       >
-                        <span className={`mt-0.5 ${f.included ? 'text-cyan-400' : 'text-gray-500'}`}>
+                        <span className={`mt-0.5 ${f.included ? 'text-indigo-400' : 'text-gray-500'}`}>
                           {f.included ? '✓' : '✗'}
                         </span>
                         <span>
@@ -636,13 +636,13 @@ export default function LandingPage() {
               <Link
                 key={page.slug}
                 href={seoPath(page.slug)}
-                className="group bg-gray-950 border border-gray-800 rounded-2xl p-6 hover:border-cyan-500/30 transition-colors"
+                className="group bg-gray-950 border border-gray-800 rounded-2xl p-6 hover:border-indigo-500/30 transition-colors"
               >
-                <h3 className="text-base font-bold mb-3 group-hover:text-cyan-400 transition-colors">
+                <h3 className="text-base font-bold mb-3 group-hover:text-indigo-400 transition-colors">
                   {page.label}
                 </h3>
                 <p className="text-sm text-gray-400 leading-relaxed">{page.summary}</p>
-                <span className="mt-4 inline-flex items-center gap-1 text-sm text-cyan-400">
+                <span className="mt-4 inline-flex items-center gap-1 text-sm text-indigo-400">
                   Ver más
                   <span aria-hidden="true">&rarr;</span>
                 </span>
@@ -663,7 +663,7 @@ export default function LandingPage() {
           </p>
           <Link
             href="/auth/signup"
-            className="inline-flex items-center gap-2 px-6 sm:px-8 py-3 sm:py-4 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl text-base sm:text-lg transition-colors"
+            className="inline-flex items-center gap-2 px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white font-bold rounded-xl text-base sm:text-lg transition-colors"
           >
             Comenzar gratis
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
@@ -720,13 +720,21 @@ export default function LandingPage() {
       {/* Sticky Mobile CTA */}
       {isMounted && !user && !hasSession && (
         <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden border-t border-gray-800/50 bg-gray-950/95 px-3 sm:px-4 py-2.5 sm:py-3" style={{ paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom))' }}>
-          <Link
-            href="/auth/signup"
-            className="flex items-center justify-center gap-2 w-full max-w-full py-3 px-3 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl text-xs sm:text-sm transition-colors shadow-lg shadow-cyan-500/20 text-center leading-tight whitespace-normal break-words"
-          >
-            <span>Comenzar gratis — {getTrialDays() || 0} días de prueba</span>
-            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
-          </Link>
+          <div className="grid grid-cols-2 gap-2">
+            <Link
+              href="#demo"
+              className="flex items-center justify-center gap-1.5 py-3 px-3 rounded-xl border border-gray-700 bg-gray-900 text-xs sm:text-sm font-semibold text-gray-200 transition-colors hover:border-indigo-500/50 hover:text-white"
+            >
+              Probar demo
+            </Link>
+            <Link
+              href="/auth/signup"
+              className="flex items-center justify-center gap-2 py-3 px-3 bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white font-bold rounded-xl text-xs sm:text-sm transition-colors shadow-lg shadow-indigo-500/20 text-center leading-tight whitespace-normal break-words"
+            >
+              <span>Empezar gratis</span>
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+            </Link>
+          </div>
         </div>
       )}
     </div>

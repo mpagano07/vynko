@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { headers } from 'next/headers';
+import { ChevronDown } from 'lucide-react';
 import {
   PLANS,
   PLAN_LIMITS,
@@ -47,67 +48,95 @@ export const metadata: Metadata = {
 };
 
 /**
- * Filas de la tabla comparativa.
+ * Filas de la tabla comparativa, agrupadas por tema.
  *
  * Solo se listan capacidades que están declaradas en `PLANS`: si una función no
  * aparece en el plan, la tabla muestra "—". Inventar una fila para que la grilla
  * quede completa sería prometer algo que el checkout no entrega.
  */
-const COMPARISON_ROWS: ReadonlyArray<{
+type ComparisonRow = {
   label: string;
   values: Record<PlanId, string>;
+};
+
+const COMPARISON_GROUPS: ReadonlyArray<{
+  id: string;
+  title: string;
+  description: string;
+  rows: ReadonlyArray<ComparisonRow>;
 }> = [
   {
-    label: 'Productos',
-    values: {
-      starter: `${PLAN_LIMITS.starter.products}`,
-      business: 'Ilimitados',
-      enterprise: 'Ilimitados',
-    },
+    id: 'catalogo',
+    title: 'Catálogo y stock',
+    description: 'Productos, códigos y control de inventario.',
+    rows: [
+      {
+        label: 'Productos',
+        values: {
+          starter: `${PLAN_LIMITS.starter.products}`,
+          business: 'Ilimitados',
+          enterprise: 'Ilimitados',
+        },
+      },
+      {
+        label: 'Stock en tiempo real',
+        values: { starter: 'Sí', business: 'Sí', enterprise: 'Sí' },
+      },
+      {
+        label: 'Código de barras',
+        values: { starter: 'Sí', business: 'Sí', enterprise: 'Sí' },
+      },
+      {
+        label: 'Pronóstico de demanda',
+        values: { starter: '—', business: 'Avanzado', enterprise: 'Avanzado' },
+      },
+    ],
   },
   {
-    label: 'Usuarios',
-    values: {
-      starter: `${PLAN_LIMITS.starter.users}`,
-      business: 'Ilimitados',
-      enterprise: 'Ilimitados',
-    },
+    id: 'ventas',
+    title: 'Ventas y caja',
+    description: 'La operación diaria del mostrador.',
+    rows: [
+      {
+        label: 'Ventas y caja',
+        values: { starter: 'Sí', business: 'Sí', enterprise: 'Sí' },
+      },
+      {
+        label: 'Clientes',
+        values: { starter: '—', business: 'Sí', enterprise: 'Sí' },
+      },
+      {
+        label: 'Reportes',
+        values: { starter: 'Básicos', business: 'Avanzados', enterprise: 'A medida' },
+      },
+    ],
   },
   {
-    label: 'Sucursales',
-    values: { starter: '1', business: 'Hasta 5', enterprise: 'Hasta 99' },
-  },
-  {
-    label: 'Stock en tiempo real',
-    values: { starter: 'Sí', business: 'Sí', enterprise: 'Sí' },
-  },
-  {
-    label: 'Ventas y caja',
-    values: { starter: 'Sí', business: 'Sí', enterprise: 'Sí' },
-  },
-  {
-    label: 'Compras y proveedores',
-    values: { starter: 'Sí', business: 'Sí', enterprise: 'Sí' },
-  },
-  {
-    label: 'Código de barras',
-    values: { starter: 'Sí', business: 'Sí', enterprise: 'Sí' },
-  },
-  {
-    label: 'Clientes',
-    values: { starter: '—', business: 'Sí', enterprise: 'Sí' },
-  },
-  {
-    label: 'Pronóstico de demanda',
-    values: { starter: '—', business: 'Avanzado', enterprise: 'Avanzado' },
-  },
-  {
-    label: 'Reportes',
-    values: { starter: 'Básicos', business: 'Avanzados', enterprise: 'A medida' },
-  },
-  {
-    label: 'Soporte',
-    values: { starter: '—', business: 'Prioritario', enterprise: 'Dedicado + SLA' },
+    id: 'equipo',
+    title: 'Compras y equipo',
+    description: 'Proveedores, usuarios y acompañamiento.',
+    rows: [
+      {
+        label: 'Compras y proveedores',
+        values: { starter: 'Sí', business: 'Sí', enterprise: 'Sí' },
+      },
+      {
+        label: 'Usuarios',
+        values: {
+          starter: `${PLAN_LIMITS.starter.users}`,
+          business: 'Ilimitados',
+          enterprise: 'Ilimitados',
+        },
+      },
+      {
+        label: 'Sucursales',
+        values: { starter: '1', business: 'Hasta 5', enterprise: 'Hasta 99' },
+      },
+      {
+        label: 'Soporte',
+        values: { starter: '—', business: 'Prioritario', enterprise: 'Dedicado + SLA' },
+      },
+    ],
   },
 ];
 
@@ -214,7 +243,7 @@ export default async function PreciosPage() {
               </Link>
               <Link
                 href="/auth/signup"
-                className="text-sm font-medium bg-cyan-500 hover:bg-cyan-400 text-black px-4 py-2 rounded-lg transition-colors"
+                className="text-sm font-medium bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white px-4 py-2 rounded-lg transition-colors"
               >
                 Comenzar gratis
               </Link>
@@ -225,7 +254,7 @@ export default async function PreciosPage() {
 
       {/* Hero */}
       <section className="relative pt-36 pb-12 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-cyan-500/5 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/5 via-transparent to-transparent" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
           <nav aria-label="Breadcrumb" className="mb-8 text-xs text-gray-500">
             <ol className="flex items-center gap-2">
@@ -266,22 +295,27 @@ export default async function PreciosPage() {
                   key={id}
                   className={`relative rounded-2xl p-8 flex flex-col ${
                     isPopular
-                      ? 'bg-gradient-to-b from-cyan-500/10 via-gray-900 to-gray-900 border-2 border-cyan-400 shadow-[0_0_60px_-12px_rgba(34,211,238,0.55)]'
+                      ? 'bg-gradient-to-b from-indigo-500/10 via-gray-900 to-gray-900 border-2 border-indigo-400 shadow-[0_0_60px_-12px_rgba(99,102,241,0.55)]'
                       : 'bg-gray-950 border border-gray-800'
                   }`}
                 >
                   {isPopular && (
-                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap px-5 py-1.5 rounded-full bg-gradient-to-r from-orange-500 to-amber-400 text-black text-xs font-extrabold uppercase tracking-wider">
+                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap px-5 py-1.5 rounded-full bg-gradient-to-r from-indigo-500 to-cyan-400 text-white text-xs font-extrabold uppercase tracking-wider">
                       Más elegido
                     </div>
                   )}
                   {badge && !isPopular && (
-                    <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 text-xs font-bold rounded-full whitespace-nowrap bg-cyan-500 text-black">
+                    <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 text-xs font-bold rounded-full whitespace-nowrap bg-indigo-500 text-white">
                       {badge}
                     </div>
                   )}
 
                   <h2 className="text-lg font-bold mb-2">{plan.name}</h2>
+                  {isPopular && (
+                    <p className="mb-4 text-xs font-medium text-indigo-300">
+                      Recomendado para comercios en crecimiento
+                    </p>
+                  )}
 
                   <div className="mb-6">
                     {id === 'enterprise' ? (
@@ -289,7 +323,7 @@ export default async function PreciosPage() {
                     ) : isTrial ? (
                       <div>
                         <div className="flex flex-wrap items-baseline gap-x-2">
-                          <span className="text-5xl font-extrabold text-cyan-400">$0</span>
+                          <span className="text-5xl font-extrabold text-indigo-400">$0</span>
                           <span className="text-sm text-gray-400">por {trialDays} días</span>
                         </div>
                         <p className="mt-2 text-sm text-gray-400">
@@ -313,7 +347,7 @@ export default async function PreciosPage() {
                   <ul className="space-y-3 mb-8 flex-1">
                     {plan.features.map((feature) => (
                       <li key={feature.label} className="flex items-start gap-3 text-sm text-gray-400">
-                        <span className="mt-0.5 text-cyan-400">✓</span>
+                        <span className="mt-0.5 text-indigo-400">✓</span>
                         <span>
                           {feature.label}
                           {feature.value && (
@@ -327,7 +361,7 @@ export default async function PreciosPage() {
                   {id === 'enterprise' ? (
                     <a
                       href={`mailto:${SALES_EMAIL}?subject=${encodeURIComponent('Cotización Plan Enterprise - Vynko')}`}
-                      className="block text-center w-full py-3 rounded-lg font-semibold text-sm bg-amber-500 hover:bg-amber-400 text-black transition-colors"
+                      className="block text-center w-full py-3 rounded-lg font-semibold text-sm transition-colors bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
                     >
                       Hablar con ventas
                     </a>
@@ -336,8 +370,8 @@ export default async function PreciosPage() {
                       href="/auth/signup"
                       className={`block text-center w-full py-3 rounded-lg font-semibold text-sm transition-colors ${
                         isPopular
-                          ? 'bg-cyan-500 hover:bg-cyan-400 text-black'
-                          : 'bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                          ? 'bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white'
+                          : 'bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
                       }`}
                     >
                       {isTrial ? `Probar ${trialDays} días gratis` : 'Comenzar gratis'}
@@ -370,35 +404,66 @@ export default async function PreciosPage() {
               funciones de stock, ventas y compras están en todos.
             </p>
           </div>
-          <div className="overflow-x-auto rounded-2xl border border-gray-800">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-950 text-gray-300">
-                <tr>
-                  <th scope="col" className="text-left font-semibold px-4 py-4">
-                    Función
-                  </th>
-                  {PLAN_ORDER.map((id) => (
-                    <th key={id} scope="col" className="text-center font-semibold px-4 py-4">
-                      {PLANS[id].name}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-800">
-                {COMPARISON_ROWS.map((row) => (
-                  <tr key={row.label} className="bg-gray-950/60">
-                    <th scope="row" className="text-left font-normal text-gray-400 px-4 py-3">
-                      {row.label}
-                    </th>
-                    {PLAN_ORDER.map((id) => (
-                      <td key={id} className="text-center text-gray-200 px-4 py-3">
-                        {row.values[id]}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-3">
+            {COMPARISON_GROUPS.map((group, index) => (
+              <details
+                key={group.id}
+                open={index === 0}
+                className="group rounded-2xl border border-gray-800 bg-gray-950/60 [&_summary::-webkit-details-marker]:hidden"
+              >
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4">
+                  <span>
+                    <span className="block text-base font-semibold text-gray-100">
+                      {group.title}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-gray-500">
+                      {group.description}
+                    </span>
+                  </span>
+                  <ChevronDown
+                    className="h-5 w-5 flex-shrink-0 text-indigo-400 transition-transform group-open:rotate-180"
+                    aria-hidden="true"
+                  />
+                </summary>
+                <div className="overflow-x-auto border-t border-gray-800">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-950 text-gray-300">
+                      <tr>
+                        <th scope="col" className="text-left font-semibold px-4 py-3">
+                          Función
+                        </th>
+                        {PLAN_ORDER.map((id) => (
+                          <th
+                            key={id}
+                            scope="col"
+                            className="text-center font-semibold px-4 py-3"
+                          >
+                            {PLANS[id].name}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800">
+                      {group.rows.map((row) => (
+                        <tr key={row.label} className="bg-gray-950/60">
+                          <th
+                            scope="row"
+                            className="text-left font-normal text-gray-400 px-4 py-3"
+                          >
+                            {row.label}
+                          </th>
+                          {PLAN_ORDER.map((id) => (
+                            <td key={id} className="text-center text-gray-200 px-4 py-3">
+                              {row.values[id]}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            ))}
           </div>
           <p className="mt-4 text-xs text-gray-500 text-center">
             Los precios se muestran en pesos argentinos con Mercado Pago. Fuera de Argentina se
@@ -421,7 +486,7 @@ export default async function PreciosPage() {
               >
                 <summary className="flex items-center justify-between gap-4 cursor-pointer text-base font-semibold text-gray-100">
                   {item.q}
-                  <span className="text-cyan-400 text-xl leading-none transition-transform group-open:rotate-45">
+                  <span className="text-indigo-400 text-xl leading-none transition-transform group-open:rotate-45">
                     +
                   </span>
                 </summary>
@@ -444,7 +509,7 @@ export default async function PreciosPage() {
           </p>
           <Link
             href="/auth/signup"
-            className="inline-flex items-center gap-2 px-8 py-4 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl text-lg transition-colors"
+            className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white font-bold rounded-xl text-lg transition-colors"
           >
             Comenzar gratis
             <span aria-hidden="true">&rarr;</span>

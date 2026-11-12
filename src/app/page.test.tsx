@@ -140,6 +140,20 @@ describe('LandingPage navbar', () => {
     expect(getNavbar().queryByRole('button', { name: 'Cerrar sesión' })).not.toBeInTheDocument();
   });
 
+  it('sin sesión muestra la barra móvil con los dos CTAs (demo y registro)', async () => {
+    mockUseAuth({ user: null, profile: null, loading: false });
+
+    render(<LandingPage />);
+
+    // La barra se monta después del efecto de hidratación para no romper el SSR.
+    const demo = await screen.findByRole('link', { name: 'Probar demo' });
+    expect(demo).toHaveAttribute('href', '#demo');
+
+    const signupLinks = screen.getAllByRole('link', { name: /empezar gratis/i });
+    expect(signupLinks).toHaveLength(1);
+    expect(signupLinks[0]).toHaveAttribute('href', '/auth/signup');
+  });
+
   it('sesión resuelta como anónima: no redirige ni muestra navbar de usuario', async () => {
     // El guard de "hay cookie pero el cliente no vio usuario" se elimino a
     // proposito: dependia de leer la cookie desde el navegador. Ahora si no hay

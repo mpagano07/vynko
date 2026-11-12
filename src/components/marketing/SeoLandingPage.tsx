@@ -114,7 +114,7 @@ export default async function SeoLandingPage({ content }: Props) {
               </Link>
               <Link
                 href="/auth/signup"
-                className="text-xs sm:text-sm font-medium bg-cyan-500 hover:bg-cyan-400 text-black px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg transition-colors whitespace-nowrap"
+                className="text-xs sm:text-sm font-medium bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg transition-colors whitespace-nowrap"
               >
                 Comenzar gratis
               </Link>
@@ -125,8 +125,8 @@ export default async function SeoLandingPage({ content }: Props) {
 
       {/* Hero */}
       <section className="relative pt-36 pb-20 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-cyan-500/5 via-transparent to-transparent" />
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-cyan-500/5 rounded-full blur-3xl" />
+        <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/5 via-transparent to-transparent" />
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-indigo-500/5 rounded-full blur-3xl" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
           <nav aria-label="Breadcrumb" className="mb-8 text-xs text-gray-500">
             <ol className="flex items-center gap-2">
@@ -140,8 +140,8 @@ export default async function SeoLandingPage({ content }: Props) {
 
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-medium mb-6">
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-medium mb-6">
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
                 {content.badge}
               </div>
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight tracking-tight">
@@ -152,7 +152,7 @@ export default async function SeoLandingPage({ content }: Props) {
               <div className="mt-8 flex flex-col sm:flex-row gap-2 sm:gap-3">
                 <Link
                   href="/auth/signup"
-                  className="inline-flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl transition-colors text-sm sm:text-base"
+                  className="inline-flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white font-bold rounded-xl transition-colors text-sm sm:text-base"
                 >
                   <span className="text-center leading-tight">Comenzar gratis{trialDays ? ` — ${trialDays} días de prueba` : ''}</span>
                 </Link>
@@ -170,7 +170,7 @@ export default async function SeoLandingPage({ content }: Props) {
 
             {/* Dashboard preview (estático, renderizado en el servidor) */}
             <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-tr from-cyan-500/10 via-transparent to-blue-500/10 rounded-2xl blur-2xl" />
+              <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 via-transparent to-blue-500/10 rounded-2xl blur-2xl" />
               <div className="relative bg-gray-900/80 backdrop-blur-xl border border-gray-800 rounded-2xl p-6 shadow-2xl">
                 <div className="flex items-center gap-2 mb-6">
                   <div className="w-3 h-3 rounded-full bg-red-500" />
@@ -180,7 +180,7 @@ export default async function SeoLandingPage({ content }: Props) {
                 </div>
                 <div className="grid grid-cols-3 gap-3 mb-6">
                   {[
-                    { label: 'Ventas hoy', value: '$4.850', color: 'text-cyan-400' },
+                    { label: 'Ventas hoy', value: '$4.850', color: 'text-indigo-400' },
                     { label: 'Productos', value: '1.247', color: 'text-blue-400' },
                     { label: 'Alertas', value: '3', color: 'text-amber-400' },
                   ].map((k) => (
@@ -195,7 +195,7 @@ export default async function SeoLandingPage({ content }: Props) {
                     {PREVIEW_BARS.map((d) => (
                       <div
                         key={d.name}
-                        className="flex-1 bg-cyan-900/40 rounded-t"
+                        className="flex-1 bg-indigo-900/40 rounded-t"
                         style={{ height: `${(d.ventas / 6300) * 100}%` }}
                       />
                     ))}
@@ -212,7 +212,7 @@ export default async function SeoLandingPage({ content }: Props) {
           <div className="mt-16 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm text-gray-300">
             {TRUST_ITEMS.map((item) => (
               <div key={item} className="flex items-center gap-2">
-                <span className="text-cyan-400">✓</span>
+                <span className="text-indigo-400">✓</span>
                 {item}
               </div>
             ))}
@@ -235,7 +235,7 @@ export default async function SeoLandingPage({ content }: Props) {
                   {item.problem}
                 </p>
                 <p className="mt-4 flex items-start gap-3 text-sm text-gray-200 border-t border-gray-800 pt-4">
-                  <span className="text-cyan-400 mt-0.5 shrink-0">✓</span>
+                  <span className="text-indigo-400 mt-0.5 shrink-0">✓</span>
                   {item.solution}
                 </p>
               </div>
@@ -254,8 +254,8 @@ export default async function SeoLandingPage({ content }: Props) {
           <div className={`grid gap-8 max-w-5xl mx-auto ${stepColumns}`}>
             {content.howTo.map((item, index) => (
               <div key={item.title} className="text-center">
-                <div className="w-16 h-16 mx-auto rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mb-6">
-                  <span className="text-xl font-extrabold text-cyan-400">
+                <div className="w-16 h-16 mx-auto rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mb-6">
+                  <span className="text-xl font-extrabold text-indigo-400">
                     {String(index + 1).padStart(2, '0')}
                   </span>
                 </div>
@@ -276,7 +276,7 @@ export default async function SeoLandingPage({ content }: Props) {
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {content.features.map((feature) => (
-              <div key={feature.title} className="bg-gray-950 border border-gray-800 rounded-2xl p-6 hover:border-cyan-500/30 transition-colors">
+              <div key={feature.title} className="bg-gray-950 border border-gray-800 rounded-2xl p-6 hover:border-indigo-500/30 transition-colors">
                 <div className="text-3xl mb-4">{feature.icon}</div>
                 <h3 className="text-base font-bold mb-3">{feature.title}</h3>
                 <p className="text-sm text-gray-400 leading-relaxed">{feature.desc}</p>
@@ -299,7 +299,7 @@ export default async function SeoLandingPage({ content }: Props) {
                 <tr className="bg-gray-900/60">
                   <th className="px-6 py-4 font-semibold text-gray-400">&nbsp;</th>
                   <th className="px-6 py-4 font-semibold text-gray-300">📋 Excel + papel</th>
-                  <th className="px-6 py-4 font-semibold text-cyan-400">⚡ Vynko</th>
+                  <th className="px-6 py-4 font-semibold text-indigo-400">⚡ Vynko</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800">
@@ -314,7 +314,7 @@ export default async function SeoLandingPage({ content }: Props) {
                     </td>
                     <td className="px-6 py-4 text-gray-200">
                       <span className="flex items-start gap-2">
-                        <span className="text-cyan-400 shrink-0">✓</span>
+                        <span className="text-indigo-400 shrink-0">✓</span>
                         {row.vynko}
                       </span>
                     </td>
@@ -349,7 +349,7 @@ export default async function SeoLandingPage({ content }: Props) {
           <ul className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl mx-auto">
             {content.audience.map((item) => (
               <li key={item} className="flex items-start gap-3 bg-gray-950 border border-gray-800 rounded-xl p-4 text-sm text-gray-300">
-                <span className="text-cyan-400 mt-0.5 shrink-0">✓</span>
+                <span className="text-indigo-400 mt-0.5 shrink-0">✓</span>
                 {item}
               </li>
             ))}
@@ -364,7 +364,7 @@ export default async function SeoLandingPage({ content }: Props) {
             <h2 className="text-3xl sm:text-4xl font-bold">{content.pricingTitle}</h2>
             <p className="mt-4 text-gray-400 max-w-2xl mx-auto">{content.pricingIntro}</p>
             {trialDays > 0 && (
-              <p className="mt-3 text-sm font-semibold text-cyan-400">
+              <p className="mt-3 text-sm font-semibold text-indigo-400">
                 Empezá hoy y no pagues nada por los primeros {trialDays} días.
               </p>
             )}
@@ -388,7 +388,7 @@ export default async function SeoLandingPage({ content }: Props) {
                 cta = (
                   <a
                     href={`mailto:${SALES_EMAIL}?subject=${encodeURIComponent('Cotización Plan Enterprise - Vynko')}`}
-                    className="block text-center w-full py-3 rounded-lg font-semibold text-sm transition-colors bg-amber-500 hover:bg-amber-400 text-black"
+                    className="block text-center w-full py-3 rounded-lg font-semibold text-sm transition-colors bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
                   >
                     Hablar con Ventas
                   </a>
@@ -399,8 +399,8 @@ export default async function SeoLandingPage({ content }: Props) {
                     href="/auth/signup"
                     className={`block text-center w-full py-3 rounded-lg font-semibold text-sm transition-colors ${
                       isPopular
-                        ? 'bg-cyan-500 hover:bg-cyan-400 text-black shadow-lg shadow-cyan-500/25'
-                        : 'bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                        ? 'bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white shadow-lg shadow-indigo-500/25'
+                        : 'bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
                     }`}
                   >
                     {isTrialPlan ? `Probar ${trialDays} Días Gratis` : 'Comenzar gratis'}
@@ -415,19 +415,19 @@ export default async function SeoLandingPage({ content }: Props) {
                     plan.comingSoon
                       ? 'bg-gray-950 border border-dashed border-gray-700'
                       : isPopular
-                        ? 'bg-gradient-to-b from-cyan-500/10 via-gray-900 to-gray-900 border-2 border-cyan-400 shadow-[0_0_60px_-12px_rgba(34,211,238,0.55)] md:scale-[1.06] md:z-10'
+                        ? 'bg-gradient-to-b from-indigo-500/10 via-gray-900 to-gray-900 border-2 border-indigo-400 shadow-[0_0_60px_-12px_rgba(99,102,241,0.55)] md:scale-[1.06] md:z-10'
                         : 'bg-gray-950 border border-gray-800'
                   }`}
                 >
                   {isPopular && (
-                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap px-5 py-1.5 rounded-full bg-gradient-to-r from-orange-500 to-amber-400 text-black text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-orange-500/30">
+                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap px-5 py-1.5 rounded-full bg-gradient-to-r from-indigo-500 to-cyan-400 text-white text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-indigo-500/30">
                       🔥 Más popular — {trialDays} días gratis
                     </div>
                   )}
                   {badge && !isPopular && (
                     <div
                       className={`absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 text-xs font-bold rounded-full whitespace-nowrap ${
-                        plan.comingSoon ? 'bg-gray-700 text-gray-300' : 'bg-cyan-500 text-black'
+                        plan.comingSoon ? 'bg-gray-700 text-gray-300' : 'bg-indigo-500 text-white'
                       }`}
                     >
                       {badge}
@@ -444,12 +444,12 @@ export default async function SeoLandingPage({ content }: Props) {
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-base text-gray-500 line-through">{formatPriceByCountry({ amount: price, country, configuredCurrencies })}</span>
                           <span className="text-sm text-gray-400">/mes</span>
-                          <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
+                          <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
                             Oferta
                           </span>
                         </div>
                         <div className="mt-2 flex flex-wrap items-baseline gap-x-2">
-                          <span className="text-5xl font-extrabold text-cyan-400">$0</span>
+                          <span className="text-5xl font-extrabold text-indigo-400">$0</span>
                           <span className="text-xl font-bold text-white">GRATIS</span>
                           <span className="text-sm text-gray-400">por {trialDays} días</span>
                         </div>
@@ -467,7 +467,7 @@ export default async function SeoLandingPage({ content }: Props) {
                   <ul className="space-y-3 mb-8 flex-1">
                     {plan.features.map((f, i) => (
                       <li key={i} className={`flex items-start gap-3 text-sm ${f.included ? 'text-gray-400' : 'text-gray-500'}`}>
-                        <span className={`mt-0.5 ${f.included ? 'text-cyan-400' : 'text-gray-500'}`}>
+                        <span className={`mt-0.5 ${f.included ? 'text-indigo-400' : 'text-gray-500'}`}>
                           {f.included ? '✓' : '✗'}
                         </span>
                         <span>
@@ -493,7 +493,7 @@ export default async function SeoLandingPage({ content }: Props) {
                 entre nueve landings con un ancla. */}
             <Link
               href="/precios"
-              className="inline-flex items-center gap-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
+              className="inline-flex items-center gap-2 text-sm text-indigo-400 hover:text-indigo-300 transition-colors"
             >
               Ver la comparativa completa de planes
               <span aria-hidden="true">&rarr;</span>
@@ -518,7 +518,7 @@ export default async function SeoLandingPage({ content }: Props) {
               <details key={item.q} className="group bg-gray-950 border border-gray-800 rounded-xl p-5 [&_summary::-webkit-details-marker]:hidden">
                 <summary className="flex items-center justify-between gap-4 cursor-pointer text-base font-semibold text-gray-100">
                   {item.q}
-                  <span className="text-cyan-400 text-xl leading-none transition-transform group-open:rotate-45">+</span>
+                  <span className="text-indigo-400 text-xl leading-none transition-transform group-open:rotate-45">+</span>
                 </summary>
                 <p className="mt-3 text-sm text-gray-400 leading-relaxed">{item.a}</p>
               </details>
@@ -542,13 +542,13 @@ export default async function SeoLandingPage({ content }: Props) {
                 <Link
                   key={item.slug}
                   href={seoPath(item.slug)}
-                  className="group bg-gray-950 border border-gray-800 rounded-2xl p-6 hover:border-cyan-500/30 transition-colors"
+                  className="group bg-gray-950 border border-gray-800 rounded-2xl p-6 hover:border-indigo-500/30 transition-colors"
                 >
-                  <h3 className="text-base font-bold mb-3 group-hover:text-cyan-400 transition-colors">
+                  <h3 className="text-base font-bold mb-3 group-hover:text-indigo-400 transition-colors">
                     {item.title}
                   </h3>
                   <p className="text-sm text-gray-400 leading-relaxed">{item.desc}</p>
-                  <span className="mt-4 inline-flex items-center gap-1 text-sm text-cyan-400">
+                  <span className="mt-4 inline-flex items-center gap-1 text-sm text-indigo-400">
                     Ver más
                     <span aria-hidden="true">&rarr;</span>
                   </span>
@@ -590,7 +590,7 @@ export default async function SeoLandingPage({ content }: Props) {
           <p className="text-gray-400 mb-8 max-w-lg mx-auto">{content.finalCtaText}</p>
           <Link
             href="/auth/signup"
-            className="inline-flex items-center gap-2 px-6 sm:px-8 py-3 sm:py-4 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl text-base sm:text-lg transition-colors"
+            className="inline-flex items-center gap-2 px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white font-bold rounded-xl text-base sm:text-lg transition-colors"
           >
             Comenzar gratis
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -650,15 +650,23 @@ export default async function SeoLandingPage({ content }: Props) {
         className="fixed bottom-0 left-0 right-0 z-50 md:hidden border-t border-gray-800/50 bg-gray-950/95 backdrop-blur-xl px-3 sm:px-4 py-2.5 sm:py-3"
         style={{ paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom))' }}
       >
-        <Link
-          href="/auth/signup"
-          className="flex items-center justify-center gap-2 w-full max-w-full py-3 px-3 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl text-xs sm:text-sm transition-colors shadow-lg shadow-cyan-500/20 text-center leading-tight whitespace-normal break-words"
-        >
-          <span>Comenzar gratis{trialDays ? ` — ${trialDays} días de prueba` : ''}</span>
-          <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-          </svg>
-        </Link>
+        <div className="grid grid-cols-2 gap-2">
+          <Link
+            href="/#demo"
+            className="flex items-center justify-center gap-1.5 py-3 px-3 rounded-xl border border-gray-700 bg-gray-900 text-xs sm:text-sm font-semibold text-gray-200 transition-colors hover:border-indigo-500/50 hover:text-white"
+          >
+            Probar demo
+          </Link>
+          <Link
+            href="/auth/signup"
+            className="flex items-center justify-center gap-2 py-3 px-3 bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white font-bold rounded-xl text-xs sm:text-sm transition-colors shadow-lg shadow-indigo-500/20 text-center leading-tight whitespace-normal break-words"
+          >
+            <span>Empezar gratis</span>
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+            </svg>
+          </Link>
+        </div>
       </div>
     </div>
   );
