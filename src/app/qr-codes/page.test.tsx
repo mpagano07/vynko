@@ -171,6 +171,23 @@ describe('códigos QR: generación perezosa', () => {
     expect(mutate).toHaveBeenCalledTimes(1);
   });
 
+  it('abre una vista ampliada del QR al tocar la tarjeta', async () => {
+    renderPage(1);
+
+    await screen.findByText('Producto 01');
+    await waitFor(() => expect(toDataURLMock).toHaveBeenCalledTimes(1));
+
+    // El botón sólo tiene nombre accesible cuando el QR ya está generado.
+    const trigger = await screen.findByRole('button', { name: 'Ampliar QR de Producto 01' });
+    fireEvent.click(trigger);
+
+    expect(await screen.findByRole('dialog', { name: 'QR de Producto 01' })).toBeInTheDocument();
+    expect(screen.getByText('Apuntá la cámara al código para escanearlo.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
   it('descarga el QR de un producto como archivo', async () => {
     renderPage(1);
 
