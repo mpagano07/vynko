@@ -212,7 +212,7 @@ jobs:
                       ("m:" + $r.month) as $b
                       | if .seen[$b] then . else .seen[$b] = true | .keep += [$r.tag] end
                     else . end
-                ).keep) as $keep
+                ) | .keep) as $keep
               | $all[]
               | .tagName as $t
               | (if ($keep | index($t)) then "KEEP" else "DELETE" end) + "\t" + $t
