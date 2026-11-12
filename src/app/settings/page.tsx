@@ -27,6 +27,7 @@ import {
   DEFAULT_CHECKOUT_SETTINGS,
   normalizeCheckoutSettings,
   type PaymentAdjustments,
+  type PaymentMethodId,
 } from '@/lib/payment-methods';
 import { canUseFacturacion } from '@/lib/arca/access';
 import {
@@ -267,10 +268,14 @@ function SettingsContent() {
   const [checkoutForm, setCheckoutForm] = useState<PaymentAdjustments>(
     DEFAULT_CHECKOUT_SETTINGS.payment_adjustments
   );
+  const [checkoutDisabledMethods, setCheckoutDisabledMethods] = useState<PaymentMethodId[]>(
+    DEFAULT_CHECKOUT_SETTINGS.disabled_methods
+  );
   const [checkoutPaperSize, setCheckoutPaperSize] = useState<'58mm' | '80mm'>('58mm');
   const [checkoutShowReceipt, setCheckoutShowReceipt] = useState(true);
   const [checkoutBaseline, setCheckoutBaseline] = useState({
     adjustments: DEFAULT_CHECKOUT_SETTINGS.payment_adjustments,
+    disabledMethods: DEFAULT_CHECKOUT_SETTINGS.disabled_methods,
     paperSize: '58mm' as '58mm' | '80mm',
     showReceipt: true,
   });
@@ -412,10 +417,12 @@ function SettingsContent() {
         if (!res.ok || cancelled) return;
         const settings = normalizeCheckoutSettings(data.settings);
         setCheckoutForm(settings.payment_adjustments);
+        setCheckoutDisabledMethods(settings.disabled_methods);
         setCheckoutPaperSize(settings.paper_size);
         setCheckoutShowReceipt(settings.show_receipt);
         setCheckoutBaseline({
           adjustments: settings.payment_adjustments,
+          disabledMethods: settings.disabled_methods,
           paperSize: settings.paper_size,
           showReceipt: settings.show_receipt,
         });
@@ -437,6 +444,7 @@ function SettingsContent() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         payment_adjustments: checkoutForm,
+        disabled_methods: checkoutDisabledMethods,
         paper_size: checkoutPaperSize,
         show_receipt: checkoutShowReceipt,
       }),
@@ -450,10 +458,11 @@ function SettingsContent() {
     window.localStorage.setItem('vynko:paper-size', checkoutPaperSize);
     setCheckoutBaseline({
       adjustments: checkoutForm,
+      disabledMethods: checkoutDisabledMethods,
       paperSize: checkoutPaperSize,
       showReceipt: checkoutShowReceipt,
     });
-  }, [checkoutForm, checkoutPaperSize, checkoutShowReceipt]);
+  }, [checkoutForm, checkoutDisabledMethods, checkoutPaperSize, checkoutShowReceipt]);
 
   const handleSaveCheckout = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -491,7 +500,8 @@ function SettingsContent() {
     tenantSynced && JSON.stringify(tenantForm) !== JSON.stringify(tenantBaseline);
   const checkoutDirty =
     checkoutSynced &&
-    JSON.stringify(checkoutForm) !== JSON.stringify(checkoutBaseline.adjustments);
+    (JSON.stringify(checkoutForm) !== JSON.stringify(checkoutBaseline.adjustments) ||
+      JSON.stringify(checkoutDisabledMethods) !== JSON.stringify(checkoutBaseline.disabledMethods));
   const ticketDirty =
     checkoutSynced &&
     (checkoutPaperSize !== checkoutBaseline.paperSize ||
@@ -500,7 +510,10 @@ function SettingsContent() {
 
   const discardProfile = () => setProfileForm(profileBaseline);
   const discardTenant = () => setTenantForm(tenantBaseline);
-  const discardCheckout = () => setCheckoutForm(checkoutBaseline.adjustments);
+  const discardCheckout = () => {
+    setCheckoutForm(checkoutBaseline.adjustments);
+    setCheckoutDisabledMethods(checkoutBaseline.disabledMethods);
+  };
   const discardTicket = () => {
     setCheckoutPaperSize(checkoutBaseline.paperSize);
     setCheckoutShowReceipt(checkoutBaseline.showReceipt);
@@ -1808,47 +1821,92 @@ function SettingsContent() {
 
                 <form onSubmit={handleSaveCheckout} className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {PAYMENT_METHODS.filter((m) => m.id !== 'mercadopago').map((method) => {
+                    {PAYMENT_METHODS.map((method) => {
                       const value = checkoutForm[method.id];
+                      const enabled = !checkoutDisabledMethods.includes(method.id);
+                      const isLastEnabled =
+                        enabled && checkoutDisabledMethods.length >= PAYMENT_METHODS.length - 1;
+                      const toggleEnabled = () => {
+                        if (!canEditCheckout || savingCheckout) return;
+                        setCheckoutDisabledMethods((prev) => {
+                          if (prev.includes(method.id)) {
+                            return prev.filter((id) => id !== method.id);
+                          }
+                          if (prev.length >= PAYMENT_METHODS.length - 1) {
+                            toast.error('Debe quedar al menos un medio de pago habilitado');
+                            return prev;
+                          }
+                          return [...prev, method.id];
+                        });
+                      };
                       return (
                         <div
                           key={method.id}
                           className="rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2"
                         >
-<div className="flex items-center justify-between gap-2">
-                          <span className="text-sm text-gray-700 dark:text-gray-300 min-w-0 truncate">{method.label}</span>
-                          <div className="flex items-center gap-1.5 flex-shrink-0">
-                            <Input
-                              type="number"
-                              min={-100}
-                              max={100}
-                              step={0.5}
-                              value={value}
-                              disabled={!canEditCheckout || savingCheckout}
-                              onChange={(e) => {
-                                const next = e.target.value === '' ? 0 : Number(e.target.value);
-                                setCheckoutForm((prev) => ({
-                                  ...prev,
-                                  [method.id]: Number.isFinite(next) ? next : 0,
-                                }));
-                              }}
-                              className="w-16 text-right"
-                            />
-                            <span className="text-xs text-gray-500">%</span>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <button
+                                type="button"
+                                role="switch"
+                                aria-checked={enabled}
+                                aria-label={`Mostrar ${method.label} al cobrar`}
+                                title={enabled ? 'Visible al cobrar' : 'Oculto al cobrar'}
+                                onClick={toggleEnabled}
+                                disabled={!canEditCheckout || savingCheckout || isLastEnabled}
+                                className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
+                                  enabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'
+                                }`}
+                              >
+                                <span
+                                  className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                                    enabled ? 'translate-x-[18px]' : 'translate-x-[2px]'
+                                  }`}
+                                />
+                              </button>
+                              <span
+                                className={`min-w-0 truncate text-sm ${
+                                  enabled
+                                    ? 'text-gray-700 dark:text-gray-300'
+                                    : 'text-gray-400 line-through dark:text-gray-500'
+                                }`}
+                              >
+                                {method.label}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              <Input
+                                type="number"
+                                min={-100}
+                                max={100}
+                                step={0.5}
+                                value={value}
+                                disabled={!canEditCheckout || savingCheckout || !enabled}
+                                onChange={(e) => {
+                                  const next = e.target.value === '' ? 0 : Number(e.target.value);
+                                  setCheckoutForm((prev) => ({
+                                    ...prev,
+                                    [method.id]: Number.isFinite(next) ? next : 0,
+                                  }));
+                                }}
+                                className="w-16 text-right"
+                              />
+                              <span className="text-xs text-gray-500">%</span>
+                            </div>
                           </div>
-                        </div>
-                          {value > 0 && (
+                          {!enabled ? (
+                            <p className="mt-1 text-xs text-gray-400">Oculto al cobrar</p>
+                          ) : value > 0 ? (
                             <p className="text-xs font-medium text-red-500 mt-1">+{value}% Recargo</p>
-                          )}
-                          {value < 0 && (
+                          ) : value < 0 ? (
                             <p className="text-xs font-medium text-green-600 dark:text-green-400 mt-1">{Math.abs(value)}% Descuento</p>
-                          )}
+                          ) : null}
                         </div>
                       );
                     })}
                   </div>
                   <p className="text-xs text-gray-400">
-                    Negativo = descuento, positivo = recargo. Se aplican automáticamente al cobrar según el medio utilizado.
+                    Desactivá un medio para que no aparezca en Cobrar venta. Negativo = descuento, positivo = recargo; se aplican automáticamente según el medio utilizado.
                   </p>
 
                   <Button type="submit" disabled={!canEditCheckout || savingCheckout}>

@@ -40,6 +40,7 @@ describe('/api/settings/checkout', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.checkout.payment_adjustments.cash).toBe(-5);
+    expect(json.checkout.disabled_methods).toEqual([]);
     expect(json.checkout.paper_size).toBe('58mm');
     expect(json.canEdit).toBe(true);
   });
@@ -62,6 +63,7 @@ describe('/api/settings/checkout', () => {
     const res = await PUT(
       makeRequest('http://localhost/api/settings/checkout', {
         payment_adjustments: { cash: -10, transfer: 0, debit: 0, credit: 5, mercadopago: 0 },
+        disabled_methods: ['credit'],
         paper_size: '80mm',
         show_receipt: true,
       })
@@ -77,7 +79,41 @@ describe('/api/settings/checkout', () => {
     expect(
       (updatedSettings.settings?.checkout as Record<string, unknown> | undefined)?.payment_adjustments as Record<string, unknown>
     ).toMatchObject({ credit: 5 });
+    expect((updatedSettings.settings?.checkout as Record<string, unknown> | undefined)?.disabled_methods).toEqual(['credit']);
     expect((updatedSettings.settings?.checkout as Record<string, unknown> | undefined)?.paper_size).toBe('80mm');
+  });
+
+  it('un PUT parcial conserva los medios ocultos ya guardados', async () => {
+    supabaseMock.__queue('tenant_users', { data: [{ role: 'owner' }] });
+    supabaseMock.__queue('tenants', {
+      data: {
+        settings: {
+          modules: { inventory: true },
+          checkout: {
+            payment_adjustments: { cash: -5 },
+            disabled_methods: ['credit', 'mercadopago'],
+            paper_size: '58mm',
+            show_receipt: true,
+          },
+        },
+      },
+    });
+    supabaseMock.__queue('tenants', { data: null, error: null });
+
+    // Un cliente viejo (o un request parcial) manda sólo los ajustes.
+    const res = await PUT(
+      makeRequest('http://localhost/api/settings/checkout', {
+        payment_adjustments: { cash: -10, transfer: 0, debit: 0, credit: 5, mercadopago: 0 },
+      })
+    );
+    expect(res.status).toBe(200);
+
+    const update = supabaseMock.__calls.find((c) => c.table === 'tenants' && c.method === 'update');
+    const updatedSettings = (update?.args[0] ?? {}) as { settings?: Record<string, unknown> };
+    const checkout = updatedSettings.settings?.checkout as Record<string, unknown> | undefined;
+    expect(checkout?.disabled_methods).toEqual(['credit', 'mercadopago']);
+    expect(checkout?.payment_adjustments).toMatchObject({ cash: -10 });
+    expect(updatedSettings.settings?.modules).toEqual({ inventory: true });
   });
 
   it('rechaza a un miembro sin permisos', async () => {

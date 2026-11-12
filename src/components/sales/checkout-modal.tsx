@@ -49,6 +49,12 @@ interface CheckoutModalProps {
   discount?: number;
   surcharge?: number;
   adjustments: PaymentAdjustments;
+  /**
+   * Medios que el local desactivó en Configuración → Preferencias. No se
+   * ofrecen al cobrar; el resto de la app sigue reconociéndolos para ventas
+   * históricas.
+   */
+  disabledMethods?: PaymentMethodId[];
   submitting?: boolean;
   defaultPrint?: boolean;
   defaultPhone?: string;
@@ -69,8 +75,6 @@ const METHOD_ICONS: Record<PaymentMethodId, typeof Banknote> = {
   credit: CreditCard,
   mercadopago: Wallet,
 };
-
-const CHECKOUT_METHODS = PAYMENT_METHODS.filter((m) => m.id !== 'mercadopago');
 
 function parseAmount(raw: string): number {
   const normalized = raw.trim().replace(/\./g, '').replace(',', '.');
@@ -122,6 +126,7 @@ export function CheckoutModal({
   discount = 0,
   surcharge = 0,
   adjustments,
+  disabledMethods = [],
   submitting = false,
   defaultPrint = true,
   defaultPhone = '',
@@ -133,8 +138,12 @@ export function CheckoutModal({
 }: CheckoutModalProps) {
   const [lines, setLines] = useState<PaymentLine[]>(() => {
     const baseCents = Math.round(total * 100);
-    const netCents = adjustCents(baseCents, adjustments.cash ?? 0);
-    return [createLine('cash', centsToInput(baseCents), centsToInput(netCents))];
+    // Si el local ocultó efectivo, la línea inicial usa el primer medio
+    // habilitado en vez de arrancar en un botón que ya no se muestra.
+    const method =
+      PAYMENT_METHODS.find((m) => !disabledMethods.includes(m.id))?.id ?? 'cash';
+    const netCents = adjustCents(baseCents, adjustments[method] ?? 0);
+    return [createLine(method, centsToInput(baseCents), centsToInput(netCents))];
   });
   const [activeLineId, setActiveLineId] = useState<string>(lines[0]?.id ?? '');
   const [printReceipt, setPrintReceipt] = useState<boolean>(Boolean(defaultPrint));
@@ -143,6 +152,11 @@ export function CheckoutModal({
   const [emitArca, setEmitArca] = useState(false);
   const [arcaInvoiceType, setArcaInvoiceType] = useState<'A' | 'B' | 'C'>(defaultArcaInvoiceType);
   const firstAmountRef = useRef<HTMLInputElement>(null);
+
+  const availableMethods = useMemo(
+    () => PAYMENT_METHODS.filter((m) => !disabledMethods.includes(m.id)),
+    [disabledMethods]
+  );
 
   const totalCents = Math.round(total * 100);
 
@@ -210,7 +224,10 @@ export function CheckoutModal({
       });
       previousFlexAllocationCents = Math.max(0, totalCents - fixedSum);
     }
-    const next = createLine('transfer', '');
+    const next = createLine(
+      availableMethods.find((m) => m.id !== 'cash')?.id ?? availableMethods[0]?.id ?? 'cash',
+      ''
+    );
     setLines((prev) => {
       const frozen = prev.map((l, i) => {
         if (i !== previousFlexIdx) return l;
@@ -295,8 +312,8 @@ export function CheckoutModal({
   }, [lines, adjustments, totalCents]);
 
   const hasAdjustments = useMemo(
-    () => PAYMENT_METHODS.some((m) => adjustments[m.id] !== 0),
-    [adjustments]
+    () => availableMethods.some((m) => adjustments[m.id] !== 0),
+    [adjustments, availableMethods]
   );
 
   const canConfirm = resolved.covered && resolved.rows.every((r) => !r.shortReceived) && (!whatsappEnabled || whatsappPhone.trim().length > 0) && !submitting;
@@ -346,7 +363,7 @@ export function CheckoutModal({
 
       if (isTyping || !selectedLine) return;
 
-      const method = CHECKOUT_METHODS.find(
+      const method = availableMethods.find(
         (m) => m.hotkey.toLowerCase() === e.key.toLowerCase()
       );
       if (method) {
@@ -358,7 +375,7 @@ export function CheckoutModal({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [lines, selectedLine, canConfirm, onClose, confirmPayment, changeMethod]);
+  }, [lines, selectedLine, canConfirm, onClose, confirmPayment, changeMethod, availableMethods]);
 
   const showBreakdown = subtotal !== undefined && (discount > 0 || surcharge > 0);
   const split = lines.length > 1;
@@ -431,7 +448,9 @@ return (
               <button
                 type="button"
                 onClick={addLine}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
+                disabled={availableMethods.length < 2}
+                title={availableMethods.length < 2 ? 'Habilitá otro medio de pago en Preferencias' : undefined}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Dividir pago
@@ -449,7 +468,7 @@ return (
                   className="rounded-lg bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 p-3"
                 >
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    {CHECKOUT_METHODS.map((method) => {
+                    {availableMethods.map((method) => {
                       const Icon = METHOD_ICONS[method.id];
                       const active = line.method === method.id;
                       const methodPct = adjustments[method.id] ?? 0;
@@ -778,7 +797,7 @@ return (
 
           <p className="hidden text-center text-xs text-gray-400 dark:text-gray-500 sm:block">
             Atajos:{' '}
-            {CHECKOUT_METHODS.map((m, i) => (
+            {availableMethods.map((m, i) => (
               <span key={m.id}>
                 {i > 0 && ' · '}
                 <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 font-mono">
