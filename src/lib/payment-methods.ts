@@ -25,6 +25,12 @@ export type PaymentAdjustments = Record<PaymentMethodId, number>;
 
 export interface CheckoutSettings {
   payment_adjustments: PaymentAdjustments;
+  /**
+   * Medios de pago que NO se ofrecen al cobrar. Se guarda la lista de ocultos
+   * (y no la de visibles) para que un medio nuevo aparezca por defecto sin
+   * migrar las preferencias de cada tenant.
+   */
+  disabled_methods: PaymentMethodId[];
   paper_size: '58mm' | '80mm';
   show_receipt: boolean;
 }
@@ -39,6 +45,7 @@ export const DEFAULT_PAYMENT_ADJUSTMENTS: PaymentAdjustments = {
 
 export const DEFAULT_CHECKOUT_SETTINGS: CheckoutSettings = {
   payment_adjustments: DEFAULT_PAYMENT_ADJUSTMENTS,
+  disabled_methods: [],
   paper_size: '58mm',
   show_receipt: true,
 };
@@ -62,8 +69,17 @@ export function normalizeCheckoutSettings(settings: unknown): CheckoutSettings {
       }
     }
   }
+  // Se descartan ids desconocidos y duplicados. Si la lista oculta todos los
+  // medios (dato viejo o request manual), se cae a la configuración por
+  // defecto: una caja sin ningún medio de pago no puede cobrar.
+  const rawDisabled = Array.isArray(s.disabled_methods) ? s.disabled_methods : [];
+  const disabled = [
+    ...new Set(rawDisabled.filter((id): id is PaymentMethodId => typeof id === 'string' && isPaymentMethodId(id))),
+  ];
+  const disabled_methods = disabled.length >= PAYMENT_METHODS.length ? [] : disabled;
   return {
     payment_adjustments: adjustments,
+    disabled_methods,
     paper_size: s.paper_size === '80mm' ? '80mm' : '58mm',
     show_receipt: typeof s.show_receipt === 'boolean' ? s.show_receipt : true,
   };

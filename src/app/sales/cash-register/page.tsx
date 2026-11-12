@@ -31,8 +31,8 @@ import {
 } from '@/lib/payment-methods';
 import { cn } from '@/lib/utils/cn';
 
-const CASH_METHODS = PAYMENT_METHODS.filter((m) => m.id !== 'mercadopago');
-const NON_CASH_METHODS = CASH_METHODS.filter((m) => m.id !== 'cash');
+const CASH_METHODS = PAYMENT_METHODS;
+const NON_CASH_METHODS = PAYMENT_METHODS.filter((m) => m.id !== 'cash');
 
 /** Billetes vigentes, de mayor a menor, para la calculadora de efectivo. */
 const DENOMINATIONS = [20000, 10000, 2000, 1000, 500, 200, 100, 50, 20, 10] as const;

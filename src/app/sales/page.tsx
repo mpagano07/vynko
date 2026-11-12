@@ -1500,6 +1500,7 @@ export default function SalesPage() {
           discount={discount}
           surcharge={surcharge}
           adjustments={checkoutSettings.payment_adjustments}
+          disabledMethods={checkoutSettings.disabled_methods}
           submitting={isSubmitting}
           defaultPrint={checkoutSettings.show_receipt !== false}
           defaultPhone={customers.find((c) => c.id === selectedCustomerId)?.phone}

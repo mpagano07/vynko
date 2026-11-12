@@ -48,15 +48,20 @@ export async function updateCheckoutSettings(
     return { ok: false, error: 'Solo el dueño o un administrador puede cambiar la configuración de cobro', status: 403 };
   }
 
-  const next = normalizeCheckoutSettings(body);
-
   const { data: current } = await supabaseAdmin
     .from('tenants')
     .select('settings')
     .eq('id', auth.tenantId)
     .single();
 
-  const raw = (current?.settings as Record<string, unknown> | undefined) ?? {};
+  const raw: Record<string, unknown> =
+    (current?.settings as Record<string, unknown> | undefined) ?? {};
+  // Se parte de lo guardado y se aplica sólo lo que vino en el body: un PUT
+  // parcial (o de una versión anterior del cliente) no debe borrar los medios
+  // ocultos ni el resto de la configuración de cobro.
+  const currentCheckout = normalizeCheckoutSettings(raw.checkout);
+  const next = normalizeCheckoutSettings({ ...currentCheckout, ...body });
+
   const settings = {
     ...(typeof raw === 'object' && raw !== null ? raw : {}),
     checkout: next,

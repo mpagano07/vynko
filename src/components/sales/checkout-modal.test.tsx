@@ -24,6 +24,35 @@ const baseProps = {
 };
 
 describe('CheckoutModal · ajustes automáticos por medio de pago', () => {
+  it('ofrece Mercado Pago como medio de pago', () => {
+    render(<CheckoutModal {...baseProps} />);
+    expect(screen.getByTitle('Mercado Pago (M)')).toBeInTheDocument();
+  });
+
+  it('oculta los medios desactivados en Preferencias', () => {
+    render(<CheckoutModal {...baseProps} disabledMethods={['credit', 'mercadopago']} />);
+    expect(screen.queryByTitle('Crédito (C)')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Mercado Pago (M)')).not.toBeInTheDocument();
+    expect(screen.getByTitle('Efectivo (E)')).toBeInTheDocument();
+  });
+
+  it('arranca en el primer medio habilitado si el efectivo está oculto', () => {
+    render(<CheckoutModal {...baseProps} disabledMethods={['cash']} />);
+    expect(screen.queryByTitle('Efectivo (E)')).not.toBeInTheDocument();
+    expect(screen.getByTitle('Transferencia (T)')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Monto a cobrar')).toBeInTheDocument();
+  });
+
+  it('deshabilita dividir el pago cuando queda un solo medio habilitado', () => {
+    render(
+      <CheckoutModal
+        {...baseProps}
+        disabledMethods={['transfer', 'debit', 'credit', 'mercadopago']}
+      />
+    );
+    expect(screen.getByRole('button', { name: /dividir pago/i })).toBeDisabled();
+  });
+
   it('precarga el efectivo con el monto ya descontado', () => {
     render(<CheckoutModal {...baseProps} adjustments={adjustments({ cash: -10 })} />);
     expect(screen.getByLabelText('Monto abonado')).toHaveValue('90,00');
