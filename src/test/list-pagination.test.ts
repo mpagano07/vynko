@@ -237,9 +237,10 @@ describe('listProductsSlim con catálogo más grande que el tope de PostgREST', 
       name: `Producto ${offset + i}`,
       sku: `SKU-${offset + i}`,
       barcode: null,
+      product_stock: [{ stock: 2 }, { stock: 3 }],
     }));
 
-  it('recorre por rangos y devuelve las cuatro columnas del picker', async () => {
+  it('recorre por rangos y devuelve las columnas del picker con el stock sumado', async () => {
     supabaseMock.__queue('products', { data: slimRows(SUPABASE_MAX_ROWS), error: null });
     supabaseMock.__queue('products', { data: slimRows(77, SUPABASE_MAX_ROWS), error: null });
 
@@ -253,6 +254,7 @@ describe('listProductsSlim con catálogo más grande que el tope de PostgREST', 
       name: `Producto ${SUPABASE_MAX_ROWS + 76}`,
       sku: `SKU-${SUPABASE_MAX_ROWS + 76}`,
       barcode: null,
+      stock: 5,
     });
 
     const ranges = callsTo(supabaseMock.__calls, 'products', 'range').map((call) => call.args);

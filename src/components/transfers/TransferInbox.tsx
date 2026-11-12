@@ -134,7 +134,7 @@ function TransferCard({
         {/* Route */}
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <div className="flex flex-col items-start min-w-0">
-            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Origen</span>
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Origen</span>
             <span className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">
               {transfer.from_tenant_name}
             </span>
@@ -150,7 +150,7 @@ function TransferCard({
             )}
           </div>
           <div className="flex flex-col items-start min-w-0">
-            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Destino</span>
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Destino</span>
             <span className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">
               {transfer.to_tenant_name}
             </span>
@@ -181,7 +181,7 @@ function TransferCard({
         <div className="border-t border-inherit px-4 py-3 space-y-3">
           {/* Items list */}
           <div className="space-y-1.5">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Productos</p>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Productos</p>
             <div className="space-y-1">
               {transfer.items.map(item => (
                 <div
@@ -205,7 +205,7 @@ function TransferCard({
           {/* Notes */}
           {transfer.notes && (
             <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Notas</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Notas</p>
               <p className="text-sm text-gray-600 dark:text-gray-400 italic">{transfer.notes}</p>
             </div>
           )}
@@ -363,7 +363,7 @@ export function TransferInbox({ currentTenantId, trigger = 0, onAction }: Transf
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
             Transferencias activas
           </h2>
-          <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400">
+          <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400">
             {transfers.length}
           </span>
         </div>

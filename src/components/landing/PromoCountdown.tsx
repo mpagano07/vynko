@@ -67,7 +67,7 @@ export default function PromoCountdown({ variant = 'pill' }: PromoCountdownProps
   if (variant === 'banner') {
     return (
       <div className="flex flex-col items-center justify-center gap-1 rounded-xl bg-gradient-to-r from-orange-500/15 via-amber-500/20 to-orange-500/15 border border-orange-500/40 px-4 py-3 text-center">
-        <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-orange-400">
+        <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-orange-400">
           <Flame className="w-4 h-4 animate-pulse" />
           {expired ? 'Oferta finalizada' : 'Oferta por tiempo limitado'}
         </p>

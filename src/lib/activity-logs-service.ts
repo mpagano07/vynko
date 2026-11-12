@@ -9,7 +9,7 @@ export type ActivityLogsResult<T = unknown> =
 
 export async function getActivityLogs(
   auth: AuthInfo,
-  options: { limit?: string | null; offset?: string | null; entity_type?: string | null }
+  options: { limit?: string | null; offset?: string | null; entity_type?: string | null; q?: string | null }
 ): Promise<ActivityLogsResult> {
   const tenantId = auth.tenantId;
 
@@ -26,6 +26,9 @@ export async function getActivityLogs(
   const limit = Math.min(Number(options.limit) || 50, 200);
   const offset = Number(options.offset) || 0;
   const entityType = options.entity_type;
+  // Búsqueda libre por usuario, producto, SKU o folio. Se limpian los
+  // separadores de PostgREST para no romper el filtro `or`.
+  const q = (options.q ?? '').trim().replace(/[%,()*"\\]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
 
   let query = supabaseAdmin
     .from('activity_logs')
@@ -36,6 +39,16 @@ export async function getActivityLogs(
   else query = query.eq('tenant_id', tenantId);
 
   if (entityType) query = query.eq('entity_type', entityType);
+  if (q) {
+    query = query.or(
+      [
+        `user_name.ilike.%${q}%`,
+        `details->>name.ilike.%${q}%`,
+        `details->>folio.ilike.%${q}%`,
+        `details->>sku.ilike.%${q}%`,
+      ].join(',')
+    );
+  }
 
   const { data, error, count } = await query;
   if (error) {

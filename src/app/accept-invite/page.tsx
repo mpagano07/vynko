@@ -135,7 +135,7 @@ export default function AcceptInvitePage() {
           <div className="max-w-sm mx-auto">
             <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto" />
             <p className="mt-4 text-gray-600">¡Invitación aceptada!</p>
-            <p className="text-sm text-gray-400 mt-1">Completa tus datos para continuar</p>
+            <p className="text-sm text-gray-400 mt-1">Completá tus datos para continuar</p>
             <form onSubmit={handleSubmit} className="mt-6 space-y-4 text-left">
               <div className="relative">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />

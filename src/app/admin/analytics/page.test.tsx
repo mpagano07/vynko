@@ -139,6 +139,27 @@ describe('AdminAnalyticsPage - paginacion de eventos', () => {
     expect(screen.queryByText(/Mostrando/)).not.toBeInTheDocument();
   });
 
+  it('cambia el rango de eventos, lo pide al servidor y vuelve a la primera pagina', async () => {
+    mockAnalyticsResponse(analyticsWithEvents(50));
+
+    await renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+    await waitFor(() => {
+      expect(screen.getByText('Mostrando 11-20 de 50')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '7 días' }));
+
+    await waitFor(() => {
+      expect(authFetchMock).toHaveBeenCalledWith('/api/admin/analytics?days=7');
+    });
+    expect(screen.getByRole('button', { name: '7 días' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Últimos 7 días')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Mostrando 1-10 de 50')).toBeInTheDocument();
+    });
+  });
+
   it('sin eventos muestra el estado vacio y no pagina', async () => {
     mockAnalyticsResponse(analyticsWithEvents(0));
 

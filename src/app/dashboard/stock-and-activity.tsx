@@ -128,10 +128,10 @@ export default function StockAndActivity({
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-medium text-gray-900 dark:text-white">{info.label}</p>
                   {info.detail && (
-                    <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{info.detail}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{info.detail}</p>
                   )}
                 </div>
-                <span className="text-[10px] text-gray-600 dark:text-gray-400 whitespace-nowrap mt-0.5">{timeAgo(log.created_at)}</span>
+                <span className="text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap mt-0.5">{timeAgo(log.created_at)}</span>
               </div>
             );
           })}
@@ -163,14 +163,14 @@ export default function StockAndActivity({
                         <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
                           {order.supplier_name}
                           {allTenants && order.tenant_name && (
-                            <span className="text-[11px] font-normal text-gray-600 dark:text-gray-400 ml-1">· {order.tenant_name}</span>
+                            <span className="text-xs font-normal text-gray-600 dark:text-gray-400 ml-1">· {order.tenant_name}</span>
                           )}
                         </p>
-                        <p className="text-[11px] text-gray-600 dark:text-gray-400">
+                        <p className="text-xs text-gray-600 dark:text-gray-400">
                           {order.items.length} producto{order.items.length !== 1 ? 's' : ''} · {totalPending} u. por recibir
                           {order.expected_date && <> · Llega {formatDate(order.expected_date, { day: '2-digit', month: 'short' }, 'es-ES')}</>}
                         </p>
-                        <p className="text-[11px] text-gray-600 dark:text-gray-400 truncate">{productList}</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 truncate">{productList}</p>
                       </div>
                     </div>
                     <Button
@@ -216,7 +216,7 @@ export default function StockAndActivity({
                     <div className={`w-2 h-2 rounded-full flex-shrink-0 ${product.stock === 0 ? 'bg-rose-500' : 'bg-amber-400'}`} />
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{product.name}</p>
-                      <p className="text-[11px] text-gray-600 dark:text-gray-400">
+                      <p className="text-xs text-gray-600 dark:text-gray-400">
                         Stock: {product.stock}
                         {lastSaleText && <> · Última venta {lastSaleText}</>}
                       </p>
@@ -228,7 +228,7 @@ export default function StockAndActivity({
                     className="h-7 px-2.5 text-xs flex-shrink-0 ml-3"
                     onClick={() =>
                       router.push(
-                        `/providers?create_po=1&productId=${product.id}&qty=${Math.max(product.min_stock - product.stock, 1)}`
+                        `/documents?type=orden_compra&create_po=1&productId=${product.id}&qty=${Math.max(product.min_stock - product.stock, 1)}`
                       )
                     }
                   >

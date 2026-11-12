@@ -48,6 +48,8 @@ import {
   Scan,
 } from 'lucide-react';
 import { formatARS, groupThousands, parseAmountInput, amountToInput } from '@/lib/utils/currency';
+import { PRICE_ROUNDING_OPTIONS, type PriceRounding } from '@/lib/price-rounding';
+import { summarizeImportRows } from '@/lib/import-preview';
 import { getTenantHeaders, authFetch } from '@/lib/fetchWithTenant';
 import { filterProducts } from '@/lib/product-search';
 import { IMPORT_FILE_ERROR } from '@/lib/excel-import-errors';
@@ -104,6 +106,8 @@ interface TransferProduct {
   name: string;
   sku?: string;
   barcode?: string;
+  /** Unidades disponibles en la sucursal origen. */
+  stock?: number;
 }
 
 export default function ProductsPage() {
@@ -130,13 +134,12 @@ function ProductsPageContent() {
   const { categories, mutate: mutateCategories } = useCategories(tenantId);
 
   // Search & Filter State
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(() => searchParams?.get('search') ?? '');
   const [selectedCategoryId, setSelectedCategoryId] = useState('all');
   const [stockFilter, setStockFilter] = useState<'all' | 'critical' | 'low' | 'normal'>(() => {
     const s = searchParams?.get('stock');
     return s === 'critical' || s === 'low' || s === 'normal' ? s : 'all';
   });
-
   /**
    * Lista filtrada de productos. Se calcula acá arriba (y no junto al resto
    * del filtrado) porque `handleExport` la usa y ahora también la referencia
@@ -177,13 +180,48 @@ function ProductsPageContent() {
   // Los inputs de precio y costo muestran los miles separados ("80.000"), asi que
   // necesitan un draft de texto: type="number" no acepta separadores.
   const [amountDraft, setAmountDraft] = useState<{ price?: string; cost?: string }>({});
+  const [marginDraft, setMarginDraft] = useState<string | null>(null);
   const priceDisplay = amountDraft.price ?? amountToInput(productForm.price);
   const costDisplay = amountDraft.cost ?? amountToInput(productForm.cost);
+  const marginDisplay = marginDraft !== null
+    ? marginDraft
+    : productForm.cost > 0 && productForm.price > 0
+      ? `${marginPercent(productForm.price, productForm.cost) >= 0 ? '+' : ''}${marginPercent(productForm.price, productForm.cost).toFixed(0)}%`
+      : '';
 
   const handleAmountChange = (field: 'price' | 'cost') => (raw: string) => {
     const formatted = groupThousands(raw);
+    const parsedVal = parseAmountInput(formatted);
     setAmountDraft((prev) => ({ ...prev, [field]: formatted }));
-    setProductForm((prev) => ({ ...prev, [field]: parseAmountInput(formatted) }));
+
+    if (field === 'price') {
+      setMarginDraft(null);
+      setProductForm((prev) => ({ ...prev, price: parsedVal }));
+    } else {
+      setProductForm((prev) => {
+        const next = { ...prev, cost: parsedVal };
+        if (marginDraft !== null && marginDraft !== '') {
+          const marginNum = parseFloat(marginDraft.replace(',', '.'));
+          if (Number.isFinite(marginNum) && parsedVal > 0) {
+            const calculatedPrice = Math.round(parsedVal * (1 + marginNum / 100));
+            next.price = calculatedPrice;
+            setAmountDraft((d) => ({ ...d, price: amountToInput(calculatedPrice) }));
+          }
+        }
+        return next;
+      });
+    }
+  };
+
+  const handleMarginChange = (raw: string) => {
+    setMarginDraft(raw);
+    const normalized = raw.replace('%', '').replace('+', '').replace(',', '.').trim();
+    const marginNum = parseFloat(normalized);
+    if (Number.isFinite(marginNum) && productForm.cost > 0) {
+      const calculatedPrice = Math.round(productForm.cost * (1 + marginNum / 100));
+      setProductForm((prev) => ({ ...prev, price: calculatedPrice }));
+      setAmountDraft((prev) => ({ ...prev, price: amountToInput(calculatedPrice) }));
+    }
   };
 
   // Category Modal State
@@ -206,6 +244,7 @@ function ProductsPageContent() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importRows, setImportRows] = useState<Record<string, unknown>[]>([]);
   const [importColumns, setImportColumns] = useState<string[]>([]);
+  const importPreview = useMemo(() => summarizeImportRows(importRows), [importRows]);
   const [importing, setImporting] = useState(false);
   const [importResults, setImportResults] = useState<{ row: number; status: string; name?: string; error?: string }[] | null>(null);
   const [showColumnInfo, setShowColumnInfo] = useState(false);
@@ -249,11 +288,12 @@ function ProductsPageContent() {
   // Price Adjustment State
   const [isPriceAdjustModalOpen, setIsPriceAdjustModalOpen] = useState(false);
   const [priceAdjustPercentage, setPriceAdjustPercentage] = useState('');
+  const [priceAdjustRounding, setPriceAdjustRounding] = useState<PriceRounding>(0);
   const [priceAdjustScope, setPriceAdjustScope] = useState<'all' | 'category'>('all');
   const [priceAdjustCategoryId, setPriceAdjustCategoryId] = useState('');
   const [priceAdjusting, setPriceAdjusting] = useState(false);
   const [priceAdjustResult, setPriceAdjustResult] = useState<{
-    percentage: number; total: number; updated: number; sample?: PriceAdjustSample[]; errors?: string[];
+    percentage: number; round_to?: number; total: number; updated: number; sample?: PriceAdjustSample[]; errors?: string[];
   } | null>(null);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -537,6 +577,7 @@ function ProductsPageContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           percentage: pct,
+          round_to: priceAdjustRounding,
           category_id: priceAdjustScope === 'category' ? priceAdjustCategoryId : undefined,
         }),
       });
@@ -657,6 +698,7 @@ function ProductsPageContent() {
   // Handlers
   const handleOpenProductModal = useCallback((product: Product | null = null) => {
     setAmountDraft({});
+    setMarginDraft(null);
     if (product) {
       setEditingProduct(product);
       setProductForm({
@@ -880,7 +922,7 @@ function ProductsPageContent() {
       <PageHeader
         icon={<Package className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />}
         title="Gestión de Inventario"
-        subtitle="Administra tus productos, códigos de barras y niveles de stock crítico."
+        subtitle="Administrá tus productos, códigos de barras y niveles de stock crítico."
         actions={
           <>
           {/* Actions Dropdown */}
@@ -1022,18 +1064,19 @@ function ProductsPageContent() {
         ) : productsLoading ? (
           <LoadingState label="Cargando inventario..." />
         ) : filteredProducts.length === 0 ? (
-          <EmptyState icon={Package} title="No se encontraron productos" description="Intenta ajustando los filtros de búsqueda." />
+          <EmptyState icon={Package} title="No se encontraron productos" description="Probá ajustando los filtros de búsqueda." />
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-left border-collapse">
               <Thead>
-                <SortableTh label="Producto" sortFor="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                <SortableTh label="Categoría" sortFor="category" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-3" />
-                <SortableTh label="Ubicación" sortFor="location" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-3" />
-                <SortableTh label="SKU / Código" sortFor="sku" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                <SortableTh label="Precios (Costo / Venta)" sortFor="price" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                <SortableTh label="Stock" sortFor="stock" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" align="center" />
-                <Th align="right">Acciones</Th>
+                <SortableTh label="Producto" sortFor="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-3 sm:px-6" />
+                <SortableTh label="Categoría" sortFor="category" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="hidden sm:table-cell px-3" />
+                <SortableTh label="Ubicación" sortFor="location" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="hidden lg:table-cell px-3" />
+                <SortableTh label="SKU / Código" sortFor="sku" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="hidden md:table-cell px-6" />
+                <SortableTh label="Precios (Costo / Venta)" sortFor="price" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-3 sm:px-6" />
+                <SortableTh label="Stock" sortFor="stock" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-3 sm:px-6" align="center" />
+                <Th align="right" className="px-3 sm:px-6">Acciones</Th>
               </Thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
                 {paginatedProducts.map((product) => {
@@ -1043,7 +1086,7 @@ function ProductsPageContent() {
 
                   return (
                     <tr key={product.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
-                      <td className="py-4 px-6">
+                      <td className="py-4 px-3 sm:px-6">
                         <div className="flex items-center gap-3">
                           {product.image_url && (
                             <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100 dark:bg-gray-800">
@@ -1056,15 +1099,28 @@ function ProductsPageContent() {
                               />
                             </div>
                           )}
-                          <div>
-                            <div className="font-semibold text-gray-900 dark:text-gray-100">{product.name}</div>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-gray-900 dark:text-gray-100 break-words">{product.name}</div>
+                            {category && (
+                              <div className="sm:hidden mt-0.5">
+                                <span
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium"
+                                  style={{
+                                    backgroundColor: `${category.color || '#3b82f6'}15`,
+                                    color: category.color || '#3b82f6',
+                                  }}
+                                >
+                                  {category.name}
+                                </span>
+                              </div>
+                            )}
                             {product.description && (
                               <div className="text-xs text-gray-500 line-clamp-1 mt-0.5">{product.description}</div>
                             )}
                           </div>
                         </div>
                       </td>
-                      <td className="py-4 px-3">
+                      <td className="hidden sm:table-cell py-4 px-3">
                         {category ? (
                           <span
                             className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium"
@@ -1080,9 +1136,9 @@ function ProductsPageContent() {
                           <span className="text-xs text-gray-400 italic">Sin categoría</span>
                         )}
                       </td>
-                      <td className="py-4 px-3">
+                      <td className="hidden lg:table-cell py-4 px-3">
                         {product.deposito || product.pasillo || product.estanteria ? (
-                          <div className="text-xs text-gray-700 dark:text-gray-300 leading-tight whitespace-nowrap">
+                          <div className="text-xs text-gray-700 dark:text-gray-300 leading-tight">
                             <p>{product.deposito ? <>Depósito: {product.deposito}</> : <span className="text-gray-300 dark:text-gray-600">Depósito: —</span>}</p>
                             <p className="mt-0.5">{product.pasillo ? <>Pasillo: {product.pasillo}</> : <span className="text-gray-300 dark:text-gray-600">Pasillo: —</span>}</p>
                             <p className="mt-0.5">{product.estanteria ? <>Estantería: {product.estanteria}</> : <span className="text-gray-300 dark:text-gray-600">Estantería: —</span>}</p>
@@ -1091,17 +1147,17 @@ function ProductsPageContent() {
                           <span className="text-xs text-gray-400 italic">—</span>
                         )}
                       </td>
-                      <td className="py-4 px-6">
+                      <td className="hidden md:table-cell py-4 px-6">
                         <div className="text-gray-900 dark:text-gray-100 font-mono text-xs">
                           {product.sku || '—'}
                         </div>
                         {product.barcode && (
-                          <div className="text-[10px] text-gray-400 font-mono mt-0.5">
+                          <div className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5">
                             GTIN: {product.barcode}
                           </div>
                         )}
                       </td>
-                      <td className="py-4 px-6">
+                      <td className="py-4 px-3 sm:px-6">
                         <div className="text-xs text-gray-500">
                           Costo: <span className="font-medium text-gray-700 dark:text-gray-300">{formatARS(product.cost || 0)}</span>
                         </div>
@@ -1116,7 +1172,7 @@ function ProductsPageContent() {
                           </div>
                         )}
                       </td>
-                      <td className="py-4 px-6 text-center">
+                      <td className="py-4 px-3 sm:px-6 text-center">
                         <div className="flex items-center justify-center gap-2">
                           <span
                             className={`inline-flex items-center justify-center w-10 h-10 rounded-full font-bold text-xs ${isCritical
@@ -1128,12 +1184,12 @@ function ProductsPageContent() {
                           >
                             {product.stock ?? 0}
                           </span>
-                          <div className="text-left text-[10px] text-gray-400">
+                          <div className="text-left text-xs text-gray-500 dark:text-gray-400">
                             <div>Ideal: {product.min_stock ?? 0} - {product.max_stock ?? 0}</div>
                           </div>
                         </div>
                       </td>
-                      <td className="py-4 px-6 text-right">
+                      <td className="py-4 px-3 sm:px-6 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <IconAction
                             icon={Edit}
@@ -1157,6 +1213,110 @@ function ProductsPageContent() {
               </tbody>
             </table>
           </div>
+
+          {/* Mobile: cards compactas, sin scroll horizontal */}
+          <div className="divide-y divide-gray-100 dark:divide-gray-800 md:hidden">
+            {paginatedProducts.map((product) => {
+              const category = categories.find((c) => c.id === product.category_id);
+              const isCritical = (product.stock ?? 0) <= (product.min_stock ?? 0);
+              const isLow = !isCritical && (product.stock ?? 0) <= (product.min_stock ?? 0) * 1.5;
+              const margin = product.cost != null && product.cost > 0 ? marginPercent(product.price, product.cost) : null;
+              const code = product.sku || product.barcode;
+              const location = [product.deposito, product.pasillo, product.estanteria].filter(Boolean).join(' · ');
+
+              return (
+                <div key={product.id} className="space-y-3 p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
+                      {product.image_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={product.image_url}
+                          alt={product.name}
+                          className="h-full w-full object-cover"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                        />
+                      ) : (
+                        <Package className="h-5 w-5 text-gray-400" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-gray-900 dark:text-gray-100 break-words">{product.name}</p>
+                      {category ? (
+                        <span
+                          className="mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium"
+                          style={{
+                            backgroundColor: `${category.color || '#3b82f6'}15`,
+                            color: category.color || '#3b82f6',
+                          }}
+                        >
+                          <Tag className="h-3 w-3" />
+                          {category.name}
+                        </span>
+                      ) : (
+                        <span className="mt-1 block text-xs italic text-gray-400">Sin categoría</span>
+                      )}
+                    </div>
+                    <span
+                      className={`inline-flex shrink-0 items-center rounded-full px-2 py-1 text-xs font-bold tabular-nums ${
+                        isCritical
+                          ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                          : isLow
+                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                            : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                      }`}
+                      title={`Stock: ${product.stock ?? 0} unidades`}
+                    >
+                      {product.stock ?? 0} u.
+                    </span>
+                  </div>
+
+                  <div className="flex items-end justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-lg font-bold tabular-nums text-indigo-600 dark:text-indigo-400">
+                        {formatARS(product.price)}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        Costo {formatARS(product.cost || 0)}
+                        {margin !== null && (
+                          <span className={margin >= 0 ? 'ml-1 text-emerald-600 dark:text-emerald-400' : 'ml-1 text-red-600 dark:text-red-400'}>
+                            · {margin >= 0 ? '+' : ''}{margin.toFixed(0)}%
+                          </span>
+                        )}
+                      </p>
+                      {code && (
+                        <p className="mt-0.5 truncate font-mono text-xs text-gray-500 dark:text-gray-400" title={code}>
+                          {code}
+                        </p>
+                      )}
+                      {location && (
+                        <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400" title={location}>
+                          Ubicación: {location}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <IconAction
+                        icon={Edit}
+                        label={`Editar ${product.name} (móvil)`}
+                        title="Editar"
+                        tone="indigo"
+                        onClick={() => handleOpenProductModal(product)}
+                      />
+                      <IconAction
+                        icon={Trash2}
+                        label={`Eliminar ${product.name} (móvil)`}
+                        title="Eliminar"
+                        tone="red"
+                        onClick={() => handleDeleteProduct(product.id)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          </>
         )}
 
         {/* Pagination Panel */}
@@ -1240,7 +1400,7 @@ function ProductsPageContent() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 sm:col-span-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:col-span-2">
                   <div>
                     <FormLabel htmlFor="product-cost">
                       Costo ($)
@@ -1275,28 +1435,38 @@ function ProductsPageContent() {
                     />
                   </div>
                   <div>
-                    <FormLabel>
-                      Margen
-                    </FormLabel>
-                    <Input
-                      type="text"
-                      readOnly
-                      className={`bg-gray-50 dark:bg-gray-800 cursor-not-allowed font-medium ${productForm.cost > 0 && productForm.price > 0 && marginPercent(productForm.price, productForm.cost) >= 0
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : 'text-red-600 dark:text-red-400'
-                        }`}
-                      value={
-                        productForm.cost > 0 && productForm.price > 0
-                          ? `${marginPercent(productForm.price, productForm.cost) >= 0 ? '+' : ''}${marginPercent(productForm.price, productForm.cost).toFixed(0)}%`
-                          : '—'
-                      }
-                    />
+                    <div className="flex items-center justify-between">
+                      <FormLabel htmlFor="product-margin">
+                        Margen (%)
+                      </FormLabel>
+                      {productForm.cost > 0 && productForm.price > 0 && (
+                        <span className={`text-xs font-semibold ${productForm.price >= productForm.cost ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                          {productForm.price >= productForm.cost ? `+${formatARS(productForm.price - productForm.cost)}` : formatARS(productForm.price - productForm.cost)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <Input
+                        id="product-margin"
+                        name="margin"
+                        type="text"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        placeholder="Ej. 40"
+                        className="tabular-nums pr-7 font-medium"
+                        value={marginDisplay}
+                        onChange={(e) => handleMarginChange(e.target.value)}
+                      />
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 dark:text-gray-500 pointer-events-none">
+                        %
+                      </span>
+                    </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2 sm:col-span-2">
                   <div>
-                    <FormLabel htmlFor="product-stock" className="text-[10px]">
+                    <FormLabel htmlFor="product-stock" className="text-xs">
                       Stock Inicial
                     </FormLabel>
                     <Input
@@ -1308,7 +1478,7 @@ function ProductsPageContent() {
                     />
                   </div>
                   <div>
-                    <FormLabel htmlFor="product-min-stock" className="text-[10px]">
+                    <FormLabel htmlFor="product-min-stock" className="text-xs">
                       Mínimo Crítico
                     </FormLabel>
                     <Input
@@ -1320,7 +1490,7 @@ function ProductsPageContent() {
                     />
                   </div>
                   <div>
-                    <FormLabel htmlFor="product-max-stock" className="text-[10px]">
+                    <FormLabel htmlFor="product-max-stock" className="text-xs">
                       Máximo Sugerido
                     </FormLabel>
                     <Input
@@ -1339,7 +1509,7 @@ function ProductsPageContent() {
                   </FormLabel>
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <FormLabel htmlFor="product-deposito" className="text-[10px]">
+                      <FormLabel htmlFor="product-deposito" className="text-xs">
                         Depósito
                       </FormLabel>
                       <Input
@@ -1352,7 +1522,7 @@ function ProductsPageContent() {
                       />
                     </div>
                     <div>
-                      <FormLabel htmlFor="product-pasillo" className="text-[10px]">
+                      <FormLabel htmlFor="product-pasillo" className="text-xs">
                         Pasillo
                       </FormLabel>
                       <Input
@@ -1365,7 +1535,7 @@ function ProductsPageContent() {
                       />
                     </div>
                     <div>
-                      <FormLabel htmlFor="product-estanteria" className="text-[10px]">
+                      <FormLabel htmlFor="product-estanteria" className="text-xs">
                         Estantería
                       </FormLabel>
                       <Input
@@ -1475,7 +1645,7 @@ function ProductsPageContent() {
                 <div><span className="font-medium text-gray-900 dark:text-gray-100">Stock máximo</span> — nivel sugerido. Ej: <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">100</code></div>
                 <div><span className="font-medium text-gray-900 dark:text-gray-100">Categoría</span> — se crea si no existe. Ej: <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">Bebidas</code></div>
                 <div><span className="font-medium text-gray-900 dark:text-gray-100">Descripción</span> — detalle del producto. Ej: <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">Gaseosa sabor cola</code></div>
-                <p className="text-[10px] text-gray-400 dark:text-gray-500 pt-1">Las columnas son opcionales excepto <strong>Nombre</strong>. Podés usar nombres en español o inglés.</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 pt-1">Las columnas son opcionales excepto <strong>Nombre</strong>. Podés usar nombres en español o inglés.</p>
               </div>
             )}
 
@@ -1557,6 +1727,32 @@ function ProductsPageContent() {
                     Cambiar archivo
                   </label>
                 </div>
+
+                {importPreview.skipped.length > 0 ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs dark:border-amber-900/40 dark:bg-amber-950/30">
+                    <p className="font-semibold text-amber-800 dark:text-amber-300">
+                      {importPreview.valid} producto(s) listos para importar ·{' '}
+                      {importPreview.skipped.length} se van a omitir por datos inválidos
+                    </p>
+                    <ul className="mt-1.5 space-y-0.5 text-amber-700 dark:text-amber-400">
+                      {importPreview.skipped.slice(0, 5).map((issue) => (
+                        <li key={issue.row}>
+                          Fila {issue.row}
+                          {issue.name ? ` (${issue.name})` : ''}: {issue.error}
+                        </li>
+                      ))}
+                    </ul>
+                    {importPreview.skipped.length > 5 && (
+                      <p className="mt-1.5 text-amber-600 dark:text-amber-500">
+                        y {importPreview.skipped.length - 5} fila(s) más.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                    {importPreview.total} fila(s) con datos válidos, listas para importar.
+                  </p>
+                )}
                 <div className="max-h-64 overflow-x-auto overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
                   <table className="w-full min-w-[600px] text-sm">
                     <Thead>
@@ -1602,7 +1798,7 @@ function ProductsPageContent() {
                   <Button variant="outline" onClick={() => { setIsImportModalOpen(false); setImportRows([]); setImportColumns([]); setImportResults(null); setShowColumnInfo(false); }}>
                     Cancelar
                   </Button>
-                  <Button onClick={handleImport} disabled={importing}>
+                  <Button onClick={handleImport} disabled={importing || importPreview.valid === 0}>
                     {importing ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -1655,6 +1851,15 @@ function ProductsPageContent() {
                     Aumento del {priceAdjustResult.percentage}% aplicado
                     {priceAdjustCategoryId ? ` a la categoría "${categories.find((c) => c.id === priceAdjustCategoryId)?.name ?? ''}"` : ' a todos los productos'}
                   </p>
+                  {Boolean(priceAdjustResult.round_to) && (
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+                      Precio redondeado{' '}
+                      {PRICE_ROUNDING_OPTIONS.find(
+                        (option) => option.value === priceAdjustResult.round_to
+                      )?.label.toLowerCase()}
+                      .
+                    </p>
+                  )}
                 </div>
                 {priceAdjustResult.errors && priceAdjustResult.errors.length > 0 && (
                   <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/30">
@@ -1740,6 +1945,30 @@ function ProductsPageContent() {
                     {priceAdjustScope === 'all'
                       ? 'Se aplicará a precio de venta y costo de todos los productos.'
                       : 'Se aplicará a precio de venta y costo de los productos de la categoría seleccionada.'}
+                  </p>
+                </div>
+
+                <div>
+                  <FormLabel variant="default" className="text-gray-300 mb-1.5">Redondeo del precio de venta</FormLabel>
+                  <div className="grid grid-cols-2 gap-2">
+                    {PRICE_ROUNDING_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setPriceAdjustRounding(option.value)}
+                        aria-pressed={priceAdjustRounding === option.value}
+                        className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
+                          priceAdjustRounding === option.value
+                            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 font-medium'
+                            : 'border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1.5">
+                    Se aplica solo al precio de venta, no al costo.
                   </p>
                 </div>
                 <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">
@@ -1961,7 +2190,7 @@ function NewTransferModal({
   const [fromTenantId, setFromTenantId] = useState(currentTenantId || '');
   const [toTenantId, setToTenantId] = useState('');
   const [notes, setNotes] = useState('');
-  const [items, setItems] = useState<{ product_id: string; product_name: string; quantity: number }[]>([]);
+  const [items, setItems] = useState<{ product_id: string; product_name: string; quantity: number; stock?: number }[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -2045,12 +2274,28 @@ function NewTransferModal({
   }, [searchTerm, searchIndex, items]);
 
   const addItem = (product: TransferProduct) => {
-    setItems(prev => [...prev, { product_id: product.id, product_name: product.name, quantity: 1 }]);
+    if (product.stock !== undefined && product.stock <= 0) {
+      toast.error(`${product.name} no tiene stock en la sucursal origen`);
+      return;
+    }
+    setItems(prev => [...prev, {
+      product_id: product.id,
+      product_name: product.name,
+      quantity: 1,
+      stock: product.stock,
+    }]);
     setSearchTerm('');
   };
 
   const updateQuantity = (productId: string, qty: number) => {
-    setItems(prev => prev.map(i => i.product_id === productId ? { ...i, quantity: Math.max(1, qty) } : i));
+    setItems(prev => prev.map(i => {
+      if (i.product_id !== productId) return i;
+      // Si el catálogo no informa stock (respuesta vieja), no se recorta acá:
+      // el backend sigue siendo la autoridad y devuelve un error claro.
+      const max = i.stock !== undefined && i.stock > 0 ? i.stock : Number.MAX_SAFE_INTEGER;
+      const next = Math.min(max, Math.max(1, Math.floor(qty) || 1));
+      return { ...i, quantity: next };
+    }));
   };
 
   const removeItem = (productId: string) => {
@@ -2065,6 +2310,11 @@ function NewTransferModal({
     }
     if (items.length === 0) {
       toast.error('Agregá al menos un producto');
+      return;
+    }
+    const overStock = items.find(i => i.stock !== undefined && i.quantity > i.stock);
+    if (overStock) {
+      toast.error(`Stock insuficiente de ${overStock.product_name}. Disponible: ${overStock.stock}`);
       return;
     }
 
@@ -2149,17 +2399,30 @@ function NewTransferModal({
 
             {searchResults.length > 0 && (
               <div className="mb-3 border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-800 max-h-48 overflow-y-auto">
-                {searchResults.map((p) => (
-                  <button
-                    key={p.id as string}
-                    type="button"
-                    onClick={() => addItem(p)}
-                    className="flex items-center justify-between w-full px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50 text-left"
-                  >
-                    <span className="font-medium text-gray-900 dark:text-gray-100">{p.name as string}</span>
-                    <span className="text-xs text-indigo-500 font-medium">Agregar</span>
-                  </button>
-                ))}
+                {searchResults.map((p) => {
+                  const outOfStock = p.stock !== undefined && p.stock <= 0;
+                  return (
+                    <button
+                      key={p.id as string}
+                      type="button"
+                      onClick={() => addItem(p)}
+                      disabled={outOfStock}
+                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-sm text-left hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent dark:hover:bg-gray-800/50"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium text-gray-900 dark:text-gray-100">{p.name as string}</span>
+                        {p.stock !== undefined && (
+                          <span className={`block text-xs ${outOfStock ? 'text-rose-600 dark:text-rose-400' : 'text-gray-400'}`}>
+                            {outOfStock ? 'Sin stock en origen' : `${p.stock} u. disponibles`}
+                          </span>
+                        )}
+                      </span>
+                      <span className={`shrink-0 text-xs font-medium ${outOfStock ? 'text-gray-400' : 'text-indigo-500'}`}>
+                        {outOfStock ? 'Sin stock' : 'Agregar'}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             )}
 
@@ -2167,15 +2430,24 @@ function NewTransferModal({
               <div className="border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-800">
                 {items.map((item) => (
                   <div key={item.product_id} className="flex items-center justify-between px-3 py-2">
-                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate flex-1">
-                      {item.product_name}
-                    </span>
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                        {item.product_name}
+                      </span>
+                      {item.stock !== undefined && (
+                        <span className="block text-xs text-gray-400">
+                          Stock disponible: {item.stock} u.
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2 ml-3">
                       <Input
                         type="number"
                         min="1"
+                        max={item.stock}
                         value={item.quantity}
                         onChange={(e) => updateQuantity(item.product_id, parseInt(e.target.value) || 1)}
+                        aria-label={`Cantidad de ${item.product_name}`}
                         className="w-20 text-center text-sm"
                       />
                       <IconAction

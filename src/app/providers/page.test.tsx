@@ -110,7 +110,7 @@ describe('proveedores: paginación', () => {
   });
 });
 
-describe('proveedores: catálogo de productos on demand', () => {
+describe('proveedores: pedidos de compra unificados', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -124,13 +124,12 @@ describe('proveedores: catálogo de productos on demand', () => {
     expect(authFetchMock).not.toHaveBeenCalledWith('/api/products');
   });
 
-  it('baja el catálogo al abrir el modal de pedido de compra', async () => {
+  it('deriva la creación de pedidos al módulo de compras', async () => {
     renderPage(3);
     await screen.findByRole('table');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Nueva compra' }));
+    fireEvent.click(screen.getByRole('button', { name: /nuevo pedido/i }));
 
-    await screen.findByText('Nueva Compra');
-    await waitFor(() => expect(authFetchMock).toHaveBeenCalledWith('/api/products'));
+    expect(pushMock).toHaveBeenCalledWith('/documents?type=orden_compra&create_po=1');
   });
 });

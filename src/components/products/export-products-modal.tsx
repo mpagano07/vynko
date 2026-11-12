@@ -132,7 +132,7 @@ export function ExportProductsModal({
         </p>
 
         <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-700 dark:bg-gray-800/60">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
             Archivo
           </p>
           <p className="mt-0.5 break-words text-sm font-medium text-gray-900 dark:text-gray-100">

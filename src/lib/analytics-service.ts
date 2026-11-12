@@ -65,15 +65,24 @@ export type AdminAnalyticsResult =
   | { ok: true; data: AdminAnalytics }
   | { ok: false; error: string; missingView: string };
 
-export async function getAdminAnalytics(): Promise<AdminAnalyticsResult> {
+export async function getAdminAnalytics(
+  options: { since?: string } = {}
+): Promise<AdminAnalyticsResult> {
+  // El filtro va antes del límite para que "últimos 7 días" no devuelva los
+  // 50 eventos más nuevos de siempre y después los recorte a cero.
+  const recentFiltered = supabaseAdmin
+    .from('analytics_events')
+    .select('id, event_type, user_email, user_name, tenant_id, metadata, created_at')
+    .order('created_at', { ascending: false });
+
+  const recentQuery = options.since
+    ? recentFiltered.gte('created_at', options.since)
+    : recentFiltered;
+
   const [funnelResult, totalsResult, recentResult, monthlyResult] = await Promise.all([
     supabaseAdmin.from('analytics_funnel').select('step, event_type, users, ordered_users'),
     supabaseAdmin.from('analytics_event_totals').select('event_type, users, total, first_at, last_at'),
-    supabaseAdmin
-      .from('analytics_events')
-      .select('id, event_type, user_email, user_name, tenant_id, metadata, created_at')
-      .order('created_at', { ascending: false })
-      .limit(50),
+    recentQuery.limit(50),
     supabaseAdmin.from('analytics_events_by_month').select('month, event_type, event_count'),
   ]);
 

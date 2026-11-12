@@ -245,7 +245,7 @@ function LoginContent() {
             </Button>
 
             <p className="text-xs text-gray-400 leading-relaxed text-center">
-              Al iniciar sesión continuás sujeto a nuestros{' '}
+              Al ingresar aceptás nuestros{' '}
               <Link href="/terminos" target="_blank" className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2">
                 Términos
               </Link>
@@ -299,7 +299,7 @@ function LoginContent() {
           </Button>
 
           <p className="text-sm text-gray-400 text-center mt-8">
-            ¿No tienes cuenta?{' '}
+            ¿No tenés cuenta?{' '}
             <Link
               href="/auth/signup"
               className="text-indigo-400 hover:text-indigo-300 font-medium"

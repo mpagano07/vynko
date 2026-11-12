@@ -111,14 +111,14 @@ describe('FormLabel', () => {
 
   it('forwards htmlFor and merges className overrides', () => {
     render(
-      <FormLabel htmlFor="product-name" className="text-[10px]">
+      <FormLabel htmlFor="product-name" className="text-xs">
         Nombre
       </FormLabel>
     );
 
     const label = screen.getByText('Nombre');
     expect(label).toHaveAttribute('for', 'product-name');
-    expect(label).toHaveClass('text-[10px]');
+    expect(label).toHaveClass('text-xs');
   });
 });
 

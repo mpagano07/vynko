@@ -191,6 +191,14 @@ export async function closeCashRegister(
   const total_counted = PAYMENT_METHODS.reduce((sum, m) => sum + counted[m.id], 0);
   const total_difference = total_counted - total_expected;
 
+  if (total_difference < 0 && !notes) {
+    return {
+      ok: false,
+      error: 'Agregá una observación para justificar el faltante de caja',
+      status: 400,
+    };
+  }
+
   const { data: updated, error } = await supabaseAdmin
     .from('cash_register_sessions')
     .update({

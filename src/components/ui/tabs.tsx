@@ -17,7 +17,10 @@ export interface TabsProps {
 export function Tabs({ tabs, activeTab, onChange, className }: TabsProps) {
   return (
     <div className={cn('border-b border-gray-200 dark:border-gray-700', className)}>
-      <nav className="flex gap-1 -mb-px overflow-x-auto" role="tablist">
+      <nav
+        className="flex gap-1 -mb-px overflow-x-auto [mask-image:linear-gradient(to_right,black_85%,transparent)] sm:[mask-image:none]"
+        role="tablist"
+      >
         {tabs.map((tab) => {
           const isActive = tab.id === activeTab;
           return (

@@ -536,7 +536,7 @@ export default function SalesPage() {
 
   const openCheckout = () => {
     if (cart.length === 0) {
-      toast.error('Agrega al menos un producto a la venta');
+      toast.error('Agregá al menos un producto a la venta');
       return;
     }
     setCheckoutOpen(true);
@@ -545,7 +545,7 @@ export default function SalesPage() {
   const handleConfirmCheckout = async ({ payments, primary, change, printReceipt, whatsappPhone, emitArca, invoiceType }: CheckoutPayload) => {
     if (cart.length === 0) {
       setCheckoutOpen(false);
-      toast.error('Agrega al menos un producto a la venta');
+      toast.error('Agregá al menos un producto a la venta');
       return;
     }
 
@@ -716,7 +716,7 @@ export default function SalesPage() {
       if (e.key === 'F4' || (e.ctrlKey && e.key === 'Enter')) {
         e.preventDefault();
         if (cart.length === 0) {
-          toast.error('Agrega al menos un producto a la venta');
+          toast.error('Agregá al menos un producto a la venta');
           return;
         }
         setCheckoutOpen(true);
@@ -768,7 +768,7 @@ export default function SalesPage() {
   }
 
   return (
-    <div className="space-y-6 relative">
+    <div className="space-y-6 relative pb-24 lg:pb-0">
       {flyAnim && (
         <div
           className="fixed z-[9999] pointer-events-none"
@@ -809,19 +809,19 @@ export default function SalesPage() {
       >
         <div className="hidden md:flex flex-wrap items-center gap-2 mt-2.5">
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
-            <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-[11px] shadow-xs">F2</kbd>
+            <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-xs shadow-xs">F2</kbd>
             Buscar producto
           </span>
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
-            <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-[11px] shadow-xs">F4</kbd>
+            <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-xs shadow-xs">F4</kbd>
             Finalizar cobro
           </span>
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
-            <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-[11px] shadow-xs">Esc</kbd>
+            <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-xs shadow-xs">Esc</kbd>
             Limpiar búsqueda
           </span>
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
-            <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-[11px] shadow-xs">Supr</kbd>
+            <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-xs shadow-xs">Supr</kbd>
             Cancelar carrito
           </span>
         </div>
@@ -906,7 +906,7 @@ export default function SalesPage() {
                       }`}
                     >
                       {inCart && (
-                        <div className="absolute top-2 right-2 flex items-center gap-1 bg-green-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                        <div className="absolute top-2 right-2 flex items-center gap-1 bg-green-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
                           <Check className="h-2.5 w-2.5" />
                           Agregado
                         </div>
@@ -921,7 +921,7 @@ export default function SalesPage() {
                       <StockBadge product={product} />
                     </div>
                     {(product.barcode || product.sku) && (
-                      <div className="text-[10px] text-gray-400 font-mono mt-1">
+                      <div className="text-xs text-gray-400 font-mono mt-1">
                         {product.barcode || product.sku}
                       </div>
                     )}
@@ -956,7 +956,7 @@ export default function SalesPage() {
                                   {inCart && <Check className="h-3.5 w-3.5" />}
                                 </span>
                                 {(product.barcode || product.sku) && (
-                                  <span className="text-[10px] text-gray-400 font-mono">
+                                  <span className="text-xs text-gray-400 font-mono">
                                     {product.barcode || product.sku}
                                   </span>
                                 )}
@@ -1103,7 +1103,7 @@ export default function SalesPage() {
                     {showAdjustments && (
                       <div className="grid grid-cols-2 gap-2 mt-2">
                         <label className="block">
-                          <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
                             Descuento %
                           </span>
                           <input
@@ -1119,7 +1119,7 @@ export default function SalesPage() {
                           />
                         </label>
                         <label className="block">
-                          <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
                             Recargo %
                           </span>
                           <input
@@ -1455,6 +1455,43 @@ export default function SalesPage() {
           </div>
         )}
       </Card>
+
+      {/* Mobile: barra de cobro fija. En desktop el resumen del carrito ya
+          queda visible en la columna derecha. */}
+      {cart.length > 0 && (
+        <div
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 px-4 pt-3 backdrop-blur-sm dark:border-gray-700 dark:bg-gray-900/95 lg:hidden"
+          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+        >
+          <div className="mx-auto flex max-w-3xl items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {cart.length} {cart.length === 1 ? 'producto' : 'productos'}
+              </p>
+              <p className="truncate text-lg font-bold tabular-nums text-gray-900 dark:text-gray-100">
+                {formatARS(total)}
+              </p>
+            </div>
+            <Button
+              onClick={openCheckout}
+              disabled={isSubmitting}
+              className="h-11 shrink-0 gap-2 px-5 font-semibold active:scale-[0.99] transition-all"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Procesando...
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4" />
+                  Cobrar
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {checkoutOpen && (
         <CheckoutModal

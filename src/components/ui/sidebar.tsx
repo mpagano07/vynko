@@ -209,19 +209,19 @@ function LockedNavItem({ item, compact = false, onNavClick }: { item: NavItem; c
             <div className="w-60 rounded-xl border border-amber-300/60 bg-white dark:border-amber-800/40 dark:bg-gray-800 p-3.5 shadow-2xl shadow-black/15 dark:shadow-black/60">
               <div className="flex items-center gap-1.5">
                 <Lock className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
-                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-300">Business</span>
-                <span className="ml-auto flex items-center gap-0.5 text-[9px] font-bold text-amber-500 dark:text-amber-400/90">
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-300">Business</span>
+                <span className="ml-auto flex items-center gap-0.5 text-xs font-bold text-amber-500 dark:text-amber-400/90">
                   <Sparkles className="h-3 w-3" />
                   Premium
                 </span>
               </div>
               <p className="mt-1.5 text-xs font-bold text-gray-900 dark:text-white">{item.name}</p>
-              <p className="mt-1 text-[10px] leading-relaxed text-gray-500 dark:text-gray-400">
+              <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                 {LOCKED_ITEM_DESCRIPTIONS[item.href] ?? 'Disponible en el plan Business.'}
               </p>
               <button
                 onClick={() => router.push('/billing')}
-                className="mt-2.5 flex w-full items-center justify-center gap-1 rounded-md bg-amber-500 px-2 py-1.5 text-[11px] font-bold text-black transition-colors hover:bg-amber-400"
+                className="mt-2.5 flex w-full items-center justify-center gap-1 rounded-md bg-amber-500 px-2 py-1.5 text-xs font-bold text-black transition-colors hover:bg-amber-400"
               >
                 Actualizar plan
                 <ArrowRight className="h-3.5 w-3.5" />
@@ -254,7 +254,7 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
             <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
             <span className="text-xs font-bold text-red-300 uppercase tracking-wider">Suscripción vencida</span>
           </div>
-          <p className="text-[10px] text-red-400/80">
+          <p className="text-xs text-red-400/80">
             Actualizá tu plan para seguir usando Vynko
           </p>
         </div>
@@ -265,7 +265,7 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
         if (visibleItems.length === 0) return null;
         return (
           <div key={group.label} className="mb-1">
-            <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
+            <p className="px-3 pt-4 pb-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
               {group.label}
             </p>
             {visibleItems.map(({ item, locked }) =>
@@ -286,7 +286,7 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
                 >
                   <span>{item.name}</span>
                   {item.badge && (
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-800/40">
+                    <span className="text-xs font-bold px-1.5 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-800/40">
                       {item.badge}
                     </span>
                   )}
@@ -299,7 +299,7 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
 
       {isAdmin && (
         <div className="mb-1">
-          <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
+          <p className="px-3 pt-4 pb-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
             Admin
           </p>
           {[
@@ -329,7 +329,7 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
 
       {visibleOperaciones.length > 0 && (
         <div className="mb-1">
-          <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
+          <p className="px-3 pt-4 pb-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
             Operaciones
           </p>
           <button
@@ -378,7 +378,7 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
                     >
                       <span>{item.name}</span>
                       {item.badge && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-800/40">
+                        <span className="text-xs font-bold px-1.5 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-800/40">
                           {item.badge}
                         </span>
                       )}
@@ -424,7 +424,7 @@ export function Sidebar() {
 
   if (loading) {
     return (
-      <aside className="hidden md:flex flex-col w-[207px] h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white p-2 border-r border-gray-200 dark:border-gray-800">
+      <aside className="hidden md:flex flex-col w-60 h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white p-2 border-r border-gray-200 dark:border-gray-800">
         <div className="mb-4 flex justify-center">
           <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="96px" className="h-9 w-auto object-contain [filter:drop-shadow(0_0_1px_#000)_drop-shadow(0_0_1px_#000)_drop-shadow(0_0_0.5px_#000)] dark:[filter:none]" />
         </div>
@@ -463,7 +463,7 @@ export function Sidebar() {
       {/* Mobile drawer */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex flex-col w-[207px] bg-white dark:bg-gray-900 text-gray-900 dark:text-white p-2 border-r border-gray-200 dark:border-gray-800 md:hidden',
+          'fixed inset-y-0 left-0 z-50 flex flex-col w-60 bg-white dark:bg-gray-900 text-gray-900 dark:text-white p-2 border-r border-gray-200 dark:border-gray-800 md:hidden',
           'transition-transform duration-200 ease-out',
           isOpen ? 'translate-x-0' : '-translate-x-full'
         )}
@@ -482,7 +482,7 @@ export function Sidebar() {
       </aside>
 
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex flex-col w-[207px] h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white p-2 border-r border-gray-200 dark:border-gray-800">
+      <aside className="hidden md:flex flex-col w-60 h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white p-2 border-r border-gray-200 dark:border-gray-800">
         <div className="mb-2">
           <div className="flex justify-center">
             <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="96px" className="h-9 w-auto object-contain [filter:drop-shadow(0_0_1px_#000)_drop-shadow(0_0_1px_#000)_drop-shadow(0_0_0.5px_#000)] dark:[filter:none]" />
@@ -528,7 +528,7 @@ function TrialCounter({ tenant }: { tenant: TenantInfo | null }) {
           <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
           <span className="text-xs font-bold text-red-300 uppercase tracking-wider">Prueba finalizada</span>
         </div>
-        <p className="text-[10px] text-red-400/80">
+        <p className="text-xs text-red-400/80">
           Suscribite a un plan para seguir usando Vynko
         </p>
       </div>
@@ -552,7 +552,7 @@ function TrialCounter({ tenant }: { tenant: TenantInfo | null }) {
           style={{ width: `${Math.max(0, Math.min(100, (daysLeft / TRIAL_DAYS) * 100))}%` }}
         />
       </div>
-      <p className="text-[10px] text-blue-400/80 mt-2">
+      <p className="text-xs text-blue-400/80 mt-2">
         {daysLeft === 0 ? 'Tu prueba termina hoy' : `Quedan ${daysLeft} días de prueba gratuita.`}
       </p>
     </div>

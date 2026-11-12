@@ -15,6 +15,7 @@ export async function GET(request: Request) {
       limit: searchParams.get('limit'),
       offset: searchParams.get('offset'),
       entity_type: searchParams.get('entity_type'),
+      q: searchParams.get('q'),
     });
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
     return NextResponse.json(fixResponse(result.data));

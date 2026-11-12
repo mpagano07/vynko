@@ -124,6 +124,7 @@ export default function DocumentosPage() {
   const [poItems, setPoItems] = useState<{ product_id: string; quantity: number; unit_cost: number }[]>([]);
   const [isSubmittingPo, setIsSubmittingPo] = useState(false);
   const [poStatus, setPoStatus] = useState<'draft' | 'sent'>('draft');
+  const poIntentHandled = useRef(false);
 
   // Receive modal state
   const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false);
@@ -211,6 +212,56 @@ export default function DocumentosPage() {
       window.history.replaceState({}, '', url.toString());
     }
   }, []);
+
+  // Deep-link: /documents?type=orden_compra&create_po=1 abre el modal de pedido.
+  // Es el único punto de creación de compras: /providers deriva acá para evitar
+  // dos flujos duplicados. Acepta supplier_id / productId / qty para precargar
+  // el pedido desde forecast o alertas de stock.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('create_po') !== '1' || poIntentHandled.current || loading) return;
+    poIntentHandled.current = true;
+
+    const supplierId = params.get('supplier_id');
+    const productId = params.get('productId');
+    const qty = Number(params.get('qty')) || 0;
+    const bulkItems = params.get('items');
+
+    if (supplierId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPoSupplierId(supplierId);
+    }
+    if (bulkItems) {
+      // Formato: productId:cantidad,productId:cantidad — lo usa el pedido de
+      // reposición masivo de /forecast.
+      const parsed = bulkItems
+        .split(',')
+        .map((pair) => {
+          const [rawProductId, rawQty] = pair.split(':');
+          const quantity = Number(rawQty) || 0;
+          const product = products.find((p) => p.id === rawProductId);
+          return product && quantity > 0
+            ? { product_id: product.id, quantity, unit_cost: product.cost || 0 }
+            : null;
+        })
+        .filter((item): item is { product_id: string; quantity: number; unit_cost: number } => item !== null);
+      if (parsed.length > 0) setPoItems(parsed);
+    } else if (productId && qty > 0) {
+      const product = products.find((p) => p.id === productId);
+      if (product) {
+        setPoItems([{ product_id: product.id, quantity: qty, unit_cost: product.cost || 0 }]);
+      }
+    }
+    setIsPoModalOpen(true);
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete('create_po');
+    url.searchParams.delete('supplier_id');
+    url.searchParams.delete('productId');
+    url.searchParams.delete('qty');
+    url.searchParams.delete('items');
+    window.history.replaceState({}, '', url.toString());
+  }, [loading, products]);
 
   const filteredDocuments = useMemo(() => {
     return documents.filter(doc => {
@@ -468,11 +519,11 @@ export default function DocumentosPage() {
   const handleCreatePo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!poSupplierId) {
-      toast.error('Selecciona un proveedor');
+      toast.error('Seleccioná un proveedor');
       return;
     }
     if (poItems.length === 0) {
-      toast.error('Agrega al menos un producto al pedido');
+      toast.error('Agregá al menos un producto al pedido');
       return;
     }
 
@@ -1397,7 +1448,7 @@ export default function DocumentosPage() {
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    <div className="hidden sm:grid grid-cols-[minmax(0,1.6fr)_96px_130px_110px_32px] gap-2 px-2 mb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    <div className="hidden sm:grid grid-cols-[minmax(0,1.6fr)_96px_130px_110px_32px] gap-2 px-2 mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                       <span>Descripción</span>
                       <span>Cant.</span>
                       <span>Precio unitario</span>
@@ -1556,7 +1607,7 @@ export default function DocumentosPage() {
                   </p>
                 ) : (
                   <div className="space-y-2 max-h-48 overflow-y-auto">
-                    <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_150px_110px_110px_32px] gap-2 px-2 mb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_150px_110px_110px_32px] gap-2 px-2 mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                       <span>Producto</span>
                       <span className="text-center">Cantidad</span>
                       <span className="text-right">Costo unit.</span>
@@ -1706,7 +1757,7 @@ export default function DocumentosPage() {
                 </FormLabel>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <FormLabel className="text-[10px]">
+                    <FormLabel className="text-xs">
                       Depósito
                     </FormLabel>
                     <Input
@@ -1717,7 +1768,7 @@ export default function DocumentosPage() {
                     />
                   </div>
                   <div>
-                    <FormLabel className="text-[10px]">
+                    <FormLabel className="text-xs">
                       Pasillo
                     </FormLabel>
                     <Input
@@ -1728,7 +1779,7 @@ export default function DocumentosPage() {
                     />
                   </div>
                   <div>
-                    <FormLabel className="text-[10px]">
+                    <FormLabel className="text-xs">
                       Estantería
                     </FormLabel>
                     <Input

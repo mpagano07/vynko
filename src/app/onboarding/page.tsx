@@ -3,11 +3,29 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  FileText,
+  Loader2,
+  Package,
+  ScanBarcode,
+  Shirt,
+  ShoppingBasket,
+  Sparkles,
+  Store,
+  Truck,
+  Upload,
+  UtensilsCrossed,
+  Wrench,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { FormLabel } from '@/components/ui/form-label';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { cn } from '@/lib/utils/cn';
 import toast from 'react-hot-toast';
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -17,36 +35,112 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   ]);
 }
 
+type BusinessType = 'kiosco' | 'bazar' | 'indumentaria' | 'distribuidora' | 'gastronomia' | 'otro';
+type SalesMode = 'mostrador' | 'mayorista' | 'mixto';
+type FirstAction = 'import' | 'manual' | 'explore';
+
+const BUSINESS_TYPES: { id: BusinessType; label: string; description: string; icon: typeof Store }[] = [
+  { id: 'kiosco', label: 'Almacén / Kiosco', description: 'Venta rápida de consumo diario', icon: Store },
+  { id: 'bazar', label: 'Bazar / Ferretería', description: 'Catálogo amplio y stock variado', icon: Wrench },
+  { id: 'indumentaria', label: 'Indumentaria', description: 'Talles, colores y temporadas', icon: Shirt },
+  { id: 'distribuidora', label: 'Distribuidora', description: 'Venta mayorista y remitos', icon: Truck },
+  { id: 'gastronomia', label: 'Gastronomía', description: 'Insumos y productos perecederos', icon: UtensilsCrossed },
+  { id: 'otro', label: 'Otro rubro', description: 'Arrancá con un catálogo libre', icon: Package },
+];
+
+const SALES_MODES: { id: SalesMode; label: string; description: string; icon: typeof ScanBarcode }[] = [
+  {
+    id: 'mostrador',
+    label: 'Mostrador con código de barras',
+    description: 'Cobrás rápido en caja y controlás el stock por unidad.',
+    icon: ScanBarcode,
+  },
+  {
+    id: 'mayorista',
+    label: 'Venta mayorista con remitos',
+    description: 'Presupuestos, remitos y cuenta corriente de clientes.',
+    icon: FileText,
+  },
+  {
+    id: 'mixto',
+    label: 'Mostrador y mayorista',
+    description: 'Combinás ventas minoristas y pedidos mayoristas.',
+    icon: Sparkles,
+  },
+];
+
+const FIRST_ACTIONS: { id: FirstAction; label: string; description: string; icon: typeof Upload }[] = [
+  {
+    id: 'import',
+    label: 'Subir mi lista de Excel',
+    description: 'Importá tu catálogo desde una planilla.',
+    icon: Upload,
+  },
+  {
+    id: 'manual',
+    label: 'Cargar mi primer producto',
+    description: 'Empezá con un producto cargado a mano.',
+    icon: ShoppingBasket,
+  },
+  {
+    id: 'explore',
+    label: 'Recorrer el sistema',
+    description: 'Conocé el panel y cargá productos cuando quieras.',
+    icon: Sparkles,
+  },
+];
+
+const STEPS = ['Tu negocio', 'Modo de venta', 'Primer paso'];
+
 export default function OnboardingPage() {
   const router = useRouter();
   const { setActiveTenant } = useAuth();
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
-  const [step, setStep] = useState<'company' | 'success'>('company');
-  const [formData, setFormData] = useState({
+  const [step, setStep] = useState(0);
+  const [success, setSuccess] = useState(false);
+  const [formData, setFormData] = useState<{
+    companyName: string;
+    ownerName: string;
+    businessType: BusinessType | '';
+    salesMode: SalesMode | '';
+    firstAction: FirstAction;
+  }>({
     companyName: '',
     ownerName: '',
+    businessType: '',
+    salesMode: '',
+    firstAction: 'explore',
   });
 
-  const createCompany = useCallback(async (companyName: string, ownerName: string) => {
-    // La sesion viaja en la cookie HttpOnly: no se manda ningun token. La ruta
-    // resuelve al usuario desde la cookie del servidor.
-    const response = await fetch('/api/onboarding', {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        companyName: companyName.trim(),
-        ownerName: ownerName.trim(),
-      }),
-    });
+  const createCompany = useCallback(
+    async (
+      companyName: string,
+      ownerName: string,
+      options?: { businessType?: string; salesMode?: string }
+    ) => {
+      // La sesion viaja en la cookie HttpOnly: no se manda ningun token. La ruta
+      // resuelve al usuario desde la cookie del servidor.
+      const response = await fetch('/api/onboarding', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          companyName: companyName.trim(),
+          ownerName: ownerName.trim(),
+          businessType: options?.businessType || undefined,
+          salesMode: options?.salesMode || undefined,
+        }),
+      });
 
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Error al crear empresa');
-    return result as { tenantId: string };
-  }, []);
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Error al crear empresa');
+      return result as { tenantId: string };
+    },
+    []
+  );
 
   // Guard definitivo: si el usuario ya pertenece a una empresa, no mostramos el
   // formulario. Se verifica contra /api/session (service role) en lugar de
@@ -114,7 +208,7 @@ export default function OnboardingPage() {
             try {
               const { tenantId } = await createCompany(metaCompany, metaOwner);
               if (cancelled) return;
-              setStep('success');
+              setSuccess(true);
               // Navegación dura, igual que las otras tres salidas de esta pagina
               // (lineas 75, 102 y 135). `router.push` desde /onboarding es la
               // unica navegacion de cliente del archivo: si el router resuelve la
@@ -133,7 +227,7 @@ export default function OnboardingPage() {
               console.error('Onboarding auto-create error:', error);
               if (!cancelled) {
                 // Si no se pudo, mostramos el formulario con los datos ya cargados.
-                setFormData({ companyName: metaCompany, ownerName: metaOwner });
+                setFormData((prev) => ({ ...prev, companyName: metaCompany, ownerName: metaOwner }));
                 setChecking(false);
               }
             }
@@ -155,15 +249,35 @@ export default function OnboardingPage() {
     };
   }, [router]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const canContinue =
+    step === 0
+      ? Boolean(formData.companyName.trim() && formData.ownerName.trim() && formData.businessType)
+      : step === 1
+        ? Boolean(formData.salesMode)
+        : true;
+
+  const handleNext = () => {
+    if (!canContinue) return;
+    setStep((prev) => Math.min(prev + 1, STEPS.length - 1));
+  };
+
+  const handleBack = () => {
+    setStep((prev) => Math.max(prev - 1, 0));
+  };
+
   const handleCreateCompany = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
 
     try {
-      const { tenantId } = await createCompany(formData.companyName, formData.ownerName);
+      const { tenantId } = await createCompany(formData.companyName, formData.ownerName, {
+        businessType: formData.businessType,
+        salesMode: formData.salesMode,
+      });
 
-      toast.success('Empresa creada exitosamente');
-      setStep('success');
+      toast.success('Negocio creado exitosamente');
+      setSuccess(true);
 
       // Mismo criterio que en el auto-alta de arriba: la eleccion de empresa
       // activa se persiste al instante y se navega. Esperar al refetch de
@@ -171,7 +285,13 @@ export default function OnboardingPage() {
       // durante los segundos que tarda el request, para que la recarga tires
       // todo ese trabajo a la basura.
       setActiveTenant(tenantId);
-      window.location.replace('/dashboard');
+      const destination =
+        formData.firstAction === 'import'
+          ? '/products?import=1'
+          : formData.firstAction === 'manual'
+            ? '/products?create=1'
+            : '/dashboard';
+      window.location.replace(destination);
     } catch (error: unknown) {
       console.error('Onboarding error:', error, JSON.stringify(error, null, 2));
       const message = error instanceof Error ? error.message : 'Error al crear empresa';
@@ -181,28 +301,18 @@ export default function OnboardingPage() {
     }
   };
 
-  if (step === 'success') {
+  if (success) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-900">
         <Card className="w-full max-w-md p-8 bg-gray-800 border border-gray-700 text-center">
           <div className="mb-4">
             <div className="w-16 h-16 bg-green-900/30 border border-green-800/50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg
-                className="w-8 h-8 text-green-400"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                  clipRule="evenodd"
-                />
-              </svg>
+              <Check className="w-8 h-8 text-green-400" />
             </div>
           </div>
           <h2 className="text-2xl font-bold mb-2 text-white">¡Bienvenido!</h2>
           <p className="text-gray-400">
-            Tu empresa {formData.companyName} ha sido creada. Redirigiendo al dashboard...
+            Tu empresa {formData.companyName} ha sido creada. Redirigiendo...
           </p>
         </Card>
       </div>
@@ -227,60 +337,204 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-900">
-      <Card className="w-full max-w-md p-8 bg-gray-800 border border-gray-700">
-        <div className="mb-8 text-center">
+    <div className="min-h-screen flex items-center justify-center bg-gray-900 px-4 py-8">
+      <Card className="w-full max-w-2xl p-6 sm:p-8 bg-gray-800 border border-gray-700">
+        <div className="mb-6 text-center">
           <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="128px" className="h-10 w-auto object-contain mx-auto mb-2" />
-          <p className="text-gray-400">Configura tu empresa</p>
+          <h1 className="text-lg font-semibold text-white">Configurá tu negocio</h1>
+          <p className="mt-1 text-sm text-gray-400">Son 3 pasos rápidos, menos de 60 segundos.</p>
         </div>
 
-        <form onSubmit={handleCreateCompany} className="space-y-4">
-          <div>
-            <FormLabel variant="default" htmlFor="company-name" className="text-gray-300 mb-2">
-              Nombre de la empresa
-            </FormLabel>
-            <Input
-              type="text"
-              id="company-name"
-              placeholder="Mi Tienda"
-              value={formData.companyName}
-              onChange={(e) =>
-                setFormData({ ...formData, companyName: e.target.value })
-              }
-              autoFocus
-              required
-              className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-400"
-            />
-          </div>
+        {/* Stepper */}
+        <ol className="mb-6 flex items-center justify-center gap-2 sm:gap-3" aria-label="Pasos de configuración">
+          {STEPS.map((label, index) => {
+            const isActive = index === step;
+            const isDone = index < step;
+            return (
+              <li key={label} className="flex items-center gap-2 sm:gap-3" aria-current={isActive ? 'step' : undefined}>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      'flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold transition-colors',
+                      isDone && 'bg-indigo-600 text-white',
+                      isActive && !isDone && 'bg-indigo-500 text-white ring-4 ring-indigo-500/20',
+                      !isActive && !isDone && 'bg-gray-700 text-gray-400'
+                    )}
+                  >
+                    {isDone ? <Check className="h-3.5 w-3.5" /> : index + 1}
+                  </span>
+                  <span className={cn('hidden text-xs font-medium sm:block', isActive ? 'text-white' : 'text-gray-400')}>
+                    {label}
+                  </span>
+                </div>
+                {index < STEPS.length - 1 && <span className="h-px w-5 bg-gray-600 sm:w-8" aria-hidden="true" />}
+              </li>
+            );
+          })}
+        </ol>
 
-          <div>
-            <FormLabel variant="default" htmlFor="owner-name" className="text-gray-300 mb-2">
-              Tu nombre
-            </FormLabel>
-            <Input
-              type="text"
-              id="owner-name"
-              placeholder="Juan Pérez"
-              value={formData.ownerName}
-              onChange={(e) =>
-                setFormData({ ...formData, ownerName: e.target.value })
-              }
-              required
-              className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-400"
-            />
-          </div>
+        <form onSubmit={handleCreateCompany} className="space-y-5">
+          {step === 0 && (
+            <div className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <FormLabel variant="default" htmlFor="company-name" className="text-gray-300 mb-2">
+                    Nombre del negocio
+                  </FormLabel>
+                  <Input
+                    type="text"
+                    id="company-name"
+                    placeholder="Mi Tienda"
+                    value={formData.companyName}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, companyName: e.target.value }))}
+                    autoFocus
+                    required
+                    className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-400"
+                  />
+                </div>
+                <div>
+                  <FormLabel variant="default" htmlFor="owner-name" className="text-gray-300 mb-2">
+                    Tu nombre
+                  </FormLabel>
+                  <Input
+                    type="text"
+                    id="owner-name"
+                    placeholder="Juan Pérez"
+                    value={formData.ownerName}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, ownerName: e.target.value }))}
+                    required
+                    className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-400"
+                  />
+                </div>
+              </div>
 
-          <Button
-            type="submit"
-            disabled={loading || !formData.companyName || !formData.ownerName}
-            className="w-full"
-          >
-            {loading ? 'Creando empresa...' : 'Crear empresa'}
-          </Button>
+              <fieldset>
+                <legend className="mb-2 text-sm font-medium text-gray-300">¿Qué tipo de negocio tenés?</legend>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {BUSINESS_TYPES.map((option) => {
+                    const Icon = option.icon;
+                    const selected = formData.businessType === option.id;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => setFormData((prev) => ({ ...prev, businessType: option.id }))}
+                        className={cn(
+                          'flex items-start gap-3 rounded-lg border p-3 text-left transition-colors',
+                          selected
+                            ? 'border-indigo-500 bg-indigo-500/10'
+                            : 'border-gray-600 bg-gray-900/40 hover:border-gray-500 hover:bg-gray-900/70'
+                        )}
+                      >
+                        <Icon className={cn('mt-0.5 h-5 w-5 shrink-0', selected ? 'text-indigo-400' : 'text-gray-400')} />
+                        <span>
+                          <span className="block text-sm font-semibold text-white">{option.label}</span>
+                          <span className="block text-xs text-gray-400">{option.description}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            </div>
+          )}
+
+          {step === 1 && (
+            <fieldset>
+              <legend className="mb-2 text-sm font-medium text-gray-300">¿Cómo vendés principalmente?</legend>
+              <div className="space-y-2">
+                {SALES_MODES.map((option) => {
+                  const Icon = option.icon;
+                  const selected = formData.salesMode === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setFormData((prev) => ({ ...prev, salesMode: option.id }))}
+                      className={cn(
+                        'flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors',
+                        selected
+                          ? 'border-indigo-500 bg-indigo-500/10'
+                          : 'border-gray-600 bg-gray-900/40 hover:border-gray-500 hover:bg-gray-900/70'
+                      )}
+                    >
+                      <Icon className={cn('mt-0.5 h-5 w-5 shrink-0', selected ? 'text-indigo-400' : 'text-gray-400')} />
+                      <span>
+                        <span className="block text-sm font-semibold text-white">{option.label}</span>
+                        <span className="block text-xs text-gray-400">{option.description}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+          )}
+
+          {step === 2 && (
+            <fieldset>
+              <legend className="mb-2 text-sm font-medium text-gray-300">¿Con qué querés arrancar?</legend>
+              <div className="space-y-2">
+                {FIRST_ACTIONS.map((option) => {
+                  const Icon = option.icon;
+                  const selected = formData.firstAction === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setFormData((prev) => ({ ...prev, firstAction: option.id }))}
+                      className={cn(
+                        'flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors',
+                        selected
+                          ? 'border-indigo-500 bg-indigo-500/10'
+                          : 'border-gray-600 bg-gray-900/40 hover:border-gray-500 hover:bg-gray-900/70'
+                      )}
+                    >
+                      <Icon className={cn('mt-0.5 h-5 w-5 shrink-0', selected ? 'text-indigo-400' : 'text-gray-400')} />
+                      <span>
+                        <span className="block text-sm font-semibold text-white">{option.label}</span>
+                        <span className="block text-xs text-gray-400">{option.description}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+          )}
+
+          <div className="flex items-center justify-between gap-3 pt-2">
+            {step > 0 ? (
+              <Button type="button" variant="outline" onClick={handleBack} className="flex items-center gap-2">
+                <ArrowLeft className="h-4 w-4" /> Atrás
+              </Button>
+            ) : (
+              <span />
+            )}
+
+            {step < STEPS.length - 1 ? (
+              <Button type="button" onClick={handleNext} disabled={!canContinue} className="flex items-center gap-2">
+                Continuar <ArrowRight className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button type="submit" disabled={loading || !canContinue} className="flex items-center gap-2">
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Creando negocio...
+                  </>
+                ) : (
+                  <>
+                    Crear negocio <Check className="h-4 w-4" />
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
         </form>
 
         <p className="text-xs text-gray-400 text-center mt-4">
-          Podrás invitar más usuarios después
+          Podés sumar a tu equipo más adelante.
         </p>
       </Card>
     </div>

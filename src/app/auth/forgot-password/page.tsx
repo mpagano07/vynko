@@ -43,7 +43,7 @@ export default function ForgotPasswordPage() {
         <Card className="w-full max-w-md p-8 bg-gray-800 border border-gray-700">
           <div className="text-center">
             <Image src="/icons/vynkoLogout.png?v=3" alt="Vynko" width={1530} height={590} sizes="128px" className="h-10 w-auto object-contain mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-white mb-2">Revisa tu email</h2>
+            <h2 className="text-2xl font-bold text-white mb-2">Revisá tu email</h2>
             <p className="text-gray-400 mb-4">
               Te enviamos un link para restablecer tu contraseña a{' '}
               <strong className="text-gray-200">{email}</strong>. Si no lo encontrás, revisá spam o correo no deseado.

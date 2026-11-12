@@ -216,4 +216,34 @@ describe('POST /api/cash-register/[id]/close', () => {
     );
     expect(res.status).toBe(400);
   });
+
+  it('exige una observación cuando el arqueo da faltante', async () => {
+    supabaseMock.__queue('tenant_users', { data: [{ role: 'manager' }] });
+    supabaseMock.__queue('cash_register_sessions', {
+      data: { id: 'sess-1', initial_fund_cents: 5000, status: 'open' },
+    });
+    supabaseMock.__queue('cash_register_sessions', {
+      data: { id: 'sess-1', initial_fund_cents: 5000 },
+    });
+    supabaseMock.__queue('sales', { data: [{ id: 's1' }] });
+    supabaseMock.__queue('sale_payments', {
+      data: [{ method: 'cash', amount_cents: 5000 }],
+    });
+    supabaseMock.__queue('cash_movements', { data: [] });
+
+    const res = await closePOST(
+      makeRequest('http://localhost/api/cash-register/sess-1/close', {
+        counted: { cash: 50, credit: 0, transfer: 0, debit: 0, mercadopago: 0 },
+      })
+    );
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toContain('observación');
+
+    const update = supabaseMock.__calls.find(
+      (c) => c.table === 'cash_register_sessions' && c.method === 'update'
+    );
+    expect(update).toBeUndefined();
+  });
 });

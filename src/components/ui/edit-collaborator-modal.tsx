@@ -150,7 +150,7 @@ export function EditCollaboratorModal({
                   <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
                 </span>
               </FormLabel>
-              <span className="text-[11px] text-gray-400">
+              <span className="text-xs text-gray-400">
                 {selectedTenantIds.length} de {tenants.length}
               </span>
             </div>

@@ -328,7 +328,7 @@ export default function FacturacionPage() {
     e.preventDefault();
 
     if (!arcaConfig?.is_active) {
-      toast.error('Debes activar la conexión con ARCA en Configuración antes de emitir comprobantes');
+      toast.error('Tenés que activar la conexión con ARCA en Configuración antes de emitir comprobantes');
       return;
     }
 
@@ -685,7 +685,7 @@ export default function FacturacionPage() {
                   <tr key={inv.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-900/30 transition-colors">
                     <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">
                       <div className="flex items-center gap-1.5">
-                        <span className="inline-block px-1.5 py-0.5 rounded text-[11px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
+                        <span className="inline-block px-1.5 py-0.5 rounded text-xs font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
                           {inv.invoice_type}
                         </span>
                         <span>
@@ -698,7 +698,7 @@ export default function FacturacionPage() {
                           >
                             <button
                               type="button"
-                              className="inline-block cursor-help rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-purple-800 outline-none focus:ring-2 focus:ring-purple-400 dark:bg-purple-950 dark:text-purple-300"
+                              className="inline-block cursor-help rounded bg-purple-100 px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide text-purple-800 outline-none focus:ring-2 focus:ring-purple-400 dark:bg-purple-950 dark:text-purple-300"
                             >
                               Prueba
                             </button>
@@ -706,7 +706,7 @@ export default function FacturacionPage() {
                         )}
                       </div>
                       {inv.related_invoice_id && (
-                        <div className="mt-0.5 text-[11px] text-gray-400">
+                        <div className="mt-0.5 text-xs text-gray-400">
                           Acredita comprobante anterior
                         </div>
                       )}
@@ -729,7 +729,7 @@ export default function FacturacionPage() {
                         <div>
                           <span className="font-mono font-medium text-gray-800 dark:text-gray-200">{inv.cae}</span>
                           {inv.cae_due_date && (
-                            <span className="block text-[11px] text-gray-400">
+                            <span className="block text-xs text-gray-400">
                               Vto: {inv.cae_due_date.slice(6, 8)}/{inv.cae_due_date.slice(4, 6)}/{inv.cae_due_date.slice(0, 4)}
                             </span>
                           )}

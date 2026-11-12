@@ -33,7 +33,7 @@ const TONE_CLASSES: Record<StatusTone, string> = {
 };
 
 const SIZE_CLASSES = {
-  xs: 'px-2 py-0.5 text-[11px] font-semibold',
+  xs: 'px-2 py-0.5 text-xs font-semibold',
   sm: 'px-2 py-0.5 text-xs font-medium',
   md: 'px-2.5 py-1 text-xs font-semibold',
   lg: 'px-3 py-1 text-sm font-semibold',

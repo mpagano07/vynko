@@ -297,7 +297,7 @@ describe('ForecastPage', () => {
     expect(within(table).getByText('73 u.')).toBeInTheDocument();
     expect(within(table).getByRole('link', { name: /Crear orden/ })).toHaveAttribute(
       'href',
-      '/providers?create_po=1&productId=p1&qty=73',
+      '/documents?type=orden_compra&create_po=1&productId=p1&qty=73',
     );
   });
 

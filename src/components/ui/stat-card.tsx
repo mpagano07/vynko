@@ -113,7 +113,7 @@ export function StatCard({
             {!loading && trend !== null && (
               <span
                 className={cn(
-                  'flex items-center gap-0.5 text-[11px] font-semibold',
+                  'flex items-center gap-0.5 text-xs font-semibold',
                   trend > 0
                     ? 'text-emerald-600 dark:text-emerald-400'
                     : trend < 0

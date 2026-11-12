@@ -27,6 +27,20 @@ describe('página pública de precios', () => {
     expect(screen.getByRole('heading', { name: /qué incluye cada plan/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /preguntas frecuentes sobre precios/i })).toBeInTheDocument();
 
+    // La comparativa se agrupa en acordeones temáticos y el primero arranca abierto.
+    const comparativa = document.querySelector('#comparativa') as HTMLElement;
+    const grupos = Array.from(comparativa.querySelectorAll('details'));
+    expect(grupos).toHaveLength(3);
+    expect(grupos[0].open).toBe(true);
+    expect(grupos[1].open).toBe(false);
+    expect(grupos[2].open).toBe(false);
+    expect(grupos[0].querySelector('summary')?.textContent).toContain('Catálogo y stock');
+    expect(grupos[1].querySelector('summary')?.textContent).toContain('Ventas y caja');
+    expect(grupos[2].querySelector('summary')?.textContent).toContain('Compras y equipo');
+
+    // El plan recomendado muestra el subtítulo de posicionamiento.
+    expect(screen.getByText(/recomendado para comercios en crecimiento/i)).toBeInTheDocument();
+
     // Cada plan declarado aparece en la grilla (y en la tabla comparativa).
     for (const id of PLAN_ORDER) {
       const name = PLANS[id].name;

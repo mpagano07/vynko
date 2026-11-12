@@ -129,6 +129,17 @@ describe('modal de producto: montos con separador de miles', () => {
     expect(screen.getByDisplayValue('-61%')).toBeInTheDocument();
   });
 
+  it('permite tipear el margen deseado y calcula el precio de venta automáticamente', async () => {
+    renderPage([product({ cost: 1000, price: 1000 })]);
+    await openEditModal();
+    const marginInput = screen.getByLabelText(/margen/i);
+    expect(marginInput).toBeInTheDocument();
+
+    // Setea margen al 50%: precio debe calcular a 1.500
+    fireEvent.change(marginInput, { target: { value: '50' } });
+    expect(screen.getByLabelText('Precio ($)')).toHaveValue('1.500');
+  });
+
   it('deja el campo vacío en vez de mostrar un 0 al borrarlo', async () => {
     renderPage();
     const { price } = await openEditModal();
@@ -217,7 +228,7 @@ describe('retomar el flujo de Google Drive al volver del OAuth', () => {
 
     renderPage();
 
-    expect(await screen.findByText('TV 100 Pulgadas')).toBeInTheDocument();
+    expect((await screen.findAllByText('TV 100 Pulgadas')).length).toBeGreaterThan(0);
     expect(screen.queryByLabelText('Exportar productos')).not.toBeInTheDocument();
   });
 
@@ -269,7 +280,7 @@ describe('retomar el flujo de Google Drive al volver del OAuth', () => {
 
     renderPage();
 
-    expect(await screen.findByText('TV 100 Pulgadas')).toBeInTheDocument();
+    expect((await screen.findAllByText('TV 100 Pulgadas')).length).toBeGreaterThan(0);
     // Se descarta la intención para que no se reanude en una próxima visita.
     expect(takeDriveIntent()).toBeNull();
   });

@@ -39,6 +39,7 @@ const product = (index: number, overrides: Record<string, unknown> = {}) => ({
   barcode: `77${String(index).padStart(4, '0')}`,
   sku: null,
   category_id: null,
+  price: 1500,
   ...overrides,
 });
 
@@ -109,7 +110,12 @@ describe('códigos QR: generación perezosa', () => {
     await screen.findByText('Producto 01');
     await waitFor(() => expect(toDataURLMock).toHaveBeenCalledTimes(15));
 
-    const printWindow = { focus: vi.fn(), print: vi.fn(), document: { write: vi.fn(), close: vi.fn() } };
+    const printWindow = {
+      focus: vi.fn(),
+      print: vi.fn(),
+      addEventListener: vi.fn(),
+      document: { write: vi.fn(), close: vi.fn() },
+    };
     const openMock = vi
       .spyOn(window, 'open')
       .mockReturnValue(printWindow as unknown as Window);
@@ -118,8 +124,10 @@ describe('códigos QR: generación perezosa', () => {
 
     await waitFor(() => expect(toDataURLMock).toHaveBeenCalledTimes(20));
     await waitFor(() => expect(openMock).toHaveBeenCalled());
-    // La ventana de impresión se abre sin referencia al opener.
-    expect(openMock.mock.calls[0][2]).toContain('noopener');
+    // Sin `noopener`: con esa feature window.open() devuelve null y la ventana
+    // quedaba en blanco. El vínculo se corta después con `opener = null`.
+    expect(openMock.mock.calls[0][2]).not.toContain('noopener');
+    expect(printWindow.document.write).toHaveBeenCalled();
     // Y la impresión se dispara desde la ventana padre tras el delay.
     await waitFor(() => expect(printWindow.print).toHaveBeenCalled(), { timeout: 2000 });
 
@@ -169,6 +177,27 @@ describe('códigos QR: generación perezosa', () => {
 
     fireEvent.click(retry);
     expect(mutate).toHaveBeenCalledTimes(1);
+  });
+
+  it('refleja los toggles de categoría, nombre, precio y SKU en las tarjetas de ejemplo', async () => {
+    renderPage(1, { categories: [{ id: 'cat-1', name: 'Redes' }] });
+
+    await screen.findByText('Producto 01');
+    expect(screen.getByText('Redes')).toBeInTheDocument();
+    expect(screen.getByText(/1\.500,00/)).toBeInTheDocument();
+    expect(screen.getByText('770001')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Categoría'));
+    fireEvent.click(screen.getByLabelText('Nombre'));
+    fireEvent.click(screen.getByLabelText('Precio'));
+    fireEvent.click(screen.getByLabelText('SKU'));
+
+    expect(screen.queryByText('Redes')).not.toBeInTheDocument();
+    expect(screen.queryByText('Producto 01')).not.toBeInTheDocument();
+    expect(screen.queryByText(/1\.500,00/)).not.toBeInTheDocument();
+    expect(screen.queryByText('770001')).not.toBeInTheDocument();
+    // La tarjeta sigue mostrando el QR y su botón de descarga.
+    expect(screen.getByRole('button', { name: 'Descargar' })).toBeInTheDocument();
   });
 
   it('abre una vista ampliada del QR al tocar la tarjeta', async () => {

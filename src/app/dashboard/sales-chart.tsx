@@ -136,7 +136,7 @@ export default function SalesChart() {
             <button
               key={'days' in period ? `d${period.days}` : `m${period.months}`}
               onClick={() => handlePeriodChange(period)}
-              className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all ${
+              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
                 period === selected
                   ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                   : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'

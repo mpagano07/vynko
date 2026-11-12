@@ -32,6 +32,25 @@ import {
 import { cn } from '@/lib/utils/cn';
 
 const CASH_METHODS = PAYMENT_METHODS.filter((m) => m.id !== 'mercadopago');
+const NON_CASH_METHODS = CASH_METHODS.filter((m) => m.id !== 'cash');
+
+/** Billetes vigentes, de mayor a menor, para la calculadora de efectivo. */
+const DENOMINATIONS = [20000, 10000, 2000, 1000, 500, 200, 100, 50, 20, 10] as const;
+
+const BILL_FORMATTER = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 });
+
+function billLabel(value: number): string {
+  return `$${BILL_FORMATTER.format(value)}`;
+}
+
+function parseBillCount(raw: string): number {
+  const n = parseInt(raw.replace(/\D/g, ''), 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function cashFromBills(bills: Record<number, string>): number {
+  return DENOMINATIONS.reduce((sum, denomination) => sum + denomination * parseBillCount(bills[denomination] ?? ''), 0);
+}
 
 interface CashMovement {
   id: string;
@@ -108,6 +127,7 @@ export default function CashRegisterPage() {
   const [counted, setCounted] = useState<Record<PaymentMethodId, string>>(
     Object.fromEntries(CASH_METHODS.map((m) => [m.id, ''])) as Record<PaymentMethodId, string>
   );
+  const [billCounts, setBillCounts] = useState<Record<number, string>>({});
   const [arqueoNotes, setArqueoNotes] = useState('');
   const [closing, setClosing] = useState(false);
   const [report, setReport] = useState<CloseReport | null>(null);
@@ -189,16 +209,33 @@ export default function CashRegisterPage() {
 
   const submitArqueo = async () => {
     if (!openSession) return;
+    const cashTotal = cashFromBills(billCounts);
+    const otherTotal = NON_CASH_METHODS.reduce((sum, m) => sum + parseAmount(counted[m.id]), 0);
+    const countedTotal = cashTotal + otherTotal;
+    if (countedTotal <= 0) {
+      toast.error('Ingresá al menos un monto contado para cerrar la caja');
+      return;
+    }
+    const expectedTotal = (openSession.total_expected ?? 0) / 100;
+    if (countedTotal < expectedTotal && !arqueoNotes.trim()) {
+      toast.error('Agregá una observación para justificar el faltante de caja');
+      return;
+    }
     setClosing(true);
     try {
       const data = await apiPost(`/api/cash-register/${openSession.id}/close`, {
         counted: Object.fromEntries(
-          CASH_METHODS.map((m) => [m.id, parseAmount(counted[m.id])])
+          CASH_METHODS.map((m) => [
+            m.id,
+            m.id === 'cash' ? cashTotal : parseAmount(counted[m.id]),
+          ])
         ),
         notes: arqueoNotes.trim() || null,
       });
       setReport(data.report);
       setArqueoOpen(false);
+      setBillCounts({});
+      setArqueoNotes('');
       toast.success('Caja cerrada y arqueo registrado');
       await fetchState();
     } catch (err) {
@@ -266,13 +303,17 @@ export default function CashRegisterPage() {
                   type="button"
                   onClick={() => {
                     const expected = openSession.expected_by_method;
-                    if (expected) {
-                      setCounted(
-                        Object.fromEntries(
-                          CASH_METHODS.map((m) => [m.id, String((expected[m.id] ?? 0) / 100)])
-                        ) as Record<PaymentMethodId, string>
-                      );
-                    }
+                    // El efectivo se cuenta billete por billete; los medios
+                    // digitales ya están confirmados por el sistema.
+                    setCounted(
+                      Object.fromEntries(
+                        CASH_METHODS.map((m) => [
+                          m.id,
+                          m.id === 'cash' ? '' : String((expected?.[m.id] ?? 0) / 100),
+                        ])
+                      ) as Record<PaymentMethodId, string>
+                    );
+                    setBillCounts({});
                     setArqueoOpen(true);
                   }}
                   className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors"
@@ -356,7 +397,7 @@ export default function CashRegisterPage() {
                         />
                         <div className="min-w-0">
                           <p className="text-gray-800 dark:text-gray-200 truncate">{m.reason}</p>
-                          <p className="text-[11px] text-gray-400">{fmtDateTime(m.created_at)}</p>
+                          <p className="text-xs text-gray-400">{fmtDateTime(m.created_at)}</p>
                         </div>
                       </div>
                       <span
@@ -477,13 +518,16 @@ export default function CashRegisterPage() {
         />
       )}
 
-      {arqueoOpen && (
+      {arqueoOpen && openSession && (
         <ArqueoModal
           counted={counted}
           notes={arqueoNotes}
           busy={closing}
+          billCounts={billCounts}
+          expectedTotalCents={openSession.total_expected ?? 0}
           onCounted={setCounted}
           onNotes={setArqueoNotes}
+          onBillCounts={setBillCounts}
           onClose={() => setArqueoOpen(false)}
           onSubmit={submitArqueo}
         />
@@ -513,6 +557,41 @@ function ReportPanel({ report, onClose }: { report: CloseReport; onClose: () => 
           </p>
         </div>
         <IconAction icon={X} label="Cerrar reporte" tone="muted" size="md" onClick={onClose} />
+      </div>
+
+      <div
+        className={cn(
+          'mb-4 rounded-xl border-2 p-4',
+          report.total_difference_cents === 0
+            ? 'border-emerald-500/40 bg-emerald-50 dark:bg-emerald-950/30'
+            : report.total_difference_cents > 0
+              ? 'border-sky-500/40 bg-sky-50 dark:bg-sky-950/30'
+              : 'border-rose-500/50 bg-rose-50 dark:bg-rose-950/30'
+        )}
+      >
+        <p className="text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300">
+          Diferencia total
+        </p>
+        <p
+          className={cn(
+            'mt-0.5 text-3xl font-black tabular-nums',
+            report.total_difference_cents === 0
+              ? 'text-emerald-600 dark:text-emerald-400'
+              : report.total_difference_cents > 0
+                ? 'text-sky-600 dark:text-sky-400'
+                : 'text-rose-600 dark:text-rose-400'
+          )}
+        >
+          {report.total_difference_cents > 0 ? '+' : ''}
+          {formatARS(report.total_difference_cents / 100)}
+        </p>
+        <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+          {report.total_difference_cents === 0
+            ? 'Caja cuadrada: lo contado coincide con lo esperado.'
+            : report.total_difference_cents > 0
+              ? 'Sobrante de caja. Revisá si faltó registrar un egreso.'
+              : 'Faltante de caja. Quedó registrada la observación del cierre.'}
+        </p>
       </div>
 
       <div className="overflow-x-auto">
@@ -666,26 +745,48 @@ function ArqueoModal({
   counted,
   notes,
   busy,
+  billCounts,
+  expectedTotalCents,
   onCounted,
   onNotes,
+  onBillCounts,
   onClose,
   onSubmit,
 }: {
   counted: Record<PaymentMethodId, string>;
   notes: string;
   busy: boolean;
+  billCounts: Record<number, string>;
+  expectedTotalCents: number;
   onCounted: (v: Record<PaymentMethodId, string>) => void;
   onNotes: (v: string) => void;
+  onBillCounts: (v: Record<number, string>) => void;
   onClose: () => void;
   onSubmit: () => void;
 }) {
+  const cashTotal = cashFromBills(billCounts);
+  const digitalTotal = NON_CASH_METHODS.reduce((sum, m) => sum + parseAmount(counted[m.id]), 0);
+  const countedCents = Math.round(cashTotal * 100) + Math.round(digitalTotal * 100);
+  const differenceCents = countedCents - expectedTotalCents;
+  const isShort = differenceCents < 0;
+  const canSubmit = !busy && countedCents > 0 && (!isShort || notes.trim().length > 0);
+
+  const setBill = (denomination: number, value: string) => {
+    onBillCounts({ ...billCounts, [denomination]: value.replace(/\D/g, '').slice(0, 4) });
+  };
+
+  const adjustBill = (denomination: number, delta: number) => {
+    const next = Math.max(0, parseBillCount(billCounts[denomination] ?? '') + delta);
+    onBillCounts({ ...billCounts, [denomination]: next > 0 ? String(next) : '' });
+  };
+
   return (
     <Modal
       panel
       backdropClose
       onClose={onClose}
       aria-label="Arqueo de caja"
-      className="max-w-md"
+      className="max-w-lg"
       header={
         <h3 className="font-bold text-gray-900 dark:text-gray-100 text-lg flex items-center gap-2">
           <Lock className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
@@ -693,59 +794,155 @@ function ArqueoModal({
         </h3>
       }
     >
-      <div className="p-5 space-y-4">
+      <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          Contá el dinero real en caja por medio y confirmá el cierre. La comparación con lo esperado se muestra al final.
+          Contá los billetes de efectivo. Los medios digitales ya vienen informados por el sistema.
         </p>
-          <div className="space-y-2.5">
-            {CASH_METHODS.map((method) => (
-              <div key={method.id} className="flex items-center gap-3">
-                <span className="w-32 text-sm text-gray-700 dark:text-gray-300">{method.label}</span>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={counted[method.id]}
-                  onChange={(e) => onCounted({ ...counted, [method.id]: e.target.value })}
-                  aria-label={`Monto contado ${method.label}`}
-                  placeholder="0,00"
-                  className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-base font-semibold tabular-nums text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
-                />
-              </div>
-            ))}
+
+        <section>
+          <div className="mb-2 flex items-center justify-between">
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Efectivo por billete</h4>
+            <span className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+              {formatARS(cashTotal)}
+            </span>
           </div>
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            {DENOMINATIONS.map((denomination) => {
+              const count = parseBillCount(billCounts[denomination] ?? '');
+              return (
+                <div
+                  key={denomination}
+                  className="flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-800/40 px-2 py-1.5"
+                >
+                  <span className="w-14 shrink-0 text-xs font-semibold tabular-nums text-gray-700 dark:text-gray-300">
+                    {billLabel(denomination)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => adjustBill(denomination, -1)}
+                    aria-label={`Restar un billete de ${billLabel(denomination)}`}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-gray-300 text-gray-600 hover:bg-gray-200 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+                  >
+                    <Minus className="h-3.5 w-3.5" />
+                  </button>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={billCounts[denomination] ?? ''}
+                    onChange={(e) => setBill(denomination, e.target.value)}
+                    aria-label={`Cantidad de billetes de ${billLabel(denomination)}`}
+                    placeholder="0"
+                    className="h-7 w-10 min-w-0 rounded-md border border-gray-300 bg-white px-1 text-center text-sm font-semibold tabular-nums text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => adjustBill(denomination, 1)}
+                    aria-label={`Sumar un billete de ${billLabel(denomination)}`}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-gray-300 text-gray-600 hover:bg-gray-200 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                  <span className="ml-auto shrink-0 text-right text-xs font-semibold tabular-nums text-gray-600 dark:text-gray-400">
+                    {count > 0 ? formatARS(denomination * count) : '—'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="space-y-2.5">
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Medios digitales</h4>
+          {NON_CASH_METHODS.map((method) => (
+            <div key={method.id} className="flex items-center gap-3">
+              <span className="w-32 shrink-0 text-sm text-gray-700 dark:text-gray-300">{method.label}</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={counted[method.id]}
+                onChange={(e) => onCounted({ ...counted, [method.id]: e.target.value })}
+                aria-label={`Monto contado ${method.label}`}
+                placeholder="0,00"
+                className="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-base font-semibold tabular-nums text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+              />
+            </div>
+          ))}
+        </section>
+
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-3 space-y-1.5 text-sm">
+          <div className="flex items-center justify-between text-gray-600 dark:text-gray-400">
+            <span>Total contado</span>
+            <span className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">{formatARS(countedCents / 100)}</span>
+          </div>
+          <div className="flex items-center justify-between text-gray-600 dark:text-gray-400">
+            <span>Esperado</span>
+            <span className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">{formatARS(expectedTotalCents / 100)}</span>
+          </div>
+          <div className="flex items-center justify-between border-t border-gray-200 dark:border-gray-700 pt-1.5">
+            <span className="font-semibold text-gray-900 dark:text-gray-100">Diferencia</span>
+            <span
+              className={cn(
+                'font-bold tabular-nums',
+                differenceCents === 0
+                  ? 'text-gray-500 dark:text-gray-400'
+                  : differenceCents > 0
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-rose-600 dark:text-rose-400'
+              )}
+            >
+              {differenceCents > 0 ? '+' : ''}
+              {formatARS(differenceCents / 100)}
+              {isShort && <span className="ml-1 text-xs">(faltante)</span>}
+            </span>
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide" htmlFor="arqueo-notes">
+            {isShort ? 'Observación (obligatoria)' : 'Observación'}
+          </label>
           <input
+            id="arqueo-notes"
             type="text"
             value={notes}
             onChange={(e) => onNotes(e.target.value)}
             aria-label="Notas del arqueo"
-            placeholder="Notas (opcional)"
-            className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+            placeholder={isShort ? 'Justificá el faltante de caja' : 'Notas (opcional)'}
+            className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
           />
-          <div className="flex items-center justify-between gap-3 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 h-10 rounded-md text-sm font-medium text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={onSubmit}
-              disabled={busy}
-              className="flex-1 h-10 inline-flex items-center justify-center gap-2 rounded-md bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:pointer-events-none transition-colors"
-            >
-              {busy ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Cerrando...
-                </>
-              ) : (
-                'Confirmar arqueo'
-              )}
-            </button>
-          </div>
+          {isShort && notes.trim().length === 0 && (
+            <p className="mt-1 flex items-center gap-1 text-xs font-medium text-rose-600 dark:text-rose-400">
+              <TriangleAlert className="h-3.5 w-3.5" />
+              Para cerrar con faltante tenés que dejar una observación.
+            </p>
+          )}
         </div>
-      </Modal>
+
+        <div className="flex items-center justify-between gap-3 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 h-10 rounded-md text-sm font-medium text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={!canSubmit}
+            className="flex-1 h-10 inline-flex items-center justify-center gap-2 rounded-md bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:pointer-events-none transition-colors"
+          >
+            {busy ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Cerrando...
+              </>
+            ) : (
+              'Confirmar arqueo'
+            )}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }

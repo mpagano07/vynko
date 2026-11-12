@@ -24,6 +24,8 @@ import {
   ShoppingCart,
   Loader2,
   CheckCircle2,
+  Repeat,
+  History,
 } from 'lucide-react';
 import { formatARS } from '@/lib/utils/currency';
 import { cn } from '@/lib/utils/cn';
@@ -43,6 +45,14 @@ interface ScannedProduct {
 
 type ScanState = 'scanning' | 'found' | 'not_found' | 'creating' | 'created' | 'error';
 type ScanAction = 'add' | 'remove' | 'sell';
+
+interface RecentScan {
+  id: string;
+  code: string;
+  name: string;
+  delta: number;
+  newStock: number;
+}
 
 const ADD_REASONS = [
   { value: 'found', label: 'Inventario encontrado' },
@@ -85,6 +95,10 @@ function ScanningPageContent() {
   const [addReason, setAddReason] = useState('found');
   const [removeReason, setRemoveReason] = useState('damaged');
   const [isSaving, setIsSaving] = useState(false);
+  // En modo continuo el guardado vuelve directo al escáner para cargar varios
+  // productos seguidos, sin pasar por la pantalla de confirmación.
+  const [continuous, setContinuous] = useState(false);
+  const [recentScans, setRecentScans] = useState<RecentScan[]>([]);
 
   const handleScan = useCallback(async (code: string) => {
     setScannedCode(code);
@@ -144,9 +158,30 @@ function ScanningPageContent() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al ajustar stock');
 
-      setProduct((prev) => prev ? { ...prev, stock: data.newStock } : prev);
+      setRecentScans((prev) =>
+        [
+          {
+            id: `${Date.now()}-${product.id}`,
+            code: scannedCode,
+            name: product.name,
+            delta,
+            newStock: data.newStock,
+          },
+          ...prev,
+        ].slice(0, 8)
+      );
       toast.success(`Stock actualizado: ${data.newStock} unidades`);
-      setScanState('created');
+
+      if (continuous) {
+        setScanState('scanning');
+        setScannedCode('');
+        setProduct(null);
+        setActiveAction('add');
+        setQuantity(1);
+      } else {
+        setProduct((prev) => prev ? { ...prev, stock: data.newStock } : prev);
+        setScanState('created');
+      }
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al ajustar stock');
     } finally {
@@ -184,12 +219,35 @@ function ScanningPageContent() {
             ? 'Escaneá un producto para sumar stock, venderlo o ajustarlo.'
             : 'Apunta la cámara a un código de barras para buscar, vender o ajustar un producto.'
         }
+        actions={
+          <button
+            type="button"
+            onClick={() => setContinuous((v) => !v)}
+            aria-pressed={continuous}
+            className={cn(
+              'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
+              continuous
+                ? 'border-teal-300 bg-teal-50 text-teal-700 dark:border-teal-700 dark:bg-teal-950/40 dark:text-teal-300'
+                : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800'
+            )}
+          >
+            <Repeat className="h-4 w-4" />
+            Modo continuo
+          </button>
+        }
       />
 
       {stockinMode && (
         <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800 text-sm text-teal-700 dark:text-teal-400">
           <PackagePlus className="h-4 w-4 shrink-0" />
           Modo carga de inventario: al escanear se abre el producto con la opción de sumar stock preseleccionada.
+        </div>
+      )}
+
+      {continuous && (
+        <div className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300">
+          <Repeat className="h-4 w-4 shrink-0" />
+          Modo continuo activo: al guardar, la cámara queda lista para el próximo código.
         </div>
       )}
 
@@ -396,6 +454,52 @@ function ScanningPageContent() {
                 <Scan className="h-4 w-4 mr-1" />
                 Intentar de nuevo
               </Button>
+            </Card>
+          )}
+
+          {recentScans.length > 0 && (
+            <Card className="p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                  <History className="h-4 w-4 text-gray-400" />
+                  Últimos escaneos
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setRecentScans([])}
+                  className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  Limpiar
+                </button>
+              </div>
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+                {recentScans.map((entry) => (
+                  <li key={entry.id} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                        {entry.name}
+                      </p>
+                      <p className="truncate font-mono text-xs text-gray-400">{entry.code}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p
+                        className={cn(
+                          'text-sm font-bold tabular-nums',
+                          entry.delta >= 0
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-red-600 dark:text-red-400'
+                        )}
+                      >
+                        {entry.delta >= 0 ? '+' : ''}
+                        {entry.delta}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        Stock: {entry.newStock}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </Card>
           )}
         </div>

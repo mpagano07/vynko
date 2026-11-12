@@ -366,10 +366,11 @@ export function CheckoutModal({
 return (
     <Modal
       panel
+      sheet
       backdropClose
       onClose={onClose}
       aria-label="Cobrar venta"
-      className="max-w-lg"
+      className="flex max-h-[92dvh] max-w-lg flex-col"
       header={
         <h3 className="font-bold text-gray-900 dark:text-gray-100 text-lg flex items-center gap-2">
           <CheckCircle2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
@@ -377,7 +378,8 @@ return (
         </h3>
       }
     >
-      <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
           <div>
             <div className="flex items-end justify-between">
               <div>
@@ -470,7 +472,7 @@ return (
                           {resolved.adjustmentsApply && methodPct !== 0 && (
                             <span
                               className={cn(
-                                'px-1 rounded font-mono text-[10px]',
+                                'px-1 rounded font-mono text-xs',
                                 methodPct < 0
                                   ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
                                   : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
@@ -497,12 +499,21 @@ return (
                     <div>
                       {isCash && isFlex ? (
                         <>
-                          <label
-                            htmlFor={`received-${line.id}`}
-                            className="text-[11px] font-medium text-gray-500 dark:text-gray-400"
-                          >
-                            Recibido
-                          </label>
+                          <div className="flex items-center justify-between">
+                            <label
+                              htmlFor={`received-${line.id}`}
+                              className="text-xs font-medium text-gray-700 dark:text-gray-300"
+                            >
+                              Recibido
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => updateLine(line.id, { received: centsToInput(netCents) })}
+                              className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                            >
+                              Monto exacto
+                            </button>
+                          </div>
                           <input
                             id={`received-${line.id}`}
                             ref={firstAmountRef}
@@ -516,13 +527,13 @@ return (
                             className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-base font-semibold tabular-nums text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                           />
                           {shortReceived ? (
-                            <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-red-600 dark:text-red-400">
+                            <p className="mt-1.5 flex items-center gap-1 text-xs font-semibold text-red-600 dark:text-red-400">
                               <TriangleAlert className="h-3.5 w-3.5 shrink-0" />
                               Faltan {formatARS(Math.max(0, netCents - Math.round(parseAmount(line.received) * 100)) / 100)}
                             </p>
                           ) : (
                             changeCents > 0 && (
-                              <p className="mt-1 flex items-center gap-1 text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                              <p className="mt-1.5 flex items-center gap-1 text-sm font-bold text-emerald-600 dark:text-emerald-400">
                                 <CheckCircle2 className="h-4 w-4 shrink-0" />
                                 Vuelto: {formatARS(changeCents / 100)}
                               </p>
@@ -531,13 +542,13 @@ return (
                         </>
                       ) : isFlex ? (
                         <>
-                          <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                          <label className="text-xs font-medium text-gray-500 dark:text-gray-400">
                             Monto a cobrar
                           </label>
                           <div className="mt-1 flex h-10 items-center rounded-md border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/60 px-3 text-base font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                             {formatARS(netCents / 100)}
                           </div>
-                          <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                          <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
                             {split
                               ? `Cubre ${formatARS(allocationCents / 100)} del total`
                               : 'Se calcula automáticamente'}
@@ -547,7 +558,7 @@ return (
                         <>
                           <label
                             htmlFor={`allocation-${line.id}`}
-                            className="text-[11px] font-medium text-gray-500 dark:text-gray-400"
+                            className="text-xs font-medium text-gray-500 dark:text-gray-400"
                           >
                             Monto a repartir
                           </label>
@@ -563,7 +574,7 @@ return (
                             className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-base font-semibold tabular-nums text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                           />
                           {pct !== 0 && !isCash && allocationCents > 0 && (
-                            <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                               {adjustmentLabel(pct)} {pct > 0 ? '+' : ''}
                               {pct}% ={' '}
                               <span className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">
@@ -578,7 +589,7 @@ return (
                     <div className="flex flex-col justify-start">
                       {isCash ? (
                         <>
-                          <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
                             {split ? (
                               <>
                                 Cubre del total:{' '}
@@ -591,7 +602,7 @@ return (
                             )}
                           </p>
                           {pct !== 0 && allocationCents > 0 && !split && (
-                            <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                               {adjustmentLabel(pct)} {pct > 0 ? '+' : ''}
                               {pct}% ={' '}
                               <span className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">
@@ -603,7 +614,7 @@ return (
                       ) : isFlex ? (
                         pct !== 0 && allocationCents > 0 ? (
                           <div className="flex items-end gap-1 pb-1">
-                            <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
                               {adjustmentLabel(pct)} {pct > 0 ? '+' : ''}
                               {pct}% ={' '}
                               <span className="font-bold text-gray-900 dark:text-gray-100 tabular-nums">
@@ -614,7 +625,7 @@ return (
                         ) : null
                       ) : (
                         <div className="flex items-end gap-1 pb-1">
-                          <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
                             Se cobrará{' '}
                             <span className="font-bold text-gray-900 dark:text-gray-100 tabular-nums">
                               {formatARS(netCents / 100)}
@@ -669,7 +680,7 @@ return (
                     <div className="mt-2">
                       <label
                         htmlFor="arca-invoice-type"
-                        className="text-[11px] font-medium text-gray-600 dark:text-gray-300"
+                        className="text-xs font-medium text-gray-600 dark:text-gray-300"
                       >
                         Tipo de comprobante
                       </label>
@@ -685,12 +696,12 @@ return (
                           </option>
                         ))}
                       </select>
-                      <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                         Sugerido según la condición frente al IVA del cliente. Se solicitará el CAE a ARCA al confirmar.
                       </p>
                     </div>
                   ) : (
-                    <p className="mt-1 text-[11px] text-indigo-700 dark:text-indigo-300">
+                    <p className="mt-1 text-xs text-indigo-700 dark:text-indigo-300">
                       Se emitirá Factura {arcaInvoiceTypes[0] ?? 'B'} por {formatARS(resolved.collectedCents / 100)}. Se solicitará el CAE a ARCA al confirmar.
                     </p>
                   )
@@ -747,48 +758,25 @@ return (
                   aria-label="Número de WhatsApp"
                   className="mt-1.5 flex h-10 w-full rounded-md border border-emerald-300 bg-white px-3 py-2 text-base font-semibold tabular-nums text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                 />
-                <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   Solo números: código de área + teléfono todo junto (ej: 1122223333).
                 </p>
               </div>
             )}
           </div>
 
-          <div className="flex items-center justify-between gap-3 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 h-10 rounded-md text-sm font-medium text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={confirmPayment}
-              disabled={!canConfirm}
-              className="flex-1 h-10 inline-flex items-center justify-center gap-2 rounded-md bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:pointer-events-none transition-colors active:scale-[0.99]"
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Procesando...
-                </>
-              ) : (
-                <>
-                  Confirmar pago
-                  <kbd className="px-1.5 py-0.5 rounded bg-indigo-700/80 text-xs font-mono">Enter</kbd>
-                </>
-              )}
-            </button>
-          </div>
-
           {resolved.totalChangeCents > 0 && canConfirm && (
-            <p className="text-center text-lg font-bold text-emerald-600 dark:text-emerald-400">
-              Vuelto total: {formatARS(resolved.totalChangeCents / 100)}
-            </p>
+            <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-500/30 p-3 text-center">
+              <span className="text-xs uppercase tracking-wider font-bold text-emerald-700 dark:text-emerald-300">
+                Vuelto a entregar al cliente
+              </span>
+              <p className="text-3xl font-black tabular-nums text-emerald-600 dark:text-emerald-400 mt-0.5">
+                {formatARS(resolved.totalChangeCents / 100)}
+              </p>
+            </div>
           )}
 
-          <p className="text-center text-[11px] text-gray-400 dark:text-gray-500">
+          <p className="hidden text-center text-xs text-gray-400 dark:text-gray-500 sm:block">
             Atajos:{' '}
             {CHECKOUT_METHODS.map((m, i) => (
               <span key={m.id}>
@@ -801,6 +789,40 @@ return (
             ))}
           </p>
         </div>
-      </Modal>
+
+        {/* Pie fuera del área scrolleable: así no tapa el último contenido
+            (atajos, vuelto o notas) al desplazarse. */}
+        <div
+          className="flex items-center justify-between gap-3 border-t border-gray-200 bg-white px-5 pt-3 dark:border-gray-700 dark:bg-gray-900"
+          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-11 rounded-md px-4 text-sm font-medium text-gray-600 border border-gray-300 transition-colors hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={confirmPayment}
+            disabled={!canConfirm}
+            className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-md bg-indigo-600 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50"
+          >
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Procesando...
+              </>
+            ) : (
+              <>
+                Confirmar pago
+                <kbd className="hidden px-1.5 py-0.5 rounded bg-indigo-700/80 text-xs font-mono sm:inline-block">Enter</kbd>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </Modal>
     );
 }

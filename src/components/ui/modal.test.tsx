@@ -57,6 +57,19 @@ describe('Modal', () => {
     expect(screen.getByText('Contenido')).toBeInTheDocument();
   });
 
+  it('ancla la variante sheet al borde inferior', () => {
+    render(
+      <Modal open onClose={vi.fn()} panel sheet className="max-w-sm">
+        <p>Contenido</p>
+      </Modal>
+    );
+
+    expect(screen.getByRole('dialog').firstElementChild).toHaveClass('items-end');
+    expect(screen.getByText('Contenido').closest('[data-modal-content]')).toHaveClass(
+      'rounded-t-2xl'
+    );
+  });
+
   it('deja scrollear el overlay cuando el contenido no entra en la pantalla', () => {
     render(
       <Modal open onClose={vi.fn()} title="Mi modal">
@@ -77,6 +90,37 @@ describe('Modal', () => {
 
     fireEvent.mouseDown(screen.getByRole('dialog'));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('cierra con la tecla Escape', () => {
+    const onClose = vi.fn();
+    render(
+      <Modal open onClose={onClose} title="Mi modal">
+        <p>Contenido</p>
+      </Modal>
+    );
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('con modales apilados, Escape cierra solo el último', () => {
+    const onCloseFirst = vi.fn();
+    const onCloseSecond = vi.fn();
+    render(
+      <>
+        <Modal open onClose={onCloseFirst} title="Primero">
+          <p>Primero</p>
+        </Modal>
+        <Modal open onClose={onCloseSecond} title="Segundo">
+          <p>Segundo</p>
+        </Modal>
+      </>
+    );
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onCloseSecond).toHaveBeenCalledTimes(1);
+    expect(onCloseFirst).not.toHaveBeenCalled();
   });
 
   it('no cierra al hacer click dentro del contenido', () => {

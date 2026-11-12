@@ -31,14 +31,11 @@ import {
   Edit,
   Trash2,
   Loader2,
-  Check,
   Upload,
   Download,
 } from 'lucide-react';
 import { PO_STATUS_LABELS, PO_STATUS_TONES, type Supplier, type PurchaseOrder } from '@/lib/types/supplier';
 import type { CommercialDocument } from '@/lib/types/document';
-import type { Product } from '@/lib/types/product';
-import { formatARS } from '@/lib/utils/currency';
 import { formatDate } from '@/lib/utils/format';
 import { matchesQuery } from '@/lib/utils/text';
 import { SortableTh, SortDir } from '@/components/ui/sortable-th';
@@ -66,8 +63,6 @@ const ExportPartiesModal = dynamicImport(
   () => import('@/components/parties/export-parties-modal').then((m) => ({ default: m.ExportPartiesModal })),
   { ssr: false },
 );
-
-const PO_INTENT_KEY = 'create_po_intent';
 
 const SUPPLIERS_PER_PAGE = 15;
 
@@ -136,103 +131,6 @@ export default function ProvidersPage() {
   const [remitos, setRemitos] = useState<CommercialDocument[]>([]);
   const [loadingChain, setLoadingChain] = useState(false);
 
-  // Purchase order modal state
-  const [products, setProducts] = useState<Product[]>([]);
-  const [productsLoading, setProductsLoading] = useState(false);
-  const productsPromiseRef = useRef<Promise<Product[] | null> | null>(null);
-  const [isPoModalOpen, setIsPoModalOpen] = useState(false);
-  const [poSupplierId, setPoSupplierId] = useState('');
-  const [poExpectedDate, setPoExpectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [poNotes, setPoNotes] = useState('');
-  const [poItems, setPoItems] = useState<{ product_id: string; quantity: number; unit_cost: number }[]>([]);
-  const [isSubmittingPo, setIsSubmittingPo] = useState(false);
-  const [poStatus, setPoStatus] = useState<'draft' | 'sent'>('draft');
-  const pendingPoItemRef = useRef<{ productId: string; qty: number } | null>(null);
-
-  /**
-   * Carga el catálogo de productos on demand (y una sola vez): se dispara al
-   * abrir el modal de pedido de compra o al retomar un intento pendiente, no
-   * al montar la página. Si falla, el siguiente intento vuelve a intentar.
-   */
-  const ensureProductsLoaded = () => {
-    if (!productsPromiseRef.current) {
-      const load = async (): Promise<Product[] | null> => {
-        setProductsLoading(true);
-        try {
-          const res = await authFetch('/api/products');
-          if (!res.ok) return null;
-          const allProducts: Product[] = await res.json();
-          const active = allProducts.filter((p) => p.is_active !== false);
-          setProducts(active);
-          return active;
-        } catch {
-          return null;
-        } finally {
-          setProductsLoading(false);
-        }
-      };
-      productsPromiseRef.current = load().then((result) => {
-        if (result === null) {
-          productsPromiseRef.current = null;
-          toast.error('Error al cargar productos');
-        }
-        return result;
-      });
-    }
-    return productsPromiseRef.current;
-  };
-
-  useEffect(() => {
-    const readIntent = () => {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('create_po') === '1') {
-        return {
-          supplierId: params.get('supplier_id'),
-          productId: params.get('productId'),
-          qty: Number(params.get('qty')) || 0,
-        };
-      }
-      try {
-        const stored = window.sessionStorage.getItem(PO_INTENT_KEY);
-        return stored
-          ? (JSON.parse(stored) as { supplierId: string | null; productId: string | null; qty: number })
-          : null;
-      } catch {
-        return null;
-      }
-    };
-
-    const params = new URLSearchParams(window.location.search);
-    const intent = readIntent();
-    if (!intent) return;
-
-    if (params.get('create_po') === '1') {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('create_po');
-      url.searchParams.delete('supplier_id');
-      url.searchParams.delete('productId');
-      url.searchParams.delete('qty');
-      window.history.replaceState({}, '', url.toString());
-      window.sessionStorage.setItem(PO_INTENT_KEY, JSON.stringify(intent));
-    }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (intent.supplierId) setPoSupplierId(intent.supplierId);
-    const productId = intent.productId;
-    if (productId && intent.qty > 0) pendingPoItemRef.current = { productId, qty: intent.qty };
-    setIsPoModalOpen(true);
-    // El modal abre de una: el catálogo se carga on demand y con eso se
-    // completa el ítem pendiente que venía en el intent.
-    void ensureProductsLoaded().then((allProducts) => {
-      const pending = pendingPoItemRef.current;
-      pendingPoItemRef.current = null;
-      if (!allProducts || !pending) return;
-      const product = allProducts.find((p) => p.id === pending.productId);
-      if (product) {
-        setPoItems((prev) => [...prev, { product_id: product.id, quantity: pending.qty, unit_cost: product.cost || 0 }]);
-      }
-    });
-  }, []);
-
   useEffect(() => {
     if (!tenantId && !allTenants) return;
     let cancelled = false;
@@ -291,90 +189,6 @@ export default function ProvidersPage() {
     } else {
       setSelectedSupplierId(supplierId);
       fetchDocumentChain(supplierId);
-    }
-  };
-
-  const resetPoForm = () => {
-    setPoSupplierId(selectedSupplierId ?? '');
-    setPoExpectedDate(new Date().toISOString().split('T')[0]);
-    setPoNotes('');
-    setPoItems([]);
-    setPoStatus('draft');
-  };
-
-  const openPoModal = () => {
-    resetPoForm();
-    setIsPoModalOpen(true);
-    void ensureProductsLoaded();
-  };
-
-  const addPoItemFromProduct = (productId: string) => {
-    const product = products.find((p) => p.id === productId);
-    if (!product) return;
-    setPoItems((prev) => [...prev, { product_id: productId, quantity: 1, unit_cost: product.cost || 0 }]);
-  };
-
-  const updatePoItem = (index: number, field: 'quantity' | 'unit_cost', value: number) => {
-    setPoItems((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
-    );
-  };
-
-  const removePoItem = (index: number) => {
-    setPoItems((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const poTotalCents = poItems.reduce(
-    (sum, item) => sum + item.quantity * Math.round(item.unit_cost * 100),
-    0
-  );
-
-  const closePoModal = () => {
-    setIsPoModalOpen(false);
-    resetPoForm();
-    window.sessionStorage.removeItem(PO_INTENT_KEY);
-  };
-
-  const handleCreatePo = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!poSupplierId) {
-      toast.error('Selecciona un proveedor');
-      return;
-    }
-    if (poItems.length === 0) {
-      toast.error('Agrega al menos un producto al pedido');
-      return;
-    }
-
-    setIsSubmittingPo(true);
-    try {
-      const res = await authFetch('/api/purchase-orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          supplier_id: poSupplierId,
-          expected_date: poExpectedDate || null,
-          notes: poNotes || null,
-          status: poStatus,
-          items: poItems.map((i) => ({
-            product_id: i.product_id,
-            quantity: i.quantity,
-            unit_cost: i.unit_cost,
-          })),
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error al crear el pedido');
-
-      toast.success('Pedido creado exitosamente');
-      closePoModal();
-
-      router.push(`/documents?type=orden_compra&selected=${data.id}`);
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Error al crear pedido');
-    } finally {
-      setIsSubmittingPo(false);
     }
   };
 
@@ -520,7 +334,7 @@ export default function ProvidersPage() {
       <PageHeader
         icon={<Truck className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />}
         title="Proveedores"
-        subtitle="Administra tus proveedores."
+        subtitle="Administrá tus proveedores y consultá sus documentos."
         actions={
           <>
             <Button variant="outline" onClick={() => setIsImportModalOpen(true)} className="flex items-center gap-2">
@@ -529,9 +343,16 @@ export default function ProvidersPage() {
             <Button variant="outline" onClick={openExportModal} disabled={busy} className="flex items-center gap-2">
               <Download className="h-4 w-4" /> Exportar
             </Button>
-            <Button onClick={openPoModal} className="flex items-center gap-2">
+            <Button
+              onClick={() =>
+                router.push(
+                  `/documents?type=orden_compra&create_po=1${selectedSupplierId ? `&supplier_id=${selectedSupplierId}` : ''}`
+                )
+              }
+              className="flex items-center gap-2"
+            >
               <Plus className="h-4 w-4" />
-              Nueva compra
+              Nuevo pedido
             </Button>
             <Button variant="outline" onClick={() => openSupplierModal(null)} className="flex items-center gap-2">
               <Plus className="h-4 w-4" />
@@ -851,179 +672,6 @@ export default function ProvidersPage() {
                 ) : (
                   <ShortLabel short="Crear">Crear Proveedor</ShortLabel>
                 )}
-                </Button>
-              </div>
-            </form>
-        </Modal>
-      )}
-
-      {/* Purchase Order Create Modal */}
-      {isPoModalOpen && (
-        <Modal
-          onClose={closePoModal}
-          className="max-w-2xl flex flex-col max-h-[90vh]"
-          title="Nueva Compra"
-        >
-          <form onSubmit={handleCreatePo} className="space-y-4 overflow-y-auto pr-1 flex-1">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <FormLabel>
-                    Proveedor *
-                  </FormLabel>
-                  <Select value={poSupplierId} onChange={(e) => setPoSupplierId(e.target.value)} required>
-                    <option value="">Seleccionar proveedor...</option>
-                    {suppliers.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </Select>
-                </div>
-                <div>
-                  <FormLabel>
-                    Fecha Esperada
-                  </FormLabel>
-                  <Input
-                    type="date"
-                    value={poExpectedDate}
-                    onChange={(e) => setPoExpectedDate(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <FormLabel>
-                    Estado
-                  </FormLabel>
-                  <Select value={poStatus} onChange={(e) => setPoStatus(e.target.value as 'draft' | 'sent')}>
-                    <option value="draft">Borrador</option>
-                    <option value="sent">Enviado</option>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Productos</h3>
-                <div className="mb-3">
-                  <Select
-                    value=""
-                    searchable
-                    onChange={e => {
-                      if (e.target.value) {
-                        addPoItemFromProduct(e.target.value);
-                      }
-                    }}
-                    className="text-xs"
-                  >
-                    <option value="">{productsLoading ? 'Cargando productos...' : '+ Agregar producto...'}</option>
-                    {products.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} - {formatARS(p.cost || 0)}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-
-                {poItems.length === 0 ? (
-                  <p className="text-sm text-gray-400 py-4 text-center">
-                    Agregá productos seleccionando del menú superior
-                  </p>
-                ) : (
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {poItems.map((item, index) => {
-                      const product = products.find((p) => p.id === item.product_id);
-                      return (
-                        <div key={item.product_id} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                              {product?.name || item.product_id}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => updatePoItem(index, 'quantity', Math.max(1, item.quantity - 1))}
-                              className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-                            >
-                              −
-                            </button>
-                            <input
-                              type="number"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(e) => updatePoItem(index, 'quantity', Math.max(1, Number(e.target.value) || 1))}
-                              className="w-14 text-center text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 py-1"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => updatePoItem(index, 'quantity', item.quantity + 1)}
-                              className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-                            >
-                              +
-                            </button>
-                          </div>
-                          <div className="w-24">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={item.unit_cost}
-                              onChange={(e) => updatePoItem(index, 'unit_cost', Math.max(0, Number(e.target.value) || 0))}
-                              className="w-full text-right text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 py-1 px-2"
-                            />
-                          </div>
-                          <div className="text-right text-sm font-medium text-gray-900 dark:text-gray-100 w-24">
-                            {formatARS(item.quantity * item.unit_cost)}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removePoItem(index)}
-                            className="text-red-500 hover:text-red-700 p-1"
-                            title="Eliminar"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                    <div className="flex justify-end pt-2">
-                      <div className="text-right">
-                        <span className="text-sm text-gray-500">Total: </span>
-                        <span className="text-lg font-bold text-green-600 dark:text-green-400">
-                          {formatARS(poTotalCents / 100)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <FormLabel>
-                  Notas del pedido
-                </FormLabel>
-                <textarea
-                  className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
-                  rows={2}
-                  placeholder="Condiciones de pago, instrucciones de entrega..."
-                  value={poNotes}
-                  onChange={(e) => setPoNotes(e.target.value)}
-                />
-              </div>
-
-              <div className="flex items-center justify-between text-lg font-bold text-gray-900 dark:text-gray-100 pt-2">
-                <span>Total Estimado</span>
-                <span className="text-2xl text-indigo-600 dark:text-indigo-400">
-                  {formatARS(poTotalCents / 100)}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
-                <Button type="button" variant="outline" onClick={closePoModal}>
-                  Cancelar
-                </Button>
-                <Button type="submit" disabled={isSubmittingPo}>
-                  {isSubmittingPo ? (
-                    <><Loader2 className="h-4 w-4 animate-spin mr-2" />Creando...</>
-                  ) : (
-                    <><Check className="h-4 w-4 mr-2" />Crear Pedido</>
-                  )}
                 </Button>
               </div>
             </form>

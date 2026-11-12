@@ -8,6 +8,7 @@ import { IconAction } from '@/components/ui/icon-action';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { SupportModal } from '@/components/ui/support-modal';
 import { SalesContactModal } from '@/components/ui/sales-contact-modal';
+import { CancelSubscriptionModal } from '@/components/billing/cancel-subscription-modal';
 import {
   PLANS,
   PLAN_ORDER,
@@ -74,6 +75,7 @@ function BillingContent() {
   );
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const [showCancelReasonModal, setShowCancelReasonModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [showRevocationModal, setShowRevocationModal] = useState(false);
@@ -442,7 +444,7 @@ function BillingContent() {
               </div>
             </div>
             {subscription.status === 'active' && (
-              <Button variant="outline" onClick={() => setShowCancelModal(true)} className="flex items-center gap-2 text-red-600 border-red-200 hover:bg-red-50 self-start whitespace-nowrap">
+              <Button variant="outline" onClick={() => setShowCancelReasonModal(true)} className="flex items-center gap-2 text-red-600 border-red-200 hover:bg-red-50 self-start whitespace-nowrap">
                 <ShortLabel short="Cancelar">Cancelar suscripción</ShortLabel>
               </Button>
             )}
@@ -515,12 +517,12 @@ function BillingContent() {
           return (
             <Card key={id} className={`p-6 relative flex flex-col ${isCurrent ? 'ring-2 ring-indigo-500' : ''} ${isPopular && !isCurrent ? 'border-indigo-200 dark:border-indigo-800' : ''}`}>
               {badge && !isCurrent && (
-                <span className={`absolute -top-2.5 left-1/2 -translate-x-1/2 text-[10px] font-semibold px-3 py-0.5 rounded-full ${plan.comingSoon ? 'bg-gray-500 text-white' : 'bg-indigo-600 text-white'}`}>
+                <span className={`absolute -top-2.5 left-1/2 -translate-x-1/2 text-xs font-semibold px-3 py-0.5 rounded-full ${plan.comingSoon ? 'bg-gray-500 text-white' : 'bg-indigo-600 text-white'}`}>
                   {badge}
                 </span>
               )}
               {isCurrent && (
-                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-[10px] font-semibold bg-emerald-600 text-white px-3 py-0.5 rounded-full">
+                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-xs font-semibold bg-emerald-600 text-white px-3 py-0.5 rounded-full">
                   Plan actual
                 </span>
               )}
@@ -578,7 +580,7 @@ function BillingContent() {
               )}
 
               {isCurrent && subscription?.status === 'active' && (
-                <Button variant="outline" onClick={() => setShowCancelModal(true)} className="w-full text-red-600 border-red-200 hover:bg-red-50">
+                <Button variant="outline" onClick={() => setShowCancelReasonModal(true)} className="w-full text-red-600 border-red-200 hover:bg-red-50">
                   <ShortLabel short="Cancelar">Cancelar suscripción</ShortLabel>
                 </Button>
               )}
@@ -608,6 +610,29 @@ function BillingContent() {
           Contactar soporte
         </Button>
       </Card>
+
+      {showCancelReasonModal && (
+        <CancelSubscriptionModal
+          periodEndLabel={
+            subscription?.currentPeriodEnd
+              ? formatDate(subscription.currentPeriodEnd, {
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric',
+                })
+              : null
+          }
+          onClose={() => setShowCancelReasonModal(false)}
+          onSupport={() => {
+            setShowCancelReasonModal(false);
+            setShowSupportModal(true);
+          }}
+          onContinue={() => {
+            setShowCancelReasonModal(false);
+            setShowCancelModal(true);
+          }}
+        />
+      )}
 
       <ConfirmModal
         open={showCancelModal}

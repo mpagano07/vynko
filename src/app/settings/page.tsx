@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, Suspense } from 'react';
-import { useAuth } from '@/lib/hooks/useAuth';
+import { useAuth, type TenantInfo } from '@/lib/hooks/useAuth';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { authFetch } from '@/lib/fetchWithTenant';
@@ -19,6 +19,7 @@ import { Select } from '@/components/ui/select';
 import { FormLabel } from '@/components/ui/form-label';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { PageHeader } from '@/components/ui/page-header';
+import { StickySaveBar } from '@/components/ui/sticky-save-bar';
 import { validatePassword, PASSWORD_MIN_LENGTH } from '@/lib/password-policy';
 import toast from 'react-hot-toast';
 import {
@@ -160,6 +161,45 @@ function formatShortDate(value?: string | null): string | null {
   return date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+interface TenantFormState {
+  company_name: string;
+  description: string;
+  razon_social: string;
+  cuit: string;
+  punto_venta: number;
+  iva_condition: string;
+  ingresos_brutos: string;
+  inicio_actividades: string;
+  business_address: string;
+  business_city: string;
+  business_province: string;
+  business_zip: string;
+  business_phone: string;
+  business_email: string;
+}
+
+/** Mismo mapeo para el formulario y su baseline, así el dirty check no miente. */
+function tenantFormFromTenant(tenant?: TenantInfo | null): TenantFormState {
+  return {
+    company_name: tenant?.company_name || tenant?.name || '',
+    description: tenant?.description || '',
+    razon_social: tenant?.razon_social || '',
+    cuit: tenant?.cuit || '',
+    punto_venta: tenant?.punto_venta || 1,
+    iva_condition: tenant?.iva_condition || 'responsable_inscripto',
+    ingresos_brutos: tenant?.ingresos_brutos || '',
+    inicio_actividades: tenant?.inicio_actividades || '',
+    business_address: tenant?.business_address || '',
+    business_city: tenant?.business_city || '',
+    business_province: tenant?.business_province || '',
+    business_zip: tenant?.business_zip || '',
+    business_phone: tenant?.business_phone || '',
+    business_email: tenant?.business_email || '',
+  };
+}
+
+const EMPTY_TENANT_FORM = tenantFormFromTenant(null);
+
 export default function SettingsPage() {
   return (
     <Suspense
@@ -208,25 +248,12 @@ function SettingsContent() {
   }, [requestedTab, authLoading, canManageTenant, canFacturacion]);
 
   const [profileForm, setProfileForm] = useState({ full_name: '' });
+  const [profileBaseline, setProfileBaseline] = useState({ full_name: '' });
   const [profileSynced, setProfileSynced] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
 
-  const [tenantForm, setTenantForm] = useState({
-    company_name: '',
-    description: '',
-    razon_social: '',
-    cuit: '',
-    punto_venta: 1,
-    iva_condition: 'responsable_inscripto',
-    ingresos_brutos: '',
-    inicio_actividades: '',
-    business_address: '',
-    business_city: '',
-    business_province: '',
-    business_zip: '',
-    business_phone: '',
-    business_email: '',
-  });
+  const [tenantForm, setTenantForm] = useState<TenantFormState>(EMPTY_TENANT_FORM);
+  const [tenantBaseline, setTenantBaseline] = useState<TenantFormState>(EMPTY_TENANT_FORM);
   const [tenantSynced, setTenantSynced] = useState(false);
   const [savingTenant, setSavingTenant] = useState(false);
 
@@ -242,6 +269,11 @@ function SettingsContent() {
   );
   const [checkoutPaperSize, setCheckoutPaperSize] = useState<'58mm' | '80mm'>('58mm');
   const [checkoutShowReceipt, setCheckoutShowReceipt] = useState(true);
+  const [checkoutBaseline, setCheckoutBaseline] = useState({
+    adjustments: DEFAULT_CHECKOUT_SETTINGS.payment_adjustments,
+    paperSize: '58mm' as '58mm' | '80mm',
+    showReceipt: true,
+  });
   const [checkoutSynced, setCheckoutSynced] = useState(false);
   const [savingCheckout, setSavingCheckout] = useState(false);
   const [savingTicket, setSavingTicket] = useState(false);
@@ -343,29 +375,17 @@ function SettingsContent() {
     if (profile && !profileSynced) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setProfileForm({ full_name: profile.full_name || '' });
+      setProfileBaseline({ full_name: profile.full_name || '' });
       setProfileSynced(true);
     }
   }, [profile, profileSynced]);
 
   useEffect(() => {
     if (tenant && !tenantSynced) {
+      const next = tenantFormFromTenant(tenant);
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setTenantForm({
-        company_name: tenant.company_name || tenant.name || '',
-        description: tenant.description || '',
-        razon_social: tenant.razon_social || '',
-        cuit: tenant.cuit || '',
-        punto_venta: tenant.punto_venta || 1,
-        iva_condition: tenant.iva_condition || 'responsable_inscripto',
-        ingresos_brutos: tenant.ingresos_brutos || '',
-        inicio_actividades: tenant.inicio_actividades || '',
-        business_address: tenant.business_address || '',
-        business_city: tenant.business_city || '',
-        business_province: tenant.business_province || '',
-        business_zip: tenant.business_zip || '',
-        business_phone: tenant.business_phone || '',
-        business_email: tenant.business_email || '',
-      });
+      setTenantForm(next);
+      setTenantBaseline(next);
       setTenantSynced(true);
     }
   }, [tenant, tenantSynced]);
@@ -394,6 +414,11 @@ function SettingsContent() {
         setCheckoutForm(settings.payment_adjustments);
         setCheckoutPaperSize(settings.paper_size);
         setCheckoutShowReceipt(settings.show_receipt);
+        setCheckoutBaseline({
+          adjustments: settings.payment_adjustments,
+          paperSize: settings.paper_size,
+          showReceipt: settings.show_receipt,
+        });
         setCanEditCheckout(data.canEdit === true);
       } catch {
         // silent
@@ -423,6 +448,11 @@ function SettingsContent() {
     // La caja lee el tamaño de papel del tenant al cargar; esta copia local
     // evita que el primer render use el valor viejo.
     window.localStorage.setItem('vynko:paper-size', checkoutPaperSize);
+    setCheckoutBaseline({
+      adjustments: checkoutForm,
+      paperSize: checkoutPaperSize,
+      showReceipt: checkoutShowReceipt,
+    });
   }, [checkoutForm, checkoutPaperSize, checkoutShowReceipt]);
 
   const handleSaveCheckout = useCallback(async (e: React.FormEvent) => {
@@ -452,6 +482,29 @@ function SettingsContent() {
       setSavingTicket(false);
     }
   }, [canEditCheckout, saveCheckoutConfig]);
+
+  // Dirty check contra el último valor confirmado por el servidor. Así el aviso
+  // desaparece al guardar, no cuando el contexto de auth refresca.
+  const profileDirty =
+    profileSynced && profileForm.full_name.trim() !== profileBaseline.full_name.trim();
+  const tenantDirty =
+    tenantSynced && JSON.stringify(tenantForm) !== JSON.stringify(tenantBaseline);
+  const checkoutDirty =
+    checkoutSynced &&
+    JSON.stringify(checkoutForm) !== JSON.stringify(checkoutBaseline.adjustments);
+  const ticketDirty =
+    checkoutSynced &&
+    (checkoutPaperSize !== checkoutBaseline.paperSize ||
+      checkoutShowReceipt !== checkoutBaseline.showReceipt);
+  const hasUnsavedChanges = profileDirty || tenantDirty || checkoutDirty || ticketDirty;
+
+  const discardProfile = () => setProfileForm(profileBaseline);
+  const discardTenant = () => setTenantForm(tenantBaseline);
+  const discardCheckout = () => setCheckoutForm(checkoutBaseline.adjustments);
+  const discardTicket = () => {
+    setCheckoutPaperSize(checkoutBaseline.paperSize);
+    setCheckoutShowReceipt(checkoutBaseline.showReceipt);
+  };
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -759,6 +812,7 @@ function SettingsContent() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al guardar');
 
+      setProfileBaseline({ full_name: profileForm.full_name.trim() });
       toast.success('Perfil actualizado');
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al guardar');
@@ -800,6 +854,7 @@ function SettingsContent() {
       // ventas, documentos) tomen la nueva condición de IVA y datos fiscales sin
       // necesidad de recargar la página.
       await loadProfileAndTenant();
+      setTenantBaseline(tenantForm);
       toast.success('Empresa actualizada');
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al guardar');
@@ -927,11 +982,11 @@ function SettingsContent() {
   if (authLoading) return null;
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 ${hasUnsavedChanges ? 'pb-24' : ''}`}>
       <PageHeader
         icon={<Settings className="h-8 w-8 text-gray-600 dark:text-gray-400" />}
         title="Configuración"
-        subtitle="Administra tu perfil, tus preferencias y los datos de tu empresa."
+        subtitle="Administrá tu perfil, tus preferencias y los datos de tu empresa."
       />
 
       <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
@@ -979,6 +1034,12 @@ function SettingsContent() {
                       <><Save className="h-4 w-4 mr-1" /><ShortLabel short="Guardar">Guardar cambios</ShortLabel></>
                     )}
                   </Button>
+                  <StickySaveBar
+                    open={profileDirty}
+                    saving={savingProfile}
+                    onDiscard={discardProfile}
+                    saveLabel="Guardar perfil"
+                  />
                 </form>
               </Card>
             </div>
@@ -1026,7 +1087,7 @@ function SettingsContent() {
                       type="password"
                       required
                       minLength={PASSWORD_MIN_LENGTH}
-                      placeholder="Repite la contraseña"
+                      placeholder="Confirmá la contraseña"
                       value={passwordForm.confirmPassword}
                       onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
                     />
@@ -1283,6 +1344,12 @@ function SettingsContent() {
                   <><Save className="h-4 w-4 mr-1" /><ShortLabel short="Guardar">Guardar cambios</ShortLabel></>
                 )}
               </Button>
+              <StickySaveBar
+                open={tenantDirty}
+                saving={savingTenant}
+                onDiscard={discardTenant}
+                saveLabel="Guardar empresa"
+              />
             </form>
           </Card>
         </div>
@@ -1344,7 +1411,7 @@ function SettingsContent() {
                         </p>
                         <p className="text-xs text-gray-500 truncate">{c.email}</p>
                         {formatShortDate(c.joined_at) && (
-                          <p className="text-[11px] text-gray-400">
+                          <p className="text-xs text-gray-400">
                             En el equipo desde {formatShortDate(c.joined_at)}
                           </p>
                         )}
@@ -1353,7 +1420,7 @@ function SettingsContent() {
                             {c.memberships!.map((m) => (
                               <span
                                 key={m.id}
-                                className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${roleChipClass(m.role)} ${m.status === 'inactive' ? 'opacity-50' : ''}`}
+                                className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded ${roleChipClass(m.role)} ${m.status === 'inactive' ? 'opacity-50' : ''}`}
                               >
                                 {m.tenant_name}
                                 <span className="opacity-70">· {getRoleLabel(m.role)}{m.status === 'inactive' ? ' · inactivo' : ''}</span>
@@ -1396,7 +1463,7 @@ function SettingsContent() {
                           c.tenants && c.tenants.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1">
                               {c.tenants.map((t) => (
-                                <span key={t.id} className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
+                                <span key={t.id} className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
                                   {t.name}
                                 </span>
                               ))}
@@ -1624,7 +1691,7 @@ function SettingsContent() {
                     <p className="text-xs font-medium text-gray-500">
                       Sucursales asignadas
                     </p>
-                    <span className="text-[11px] text-gray-400">
+                    <span className="text-xs text-gray-400">
                       {selectedTenantIds.length} de {manageableTenants.length}
                     </span>
                   </div>
@@ -1697,7 +1764,7 @@ function SettingsContent() {
                   <ListChecks className="h-5 w-5 text-cyan-500" />
                   <div>
                     <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Guía de primeros pasos</span>
-                    <p className="text-[11px] text-gray-400">Mostrar la guía de configuración en el panel de control.</p>
+                    <p className="text-xs text-gray-400">Mostrar la guía de configuración en el panel de control.</p>
                   </div>
                 </div>
                 <Button
@@ -1771,10 +1838,10 @@ function SettingsContent() {
                           </div>
                         </div>
                           {value > 0 && (
-                            <p className="text-[11px] font-medium text-red-500 mt-1">+{value}% Recargo</p>
+                            <p className="text-xs font-medium text-red-500 mt-1">+{value}% Recargo</p>
                           )}
                           {value < 0 && (
-                            <p className="text-[11px] font-medium text-green-600 dark:text-green-400 mt-1">{Math.abs(value)}% Descuento</p>
+                            <p className="text-xs font-medium text-green-600 dark:text-green-400 mt-1">{Math.abs(value)}% Descuento</p>
                           )}
                         </div>
                       );
@@ -1791,6 +1858,13 @@ function SettingsContent() {
                       <><Save className="h-4 w-4 mr-1" /><ShortLabel short="Guardar">Guardar cambios</ShortLabel></>
                     )}
                   </Button>
+                  <StickySaveBar
+                    open={checkoutDirty}
+                    saving={savingCheckout}
+                    disabled={!canEditCheckout}
+                    onDiscard={discardCheckout}
+                    saveLabel="Guardar ajustes"
+                  />
                 </form>
               </Card>
 
@@ -1834,6 +1908,13 @@ function SettingsContent() {
                       <><Save className="h-4 w-4 mr-1" /><ShortLabel short="Guardar">Guardar cambios</ShortLabel></>
                     )}
                   </Button>
+                  <StickySaveBar
+                    open={ticketDirty}
+                    saving={savingTicket}
+                    disabled={!canEditCheckout}
+                    onDiscard={discardTicket}
+                    saveLabel="Guardar ticket"
+                  />
                 </form>
               </Card>
             </div>

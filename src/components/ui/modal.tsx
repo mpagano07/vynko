@@ -14,10 +14,52 @@ export interface ModalProps {
   icon?: React.ReactNode;
   className?: string;
   panel?: boolean;
+  /**
+   * En mobile se ancla al borde inferior como hoja (bottom sheet). En pantallas
+   * grandes mantiene el modal centrado de siempre.
+   */
+  sheet?: boolean;
   header?: React.ReactNode;
   backdropClose?: boolean;
   'aria-label'?: string;
   children: React.ReactNode;
+}
+
+/**
+ * Pila de modales abiertos. `Escape` debe cerrar solo el último: si hay un
+ * modal de confirmación encima de otro, el de abajo no tiene que desaparecer.
+ * Es un módulo compartido para que todos los `Modal` respeten el orden.
+ */
+const openModalStack: string[] = [];
+
+function useEscapeToClose(open: boolean, onClose: () => void) {
+  const modalId = React.useId();
+  const onCloseRef = React.useRef(onClose);
+
+  // El callback suele ser una arrow inline distinta en cada render. Guardarlo
+  // en un ref evita re-registrar el listener y alterar el orden de la pila.
+  React.useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    openModalStack.push(modalId);
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (openModalStack[openModalStack.length - 1] !== modalId) return;
+      event.preventDefault();
+      onCloseRef.current();
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      const index = openModalStack.lastIndexOf(modalId);
+      if (index !== -1) openModalStack.splice(index, 1);
+    };
+  }, [open, modalId]);
 }
 
 export function Modal({
@@ -28,6 +70,7 @@ export function Modal({
   icon,
   className,
   panel = false,
+  sheet = false,
   header,
   backdropClose,
   'aria-label': ariaLabel,
@@ -36,9 +79,10 @@ export function Modal({
   // El nombre accesible sale del título cuando existe; `aria-label` queda como
   // respaldo para los modales que no lo pasan.
   //
-  // El hook va ANTES del early return de `open`: si se declarara después,
+  // Los hooks van ANTES del early return de `open`: si se declararan después,
   // cambiar `open` entre renders cambiaría la cantidad de hooks.
   const titleId = React.useId();
+  useEscapeToClose(open, onClose);
 
   if (!open) return null;
 
@@ -68,12 +112,26 @@ export function Modal({
       aria-labelledby={!ariaLabel && title ? titleId : undefined}
       onMouseDown={handleBackdropMouseDown}
     >
-      <div className="flex min-h-full items-center justify-center p-4">
+      <div
+        className={cn(
+          'flex min-h-full justify-center',
+          sheet ? 'items-end p-0 sm:items-center sm:p-4' : 'items-center p-4'
+        )}
+      >
         {panel ? (
           <div
             data-modal-content
-            className={cn('w-full overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-gray-900', className)}
+            className={cn(
+              'w-full overflow-hidden bg-white shadow-2xl dark:bg-gray-900',
+              sheet ? 'rounded-t-2xl sm:rounded-xl' : 'rounded-xl',
+              className
+            )}
           >
+            {sheet && (
+              <div className="flex justify-center pt-2 sm:hidden" aria-hidden="true">
+                <span className="h-1.5 w-10 rounded-full bg-gray-300 dark:bg-gray-600" />
+              </div>
+            )}
             <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-800">
               <div className="flex items-center gap-2">{header}</div>
               <IconAction icon={X} label="Cerrar" tone="muted" size="md" onClick={onClose} />

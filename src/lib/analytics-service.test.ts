@@ -141,6 +141,30 @@ describe('getAdminAnalytics', () => {
     expect(result.error).toContain('migracion 040');
   });
 
+  it('filtra los eventos recientes por fecha antes del limite de 50', async () => {
+    supabaseMock.__queue('analytics_funnel', { data: [], error: null });
+    supabaseMock.__queue('analytics_event_totals', { data: [], error: null });
+
+    await getAdminAnalytics({ since: '2026-11-05T12:00:00.000Z' });
+
+    const recentCalls = supabaseMock.__calls.filter((call) => call.table === 'analytics_events');
+    const gteIndex = recentCalls.findIndex((call) => call.method === 'gte');
+    const limitIndex = recentCalls.findIndex((call) => call.method === 'limit');
+
+    expect(recentCalls[gteIndex].args).toEqual(['created_at', '2026-11-05T12:00:00.000Z']);
+    expect(gteIndex).toBeLessThan(limitIndex);
+  });
+
+  it('sin since no agrega el filtro de fecha', async () => {
+    supabaseMock.__queue('analytics_funnel', { data: [], error: null });
+    supabaseMock.__queue('analytics_event_totals', { data: [], error: null });
+
+    await getAdminAnalytics();
+
+    const recentCalls = supabaseMock.__calls.filter((call) => call.table === 'analytics_events');
+    expect(recentCalls.some((call) => call.method === 'gte')).toBe(false);
+  });
+
   it('deja el embudo vacio sin romper cuando no hay datos todavia', async () => {
     supabaseMock.__queue('analytics_funnel', { data: [], error: null });
     supabaseMock.__queue('analytics_event_totals', { data: [], error: null });

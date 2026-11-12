@@ -85,6 +85,68 @@ describe('Stock Transfers API', () => {
       expect(json.error).toBe('Solo el dueño o un administrador puede crear transferencias');
     });
 
+    it('rechaza cantidades mayores al stock de la sucursal origen (400)', async () => {
+      vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 't1', 't2'] });
+      supabaseMock.__queue('tenant_users', { data: { role: 'owner' } }, { data: { role: 'owner' } });
+      supabaseMock.__queue('product_stock', {
+        data: [{ product_id: 'p1', tenant_id: 't1', stock: 10 }],
+        error: null,
+      });
+      supabaseMock.__queue('products', { data: [{ id: 'p1', name: 'Coca Cola' }] });
+
+      const res = await POST(makeRequest('POST', {
+        from_tenant_id: 't1',
+        to_tenant_id: 't2',
+        items: [{ product_id: 'p1', quantity: 11 }]
+      }));
+
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toBe('Stock insuficiente de "Coca Cola". Disponible: 10, requerido: 11');
+      expect(
+        supabaseMock.__calls.some((c) => c.table === 'stock_transfers' && c.method === 'insert')
+      ).toBe(false);
+    });
+
+    it('suma líneas repetidas antes de comparar contra el stock', async () => {
+      vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 't1', 't2'] });
+      supabaseMock.__queue('tenant_users', { data: { role: 'owner' } }, { data: { role: 'owner' } });
+      supabaseMock.__queue('product_stock', {
+        data: [{ product_id: 'p1', tenant_id: 't1', stock: 10 }],
+        error: null,
+      });
+
+      const res = await POST(makeRequest('POST', {
+        from_tenant_id: 't1',
+        to_tenant_id: 't2',
+        items: [
+          { product_id: 'p1', quantity: 6 },
+          { product_id: 'p1', quantity: 6 },
+        ]
+      }));
+
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toContain('requerido: 12');
+    });
+
+    it('rechaza cantidades que no sean enteros positivos (400)', async () => {
+      vi.mocked(getAuth).mockResolvedValue({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 't1', 't2'] });
+
+      for (const quantity of [0, -3, 2.5]) {
+        supabaseMock.__queue('tenant_users', { data: { role: 'owner' } }, { data: { role: 'owner' } });
+
+        const res = await POST(makeRequest('POST', {
+          from_tenant_id: 't1',
+          to_tenant_id: 't2',
+          items: [{ product_id: 'p1', quantity }]
+        }));
+        expect(res.status).toBe(400);
+        const json = await res.json();
+        expect(json.error).toBe('Las cantidades deben ser enteros mayores a 0');
+      }
+    });
+
     it('creates transfer with valid data (201) and records activity log', async () => {
       vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 't1', 't2'] });
       supabaseMock.__queue('tenant_users', { data: { role: 'owner' } }, { data: { role: 'owner' } });
