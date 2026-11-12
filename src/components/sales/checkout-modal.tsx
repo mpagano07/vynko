@@ -366,10 +366,11 @@ export function CheckoutModal({
 return (
     <Modal
       panel
+      sheet
       backdropClose
       onClose={onClose}
       aria-label="Cobrar venta"
-      className="max-w-lg"
+      className="flex max-h-[92dvh] max-w-lg flex-col"
       header={
         <h3 className="font-bold text-gray-900 dark:text-gray-100 text-lg flex items-center gap-2">
           <CheckCircle2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
@@ -377,7 +378,7 @@ return (
         </h3>
       }
     >
-      <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
           <div>
             <div className="flex items-end justify-between">
               <div>
@@ -779,34 +780,6 @@ return (
             )}
           </div>
 
-          <div className="flex items-center justify-between gap-3 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 h-10 rounded-md text-sm font-medium text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={confirmPayment}
-              disabled={!canConfirm}
-              className="flex-1 h-10 inline-flex items-center justify-center gap-2 rounded-md bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:pointer-events-none transition-colors active:scale-[0.99]"
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Procesando...
-                </>
-              ) : (
-                <>
-                  Confirmar pago
-                  <kbd className="px-1.5 py-0.5 rounded bg-indigo-700/80 text-xs font-mono">Enter</kbd>
-                </>
-              )}
-            </button>
-          </div>
-
           {resolved.totalChangeCents > 0 && canConfirm && (
             <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-500/30 p-3 text-center">
               <span className="text-xs uppercase tracking-wider font-bold text-emerald-700 dark:text-emerald-300">
@@ -818,7 +791,7 @@ return (
             </div>
           )}
 
-          <p className="text-center text-xs text-gray-400 dark:text-gray-500">
+          <p className="hidden text-center text-xs text-gray-400 dark:text-gray-500 sm:block">
             Atajos:{' '}
             {CHECKOUT_METHODS.map((m, i) => (
               <span key={m.id}>
@@ -830,6 +803,38 @@ return (
               </span>
             ))}
           </p>
+
+          {/* El pie queda fijo dentro de la hoja para confirmar sin scrollear. */}
+          <div
+            className="sticky bottom-0 z-10 -mx-5 -mb-5 mt-1 flex items-center justify-between gap-3 border-t border-gray-200 bg-white px-5 pt-3 dark:border-gray-700 dark:bg-gray-900"
+            style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
+          >
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-11 rounded-md px-4 text-sm font-medium text-gray-600 border border-gray-300 transition-colors hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={confirmPayment}
+              disabled={!canConfirm}
+              className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-md bg-indigo-600 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Procesando...
+                </>
+              ) : (
+                <>
+                  Confirmar pago
+                  <kbd className="hidden px-1.5 py-0.5 rounded bg-indigo-700/80 text-xs font-mono sm:inline-block">Enter</kbd>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </Modal>
     );

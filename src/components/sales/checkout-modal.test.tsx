@@ -137,3 +137,23 @@ describe('CheckoutModal · ajustes automáticos por medio de pago', () => {
     expect(screen.getByText(/Vuelto a entregar al cliente/i)).toBeInTheDocument();
   });
 });
+
+describe('CheckoutModal · hoja inferior en mobile', () => {
+  it('se ancla al borde inferior y mantiene el total visible', () => {
+    render(<CheckoutModal {...baseProps} />);
+
+    expect(screen.getByText('Cobrar venta').closest('[data-modal-content]')).toHaveClass(
+      'rounded-t-2xl'
+    );
+    expect(screen.getAllByText(money(100)).length).toBeGreaterThan(0);
+  });
+
+  it('bloquea la confirmación si el efectivo recibido no alcanza', () => {
+    render(<CheckoutModal {...baseProps} />);
+
+    fireEvent.change(screen.getByLabelText('Monto abonado'), { target: { value: '10' } });
+
+    expect(screen.getByText(/faltan \$ 90,00/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /confirmar pago/i })).toBeDisabled();
+  });
+});

@@ -57,6 +57,19 @@ describe('Modal', () => {
     expect(screen.getByText('Contenido')).toBeInTheDocument();
   });
 
+  it('ancla la variante sheet al borde inferior', () => {
+    render(
+      <Modal open onClose={vi.fn()} panel sheet className="max-w-sm">
+        <p>Contenido</p>
+      </Modal>
+    );
+
+    expect(screen.getByRole('dialog').firstElementChild).toHaveClass('items-end');
+    expect(screen.getByText('Contenido').closest('[data-modal-content]')).toHaveClass(
+      'rounded-t-2xl'
+    );
+  });
+
   it('deja scrollear el overlay cuando el contenido no entra en la pantalla', () => {
     render(
       <Modal open onClose={vi.fn()} title="Mi modal">
