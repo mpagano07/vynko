@@ -136,8 +136,6 @@ function ProductsPageContent() {
     const s = searchParams?.get('stock');
     return s === 'critical' || s === 'low' || s === 'normal' ? s : 'all';
   });
-  const [quickFilter, setQuickFilter] = useState<'all' | 'low-stock' | 'no-cost' | 'no-code'>('all');
-
   /**
    * Lista filtrada de productos. Se calcula acá arriba (y no junto al resto
    * del filtrado) porque `handleExport` la usa y ahora también la referencia
@@ -149,15 +147,8 @@ function ProductsPageContent() {
         searchTerm,
         categoryId: selectedCategoryId,
         stockFilter,
-      }).filter((product) => {
-        if (quickFilter === 'low-stock') {
-          return (product.stock ?? 0) <= (product.min_stock ?? 0) * 1.5;
-        }
-        if (quickFilter === 'no-cost') return !product.cost || product.cost <= 0;
-        if (quickFilter === 'no-code') return !product.sku && !product.barcode;
-        return true;
       }),
-    [products, searchTerm, selectedCategoryId, stockFilter, quickFilter]
+    [products, searchTerm, selectedCategoryId, stockFilter]
   );
 
   // Product Modal State
@@ -697,13 +688,6 @@ function ProductsPageContent() {
   // Pagination Logic
   const { currentPage, setCurrentPage, totalPages, pageItems: paginatedProducts } = usePagination(sortedProducts, 8);
 
-  // Contadores de los filtros rápidos (sobre el catálogo completo, no la página).
-  const lowStockCount = (products || []).filter(
-    (p) => (p.stock ?? 0) <= (p.min_stock ?? 0) * 1.5
-  ).length;
-  const noCostCount = (products || []).filter((p) => !p.cost || p.cost <= 0).length;
-  const noCodeCount = (products || []).filter((p) => !p.sku && !p.barcode).length;
-
   // Handlers
   const handleOpenProductModal = useCallback((product: Product | null = null) => {
     setAmountDraft({});
@@ -1051,7 +1035,7 @@ function ProductsPageContent() {
             <Select
               aria-label="Nivel de stock"
               value={stockFilter}
-              onChange={(e) => { setStockFilter(e.target.value as 'all' | 'critical' | 'low' | 'normal'); setQuickFilter('all'); setCurrentPage(1); }}
+              onChange={(e) => { setStockFilter(e.target.value as 'all' | 'critical' | 'low' | 'normal'); setCurrentPage(1); }}
             >
               <option value="all">Cualquier nivel de stock</option>
               <option value="critical">Stock Crítico (menor al mínimo)</option>
@@ -1063,40 +1047,6 @@ function ProductsPageContent() {
           <div className="flex items-center justify-end text-sm text-gray-500">
             Total filtrados: <strong>{filteredProducts.length}</strong>
           </div>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3 dark:border-gray-800">
-          <span className="mr-1 text-xs font-medium text-gray-500 dark:text-gray-400">Filtros rápidos:</span>
-          {[
-            { id: 'all' as const, label: 'Todos' },
-            { id: 'low-stock' as const, label: `Stock bajo (${lowStockCount})` },
-            { id: 'no-cost' as const, label: `Sin costo (${noCostCount})` },
-            { id: 'no-code' as const, label: `Sin código (${noCodeCount})` },
-          ].map((chip) => {
-            const active =
-              chip.id === 'all'
-                ? quickFilter === 'all' && stockFilter === 'all'
-                : quickFilter === chip.id;
-            return (
-              <button
-                key={chip.id}
-                type="button"
-                aria-pressed={active}
-                onClick={() => {
-                  setQuickFilter(chip.id);
-                  if (chip.id === 'all' || chip.id === 'low-stock') setStockFilter('all');
-                  setCurrentPage(1);
-                }}
-                className={
-                  active
-                    ? 'rounded-full bg-gray-900 px-3 py-1 text-xs font-semibold text-white dark:bg-white dark:text-gray-900'
-                    : 'rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-600 transition-colors hover:border-gray-300 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:text-gray-100'
-                }
-              >
-                {chip.label}
-              </button>
-            );
-          })}
         </div>
       </Card>
 

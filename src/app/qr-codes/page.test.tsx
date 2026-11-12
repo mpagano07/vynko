@@ -109,7 +109,12 @@ describe('códigos QR: generación perezosa', () => {
     await screen.findByText('Producto 01');
     await waitFor(() => expect(toDataURLMock).toHaveBeenCalledTimes(15));
 
-    const printWindow = { focus: vi.fn(), print: vi.fn(), document: { write: vi.fn(), close: vi.fn() } };
+    const printWindow = {
+      focus: vi.fn(),
+      print: vi.fn(),
+      addEventListener: vi.fn(),
+      document: { write: vi.fn(), close: vi.fn() },
+    };
     const openMock = vi
       .spyOn(window, 'open')
       .mockReturnValue(printWindow as unknown as Window);
@@ -118,8 +123,10 @@ describe('códigos QR: generación perezosa', () => {
 
     await waitFor(() => expect(toDataURLMock).toHaveBeenCalledTimes(20));
     await waitFor(() => expect(openMock).toHaveBeenCalled());
-    // La ventana de impresión se abre sin referencia al opener.
-    expect(openMock.mock.calls[0][2]).toContain('noopener');
+    // Sin `noopener`: con esa feature window.open() devuelve null y la ventana
+    // quedaba en blanco. El vínculo se corta después con `opener = null`.
+    expect(openMock.mock.calls[0][2]).not.toContain('noopener');
+    expect(printWindow.document.write).toHaveBeenCalled();
     // Y la impresión se dispara desde la ventana padre tras el delay.
     await waitFor(() => expect(printWindow.print).toHaveBeenCalled(), { timeout: 2000 });
 

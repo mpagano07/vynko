@@ -115,25 +115,22 @@ describe('CheckoutModal · ajustes automáticos por medio de pago', () => {
     expect(screen.queryByText(/^Descuento -10% =/)).not.toBeInTheDocument();
   });
 
-  it('permite usar el botón de monto exacto y los botones de billetes rápidos', () => {
+  it('permite volver al monto exacto y ya no muestra billetes rápidos', () => {
     render(<CheckoutModal {...baseProps} adjustments={adjustments({ cash: 0 })} />);
-    const exactButton = screen.getByRole('button', { name: /monto exacto/i });
-    expect(exactButton).toBeInTheDocument();
-    
-    // Al presionar +$10k suma 10.000 al monto recibido
-    const add10kButton = screen.getByRole('button', { name: /\+\$10k/i });
-    fireEvent.click(add10kButton);
-    expect(screen.getByLabelText('Monto abonado')).toHaveValue('10.100,00');
+    const received = screen.getByLabelText('Monto abonado');
+    fireEvent.change(received, { target: { value: '250' } });
+    expect(received).toHaveValue('250');
 
-    // Al presionar monto exacto vuelve a 100,00
-    fireEvent.click(exactButton);
-    expect(screen.getByLabelText('Monto abonado')).toHaveValue('100,00');
+    fireEvent.click(screen.getByRole('button', { name: /monto exacto/i }));
+    expect(received).toHaveValue('100,00');
+
+    // Los atajos +$1k… +$20k se quitaron.
+    expect(screen.queryByRole('button', { name: /^\+\$/ })).not.toBeInTheDocument();
   });
 
   it('muestra el banner destacado de vuelto al entregar cambio', () => {
     render(<CheckoutModal {...baseProps} adjustments={adjustments({ cash: 0 })} />);
-    const add1kButton = screen.getByRole('button', { name: /\+\$1k/i });
-    fireEvent.click(add1kButton); // 100 + 1000 = 1100 => vuelto 1000
+    fireEvent.change(screen.getByLabelText('Monto abonado'), { target: { value: '1100' } });
     expect(screen.getByText(/Vuelto a entregar al cliente/i)).toBeInTheDocument();
   });
 });

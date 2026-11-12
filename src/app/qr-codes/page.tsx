@@ -19,6 +19,7 @@ import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
 import { SearchInput } from '@/components/ui/search-input';
+import toast from 'react-hot-toast';
 import {
   QrCode,
   Loader2,
@@ -194,8 +195,14 @@ export default function CodigosPage() {
         setQrs(printMap);
       }
 
-      const printWindow = window.open('', '_blank', 'width=800,height=600,noopener,noreferrer');
-      if (!printWindow) return;
+      // `noopener` hace que `window.open()` devuelva `null`: la pestaña se abre
+      // vacía y nunca llegamos a escribir el HTML (por eso quedaba en blanco).
+      // Abrimos con referencia y cortamos el vínculo con el opener a mano.
+      const printWindow = window.open('', '_blank', 'width=800,height=600');
+      if (!printWindow) {
+        toast.error('Permití las ventanas emergentes para imprimir los QR.');
+        return;
+      }
       printWindow.opener = null;
 
       const logoUrl = `${window.location.origin}/icons/vynkoLogout.png`;
@@ -392,11 +399,24 @@ export default function CodigosPage() {
 </html>`);
       printWindow.document.close();
 
-      // La ventana de impresión hereda la CSP de la pagina, asi que un <script>
-      // inline con este nonce (o sin CSP) queda bloqueado. Se dispara la
-      // impresion desde la ventana padre en lugar de incrustar un script.
-      printWindow.focus();
-      setTimeout(() => printWindow.print(), 300);
+      // La ventana de impresión hereda la CSP de la página, así que un <script>
+      // inline con nonce (o sin CSP) queda bloqueado. Disparamos la impresión
+      // desde la ventana padre, esperando a que carguen el logo y los QR para
+      // no mandar una hoja en blanco a la impresora.
+      let printed = false;
+      const printOnce = () => {
+        if (printed) return;
+        printed = true;
+        try {
+          printWindow.focus();
+          printWindow.print();
+        } catch {
+          // La ventana se cerró antes de imprimir.
+        }
+      };
+      printWindow.addEventListener('load', () => setTimeout(printOnce, 150), { once: true });
+      // Respaldo por si `load` no dispara (por ejemplo, una imagen rota).
+      setTimeout(printOnce, 800);
     } finally {
       setPrinting(false);
     }
