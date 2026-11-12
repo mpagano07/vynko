@@ -49,6 +49,7 @@ import {
 } from 'lucide-react';
 import { formatARS, groupThousands, parseAmountInput, amountToInput } from '@/lib/utils/currency';
 import { PRICE_ROUNDING_OPTIONS, type PriceRounding } from '@/lib/price-rounding';
+import { summarizeImportRows } from '@/lib/import-preview';
 import { getTenantHeaders, authFetch } from '@/lib/fetchWithTenant';
 import { filterProducts } from '@/lib/product-search';
 import { IMPORT_FILE_ERROR } from '@/lib/excel-import-errors';
@@ -241,6 +242,7 @@ function ProductsPageContent() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importRows, setImportRows] = useState<Record<string, unknown>[]>([]);
   const [importColumns, setImportColumns] = useState<string[]>([]);
+  const importPreview = useMemo(() => summarizeImportRows(importRows), [importRows]);
   const [importing, setImporting] = useState(false);
   const [importResults, setImportResults] = useState<{ row: number; status: string; name?: string; error?: string }[] | null>(null);
   const [showColumnInfo, setShowColumnInfo] = useState(false);
@@ -1723,6 +1725,32 @@ function ProductsPageContent() {
                     Cambiar archivo
                   </label>
                 </div>
+
+                {importPreview.skipped.length > 0 ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs dark:border-amber-900/40 dark:bg-amber-950/30">
+                    <p className="font-semibold text-amber-800 dark:text-amber-300">
+                      {importPreview.valid} producto(s) listos para importar ·{' '}
+                      {importPreview.skipped.length} se van a omitir por datos inválidos
+                    </p>
+                    <ul className="mt-1.5 space-y-0.5 text-amber-700 dark:text-amber-400">
+                      {importPreview.skipped.slice(0, 5).map((issue) => (
+                        <li key={issue.row}>
+                          Fila {issue.row}
+                          {issue.name ? ` (${issue.name})` : ''}: {issue.error}
+                        </li>
+                      ))}
+                    </ul>
+                    {importPreview.skipped.length > 5 && (
+                      <p className="mt-1.5 text-amber-600 dark:text-amber-500">
+                        y {importPreview.skipped.length - 5} fila(s) más.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                    {importPreview.total} fila(s) con datos válidos, listas para importar.
+                  </p>
+                )}
                 <div className="max-h-64 overflow-x-auto overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
                   <table className="w-full min-w-[600px] text-sm">
                     <Thead>
@@ -1768,7 +1796,7 @@ function ProductsPageContent() {
                   <Button variant="outline" onClick={() => { setIsImportModalOpen(false); setImportRows([]); setImportColumns([]); setImportResults(null); setShowColumnInfo(false); }}>
                     Cancelar
                   </Button>
-                  <Button onClick={handleImport} disabled={importing}>
+                  <Button onClick={handleImport} disabled={importing || importPreview.valid === 0}>
                     {importing ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin mr-2" />
