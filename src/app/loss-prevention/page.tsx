@@ -44,6 +44,25 @@ const reasonOptions = [
 
 const reasonMap = Object.fromEntries(reasonOptions.map(r => [r.value, r]));
 
+// El `reason` de `stock_history` no siempre es uno de los motivos del
+// formulario: la edición de producto y la re-importación escriben texto libre
+// ("Edición de producto", "Importación de productos") y los datos viejos pueden
+// venir vacíos. El donut y la tabla ya caían en "Corrección"; el filtro no, así
+// que esos ajustes se veían en "Productos con más pérdidas" pero no en ninguna
+// opción del filtro. Este helper unifica los tres lugares.
+function baseReason(reason?: string): string {
+  const base = reason?.split(':')[0]?.trim() || '';
+  return reasonMap[base] ? base : 'correction';
+}
+
+/** Texto libre del motivo: lo que sigue a ":" o, si el motivo es desconocido, el motivo entero. */
+function reasonNote(reason?: string): string {
+  if (!reason) return '';
+  const [base, ...rest] = reason.split(':');
+  if (rest.length > 0) return rest.join(':').trim();
+  return reasonMap[base.trim()] ? '' : base.trim();
+}
+
 // Motivos que suman stock; el resto resta. Centralizado para que agregar un
 // motivo nuevo no deje el formulario y el envio con criterios distintos.
 const POSITIVE_REASONS = new Set(['found', 'stock_in', 'correction']);
@@ -117,7 +136,7 @@ export default function LossPreventionPage() {
   // y no pueden quedar detrás de un `return` condicional.
   const filtered = history.filter(h => {
     if (search && !matchesQuery(h.productName, search)) return false;
-    if (reasonFilter && (h.reason?.split(':')[0] || '') !== reasonFilter) return false;
+    if (reasonFilter && baseReason(h.reason) !== reasonFilter) return false;
     const day = h.createdAt.slice(0, 10);
     if (dateFrom && day < dateFrom) return false;
     if (dateTo && day > dateTo) return false;
@@ -189,7 +208,7 @@ export default function LossPreventionPage() {
   ).sort(([, a], [, b]) => b - a).slice(0, 5);
 
   const lossByReason = losses.reduce((acc: Record<string, number>, h) => {
-    const reason = h.reason?.split(':')[0] || 'correction';
+    const reason = baseReason(h.reason);
     acc[reason] = (acc[reason] || 0) + Math.abs(h.quantity);
     return acc;
   }, {} as Record<string, number>);
@@ -377,8 +396,8 @@ export default function LossPreventionPage() {
               </Thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
                 {paginatedHistory.map((h) => {
-                  const reasonInfo = reasonMap[h.reason?.split(':')[0] || ''] || reasonMap.correction;
-                  const note = h.reason?.includes(':') ? h.reason.split(':').slice(1).join(':').trim() : '';
+                  const reasonInfo = reasonMap[baseReason(h.reason)];
+                  const note = reasonNote(h.reason);
                   const cost = costOfProduct(h.productId);
                   const costText = cost > 0
                     ? `${h.quantity < 0 ? '-' : '+'}${formatARS(Math.abs(h.quantity) * cost)}`

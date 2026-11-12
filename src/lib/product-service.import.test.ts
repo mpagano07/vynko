@@ -420,7 +420,7 @@ describe('importProducts: precio y stock', () => {
       tenant_id: 'tenant-1',
       quantity: 15,
       type: 'adjustment',
-      reason: 'Importación de productos',
+      reason: 'correction: Importación de productos',
     });
   });
 
