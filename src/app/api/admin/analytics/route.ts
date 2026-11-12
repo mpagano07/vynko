@@ -3,9 +3,22 @@ import { createServerSupabaseClient } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { isAdminProfile } from '@/lib/admin';
 import { getAdminAnalytics } from '@/lib/analytics-service';
+import { analyticsSince, isAnalyticsRangeDays } from '@/lib/analytics-ranges';
 import { logger } from '@/lib/logger';
 
-export async function GET() {
+export async function GET(request?: Request) {
+  const rawDays = request
+    ? new URL(request.url).searchParams.get('days')
+    : null;
+  let since: string | undefined;
+  if (rawDays !== null) {
+    const days = Number(rawDays);
+    if (!isAnalyticsRangeDays(days)) {
+      return NextResponse.json({ error: 'Rango de fechas inválido' }, { status: 400 });
+    }
+    since = analyticsSince(days);
+  }
+
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -36,7 +49,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const result = await getAdminAnalytics();
+  const result = await getAdminAnalytics({ since });
 
   // El service devuelve `ok: false` cuando las vistas de la migracion 040
   // todavia no existen. 503 y no 200 con datos vacios: el panel tiene que

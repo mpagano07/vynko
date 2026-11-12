@@ -21,14 +21,15 @@ vi.mock('@/lib/supabase', () => ({
 // por `ok` y el mock tiene que poder representar las dos ramas.
 const analyticsMock = {
   getAdminAnalytics: vi.fn<
-    () => Promise<
+    (options?: { since?: string }) => Promise<
       | { ok: true; data: { totalSignups: number } }
       | { ok: false; error: string; missingView: string }
     >
   >(async () => ({ ok: true, data: { totalSignups: 0 } })),
 };
 vi.mock('@/lib/analytics-service', () => ({
-  getAdminAnalytics: (...args: unknown[]) => analyticsMock.getAdminAnalytics(...(args as [])),
+  getAdminAnalytics: (...args: [{ since?: string }?]) =>
+    analyticsMock.getAdminAnalytics(...args),
 }));
 
 import { GET as getAdminAnalyticsRoute } from '@/app/api/admin/analytics/route';
@@ -130,6 +131,33 @@ describe('GET /api/admin/analytics', () => {
     await expect(response.json()).resolves.toEqual({
       error: 'Falta aplicar la migracion 040 (analytics_funnel no existe)',
     });
+  });
+
+  it('rechaza un rango de fechas que no existe', async () => {
+    const response = await getAdminAnalyticsRoute(
+      new Request('http://localhost/api/admin/analytics?days=15')
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: 'Rango de fechas inválido' });
+    expect(analyticsMock.getAdminAnalytics).not.toHaveBeenCalled();
+  });
+
+  it('traduce el rango a un since y se lo pasa al service', async () => {
+    supabaseMock.__queue('profiles', { data: { is_admin: true }, error: null });
+
+    const response = await getAdminAnalyticsRoute(
+      new Request('http://localhost/api/admin/analytics?days=7')
+    );
+
+    expect(response.status).toBe(200);
+    expect(analyticsMock.getAdminAnalytics).toHaveBeenCalledTimes(1);
+
+    const since = analyticsMock.getAdminAnalytics.mock.calls[0][0]?.since;
+    expect(since).toBeDefined();
+    const days = (Date.now() - new Date(since as string).getTime()) / 86_400_000;
+    expect(days).toBeGreaterThan(6.9);
+    expect(days).toBeLessThan(7.1);
   });
 
   it('no decide por el email', async () => {

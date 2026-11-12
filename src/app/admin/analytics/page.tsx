@@ -18,6 +18,7 @@ import {
 
 import { isAdminProfile } from '@/lib/admin';
 import { formatEventDetails } from '@/lib/analytics-event-details';
+import { ANALYTICS_EVENT_RANGES, type AnalyticsRangeDays } from '@/lib/analytics-ranges';
 import type { AdminAnalytics, EventBreakdown, FunnelStep } from '@/lib/analytics-service';
 
 interface AnalyticsData extends AdminAnalytics {
@@ -52,6 +53,7 @@ export default function AdminAnalyticsPage() {
   const isDark = useTheme();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [rangeDays, setRangeDays] = useState<AnalyticsRangeDays>(30);
 
   useEffect(() => {
     if (authLoading) return;
@@ -60,25 +62,34 @@ export default function AdminAnalyticsPage() {
       return;
     }
 
+    let cancelled = false;
+
     async function fetchData() {
       try {
-        const res = await authFetch('/api/admin/analytics');
+        const res = await authFetch(`/api/admin/analytics?days=${rangeDays}`);
         const json = await res.json();
         // Un 503 significa que falta aplicar la migracion 040. Se muestra
         // el cartel y no un panel vacio, para que quede claro que el
         // problema es la base y no que todavia no hay datos.
+        if (cancelled) return;
         if (!res.ok) {
           setError(json?.error ?? 'Error al cargar datos');
           return;
         }
+        setError(null);
         setData(json);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Error desconocido');
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Error desconocido');
+        }
       }
     }
 
     fetchData();
-  }, [user, profile, authLoading, router]);
+    return () => {
+      cancelled = true;
+    };
+  }, [user, profile, authLoading, router, rangeDays]);
 
   // El hook va antes de los returns de carga y error para que su estado no se
   // descuadre cuando los datos llegan despues. Acepta undefined y devuelve
@@ -137,13 +148,36 @@ export default function AdminAnalyticsPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center gap-3">
-        <Link href="/dashboard" className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors">
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Analytics Admin</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Dónde se cae la gente entre el registro y el primer pago</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Link href="/dashboard" className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors">
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Analytics Admin</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Dónde se cae la gente entre el registro y el primer pago</p>
+          </div>
+        </div>
+
+        <div role="group" aria-label="Rango de eventos recientes" className="flex flex-wrap gap-1.5">
+          {ANALYTICS_EVENT_RANGES.map((range) => (
+            <button
+              key={range.days}
+              type="button"
+              onClick={() => {
+                setRangeDays(range.days);
+                setEventsPage(1);
+              }}
+              aria-pressed={rangeDays === range.days}
+              className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${
+                rangeDays === range.days
+                  ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 font-medium'
+                  : 'border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+              }`}
+            >
+              {range.label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -174,7 +208,12 @@ export default function AdminAnalyticsPage() {
       </Card>
 
       <Card className="p-5">
-        <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">Eventos recientes</h2>
+        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300">Eventos recientes</h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {rangeDays === 0 ? 'Todo el historial' : `Últimos ${rangeDays} días`}
+          </p>
+        </div>
         {data.recentEvents.length === 0 ? (
           <p className="text-gray-500 text-sm text-center py-8">Sin eventos registrados</p>
         ) : (
