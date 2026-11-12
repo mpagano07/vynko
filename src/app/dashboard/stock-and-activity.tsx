@@ -131,7 +131,7 @@ export default function StockAndActivity({
                     <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{info.detail}</p>
                   )}
                 </div>
-                <span className="text-[10px] text-gray-600 dark:text-gray-400 whitespace-nowrap mt-0.5">{timeAgo(log.created_at)}</span>
+                <span className="text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap mt-0.5">{timeAgo(log.created_at)}</span>
               </div>
             );
           })}
@@ -228,7 +228,7 @@ export default function StockAndActivity({
                     className="h-7 px-2.5 text-xs flex-shrink-0 ml-3"
                     onClick={() =>
                       router.push(
-                        `/providers?create_po=1&productId=${product.id}&qty=${Math.max(product.min_stock - product.stock, 1)}`
+                        `/documents?type=orden_compra&create_po=1&productId=${product.id}&qty=${Math.max(product.min_stock - product.stock, 1)}`
                       )
                     }
                   >

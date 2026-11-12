@@ -230,7 +230,7 @@ describe('DashboardPage: carga de datos de un tenant', () => {
     render(<DashboardPage />);
 
     expect(await screen.findByText('Sin ventas hoy')).toBeInTheDocument();
-    expect(screen.getByText('Registra tu primera venta')).toBeInTheDocument();
+    expect(screen.getByText('Registrá tu primera venta')).toBeInTheDocument();
     expect(screen.queryByText('Hoy todavía no registraste ventas.')).not.toBeInTheDocument();
   });
 });

@@ -515,12 +515,12 @@ function BillingContent() {
           return (
             <Card key={id} className={`p-6 relative flex flex-col ${isCurrent ? 'ring-2 ring-indigo-500' : ''} ${isPopular && !isCurrent ? 'border-indigo-200 dark:border-indigo-800' : ''}`}>
               {badge && !isCurrent && (
-                <span className={`absolute -top-2.5 left-1/2 -translate-x-1/2 text-[10px] font-semibold px-3 py-0.5 rounded-full ${plan.comingSoon ? 'bg-gray-500 text-white' : 'bg-indigo-600 text-white'}`}>
+                <span className={`absolute -top-2.5 left-1/2 -translate-x-1/2 text-xs font-semibold px-3 py-0.5 rounded-full ${plan.comingSoon ? 'bg-gray-500 text-white' : 'bg-indigo-600 text-white'}`}>
                   {badge}
                 </span>
               )}
               {isCurrent && (
-                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-[10px] font-semibold bg-emerald-600 text-white px-3 py-0.5 rounded-full">
+                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-xs font-semibold bg-emerald-600 text-white px-3 py-0.5 rounded-full">
                   Plan actual
                 </span>
               )}

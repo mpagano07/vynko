@@ -38,6 +38,8 @@ export function ThemeToggle({ className }: { className?: string }) {
     <button
       type="button"
       role="switch"
+      aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+      title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
       aria-checked={theme === 'dark'}
       onClick={toggleTheme}
       className={cn(

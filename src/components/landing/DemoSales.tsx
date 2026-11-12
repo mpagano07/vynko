@@ -175,7 +175,7 @@ export default function DemoSales() {
                         }`}
                       >
                         <div className="flex items-center justify-between mb-1">
-                          <span className={`text-[10px] font-mono ${isCritical ? 'text-amber-400' : 'text-gray-400'}`}>
+                          <span className={`text-xs font-mono ${isCritical ? 'text-amber-400' : 'text-gray-400'}`}>
                             {isCritical ? '⚠ Bajo' : `Stock: ${p.stock}`}
                           </span>
                         </div>
@@ -192,7 +192,7 @@ export default function DemoSales() {
                   <ShoppingCart className="h-4 w-4 text-cyan-400" />
                   <span className="text-sm font-semibold text-gray-200">Carrito</span>
                   {cart.length > 0 && (
-                    <span className="ml-auto text-[10px] bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded-full font-bold">
+                    <span className="ml-auto text-xs bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded-full font-bold">
                       {cart.length}
                     </span>
                   )}
@@ -208,7 +208,7 @@ export default function DemoSales() {
                       <div key={item.product_id} className="flex items-center justify-between bg-gray-950/60 rounded-lg px-3 py-2 border border-gray-800/50">
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium text-gray-300 truncate">{item.name}</p>
-                          <p className="text-[10px] text-gray-400">{formatARS(item.price)} x {item.quantity}</p>
+                          <p className="text-xs text-gray-400">{formatARS(item.price)} x {item.quantity}</p>
                         </div>
                         <div className="flex items-center gap-1 ml-2">
                           <button onClick={() => updateQty(item.product_id, -1)} className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-white hover:bg-gray-700 transition-colors">
@@ -283,7 +283,7 @@ export default function DemoSales() {
                     <tr key={p.id} className="hover:bg-gray-800/20">
                       <td className="py-3.5 px-4 sm:px-5">
                         <p className="font-semibold text-gray-100 text-sm">{p.name}</p>
-                        <p className="text-[10px] text-gray-400 font-mono">{p.sku}</p>
+                        <p className="text-xs text-gray-400 font-mono">{p.sku}</p>
                       </td>
                       <td className="py-3.5 px-3">
                         <span
@@ -302,7 +302,7 @@ export default function DemoSales() {
                       </td>
                       <td className="py-3.5 px-4 sm:px-5">
                         <p className="text-gray-300 font-mono text-[11px]">{p.sku}</p>
-                        <p className="text-[10px] text-gray-400 font-mono mt-0.5">GTIN: {p.barcode}</p>
+                        <p className="text-xs text-gray-400 font-mono mt-0.5">GTIN: {p.barcode}</p>
                       </td>
                       <td className="py-3.5 px-4 sm:px-5">
                         <p className="text-[11px] text-gray-400">
@@ -326,7 +326,7 @@ export default function DemoSales() {
                           }`}>
                             {p.stock}
                           </span>
-                          <div className="text-left text-[10px] text-gray-400">
+                          <div className="text-left text-xs text-gray-400">
                             <div>Ideal: {p.minStock} - {p.maxStock}</div>
                             {isCritical && <div className="text-red-400 font-semibold">Crítico</div>}
                             {isLow && <div className="text-amber-400 font-semibold">Bajo</div>}

@@ -425,7 +425,7 @@ export default function CodigosPage() {
                   </button>
                   <div className="flex w-full min-w-0 flex-1 flex-col text-center">
                     {categoryName && (
-                      <p className="mb-0.5 truncate text-[10px] font-semibold uppercase tracking-wide text-indigo-500 dark:text-indigo-400">
+                      <p className="mb-0.5 truncate text-xs font-semibold uppercase tracking-wide text-indigo-500 dark:text-indigo-400">
                         {categoryName}
                       </p>
                     )}
@@ -474,7 +474,7 @@ export default function CodigosPage() {
             role="dialog"
             aria-modal="true"
             aria-label={`QR de ${preview.name}`}
-            className="relative w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl dark:bg-[#252d3b]"
+            className="relative w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl dark:bg-gray-800"
             onClick={(e) => e.stopPropagation()}
           >
             <button

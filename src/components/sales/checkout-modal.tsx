@@ -470,7 +470,7 @@ return (
                           {resolved.adjustmentsApply && methodPct !== 0 && (
                             <span
                               className={cn(
-                                'px-1 rounded font-mono text-[10px]',
+                                'px-1 rounded font-mono text-xs',
                                 methodPct < 0
                                   ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
                                   : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
@@ -497,12 +497,21 @@ return (
                     <div>
                       {isCash && isFlex ? (
                         <>
-                          <label
-                            htmlFor={`received-${line.id}`}
-                            className="text-[11px] font-medium text-gray-500 dark:text-gray-400"
-                          >
-                            Recibido
-                          </label>
+                          <div className="flex items-center justify-between">
+                            <label
+                              htmlFor={`received-${line.id}`}
+                              className="text-xs font-medium text-gray-700 dark:text-gray-300"
+                            >
+                              Recibido
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => updateLine(line.id, { received: centsToInput(netCents) })}
+                              className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                            >
+                              Monto exacto
+                            </button>
+                          </div>
                           <input
                             id={`received-${line.id}`}
                             ref={firstAmountRef}
@@ -515,14 +524,30 @@ return (
                             aria-label="Monto abonado"
                             className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-base font-semibold tabular-nums text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                           />
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {[1000, 2000, 5000, 10000, 20000].map((denomination) => (
+                              <button
+                                key={denomination}
+                                type="button"
+                                onClick={() => {
+                                  const currentVal = parseAmount(line.received);
+                                  const nextVal = currentVal + denomination;
+                                  updateLine(line.id, { received: centsToInput(Math.round(nextVal * 100)) });
+                                }}
+                                className="px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 transition-colors"
+                              >
+                                +${denomination >= 1000 ? `${denomination / 1000}k` : denomination}
+                              </button>
+                            ))}
+                          </div>
                           {shortReceived ? (
-                            <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-red-600 dark:text-red-400">
+                            <p className="mt-1.5 flex items-center gap-1 text-xs font-semibold text-red-600 dark:text-red-400">
                               <TriangleAlert className="h-3.5 w-3.5 shrink-0" />
                               Faltan {formatARS(Math.max(0, netCents - Math.round(parseAmount(line.received) * 100)) / 100)}
                             </p>
                           ) : (
                             changeCents > 0 && (
-                              <p className="mt-1 flex items-center gap-1 text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                              <p className="mt-1.5 flex items-center gap-1 text-sm font-bold text-emerald-600 dark:text-emerald-400">
                                 <CheckCircle2 className="h-4 w-4 shrink-0" />
                                 Vuelto: {formatARS(changeCents / 100)}
                               </p>
@@ -783,9 +808,14 @@ return (
           </div>
 
           {resolved.totalChangeCents > 0 && canConfirm && (
-            <p className="text-center text-lg font-bold text-emerald-600 dark:text-emerald-400">
-              Vuelto total: {formatARS(resolved.totalChangeCents / 100)}
-            </p>
+            <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-500/30 p-3 text-center">
+              <span className="text-xs uppercase tracking-wider font-bold text-emerald-700 dark:text-emerald-300">
+                Vuelto a entregar al cliente
+              </span>
+              <p className="text-3xl font-black tabular-nums text-emerald-600 dark:text-emerald-400 mt-0.5">
+                {formatARS(resolved.totalChangeCents / 100)}
+              </p>
+            </div>
           )}
 
           <p className="text-center text-[11px] text-gray-400 dark:text-gray-500">

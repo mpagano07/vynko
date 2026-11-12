@@ -262,7 +262,7 @@ export default function LandingPage() {
                     { label: 'Alertas', value: '3', color: 'text-amber-400' },
                   ].map(k => (
                     <div key={k.label} className="bg-gray-950/60 rounded-lg p-3 border border-gray-800/50">
-                      <p className="text-[10px] text-gray-400 uppercase tracking-wider">{k.label}</p>
+                      <p className="text-xs text-gray-400 uppercase tracking-wider">{k.label}</p>
                       <p className={`text-lg font-bold mt-1 ${k.color}`}>{k.value}</p>
                     </div>
                   ))}
@@ -300,7 +300,7 @@ export default function LandingPage() {
           <div className="text-center mb-12">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-medium mb-4">
               <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-              Prueba ahora — sin registro
+              Probá ahora — sin registro
             </div>
             <h2 className="text-3xl sm:text-4xl font-bold">Probá Vynko <span className="text-cyan-400">en acción</span></h2>
             <p className="mt-4 text-gray-400 max-w-lg mx-auto">Sumá productos al carrito, simulá una venta y experimentá la interfaz. Sin crear cuenta, sin compromiso.</p>
@@ -562,7 +562,7 @@ export default function LandingPage() {
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-base text-gray-500 line-through">{formatPriceByCountry({ amount: price, country, configuredCurrencies })}</span>
                           <span className="text-sm text-gray-400">/mes</span>
-                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
+                          <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
                             Oferta
                           </span>
                         </div>

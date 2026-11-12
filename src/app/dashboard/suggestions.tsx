@@ -8,7 +8,7 @@ import Link from 'next/link';
 const SUGGESTIONS = [
   { text: 'Agregá colaboradores para que cada empleado tenga su propio usuario.', cta: 'Configurar', href: '/settings' },
   { text: 'Activá códigos QR para que tus productos se escaneen al instante.', cta: 'Activar', href: '/qr-codes' },
-  { text: 'Registrá una compra para mantener el stock siempre actualizado.', cta: 'Registrar', href: '/providers?create_po=1' },
+  { text: 'Registrá un pedido de compra para mantener el stock siempre actualizado.', cta: 'Crear pedido', href: '/documents?type=orden_compra&create_po=1' },
   { text: 'Creá categorías para encontrar tus productos más rápido.', cta: 'Crear', href: '/products' },
   { text: 'Gestioná tus documentos comerciales.', cta: 'Ver', href: '/documents' },
 ];

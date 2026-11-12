@@ -931,7 +931,7 @@ function SettingsContent() {
       <PageHeader
         icon={<Settings className="h-8 w-8 text-gray-600 dark:text-gray-400" />}
         title="Configuración"
-        subtitle="Administra tu perfil, tus preferencias y los datos de tu empresa."
+        subtitle="Administrá tu perfil, tus preferencias y los datos de tu empresa."
       />
 
       <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
@@ -1026,7 +1026,7 @@ function SettingsContent() {
                       type="password"
                       required
                       minLength={PASSWORD_MIN_LENGTH}
-                      placeholder="Repite la contraseña"
+                      placeholder="Confirmá la contraseña"
                       value={passwordForm.confirmPassword}
                       onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
                     />
@@ -1353,7 +1353,7 @@ function SettingsContent() {
                             {c.memberships!.map((m) => (
                               <span
                                 key={m.id}
-                                className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${roleChipClass(m.role)} ${m.status === 'inactive' ? 'opacity-50' : ''}`}
+                                className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded ${roleChipClass(m.role)} ${m.status === 'inactive' ? 'opacity-50' : ''}`}
                               >
                                 {m.tenant_name}
                                 <span className="opacity-70">· {getRoleLabel(m.role)}{m.status === 'inactive' ? ' · inactivo' : ''}</span>
@@ -1396,7 +1396,7 @@ function SettingsContent() {
                           c.tenants && c.tenants.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1">
                               {c.tenants.map((t) => (
-                                <span key={t.id} className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
+                                <span key={t.id} className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
                                   {t.name}
                                 </span>
                               ))}

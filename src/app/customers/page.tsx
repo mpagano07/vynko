@@ -285,7 +285,7 @@ export default function CustomersPage() {
       <PageHeader
         icon={<Users className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />}
         title="Clientes"
-        subtitle="Gestiona tus clientes y consulta su historial de compras."
+        subtitle="Gestioná tus clientes y consultá su historial de compras."
         subtitleClassName="text-gray-500 dark:text-gray-400"
         actions={
           <>
@@ -310,7 +310,7 @@ export default function CustomersPage() {
         {loading ? (
           <LoadingState label="Cargando clientes..." />
         ) : filtered.length === 0 ? (
-          <EmptyState icon={Users} title="No se encontraron clientes" description="Agrega tu primer cliente para comenzar." />
+          <EmptyState icon={Users} title="No se encontraron clientes" description="Agregá tu primer cliente para comenzar." />
         ) : (
           <>
           <div className="overflow-x-auto">

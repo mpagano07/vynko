@@ -408,7 +408,7 @@ export function ArcaConfigCard() {
                 <span className="text-xs text-gray-600 dark:text-gray-300 text-center font-medium">
                   {certFileName || (config?.has_cert ? 'Reemplazar certificado (.crt)' : 'Seleccionar archivo .crt')}
                 </span>
-                <span className="text-[10px] text-gray-400 mt-0.5">Emitido por ARCA para tu CUIT</span>
+                <span className="text-xs text-gray-400 mt-0.5">Emitido por ARCA para tu CUIT</span>
                 <input
                   type="file"
                   accept=".crt,.pem,.txt"
@@ -433,7 +433,7 @@ export function ArcaConfigCard() {
                 <span className="text-xs text-gray-600 dark:text-gray-300 text-center font-medium">
                   {keyFileName || (config?.has_key ? 'Reemplazar clave privada (.key)' : 'Seleccionar archivo .key')}
                 </span>
-                <span className="text-[10px] text-gray-400 mt-0.5">Clave RSA generada con tu CSR</span>
+                <span className="text-xs text-gray-400 mt-0.5">Clave RSA generada con tu CSR</span>
                 <input
                   type="file"
                   accept=".key,.pem,.txt"

@@ -4,7 +4,7 @@ import { AlertTriangle } from 'lucide-react';
 
 export function ErrorState({
   title = 'Algo salió mal',
-  description = 'Por favor, intenta de nuevo más tarde.',
+  description = 'Por favor, intentá de nuevo más tarde.',
   onRetry,
 }: {
   title?: string;

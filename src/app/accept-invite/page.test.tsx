@@ -55,7 +55,7 @@ describe('/accept-invite', () => {
 
     render(<AcceptInvitePage />);
 
-    expect(await screen.findByText(/Completa tus datos/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Completá tus datos/i)).toBeInTheDocument();
     expect(refreshSessionMock).not.toHaveBeenCalled();
     expect(replaceMock).not.toHaveBeenCalled();
     expect(pushMock).not.toHaveBeenCalled();

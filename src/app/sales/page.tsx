@@ -536,7 +536,7 @@ export default function SalesPage() {
 
   const openCheckout = () => {
     if (cart.length === 0) {
-      toast.error('Agrega al menos un producto a la venta');
+      toast.error('Agregá al menos un producto a la venta');
       return;
     }
     setCheckoutOpen(true);
@@ -545,7 +545,7 @@ export default function SalesPage() {
   const handleConfirmCheckout = async ({ payments, primary, change, printReceipt, whatsappPhone, emitArca, invoiceType }: CheckoutPayload) => {
     if (cart.length === 0) {
       setCheckoutOpen(false);
-      toast.error('Agrega al menos un producto a la venta');
+      toast.error('Agregá al menos un producto a la venta');
       return;
     }
 
@@ -716,7 +716,7 @@ export default function SalesPage() {
       if (e.key === 'F4' || (e.ctrlKey && e.key === 'Enter')) {
         e.preventDefault();
         if (cart.length === 0) {
-          toast.error('Agrega al menos un producto a la venta');
+          toast.error('Agregá al menos un producto a la venta');
           return;
         }
         setCheckoutOpen(true);
@@ -906,7 +906,7 @@ export default function SalesPage() {
                       }`}
                     >
                       {inCart && (
-                        <div className="absolute top-2 right-2 flex items-center gap-1 bg-green-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                        <div className="absolute top-2 right-2 flex items-center gap-1 bg-green-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
                           <Check className="h-2.5 w-2.5" />
                           Agregado
                         </div>
@@ -921,7 +921,7 @@ export default function SalesPage() {
                       <StockBadge product={product} />
                     </div>
                     {(product.barcode || product.sku) && (
-                      <div className="text-[10px] text-gray-400 font-mono mt-1">
+                      <div className="text-xs text-gray-400 font-mono mt-1">
                         {product.barcode || product.sku}
                       </div>
                     )}
@@ -956,7 +956,7 @@ export default function SalesPage() {
                                   {inCart && <Check className="h-3.5 w-3.5" />}
                                 </span>
                                 {(product.barcode || product.sku) && (
-                                  <span className="text-[10px] text-gray-400 font-mono">
+                                  <span className="text-xs text-gray-400 font-mono">
                                     {product.barcode || product.sku}
                                   </span>
                                 )}

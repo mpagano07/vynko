@@ -413,7 +413,7 @@ export default function LossPreventionPage() {
                         {h.productSku && <div className="text-[11px] text-gray-400">SKU: {h.productSku}</div>}
                       </td>
                       <td className="py-2.5 px-4">
-                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${reasonInfo?.color || 'text-gray-500 bg-gray-100'}`}>
+                        <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${reasonInfo?.color || 'text-gray-500 bg-gray-100'}`}>
                           {reasonInfo?.label || h.reason}
                         </span>
                       </td>
@@ -477,7 +477,7 @@ export default function LossPreventionPage() {
                   value={form.quantity || ''}
                   onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })}
                 />
-                <p className="text-[10px] text-gray-400 mt-1">
+                <p className="text-xs text-gray-400 mt-1">
                   {POSITIVE_REASONS.has(form.reason)
                     ? 'Se sumará al stock actual'
                     : 'Se restará del stock actual'}

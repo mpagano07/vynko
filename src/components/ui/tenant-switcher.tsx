@@ -128,7 +128,7 @@ export function TenantSwitcher() {
                 className="flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-700 mb-1"
               >
                 <div className="w-5 h-5 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                  <span className="text-[10px] font-bold text-blue-700 dark:text-blue-400">T</span>
+                  <span className="text-xs font-bold text-blue-700 dark:text-blue-400">T</span>
                 </div>
                 <span className="min-w-0 flex-1 break-words font-medium text-gray-800 dark:text-gray-200">Todas las sucursales</span>
                 {!tenant && (
@@ -182,7 +182,7 @@ export function TenantSwitcher() {
                       className="flex items-center gap-2 flex-1 min-w-0"
                     >
                       <div className="w-5 h-5 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                        <span className="text-[10px] font-bold text-gray-600 dark:text-gray-300">{(t.name || 'T')[0].toUpperCase()}</span>
+                        <span className="text-xs font-bold text-gray-600 dark:text-gray-300">{(t.name || 'T')[0].toUpperCase()}</span>
                       </div>
                       {/* Sin truncate: si el nombre no entra, baja de linea.
                           Los puntos suspensivos ocultaban el nombre real. */}

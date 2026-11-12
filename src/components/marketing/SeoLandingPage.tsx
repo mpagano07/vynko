@@ -185,7 +185,7 @@ export default async function SeoLandingPage({ content }: Props) {
                     { label: 'Alertas', value: '3', color: 'text-amber-400' },
                   ].map((k) => (
                     <div key={k.label} className="bg-gray-950/60 rounded-lg p-3 border border-gray-800/50">
-                      <p className="text-[10px] text-gray-400 uppercase tracking-wider">{k.label}</p>
+                      <p className="text-xs text-gray-400 uppercase tracking-wider">{k.label}</p>
                       <p className={`text-lg font-bold mt-1 ${k.color}`}>{k.value}</p>
                     </div>
                   ))}
@@ -444,7 +444,7 @@ export default async function SeoLandingPage({ content }: Props) {
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-base text-gray-500 line-through">{formatPriceByCountry({ amount: price, country, configuredCurrencies })}</span>
                           <span className="text-sm text-gray-400">/mes</span>
-                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
+                          <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
                             Oferta
                           </span>
                         </div>

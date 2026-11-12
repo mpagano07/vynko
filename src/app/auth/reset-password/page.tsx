@@ -124,7 +124,7 @@ function ResetPasswordContent() {
             <Input
               type="password"
               id="confirm-password"
-              placeholder="Repite la contraseña"
+              placeholder="Confirmá la contraseña"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required

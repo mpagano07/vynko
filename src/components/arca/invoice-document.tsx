@@ -135,7 +135,7 @@ function A4Document({ invoice, tenant }: { invoice: InvoiceDocumentData; tenant:
             <div className="w-14 h-14 border-2 border-gray-900 flex items-center justify-center text-2xl font-bold">
               {letter}
             </div>
-            <span className="text-[10px] text-gray-500 mt-1">
+            <span className="text-xs text-gray-500 mt-1">
               COD. {String(code ?? '').padStart(2, '0')}
             </span>
           </div>
@@ -153,12 +153,12 @@ function A4Document({ invoice, tenant }: { invoice: InvoiceDocumentData; tenant:
 
       <div className="grid grid-cols-2 gap-4 border-b border-gray-300 py-3">
         <div>
-          <p className="text-[10px] uppercase text-gray-500">Receptor</p>
+          <p className="text-xs uppercase text-gray-500">Receptor</p>
           <p className="font-medium text-sm">{invoice.customer_name}</p>
           <p>{invoice.document_type}: {invoice.document_number || '—'}</p>
         </div>
         <div>
-          <p className="text-[10px] uppercase text-gray-500">Condición frente al IVA</p>
+          <p className="text-xs uppercase text-gray-500">Condición frente al IVA</p>
           <p className="font-medium">{ivaConditionLabel(invoice.iva_condition)}</p>
           {tenant.ingresos_brutos && <p>Ingresos Brutos: {tenant.ingresos_brutos}</p>}
           {tenant.inicio_actividades && <p>Inicio de actividades: {tenant.inicio_actividades}</p>}
@@ -167,7 +167,7 @@ function A4Document({ invoice, tenant }: { invoice: InvoiceDocumentData; tenant:
 
       <table className="w-full text-left mt-3">
         <thead>
-          <tr className="border-b border-gray-300 text-[10px] uppercase text-gray-500">
+          <tr className="border-b border-gray-300 text-xs uppercase text-gray-500">
             <th className="py-1">Descripción</th>
             <th className="py-1 text-center">Cant.</th>
             <th className="py-1 text-right">P. Unit.</th>
@@ -215,7 +215,7 @@ function A4Document({ invoice, tenant }: { invoice: InvoiceDocumentData; tenant:
       </div>
 
       {isNC && invoice.related_invoice_id && (
-        <p className="mt-2 text-[10px] text-gray-500">
+        <p className="mt-2 text-xs text-gray-500">
           Nota de Crédito que acredita al comprobante original (ver CbtesAsoc).
         </p>
       )}
@@ -231,7 +231,7 @@ function A4Document({ invoice, tenant }: { invoice: InvoiceDocumentData; tenant:
             <p><strong>Fecha Vto. CAE:</strong> {formatCaeDueDate(invoice.cae_due_date)}</p>
           </div>
         </div>
-        <p className="text-[10px] text-gray-400 text-right max-w-[180px]">
+        <p className="text-xs text-gray-400 text-right max-w-[180px]">
           {invoice.is_sandbox
             ? 'Documento sin validez fiscal. Emitido en Modo Sandbox con CAE simulado.'
             : 'Documento generado electrónicamente. Validez fiscal acreditada por el CAE.'}

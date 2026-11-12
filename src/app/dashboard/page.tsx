@@ -327,10 +327,10 @@ export default function DashboardPage() {
               Nuevo producto
             </Button>
           </Link>
-          <Link href="/providers?create_po=1" prefetch={false} className="hidden sm:inline-flex">
+          <Link href="/documents?type=orden_compra&create_po=1" prefetch={false} className="hidden sm:inline-flex">
             <Button size="sm" variant="outline" className="gap-1.5 h-8 px-3 text-sm font-medium">
               <ShoppingCart className="h-3.5 w-3.5" />
-              Nueva compra
+              Nuevo pedido
             </Button>
           </Link>
         </div>
@@ -349,57 +349,65 @@ export default function DashboardPage() {
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard
-          stretch
-          className="p-4 h-[104px]"
-          title="Ventas hoy"
-          titleClassName="normal-case tracking-normal font-normal text-gray-500 dark:text-gray-400"
-          value={salesData ? formatARS(salesData.todayTotal / 100) : '0.00'}
-          valueClassName="text-xl"
-          subtitle={hasSalesToday ? `${todaySalesCount} venta${todaySalesCount !== 1 ? 's' : ''}` : 'Sin ventas'}
-          subtitleClassName="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5"
-          icon={TrendingUp}
-          tone="emerald"
-          iconVariant="small"
-          loading={isLoading}
-        />
+        <Link href="/sales" prefetch={false} className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+          <StatCard
+            stretch
+            className="p-4 h-[104px] transition-all hover:border-indigo-300 hover:shadow-md dark:hover:border-indigo-700"
+            title="Ventas hoy"
+            titleClassName="normal-case tracking-normal font-normal text-gray-500 dark:text-gray-400"
+            value={salesData ? formatARS(salesData.todayTotal / 100) : '0.00'}
+            valueClassName="text-xl"
+            subtitle={hasSalesToday ? `${todaySalesCount} venta${todaySalesCount !== 1 ? 's' : ''}` : 'Sin ventas'}
+            subtitleClassName="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5"
+            icon={TrendingUp}
+            tone="emerald"
+            iconVariant="small"
+            loading={isLoading}
+          />
+        </Link>
 
-        <StatCard
-          stretch
-          className="p-4 h-[104px]"
-          title="Ingresos del mes"
-          titleClassName="normal-case tracking-normal font-normal text-gray-500 dark:text-gray-400"
-          value={monthlyData ? formatARS(monthlyData.total) : '0.00'}
-          valueClassName="text-xl"
-          subtitle={`Ticket promedio: ${monthlyData?.avgTicket != null ? formatARS(monthlyData.avgTicket) : '0.00'}`}
-          subtitleClassName="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5"
-          trend={!isLoading && monthlyData?.variationPercent != null ? monthlyData.variationPercent : null}
-          loading={isLoading}
-        />
+        <Link href="/sales" prefetch={false} className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+          <StatCard
+            stretch
+            className="p-4 h-[104px] transition-all hover:border-indigo-300 hover:shadow-md dark:hover:border-indigo-700"
+            title="Ingresos del mes"
+            titleClassName="normal-case tracking-normal font-normal text-gray-500 dark:text-gray-400"
+            value={monthlyData ? formatARS(monthlyData.total) : '0.00'}
+            valueClassName="text-xl"
+            subtitle={`Ticket promedio: ${monthlyData?.avgTicket != null ? formatARS(monthlyData.avgTicket) : '0.00'}`}
+            subtitleClassName="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5"
+            trend={!isLoading && monthlyData?.variationPercent != null ? monthlyData.variationPercent : null}
+            loading={isLoading}
+          />
+        </Link>
 
-        <StatCard
-          stretch
-          className="p-4 h-[104px]"
-          title="Stock crítico"
-          titleClassName="normal-case tracking-normal font-normal text-gray-500 dark:text-gray-400"
-          value={criticalCount}
-          valueClassName={`text-xl ${criticalCount > 0 ? 'text-rose-600 dark:text-rose-400' : ''}`}
-          subtitle={criticalCount > 0 ? 'productos por reponer' : 'todo en orden'}
-          subtitleClassName="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5"
-          loading={isLoading}
-        />
+        <Link href="/products?stock=critical" prefetch={false} className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+          <StatCard
+            stretch
+            className="p-4 h-[104px] transition-all hover:border-indigo-300 hover:shadow-md dark:hover:border-indigo-700"
+            title="Stock crítico"
+            titleClassName="normal-case tracking-normal font-normal text-gray-500 dark:text-gray-400"
+            value={criticalCount}
+            valueClassName={`text-xl ${criticalCount > 0 ? 'text-rose-600 dark:text-rose-400' : ''}`}
+            subtitle={criticalCount > 0 ? 'productos por reponer' : 'todo en orden'}
+            subtitleClassName="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5"
+            loading={isLoading}
+          />
+        </Link>
 
-        <StatCard
-          stretch
-          className="p-4 h-[104px]"
-          title="Estado"
-          titleClassName="normal-case tracking-normal font-normal text-gray-500 dark:text-gray-400"
-          value={!hasSalesToday ? 'Sin ventas hoy' : criticalCount > 0 ? 'Stock bajo' : 'Todo OK'}
-          valueClassName="text-sm font-medium text-gray-900 dark:text-white leading-snug"
-          subtitle={!hasSalesToday ? 'Registra tu primera venta' : criticalCount > 0 ? 'Reponé stock pronto' : 'Negocio funcionando'}
-          subtitleClassName="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5"
-          loading={isLoading}
-        />
+        <Link href="/documents?type=orden_compra" prefetch={false} className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+          <StatCard
+            stretch
+            className="p-4 h-[104px] transition-all hover:border-indigo-300 hover:shadow-md dark:hover:border-indigo-700"
+            title="Estado"
+            titleClassName="normal-case tracking-normal font-normal text-gray-500 dark:text-gray-400"
+            value={!hasSalesToday ? 'Sin ventas hoy' : criticalCount > 0 ? 'Stock bajo' : 'Todo OK'}
+            valueClassName="text-sm font-medium text-gray-900 dark:text-white leading-snug"
+            subtitle={!hasSalesToday ? 'Registrá tu primera venta' : criticalCount > 0 ? 'Reponé stock pronto' : 'Negocio funcionando'}
+            subtitleClassName="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5"
+            loading={isLoading}
+          />
+        </Link>
       </div>
 
       {allTenants && Object.keys(perTenant).length > 0 && (

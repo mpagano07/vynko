@@ -45,8 +45,14 @@ function mockApiSession(body: Record<string, unknown>, ok = true) {
 function fillCompanyForm() {
   fireEvent.change(screen.getByPlaceholderText('Mi Tienda'), { target: { value: 'Mi Shop' } });
   fireEvent.change(screen.getByPlaceholderText('Juan Pérez'), { target: { value: 'Ana' } });
-  const form = screen.getByRole('button', { name: 'Crear empresa' }).closest('form') as HTMLFormElement;
-  fireEvent.submit(form);
+  fireEvent.click(screen.getByText('Almacén / Kiosco'));
+  fireEvent.click(screen.getByRole('button', { name: /continuar/i }));
+
+  fireEvent.click(screen.getByText('Mostrador con código de barras'));
+  fireEvent.click(screen.getByRole('button', { name: /continuar/i }));
+
+  fireEvent.click(screen.getByText('Recorrer el sistema'));
+  fireEvent.click(screen.getByRole('button', { name: /crear negocio/i }));
 }
 
 describe('OnboardingPage guard', () => {
@@ -70,7 +76,7 @@ describe('OnboardingPage guard', () => {
 
     await screen.findByText(/Verificando tu cuenta/i);
     await vi.waitFor(() => expect(window.location.replace).toHaveBeenCalledWith('/dashboard'));
-    expect(screen.queryByText('Configura tu empresa')).not.toBeInTheDocument();
+    expect(screen.queryByText('Configurá tu negocio')).not.toBeInTheDocument();
   });
 
   it('redirige al dashboard si /api/session devuelve un tenant activo', async () => {
@@ -79,7 +85,7 @@ describe('OnboardingPage guard', () => {
     render(<OnboardingPage />);
 
     await vi.waitFor(() => expect(window.location.replace).toHaveBeenCalledWith('/dashboard'));
-    expect(screen.queryByText('Configura tu empresa')).not.toBeInTheDocument();
+    expect(screen.queryByText('Configurá tu negocio')).not.toBeInTheDocument();
   });
 
   it('muestra el formulario solo para usuarios sin empresa', async () => {
@@ -87,7 +93,7 @@ describe('OnboardingPage guard', () => {
 
     render(<OnboardingPage />);
 
-    expect(await screen.findByText('Configura tu empresa')).toBeInTheDocument();
+    expect(await screen.findByText('Configurá tu negocio')).toBeInTheDocument();
     expect(router.replace).not.toHaveBeenCalledWith('/dashboard');
   });
 
@@ -99,7 +105,7 @@ describe('OnboardingPage guard', () => {
     render(<OnboardingPage />);
 
     await vi.waitFor(() => expect(window.location.replace).toHaveBeenCalledWith('/dashboard'));
-    expect(screen.queryByText('Configura tu empresa')).not.toBeInTheDocument();
+    expect(screen.queryByText('Configurá tu negocio')).not.toBeInTheDocument();
   });
 
   it('redirige a login si no hay sesión', async () => {
@@ -118,7 +124,7 @@ describe('OnboardingPage guard', () => {
     render(<OnboardingPage />);
 
     await vi.waitFor(() => expect(window.location.replace).toHaveBeenCalledWith('/dashboard'));
-    expect(screen.queryByText('Configura tu empresa')).not.toBeInTheDocument();
+    expect(screen.queryByText('Configurá tu negocio')).not.toBeInTheDocument();
   });
 
   it('NO muestra el formulario si /api/session responde 404 con HTML (fail closed)', async () => {
@@ -133,7 +139,7 @@ describe('OnboardingPage guard', () => {
     render(<OnboardingPage />);
 
     await vi.waitFor(() => expect(window.location.replace).toHaveBeenCalledWith('/dashboard'));
-    expect(screen.queryByText('Configura tu empresa')).not.toBeInTheDocument();
+    expect(screen.queryByText('Configurá tu negocio')).not.toBeInTheDocument();
   });
   it('crea la empresa automáticamente si user_metadata trae nombre/empresa del registro', async () => {
     const setActiveTenant = vi.fn();
@@ -160,7 +166,7 @@ describe('OnboardingPage guard', () => {
     // cartel que promete una redirección que no ocurre, sin error en consola.
     expect(window.location.replace).toHaveBeenCalledWith('/dashboard');
     expect(router.push).not.toHaveBeenCalledWith('/dashboard');
-    expect(screen.queryByText('Configura tu empresa')).not.toBeInTheDocument();
+    expect(screen.queryByText('Configurá tu negocio')).not.toBeInTheDocument();
   });
 
   it('si la auto-creación falla, muestra el formulario con nombre/empresa precargados', async () => {
@@ -177,7 +183,7 @@ describe('OnboardingPage guard', () => {
 
     render(<OnboardingPage />);
 
-    expect(await screen.findByText('Configura tu empresa')).toBeInTheDocument();
+    expect(await screen.findByText('Configurá tu negocio')).toBeInTheDocument();
     expect((screen.getByPlaceholderText('Mi Tienda') as HTMLInputElement).value).toBe('Mi Ropa');
     expect((screen.getByPlaceholderText('Juan Pérez') as HTMLInputElement).value).toBe('Ana');
     expect(router.push).not.toHaveBeenCalledWith('/dashboard');
@@ -214,7 +220,7 @@ describe('OnboardingPage formulario de empresa', () => {
 
     render(<OnboardingPage />);
 
-    await screen.findByText('Configura tu empresa');
+    await screen.findByText('Configurá tu negocio');
     fillCompanyForm();
 
     expect(await screen.findByText(/¡Bienvenido!/)).toBeInTheDocument();
@@ -246,7 +252,7 @@ describe('OnboardingPage formulario de empresa', () => {
 
     render(<OnboardingPage />);
 
-    await screen.findByText('Configura tu empresa');
+    await screen.findByText('Configurá tu negocio');
     fillCompanyForm();
 
     expect(await screen.findByText(/¡Bienvenido!/)).toBeInTheDocument();
@@ -282,7 +288,7 @@ describe('OnboardingPage formulario de empresa', () => {
 
     render(<OnboardingPage />);
 
-    await screen.findByText('Configura tu empresa');
+    await screen.findByText('Configurá tu negocio');
     fillCompanyForm();
 
     expect(await screen.findByText(/¡Bienvenido!/)).toBeInTheDocument();
@@ -303,11 +309,11 @@ describe('OnboardingPage formulario de empresa', () => {
 
     render(<OnboardingPage />);
 
-    await screen.findByText('Configura tu empresa');
+    await screen.findByText('Configurá tu negocio');
     fillCompanyForm();
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('No se pudo crear la empresa'));
     expect(screen.queryByText(/¡Bienvenido!/)).not.toBeInTheDocument();
-    expect(screen.getByText('Crear empresa')).toBeInTheDocument();
+    expect(screen.getByText('Crear negocio')).toBeInTheDocument();
   });
 });

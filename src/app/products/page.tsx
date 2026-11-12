@@ -177,13 +177,48 @@ function ProductsPageContent() {
   // Los inputs de precio y costo muestran los miles separados ("80.000"), asi que
   // necesitan un draft de texto: type="number" no acepta separadores.
   const [amountDraft, setAmountDraft] = useState<{ price?: string; cost?: string }>({});
+  const [marginDraft, setMarginDraft] = useState<string | null>(null);
   const priceDisplay = amountDraft.price ?? amountToInput(productForm.price);
   const costDisplay = amountDraft.cost ?? amountToInput(productForm.cost);
+  const marginDisplay = marginDraft !== null
+    ? marginDraft
+    : productForm.cost > 0 && productForm.price > 0
+      ? `${marginPercent(productForm.price, productForm.cost) >= 0 ? '+' : ''}${marginPercent(productForm.price, productForm.cost).toFixed(0)}%`
+      : '';
 
   const handleAmountChange = (field: 'price' | 'cost') => (raw: string) => {
     const formatted = groupThousands(raw);
+    const parsedVal = parseAmountInput(formatted);
     setAmountDraft((prev) => ({ ...prev, [field]: formatted }));
-    setProductForm((prev) => ({ ...prev, [field]: parseAmountInput(formatted) }));
+
+    if (field === 'price') {
+      setMarginDraft(null);
+      setProductForm((prev) => ({ ...prev, price: parsedVal }));
+    } else {
+      setProductForm((prev) => {
+        const next = { ...prev, cost: parsedVal };
+        if (marginDraft !== null && marginDraft !== '') {
+          const marginNum = parseFloat(marginDraft.replace(',', '.'));
+          if (Number.isFinite(marginNum) && parsedVal > 0) {
+            const calculatedPrice = Math.round(parsedVal * (1 + marginNum / 100));
+            next.price = calculatedPrice;
+            setAmountDraft((d) => ({ ...d, price: amountToInput(calculatedPrice) }));
+          }
+        }
+        return next;
+      });
+    }
+  };
+
+  const handleMarginChange = (raw: string) => {
+    setMarginDraft(raw);
+    const normalized = raw.replace('%', '').replace('+', '').replace(',', '.').trim();
+    const marginNum = parseFloat(normalized);
+    if (Number.isFinite(marginNum) && productForm.cost > 0) {
+      const calculatedPrice = Math.round(productForm.cost * (1 + marginNum / 100));
+      setProductForm((prev) => ({ ...prev, price: calculatedPrice }));
+      setAmountDraft((prev) => ({ ...prev, price: amountToInput(calculatedPrice) }));
+    }
   };
 
   // Category Modal State
@@ -657,6 +692,7 @@ function ProductsPageContent() {
   // Handlers
   const handleOpenProductModal = useCallback((product: Product | null = null) => {
     setAmountDraft({});
+    setMarginDraft(null);
     if (product) {
       setEditingProduct(product);
       setProductForm({
@@ -880,7 +916,7 @@ function ProductsPageContent() {
       <PageHeader
         icon={<Package className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />}
         title="Gestión de Inventario"
-        subtitle="Administra tus productos, códigos de barras y niveles de stock crítico."
+        subtitle="Administrá tus productos, códigos de barras y niveles de stock crítico."
         actions={
           <>
           {/* Actions Dropdown */}
@@ -1022,18 +1058,18 @@ function ProductsPageContent() {
         ) : productsLoading ? (
           <LoadingState label="Cargando inventario..." />
         ) : filteredProducts.length === 0 ? (
-          <EmptyState icon={Package} title="No se encontraron productos" description="Intenta ajustando los filtros de búsqueda." />
+          <EmptyState icon={Package} title="No se encontraron productos" description="Probá ajustando los filtros de búsqueda." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <Thead>
-                <SortableTh label="Producto" sortFor="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                <SortableTh label="Categoría" sortFor="category" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-3" />
-                <SortableTh label="Ubicación" sortFor="location" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-3" />
-                <SortableTh label="SKU / Código" sortFor="sku" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                <SortableTh label="Precios (Costo / Venta)" sortFor="price" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" />
-                <SortableTh label="Stock" sortFor="stock" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-6" align="center" />
-                <Th align="right">Acciones</Th>
+                <SortableTh label="Producto" sortFor="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-3 sm:px-6" />
+                <SortableTh label="Categoría" sortFor="category" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="hidden sm:table-cell px-3" />
+                <SortableTh label="Ubicación" sortFor="location" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="hidden lg:table-cell px-3" />
+                <SortableTh label="SKU / Código" sortFor="sku" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="hidden md:table-cell px-6" />
+                <SortableTh label="Precios (Costo / Venta)" sortFor="price" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-3 sm:px-6" />
+                <SortableTh label="Stock" sortFor="stock" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-3 sm:px-6" align="center" />
+                <Th align="right" className="px-3 sm:px-6">Acciones</Th>
               </Thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
                 {paginatedProducts.map((product) => {
@@ -1043,7 +1079,7 @@ function ProductsPageContent() {
 
                   return (
                     <tr key={product.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
-                      <td className="py-4 px-6">
+                      <td className="py-4 px-3 sm:px-6">
                         <div className="flex items-center gap-3">
                           {product.image_url && (
                             <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100 dark:bg-gray-800">
@@ -1056,15 +1092,28 @@ function ProductsPageContent() {
                               />
                             </div>
                           )}
-                          <div>
-                            <div className="font-semibold text-gray-900 dark:text-gray-100">{product.name}</div>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-gray-900 dark:text-gray-100 truncate">{product.name}</div>
+                            {category && (
+                              <div className="sm:hidden mt-0.5">
+                                <span
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium"
+                                  style={{
+                                    backgroundColor: `${category.color || '#3b82f6'}15`,
+                                    color: category.color || '#3b82f6',
+                                  }}
+                                >
+                                  {category.name}
+                                </span>
+                              </div>
+                            )}
                             {product.description && (
                               <div className="text-xs text-gray-500 line-clamp-1 mt-0.5">{product.description}</div>
                             )}
                           </div>
                         </div>
                       </td>
-                      <td className="py-4 px-3">
+                      <td className="hidden sm:table-cell py-4 px-3">
                         {category ? (
                           <span
                             className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium"
@@ -1080,7 +1129,7 @@ function ProductsPageContent() {
                           <span className="text-xs text-gray-400 italic">Sin categoría</span>
                         )}
                       </td>
-                      <td className="py-4 px-3">
+                      <td className="hidden lg:table-cell py-4 px-3">
                         {product.deposito || product.pasillo || product.estanteria ? (
                           <div className="text-xs text-gray-700 dark:text-gray-300 leading-tight whitespace-nowrap">
                             <p>{product.deposito ? <>Depósito: {product.deposito}</> : <span className="text-gray-300 dark:text-gray-600">Depósito: —</span>}</p>
@@ -1091,12 +1140,12 @@ function ProductsPageContent() {
                           <span className="text-xs text-gray-400 italic">—</span>
                         )}
                       </td>
-                      <td className="py-4 px-6">
+                      <td className="hidden md:table-cell py-4 px-6">
                         <div className="text-gray-900 dark:text-gray-100 font-mono text-xs">
                           {product.sku || '—'}
                         </div>
                         {product.barcode && (
-                          <div className="text-[10px] text-gray-400 font-mono mt-0.5">
+                          <div className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5">
                             GTIN: {product.barcode}
                           </div>
                         )}
@@ -1128,7 +1177,7 @@ function ProductsPageContent() {
                           >
                             {product.stock ?? 0}
                           </span>
-                          <div className="text-left text-[10px] text-gray-400">
+                          <div className="text-left text-xs text-gray-500 dark:text-gray-400">
                             <div>Ideal: {product.min_stock ?? 0} - {product.max_stock ?? 0}</div>
                           </div>
                         </div>
@@ -1240,7 +1289,7 @@ function ProductsPageContent() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 sm:col-span-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:col-span-2">
                   <div>
                     <FormLabel htmlFor="product-cost">
                       Costo ($)
@@ -1275,28 +1324,38 @@ function ProductsPageContent() {
                     />
                   </div>
                   <div>
-                    <FormLabel>
-                      Margen
-                    </FormLabel>
-                    <Input
-                      type="text"
-                      readOnly
-                      className={`bg-gray-50 dark:bg-gray-800 cursor-not-allowed font-medium ${productForm.cost > 0 && productForm.price > 0 && marginPercent(productForm.price, productForm.cost) >= 0
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : 'text-red-600 dark:text-red-400'
-                        }`}
-                      value={
-                        productForm.cost > 0 && productForm.price > 0
-                          ? `${marginPercent(productForm.price, productForm.cost) >= 0 ? '+' : ''}${marginPercent(productForm.price, productForm.cost).toFixed(0)}%`
-                          : '—'
-                      }
-                    />
+                    <div className="flex items-center justify-between">
+                      <FormLabel htmlFor="product-margin">
+                        Margen (%)
+                      </FormLabel>
+                      {productForm.cost > 0 && productForm.price > 0 && (
+                        <span className={`text-xs font-semibold ${productForm.price >= productForm.cost ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                          {productForm.price >= productForm.cost ? `+${formatARS(productForm.price - productForm.cost)}` : formatARS(productForm.price - productForm.cost)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <Input
+                        id="product-margin"
+                        name="margin"
+                        type="text"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        placeholder="Ej. 40"
+                        className="tabular-nums pr-7 font-medium"
+                        value={marginDisplay}
+                        onChange={(e) => handleMarginChange(e.target.value)}
+                      />
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 dark:text-gray-500 pointer-events-none">
+                        %
+                      </span>
+                    </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2 sm:col-span-2">
                   <div>
-                    <FormLabel htmlFor="product-stock" className="text-[10px]">
+                    <FormLabel htmlFor="product-stock" className="text-xs">
                       Stock Inicial
                     </FormLabel>
                     <Input
@@ -1308,7 +1367,7 @@ function ProductsPageContent() {
                     />
                   </div>
                   <div>
-                    <FormLabel htmlFor="product-min-stock" className="text-[10px]">
+                    <FormLabel htmlFor="product-min-stock" className="text-xs">
                       Mínimo Crítico
                     </FormLabel>
                     <Input
@@ -1320,7 +1379,7 @@ function ProductsPageContent() {
                     />
                   </div>
                   <div>
-                    <FormLabel htmlFor="product-max-stock" className="text-[10px]">
+                    <FormLabel htmlFor="product-max-stock" className="text-xs">
                       Máximo Sugerido
                     </FormLabel>
                     <Input
@@ -1339,7 +1398,7 @@ function ProductsPageContent() {
                   </FormLabel>
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <FormLabel htmlFor="product-deposito" className="text-[10px]">
+                      <FormLabel htmlFor="product-deposito" className="text-xs">
                         Depósito
                       </FormLabel>
                       <Input
@@ -1352,7 +1411,7 @@ function ProductsPageContent() {
                       />
                     </div>
                     <div>
-                      <FormLabel htmlFor="product-pasillo" className="text-[10px]">
+                      <FormLabel htmlFor="product-pasillo" className="text-xs">
                         Pasillo
                       </FormLabel>
                       <Input
@@ -1365,7 +1424,7 @@ function ProductsPageContent() {
                       />
                     </div>
                     <div>
-                      <FormLabel htmlFor="product-estanteria" className="text-[10px]">
+                      <FormLabel htmlFor="product-estanteria" className="text-xs">
                         Estantería
                       </FormLabel>
                       <Input
@@ -1475,7 +1534,7 @@ function ProductsPageContent() {
                 <div><span className="font-medium text-gray-900 dark:text-gray-100">Stock máximo</span> — nivel sugerido. Ej: <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">100</code></div>
                 <div><span className="font-medium text-gray-900 dark:text-gray-100">Categoría</span> — se crea si no existe. Ej: <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">Bebidas</code></div>
                 <div><span className="font-medium text-gray-900 dark:text-gray-100">Descripción</span> — detalle del producto. Ej: <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">Gaseosa sabor cola</code></div>
-                <p className="text-[10px] text-gray-400 dark:text-gray-500 pt-1">Las columnas son opcionales excepto <strong>Nombre</strong>. Podés usar nombres en español o inglés.</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 pt-1">Las columnas son opcionales excepto <strong>Nombre</strong>. Podés usar nombres en español o inglés.</p>
               </div>
             )}
 

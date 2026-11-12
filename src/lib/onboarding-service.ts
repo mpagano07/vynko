@@ -66,6 +66,15 @@ export async function completeOnboarding(
     return { ok: false, error: 'companyName and ownerName are required', status: 400 };
   }
 
+  const businessTypes = ['kiosco', 'bazar', 'indumentaria', 'distribuidora', 'gastronomia', 'otro'];
+  const salesModes = ['mostrador', 'mayorista', 'mixto'];
+  const businessType = typeof body.businessType === 'string' && businessTypes.includes(body.businessType)
+    ? body.businessType
+    : null;
+  const salesMode = typeof body.salesMode === 'string' && salesModes.includes(body.salesMode)
+    ? body.salesMode
+    : null;
+
   const user = await getAuthenticatedUser(request);
   if (!user) {
     return { ok: false, error: 'No authenticated user', status: 401 };
@@ -118,6 +127,10 @@ export async function completeOnboarding(
         slug: tenantSlug,
         subscription_plan: NEW_ACCOUNT_PLAN,
         subscription_status: 'free',
+        settings: {
+          ...(businessType ? { business_type: businessType } : {}),
+          ...(salesMode ? { sales_mode: salesMode } : {}),
+        },
       }
     );
 
@@ -170,7 +183,7 @@ export async function completeOnboarding(
     userEmail: user.email,
     userName: ownerNameStr,
     tenantId,
-    metadata: { plan: NEW_ACCOUNT_PLAN },
+    metadata: { plan: NEW_ACCOUNT_PLAN, ...(businessType ? { business_type: businessType } : {}), ...(salesMode ? { sales_mode: salesMode } : {}) },
   });
 
   await trackEvent({

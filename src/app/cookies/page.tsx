@@ -158,12 +158,6 @@ export default function CookiesPage() {
                     <td className="py-3">Persistente</td>
                   </tr>
                   <tr>
-                    <td className="py-3 pr-4 font-mono text-xs text-cyan-400">create_po_intent</td>
-                    <td className="py-3 pr-4">SessionStorage</td>
-                    <td className="py-3 pr-4">Conservar temporalmente el borrador de una orden de compra al navegar entre pantallas.</td>
-                    <td className="py-3">Solo pestaña</td>
-                  </tr>
-                  <tr>
                     <td className="py-3 pr-4 font-mono text-xs text-cyan-400">supabase.auth.token (heredado)</td>
                     <td className="py-3 pr-4">LocalStorage</td>
                     <td className="py-3 pr-4">Token de sesión de versiones anteriores del sistema. Se elimina al cerrar sesión o tras ~30 minutos de inactividad.</td>
@@ -177,7 +171,7 @@ export default function CookiesPage() {
           <section className="bg-gray-900/50 border border-gray-800 rounded-xl p-6">
             <h2 className="text-xl font-semibold text-white mb-3">5. Cómo gestionar, deshabilitar o retirar tu consentimiento</h2>
             <p className="mb-3">
-              Puedes retirar o modificar tu consentimiento en cualquier momento borrando la cookie <code className="text-cyan-400 font-mono text-sm">vynko_cookie_consent</code> desde las herramientas de desarrollo de tu navegador, o limpiando los datos del sitio. El aviso se mostrará nuevamente en tu próxima visita para que decidas de nuevo.
+              Podés retirar o modificar tu consentimiento en cualquier momento borrando la cookie <code className="text-cyan-400 font-mono text-sm">vynko_cookie_consent</code> desde las herramientas de desarrollo de tu navegador, o limpiando los datos del sitio. El aviso se mostrará nuevamente en tu próxima visita para que decidas de nuevo.
             </p>
             <p className="mb-4">
               También puedes reabrir el panel de preferencias ahora mismo:

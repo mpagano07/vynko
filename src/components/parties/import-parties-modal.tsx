@@ -212,7 +212,7 @@ export function ImportPartiesModal({ kind, open, onClose, onImported }: ImportPa
               <span className="font-medium text-gray-900 dark:text-gray-100">{col.label}</span> — {col.detail}
             </div>
           ))}
-          <p className="text-[10px] text-gray-400 dark:text-gray-500 pt-1">{text.footer}</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 pt-1">{text.footer}</p>
         </div>
       )}
 

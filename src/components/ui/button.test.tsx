@@ -25,6 +25,23 @@ describe('Button', () => {
     expect(screen.getByRole('button', { name: 'Ok' }).className).toContain('mt-4');
   });
 
+  it('applies the danger variant', () => {
+    render(<Button variant="danger">Eliminar</Button>);
+    expect(screen.getByRole('button', { name: 'Eliminar' }).className).toContain('bg-rose-600');
+  });
+
+  it('applies the ghost variant', () => {
+    render(<Button variant="ghost">Cancelar</Button>);
+    expect(screen.getByRole('button', { name: 'Cancelar' }).className).toContain('hover:bg-gray-100');
+  });
+
+  it('shows a spinner and disables the button while loading', () => {
+    render(<Button loading>Guardando</Button>);
+    const button = screen.getByRole('button', { name: 'Guardando' });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-busy', 'true');
+  });
+
   it('is disabled when the disabled prop is set', () => {
     render(<Button disabled>Ok</Button>);
     expect(screen.getByRole('button', { name: 'Ok' })).toBeDisabled();

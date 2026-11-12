@@ -500,7 +500,7 @@ export default function ForecastPage() {
                     <td className="py-3 px-6 text-center">
                       {p.suggestedOrder15 > 0 ? (
                         <a
-                          href={`/providers?create_po=1&productId=${p.productId}&qty=${p.suggestedOrder15}`}
+                          href={`/documents?type=orden_compra&create_po=1&productId=${p.productId}&qty=${p.suggestedOrder15}`}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition-colors whitespace-nowrap"
                         >
                           Crear orden

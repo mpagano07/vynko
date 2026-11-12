@@ -241,7 +241,7 @@ export default function OnboardingChecklist({ hasCommercialData, hasImported, ha
               <p className={`text-xs font-medium ${step.done ? 'text-gray-500 dark:text-gray-400' : 'text-gray-800 dark:text-gray-200'}`}>
                 {step.title}
               </p>
-              <p className="text-[10px] text-gray-500 dark:text-gray-500 truncate">{step.desc}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-500 truncate">{step.desc}</p>
             </div>
             {!step.done && (
               <ChevronRight className="h-3.5 w-3.5 text-gray-400 group-hover:text-cyan-400 shrink-0 transition-colors" />
@@ -257,7 +257,7 @@ export default function OnboardingChecklist({ hasCommercialData, hasImported, ha
             <div className="p-3.5 pb-3">
               <div className="flex items-center gap-1.5">
                 <EyeOff className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
-                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-300">Ocultar guía</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-300">Ocultar guía</span>
               </div>
               <p className="mt-1.5 text-xs font-bold text-gray-900 dark:text-white">
                 ¿Ocultar los Primeros pasos?

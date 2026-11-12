@@ -328,7 +328,7 @@ export default function FacturacionPage() {
     e.preventDefault();
 
     if (!arcaConfig?.is_active) {
-      toast.error('Debes activar la conexión con ARCA en Configuración antes de emitir comprobantes');
+      toast.error('Tenés que activar la conexión con ARCA en Configuración antes de emitir comprobantes');
       return;
     }
 
@@ -698,7 +698,7 @@ export default function FacturacionPage() {
                           >
                             <button
                               type="button"
-                              className="inline-block cursor-help rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-purple-800 outline-none focus:ring-2 focus:ring-purple-400 dark:bg-purple-950 dark:text-purple-300"
+                              className="inline-block cursor-help rounded bg-purple-100 px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide text-purple-800 outline-none focus:ring-2 focus:ring-purple-400 dark:bg-purple-950 dark:text-purple-300"
                             >
                               Prueba
                             </button>
