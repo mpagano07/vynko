@@ -1,4 +1,5 @@
 import { supabaseAdmin } from './supabaseAdmin';
+import { isAdminProfile } from '@/lib/admin';
 import { logger } from '@/lib/logger';
 
 /**
@@ -60,6 +61,13 @@ export async function trackEvent(params: TrackEventParams): Promise<void> {
   if (!userId) return;
 
   try {
+    // Las cuentas de admin no son clientes: si sus eventos entran al embudo,
+    // el panel muestra como "cliente" al dueño del producto y las metricas
+    // dejan de servir. Se consulta el perfil una sola vez y se usa tambien
+    // para completar email y nombre.
+    const profile = await loadProfile(userId);
+    if (isAdminProfile(profile)) return;
+
     if (FIRST_EVENT_TYPES.has(type)) {
       const { data: already } = await supabaseAdmin
         .from('analytics_events')
@@ -72,7 +80,10 @@ export async function trackEvent(params: TrackEventParams): Promise<void> {
       if (already) return;
     }
 
-    const identity = await resolveIdentity(userId, params);
+    const identity = {
+      email: params.userEmail ?? profile?.email ?? null,
+      name: params.userName ?? profile?.full_name ?? null,
+    };
 
     const { error } = await supabaseAdmin.from('analytics_events').insert({
       event_type: type,
@@ -138,22 +149,28 @@ export async function trackAppReturn(params: {
   }
 }
 
-async function resolveIdentity(
-  userId: string,
-  params: TrackEventParams
-): Promise<{ email: string | null; name: string | null }> {
-  if (params.userEmail !== undefined && params.userName !== undefined) {
-    return { email: params.userEmail, name: params.userName };
-  }
-
-  const { data } = await supabaseAdmin
+async function loadProfile(userId: string): Promise<{
+  is_admin: boolean | null;
+  email: string | null;
+  full_name: string | null;
+} | null> {
+  const { data, error } = await supabaseAdmin
     .from('profiles')
-    .select('email, full_name')
+    .select('is_admin, email, full_name')
     .eq('id', userId)
     .maybeSingle();
 
-  return {
-    email: params.userEmail ?? data?.email ?? null,
-    name: params.userName ?? data?.full_name ?? null,
-  };
+  if (error) {
+    // Si no se puede verificar el flag no se descarta el evento: perder toda
+    // la telemetria por un error transitorio es peor que registrar de mas. Un
+    // evento del admin que se cuele se limpia con
+    // scripts/cleanup-admin-analytics.mjs.
+    logger.error('[analytics] no se pudo verificar si la cuenta es admin:', {
+      error: error.message,
+    });
+    return null;
+  }
+
+  return data ?? null;
 }
+
