@@ -13,6 +13,11 @@ import { rateLimit } from '@/lib/rate-limit';
 import { MAX_IMPORT_ROWS } from '@/lib/excel-import-parse';
 import { logger } from '@/lib/logger';
 import { selectAllRows } from '@/lib/supabase-paging';
+import {
+  isPriceRounding,
+  roundPriceCents,
+  type PriceRounding,
+} from '@/lib/price-rounding';
 
 export type ListProductsResult =
   | { ok: true; products: Array<Record<string, unknown>> }
@@ -1364,11 +1369,13 @@ export async function adjustPrices(auth: AuthInfo, body: {
   percentage?: unknown;
   product_ids?: unknown;
   category_id?: unknown;
+  round_to?: unknown;
 }): Promise<AdjustPricesResult> {
-  const { percentage, product_ids, category_id } = body as {
+  const { percentage, product_ids, category_id, round_to } = body as {
     percentage: number;
     product_ids?: string[];
     category_id?: string | null;
+    round_to?: unknown;
   };
   const tenantId = auth.tenantId;
 
@@ -1381,6 +1388,12 @@ export async function adjustPrices(auth: AuthInfo, body: {
   if (percentage === undefined || typeof percentage !== 'number' || percentage <= 0 || percentage > 100) {
     return { ok: false, error: 'Porcentaje inválido (debe estar entre 0 y 100)', status: 400 };
   }
+
+  const rawRoundTo = round_to ?? 0;
+  if (!isPriceRounding(rawRoundTo)) {
+    return { ok: false, error: 'Opción de redondeo inválida', status: 400 };
+  }
+  const roundTo: PriceRounding = rawRoundTo;
 
   const multiplier = 1 + percentage / 100;
 
@@ -1430,7 +1443,7 @@ export async function adjustPrices(auth: AuthInfo, body: {
     // así que el INSERT del upsert la necesita igual que `name`.
     sku: p.sku ?? '',
     old_price_cents: p.price_cents,
-    new_price_cents: Math.round(p.price_cents * multiplier),
+    new_price_cents: roundPriceCents(p.price_cents * multiplier, roundTo),
     old_cost: p.cost,
     new_cost: p.cost ? Math.round(p.cost * multiplier) : null,
   }));
@@ -1487,7 +1500,7 @@ export async function adjustPrices(auth: AuthInfo, body: {
     userId: auth.userId,
     action: 'adjusted',
     entityType: 'product',
-    details: { percentage, total: updates.length, updated: updates.length - errors.length, category_id: category_id ?? null },
+    details: { percentage, round_to: roundTo, total: updates.length, updated: updates.length - errors.length, category_id: category_id ?? null },
   });
 
   return {
@@ -1495,6 +1508,7 @@ export async function adjustPrices(auth: AuthInfo, body: {
     data: {
       success: errors.length === 0,
       percentage,
+      round_to: roundTo,
       total: updates.length,
       updated: updates.length - errors.length,
       errors: errors.length > 0 ? errors : undefined,

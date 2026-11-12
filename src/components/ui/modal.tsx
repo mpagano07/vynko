@@ -25,6 +25,43 @@ export interface ModalProps {
   children: React.ReactNode;
 }
 
+/**
+ * Pila de modales abiertos. `Escape` debe cerrar solo el último: si hay un
+ * modal de confirmación encima de otro, el de abajo no tiene que desaparecer.
+ * Es un módulo compartido para que todos los `Modal` respeten el orden.
+ */
+const openModalStack: string[] = [];
+
+function useEscapeToClose(open: boolean, onClose: () => void) {
+  const modalId = React.useId();
+  const onCloseRef = React.useRef(onClose);
+
+  // El callback suele ser una arrow inline distinta en cada render. Guardarlo
+  // en un ref evita re-registrar el listener y alterar el orden de la pila.
+  React.useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    openModalStack.push(modalId);
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (openModalStack[openModalStack.length - 1] !== modalId) return;
+      event.preventDefault();
+      onCloseRef.current();
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      const index = openModalStack.lastIndexOf(modalId);
+      if (index !== -1) openModalStack.splice(index, 1);
+    };
+  }, [open, modalId]);
+}
+
 export function Modal({
   open = true,
   onClose,
@@ -42,9 +79,10 @@ export function Modal({
   // El nombre accesible sale del título cuando existe; `aria-label` queda como
   // respaldo para los modales que no lo pasan.
   //
-  // El hook va ANTES del early return de `open`: si se declarara después,
+  // Los hooks van ANTES del early return de `open`: si se declararan después,
   // cambiar `open` entre renders cambiaría la cantidad de hooks.
   const titleId = React.useId();
+  useEscapeToClose(open, onClose);
 
   if (!open) return null;
 

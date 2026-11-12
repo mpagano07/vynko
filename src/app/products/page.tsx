@@ -48,6 +48,7 @@ import {
   Scan,
 } from 'lucide-react';
 import { formatARS, groupThousands, parseAmountInput, amountToInput } from '@/lib/utils/currency';
+import { PRICE_ROUNDING_OPTIONS, type PriceRounding } from '@/lib/price-rounding';
 import { getTenantHeaders, authFetch } from '@/lib/fetchWithTenant';
 import { filterProducts } from '@/lib/product-search';
 import { IMPORT_FILE_ERROR } from '@/lib/excel-import-errors';
@@ -283,11 +284,12 @@ function ProductsPageContent() {
   // Price Adjustment State
   const [isPriceAdjustModalOpen, setIsPriceAdjustModalOpen] = useState(false);
   const [priceAdjustPercentage, setPriceAdjustPercentage] = useState('');
+  const [priceAdjustRounding, setPriceAdjustRounding] = useState<PriceRounding>(0);
   const [priceAdjustScope, setPriceAdjustScope] = useState<'all' | 'category'>('all');
   const [priceAdjustCategoryId, setPriceAdjustCategoryId] = useState('');
   const [priceAdjusting, setPriceAdjusting] = useState(false);
   const [priceAdjustResult, setPriceAdjustResult] = useState<{
-    percentage: number; total: number; updated: number; sample?: PriceAdjustSample[]; errors?: string[];
+    percentage: number; round_to?: number; total: number; updated: number; sample?: PriceAdjustSample[]; errors?: string[];
   } | null>(null);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -571,6 +573,7 @@ function ProductsPageContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           percentage: pct,
+          round_to: priceAdjustRounding,
           category_id: priceAdjustScope === 'category' ? priceAdjustCategoryId : undefined,
         }),
       });
@@ -1818,6 +1821,15 @@ function ProductsPageContent() {
                     Aumento del {priceAdjustResult.percentage}% aplicado
                     {priceAdjustCategoryId ? ` a la categoría "${categories.find((c) => c.id === priceAdjustCategoryId)?.name ?? ''}"` : ' a todos los productos'}
                   </p>
+                  {Boolean(priceAdjustResult.round_to) && (
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+                      Precio redondeado{' '}
+                      {PRICE_ROUNDING_OPTIONS.find(
+                        (option) => option.value === priceAdjustResult.round_to
+                      )?.label.toLowerCase()}
+                      .
+                    </p>
+                  )}
                 </div>
                 {priceAdjustResult.errors && priceAdjustResult.errors.length > 0 && (
                   <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/30">
@@ -1903,6 +1915,30 @@ function ProductsPageContent() {
                     {priceAdjustScope === 'all'
                       ? 'Se aplicará a precio de venta y costo de todos los productos.'
                       : 'Se aplicará a precio de venta y costo de los productos de la categoría seleccionada.'}
+                  </p>
+                </div>
+
+                <div>
+                  <FormLabel variant="default" className="text-gray-300 mb-1.5">Redondeo del precio de venta</FormLabel>
+                  <div className="grid grid-cols-2 gap-2">
+                    {PRICE_ROUNDING_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setPriceAdjustRounding(option.value)}
+                        aria-pressed={priceAdjustRounding === option.value}
+                        className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
+                          priceAdjustRounding === option.value
+                            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 font-medium'
+                            : 'border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1.5">
+                    Se aplica solo al precio de venta, no al costo.
                   </p>
                 </div>
                 <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">
