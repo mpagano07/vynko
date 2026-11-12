@@ -46,12 +46,49 @@ describe('track-event', () => {
     });
   });
 
-  it('no consulta profiles si ya viene el nombre y el email', async () => {
+  it('prefiere el email y el nombre que vienen por parametro sobre los de profiles', async () => {
+    // Los webhooks ya conocen la identidad y no deben quedar pisados por una
+    // fila de profiles desactualizada.
+    supabaseMock.__queue('profiles', {
+      data: { is_admin: false, email: 'perfil@b.com', full_name: 'Perfil' },
+      error: null,
+    });
     supabaseMock.__queue('analytics_events', { data: null, error: null });
 
     await trackEvent({ type: 'signup', userId: 'user-1', userEmail: 'a@b.com', userName: 'Ana' });
 
-    expect(supabaseMock.__calls.some((c) => c.table === 'profiles')).toBe(false);
+    expect(insertCalls()[0]?.args[0]).toMatchObject({
+      user_email: 'a@b.com',
+      user_name: 'Ana',
+    });
+  });
+
+  it('no graba eventos de una cuenta admin', async () => {
+    // El admin tambien usa el producto, pero no es un cliente: si sus eventos
+    // entran al embudo, el panel muestra al dueño como si fuera un usuario
+    // mas y las metricas dejan de reflejar a los clientes reales.
+    supabaseMock.__queue('profiles', { data: { is_admin: true }, error: null });
+
+    await trackEvent({ type: 'product_created', userId: 'admin-1' });
+
+    expect(insertCalls()).toHaveLength(0);
+  });
+
+  it('graba igual si no se pudo verificar si es admin', async () => {
+    // Ante un error transitorio se prefiere registrar de mas antes que perder
+    // la telemetria de todos los clientes. Un evento colado se limpia despues
+    // con scripts/cleanup-admin-analytics.mjs.
+    supabaseMock.__queue('profiles', { data: null, error: { message: 'perfil inaccesible' } });
+    supabaseMock.__queue('analytics_events', { data: null, error: null });
+
+    await trackEvent({ type: 'signup', userId: 'user-1' });
+
+    expect(insertCalls()).toHaveLength(1);
+    const spy = vi.spyOn(console, 'error');
+    expect(findLog(spy, '[analytics] no se pudo verificar si la cuenta es admin')).toMatchObject({
+      level: 'error',
+      error: 'perfil inaccesible',
+    });
   });
 
   it('resuelve email y nombre desde profiles si no vienen', async () => {
@@ -152,6 +189,15 @@ describe('trackAppReturn', () => {
 
     expect(insertCalls()).toHaveLength(1);
     expect(insertCalls()[0]?.args[0]).toMatchObject({ event_type: 'app_return' });
+  });
+
+  it('no graba app_return de una cuenta admin', async () => {
+    supabaseMock.__queue('analytics_events', { data: null, error: null });
+    supabaseMock.__queue('profiles', { data: { is_admin: true }, error: null });
+
+    await trackAppReturn({ userId: 'admin-1' });
+
+    expect(insertCalls()).toHaveLength(0);
   });
 
   it('corta si el ultimo volvio hace menos de 24 horas', async () => {

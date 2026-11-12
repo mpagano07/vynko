@@ -51,6 +51,11 @@ menos de 24 h (`trackAppReturn`).
 - `trackEvent` **nunca tira**: si falta la migracion, si el CHECK rechaza el
   tipo o si Supabase esta caido, el evento se loguea y el negocio (venta,
   producto) se guarda igual. Es telemetria, no parte de la transaccion.
+- Las cuentas con `profiles.is_admin = TRUE` **no generan eventos**: `trackEvent`
+  lee el perfil y corta antes del insert. El admin no es un cliente, asi que sus
+  pruebas no ensucian el embudo (aplica en todos los entornos). Si la lectura del
+  perfil falla, el evento se registra igual (fail-open) y se puede limpiar con
+  `scripts/cleanup-admin-analytics.mjs`.
 - Metadata del navegador sanitizada (10 claves, primitivas, strings a 200) y
   rate limit de 60 req/min por IP en `/api/analytics/track`.
 - `userId` sale de la sesion, nunca del body.
