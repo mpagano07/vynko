@@ -295,21 +295,21 @@ export default function DemoSales() {
                         </span>
                       </td>
                       <td className="py-3.5 px-4 sm:px-5">
-                        <div className="text-[11px] text-gray-400 leading-tight whitespace-nowrap">
+                        <div className="text-xs text-gray-400 leading-tight whitespace-nowrap">
                           <p>Depósito: {p.deposito}</p>
                           <p className="mt-0.5">Pasillo: {p.pasillo} · Est.: {p.estanteria}</p>
                         </div>
                       </td>
                       <td className="py-3.5 px-4 sm:px-5">
-                        <p className="text-gray-300 font-mono text-[11px]">{p.sku}</p>
+                        <p className="text-gray-300 font-mono text-xs">{p.sku}</p>
                         <p className="text-xs text-gray-400 font-mono mt-0.5">GTIN: {p.barcode}</p>
                       </td>
                       <td className="py-3.5 px-4 sm:px-5">
-                        <p className="text-[11px] text-gray-400">
+                        <p className="text-xs text-gray-400">
                           Costo: <span className="font-medium text-gray-300">{formatARS(p.cost)}</span>
                         </p>
                         <p className="text-sm font-semibold text-green-400 mt-0.5">{formatARS(p.price)}</p>
-                        <p className="text-[11px] text-gray-400 mt-0.5">
+                        <p className="text-xs text-gray-400 mt-0.5">
                           Margen: <span className={`font-medium ${margin >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                             {margin >= 0 ? '+' : ''}{margin.toFixed(0)}%
                           </span>
@@ -343,8 +343,8 @@ export default function DemoSales() {
       )}
 
       <div className="px-4 py-3 border-t border-gray-800 bg-gray-900/30 flex items-center justify-between">
-        <p className="text-[11px] text-gray-400">Productos de ejemplo — Los datos no se guardan</p>
-        <Link href="/auth/signup" className="text-[11px] text-cyan-400 hover:text-cyan-300 font-medium transition-colors">
+        <p className="text-xs text-gray-400">Productos de ejemplo — Los datos no se guardan</p>
+        <Link href="/auth/signup" className="text-xs text-cyan-400 hover:text-cyan-300 font-medium transition-colors">
           Crear cuenta real →
         </Link>
       </div>

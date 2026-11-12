@@ -85,14 +85,14 @@ export default function CookieConsent() {
               <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-800 px-3 py-2">
                 <div>
                   <p className="text-xs font-medium text-white">Esenciales (obligatorias)</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">Autenticación, sesión y seguridad.</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Autenticación, sesión y seguridad.</p>
                 </div>
-                <span className="text-[11px] text-gray-500 flex-shrink-0">Siempre activas</span>
+                <span className="text-xs text-gray-500 flex-shrink-0">Siempre activas</span>
               </div>
               <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-800 px-3 py-2">
                 <div>
                   <p className="text-xs font-medium text-white">Funcionales</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">Recuerdan preferencias (idioma/país).</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Recuerdan preferencias (idioma/país).</p>
                 </div>
                 <label className="inline-flex items-center cursor-pointer flex-shrink-0">
                   <input type="checkbox" checked={functional} onChange={(e) => setFunctional(e.target.checked)} className="sr-only peer" />
@@ -102,7 +102,7 @@ export default function CookieConsent() {
               <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-800 px-3 py-2">
                 <div>
                   <p className="text-xs font-medium text-white">Analíticas</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">Medición de uso propia y de Vercel Analytics. Si la desactivás, no se cargan.</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Medición de uso propia y de Vercel Analytics. Si la desactivás, no se cargan.</p>
                 </div>
                 <label className="inline-flex items-center cursor-pointer flex-shrink-0">
                   <input type="checkbox" checked={analytics} onChange={(e) => setAnalytics(e.target.checked)} className="sr-only peer" />
@@ -112,7 +112,7 @@ export default function CookieConsent() {
               <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-800 px-3 py-2">
                 <div>
                   <p className="text-xs font-medium text-white">Marketing</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">Personalización/publicidad. Actualmente no activas.</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Personalización/publicidad. Actualmente no activas.</p>
                 </div>
                 <label className="inline-flex items-center cursor-pointer flex-shrink-0">
                   <input type="checkbox" checked={marketing} onChange={(e) => setMarketing(e.target.checked)} className="sr-only peer" />

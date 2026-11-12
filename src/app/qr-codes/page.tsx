@@ -9,6 +9,7 @@ import { fetchWithTenant } from '@/lib/fetchWithTenant';
 import { generateBrandedQrDataUrl } from '@/lib/qr-branding';
 import { matchesQuery } from '@/lib/utils/text';
 import { escapeAttribute, escapeHtml, isSafeImageUrl } from '@/lib/security/html-escape';
+import { formatARS } from '@/lib/utils/currency';
 import { Card } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -30,6 +31,14 @@ import {
 const PRODUCTS_PER_PAGE = 15;
 /** Cuántos QRs se generan a la vez: acotado para no congelar el hilo principal. */
 const QR_CONCURRENCY = 16;
+
+type LabelTemplate = 'a4-24' | 'a4-40' | 'roll';
+
+const LABEL_TEMPLATES: { id: LabelTemplate; label: string; hint: string }[] = [
+  { id: 'a4-24', label: 'A4 · 24 etiquetas', hint: '3 × 8' },
+  { id: 'a4-40', label: 'A4 · 40 etiquetas', hint: '4 × 10' },
+  { id: 'roll', label: 'Rollo 58 mm', hint: 'Continuo' },
+];
 
 type QrModule = typeof import('qrcode');
 
@@ -70,6 +79,10 @@ export default function CodigosPage() {
   const [qrs, setQrs] = useState<Map<string, string>>(new Map());
   const [printing, setPrinting] = useState(false);
   const [preview, setPreview] = useState<{ id: string; name: string; code: string; qrUrl: string } | null>(null);
+  const [labelTemplate, setLabelTemplate] = useState<LabelTemplate>('a4-24');
+  const [showName, setShowName] = useState(true);
+  const [showPrice, setShowPrice] = useState(true);
+  const [showSku, setShowSku] = useState(true);
   const printRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -192,6 +205,55 @@ export default function CodigosPage() {
         year: 'numeric',
       });
 
+      const printConfig =
+        labelTemplate === 'roll'
+          ? {
+              page: '58mm auto',
+              margin: '3mm',
+              columns: 1,
+              gap: '0',
+              qr: 150,
+              nameFont: '12px',
+              priceFont: '14px',
+              codeFont: '9px',
+              cardPadding: '3mm 0',
+              cardGap: '2mm',
+              cardBorder: 'none',
+              hideHeader: true,
+              breakAfter: 'page',
+            }
+          : labelTemplate === 'a4-40'
+            ? {
+                page: 'A4',
+                margin: '6mm',
+                columns: 4,
+                gap: '2mm',
+                qr: 68,
+                nameFont: '7.5px',
+                priceFont: '9px',
+                codeFont: '6.5px',
+                cardPadding: '2px',
+                cardGap: '1px',
+                cardBorder: '1px dashed #cbd5e1',
+                hideHeader: false,
+                breakAfter: 'auto',
+              }
+            : {
+                page: 'A4',
+                margin: '8mm',
+                columns: 3,
+                gap: '3mm',
+                qr: 96,
+                nameFont: '9px',
+                priceFont: '11px',
+                codeFont: '7.5px',
+                cardPadding: '4px',
+                cardGap: '2px',
+                cardBorder: '1px dashed #cbd5e1',
+                hideHeader: false,
+                breakAfter: 'auto',
+              };
+
       const cards = filtered.map((p) => {
         const qrUrl = printMap.get(p.id);
         const code = p.barcode || p.sku || p.id;
@@ -199,10 +261,11 @@ export default function CodigosPage() {
         return `
           <div class="qr-card">
             <div class="qr-frame">
-              <img src="${escapeAttribute(qrUrl)}" alt="QR ${escapeAttribute(p.name)}" width="140" height="140" />
+              <img src="${escapeAttribute(qrUrl)}" alt="QR ${escapeAttribute(p.name)}" width="${printConfig.qr}" height="${printConfig.qr}" />
             </div>
-            <p class="qr-name">${escapeHtml(p.name)}</p>
-            <p class="qr-code">${escapeHtml(code)}</p>
+            ${showName ? `<p class="qr-name">${escapeHtml(p.name)}</p>` : ''}
+            ${showPrice ? `<p class="qr-price">${escapeHtml(formatARS(p.price))}</p>` : ''}
+            ${showSku ? `<p class="qr-code">${escapeHtml(code)}</p>` : ''}
             <span class="qr-brand">vynko</span>
           </div>
         `;
@@ -223,7 +286,7 @@ export default function CodigosPage() {
       -webkit-print-color-adjust: exact;
     }
     .print-header {
-      display: flex;
+      display: ${printConfig.hideHeader ? 'none' : 'flex'};
       align-items: flex-end;
       justify-content: space-between;
       gap: 12px;
@@ -245,19 +308,20 @@ export default function CodigosPage() {
     .meta strong { font-size: 10px; color: #0f172a; }
     .grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 8px;
+      grid-template-columns: repeat(${printConfig.columns}, 1fr);
+      gap: ${printConfig.gap};
     }
     .qr-card {
-      border: 1px dashed #cbd5e1;
-      border-radius: 10px;
-      padding: 9px 8px 7px;
+      border: ${printConfig.cardBorder};
+      border-radius: ${printConfig.columns === 1 ? '0' : '10px'};
+      padding: ${printConfig.cardPadding};
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 5px;
+      gap: ${printConfig.cardGap};
       background: #fff;
       break-inside: avoid;
+      break-after: ${printConfig.breakAfter};
     }
     .qr-frame {
       background: #fff;
@@ -266,9 +330,9 @@ export default function CodigosPage() {
       box-shadow: inset 0 0 0 1px #e2e8f0;
       line-height: 0;
     }
-    .qr-card img { width: 140px; height: 140px; }
+    .qr-card img { width: ${printConfig.qr}px; height: ${printConfig.qr}px; }
     .qr-name {
-      font-size: 10.5px;
+      font-size: ${printConfig.nameFont};
       font-weight: 600;
       line-height: 1.25;
       text-align: center;
@@ -276,11 +340,18 @@ export default function CodigosPage() {
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
       overflow: hidden;
-      min-height: 26px;
+      min-height: ${printConfig.columns === 1 ? '0' : '26px'};
+      max-width: 100%;
+    }
+    .qr-price {
+      font-size: ${printConfig.priceFont};
+      font-weight: 800;
+      text-align: center;
+      white-space: nowrap;
       max-width: 100%;
     }
     .qr-code {
-      font-size: 8.5px;
+      font-size: ${printConfig.codeFont};
       letter-spacing: 0.02em;
       color: #6b7280;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -291,16 +362,16 @@ export default function CodigosPage() {
       max-width: 100%;
     }
     .qr-brand {
-      font-size: 8px;
+      font-size: ${printConfig.columns === 1 ? '10px' : '8px'};
       font-weight: 700;
       letter-spacing: 0.18em;
       text-transform: uppercase;
       color: #6366f1;
     }
     @media print {
-      @page { size: A4; margin: 8mm; }
+      @page { size: ${printConfig.page}; margin: ${printConfig.margin}; }
       body { padding: 0; }
-      .grid { gap: 7px; }
+      .grid { gap: ${printConfig.gap}; }
     }
   </style>
 </head>
@@ -383,6 +454,66 @@ export default function CodigosPage() {
         </div>
       </Card>
 
+      {/* Configuración de etiqueta */}
+      <Card className="rounded-xl border border-gray-200/80 p-3 shadow-sm dark:border-gray-800 sm:p-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Formato de etiqueta</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Elegí la plantilla de impresión y qué datos querés que salgan en cada etiqueta.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div
+              role="radiogroup"
+              aria-label="Plantilla de etiqueta"
+              className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-gray-700 dark:bg-gray-800/60"
+            >
+              {LABEL_TEMPLATES.map((tpl) => {
+                const active = labelTemplate === tpl.id;
+                return (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => setLabelTemplate(tpl.id)}
+                    className={
+                      active
+                        ? 'rounded-md bg-white px-2.5 py-1.5 text-xs font-semibold text-indigo-700 shadow-sm dark:bg-gray-700 dark:text-indigo-300'
+                        : 'rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
+                    }
+                  >
+                    <span className="block">{tpl.label}</span>
+                    <span className="block text-xs font-normal opacity-70">{tpl.hint}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              {[
+                { key: 'name' as const, label: 'Nombre', checked: showName, set: setShowName },
+                { key: 'price' as const, label: 'Precio', checked: showPrice, set: setShowPrice },
+                { key: 'sku' as const, label: 'SKU', checked: showSku, set: setShowSku },
+              ].map((field) => (
+                <label
+                  key={field.key}
+                  className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-gray-700 dark:text-gray-300"
+                >
+                  <input
+                    type="checkbox"
+                    checked={field.checked}
+                    onChange={(e) => field.set(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-2 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-900"
+                  />
+                  {field.label}
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Card>
+
       {/* QR Grid */}
       {isError ? (
         <ErrorState title="No se pudieron cargar los productos" onRetry={() => mutate()} />
@@ -436,7 +567,7 @@ export default function CodigosPage() {
                       {p.name}
                     </p>
                     <p
-                      className="mt-1 w-full truncate rounded-md bg-gray-100 px-2 py-1 text-center font-mono text-[11px] text-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                      className="mt-1 w-full truncate rounded-md bg-gray-100 px-2 py-1 text-center font-mono text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300"
                       title={code}
                     >
                       {code}

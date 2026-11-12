@@ -351,7 +351,7 @@ export function ArcaConfigCard() {
               value={form.punto_venta}
               onChange={(e) => setForm({ ...form, punto_venta: parseInt(e.target.value, 10) || 1 })}
             />
-            <p className="text-[11px] text-gray-400 mt-1">
+            <p className="text-xs text-gray-400 mt-1">
               Debe ser tipo &ldquo;Factura Electrónica - Web Services&rdquo; en ARCA
             </p>
           </div>
@@ -398,7 +398,7 @@ export function ArcaConfigCard() {
               <div className="flex items-center justify-between">
                 <FormLabel>Certificado Digital (.crt / .pem)</FormLabel>
                 {config?.has_cert && (
-                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
                     <CheckCircle2 className="h-3 w-3" /> Certificado activo
                   </span>
                 )}
@@ -423,7 +423,7 @@ export function ArcaConfigCard() {
               <div className="flex items-center justify-between">
                 <FormLabel>Clave Privada (.key)</FormLabel>
                 {config?.has_key && (
-                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
                     <CheckCircle2 className="h-3 w-3" /> Clave cifrada guardada
                   </span>
                 )}

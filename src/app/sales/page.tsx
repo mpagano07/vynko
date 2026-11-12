@@ -809,19 +809,19 @@ export default function SalesPage() {
       >
         <div className="hidden md:flex flex-wrap items-center gap-2 mt-2.5">
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
-            <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-[11px] shadow-xs">F2</kbd>
+            <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-xs shadow-xs">F2</kbd>
             Buscar producto
           </span>
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
-            <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-[11px] shadow-xs">F4</kbd>
+            <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-xs shadow-xs">F4</kbd>
             Finalizar cobro
           </span>
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
-            <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-[11px] shadow-xs">Esc</kbd>
+            <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-xs shadow-xs">Esc</kbd>
             Limpiar búsqueda
           </span>
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
-            <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-[11px] shadow-xs">Supr</kbd>
+            <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-mono text-xs shadow-xs">Supr</kbd>
             Cancelar carrito
           </span>
         </div>
@@ -1103,7 +1103,7 @@ export default function SalesPage() {
                     {showAdjustments && (
                       <div className="grid grid-cols-2 gap-2 mt-2">
                         <label className="block">
-                          <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
                             Descuento %
                           </span>
                           <input
@@ -1119,7 +1119,7 @@ export default function SalesPage() {
                           />
                         </label>
                         <label className="block">
-                          <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
                             Recargo %
                           </span>
                           <input

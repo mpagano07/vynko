@@ -1344,7 +1344,7 @@ function SettingsContent() {
                         </p>
                         <p className="text-xs text-gray-500 truncate">{c.email}</p>
                         {formatShortDate(c.joined_at) && (
-                          <p className="text-[11px] text-gray-400">
+                          <p className="text-xs text-gray-400">
                             En el equipo desde {formatShortDate(c.joined_at)}
                           </p>
                         )}
@@ -1624,7 +1624,7 @@ function SettingsContent() {
                     <p className="text-xs font-medium text-gray-500">
                       Sucursales asignadas
                     </p>
-                    <span className="text-[11px] text-gray-400">
+                    <span className="text-xs text-gray-400">
                       {selectedTenantIds.length} de {manageableTenants.length}
                     </span>
                   </div>
@@ -1697,7 +1697,7 @@ function SettingsContent() {
                   <ListChecks className="h-5 w-5 text-cyan-500" />
                   <div>
                     <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Guía de primeros pasos</span>
-                    <p className="text-[11px] text-gray-400">Mostrar la guía de configuración en el panel de control.</p>
+                    <p className="text-xs text-gray-400">Mostrar la guía de configuración en el panel de control.</p>
                   </div>
                 </div>
                 <Button
@@ -1771,10 +1771,10 @@ function SettingsContent() {
                           </div>
                         </div>
                           {value > 0 && (
-                            <p className="text-[11px] font-medium text-red-500 mt-1">+{value}% Recargo</p>
+                            <p className="text-xs font-medium text-red-500 mt-1">+{value}% Recargo</p>
                           )}
                           {value < 0 && (
-                            <p className="text-[11px] font-medium text-green-600 dark:text-green-400 mt-1">{Math.abs(value)}% Descuento</p>
+                            <p className="text-xs font-medium text-green-600 dark:text-green-400 mt-1">{Math.abs(value)}% Descuento</p>
                           )}
                         </div>
                       );

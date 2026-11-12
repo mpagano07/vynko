@@ -229,6 +229,13 @@ export default function ForecastPage() {
     ? filteredPredictions.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
     : filteredPredictions;
 
+  // Pedido de reposición masivo: manda al flujo único de compras (/documents)
+  // con todos los productos que tienen sugerencia de compra a 15 días.
+  const reorderProducts = data.predictions.filter((p) => p.suggestedOrder15 > 0);
+  const bulkReorderHref = `/documents?type=orden_compra&create_po=1&items=${reorderProducts
+    .map((p) => `${p.productId}:${p.suggestedOrder15}`)
+    .join(',')}`;
+
   return (
     <div className="space-y-6">
       {header}
@@ -304,7 +311,7 @@ export default function ForecastPage() {
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-[11px] text-gray-500 dark:text-gray-400">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs text-gray-500 dark:text-gray-400">
             <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500" /> En riesgo</span>
             <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Reponer</span>
             <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-gray-400" /> Sin rotación</span>
@@ -329,7 +336,7 @@ export default function ForecastPage() {
                   const urgent = p.daysUntilStockout !== null && p.daysUntilStockout <= 7;
                   return (
                     <div key={p.productId} className="flex items-center gap-2.5">
-                      <span className={`flex-shrink-0 w-5 h-5 rounded-full text-[11px] font-bold flex items-center justify-center ${
+                      <span className={`flex-shrink-0 w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center ${
                         urgent
                           ? 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400'
                           : 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400'
@@ -426,7 +433,18 @@ export default function ForecastPage() {
             <Filter className="h-5 w-5 text-gray-400" />
             Productos
           </h2>
-          <div className="flex gap-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            {reorderProducts.length > 0 && (
+              <a
+                href={bulkReorderHref}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700"
+              >
+                <ShoppingCart className="h-3.5 w-3.5" />
+                Crear pedido de reposición
+                <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-xs font-bold">{reorderProducts.length}</span>
+              </a>
+            )}
+            <div className="flex gap-1.5">
             {([
               { key: 'riesgo', label: 'En riesgo', count: data.predictions.filter((p) => p.totalSoldLast30 > 0 && (p.needsReorder || p.currentStock <= p.minStock)).length },
               { key: 'todos', label: 'Todos', count: data.predictions.length },
@@ -446,6 +464,7 @@ export default function ForecastPage() {
                 <span className={`ml-1.5 ${filterTab === tab.key ? 'text-gray-400 dark:text-gray-500' : 'text-gray-600 dark:text-gray-400'}`}>{tab.count}</span>
               </button>
             ))}
+          </div>
           </div>
         </div>
         {filteredPredictions.length === 0 ? (
@@ -477,7 +496,25 @@ export default function ForecastPage() {
                     </td>
                     <td className="py-3 px-6 text-center text-gray-600 dark:text-gray-400">{formatDailyDemand(p)}</td>
                     <td className="py-3 px-6 text-center text-gray-600 dark:text-gray-400">
-                      {p.daysUntilStockout !== null ? `${p.daysUntilStockout}d` : '—'}
+                      {p.daysUntilStockout !== null ? (
+                        <span className="inline-flex items-center justify-center gap-1.5">
+                          <span
+                            className={`h-2 w-2 shrink-0 rounded-full ${
+                              p.daysUntilStockout < 3
+                                ? 'bg-rose-500'
+                                : p.daysUntilStockout <= 7
+                                  ? 'bg-amber-500'
+                                  : p.daysUntilStockout > 15
+                                    ? 'bg-emerald-500'
+                                    : 'bg-gray-400'
+                            }`}
+                            aria-hidden="true"
+                          />
+                          {p.daysUntilStockout}d
+                        </span>
+                      ) : (
+                        '—'
+                      )}
                     </td>
                     <td className="py-3 px-6 text-center">
                       {p.suggestedOrder15 > 0 ? (

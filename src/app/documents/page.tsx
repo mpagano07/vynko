@@ -225,12 +225,28 @@ export default function DocumentosPage() {
     const supplierId = params.get('supplier_id');
     const productId = params.get('productId');
     const qty = Number(params.get('qty')) || 0;
+    const bulkItems = params.get('items');
 
     if (supplierId) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setPoSupplierId(supplierId);
     }
-    if (productId && qty > 0) {
+    if (bulkItems) {
+      // Formato: productId:cantidad,productId:cantidad — lo usa el pedido de
+      // reposición masivo de /forecast.
+      const parsed = bulkItems
+        .split(',')
+        .map((pair) => {
+          const [rawProductId, rawQty] = pair.split(':');
+          const quantity = Number(rawQty) || 0;
+          const product = products.find((p) => p.id === rawProductId);
+          return product && quantity > 0
+            ? { product_id: product.id, quantity, unit_cost: product.cost || 0 }
+            : null;
+        })
+        .filter((item): item is { product_id: string; quantity: number; unit_cost: number } => item !== null);
+      if (parsed.length > 0) setPoItems(parsed);
+    } else if (productId && qty > 0) {
       const product = products.find((p) => p.id === productId);
       if (product) {
         setPoItems([{ product_id: product.id, quantity: qty, unit_cost: product.cost || 0 }]);
@@ -243,6 +259,7 @@ export default function DocumentosPage() {
     url.searchParams.delete('supplier_id');
     url.searchParams.delete('productId');
     url.searchParams.delete('qty');
+    url.searchParams.delete('items');
     window.history.replaceState({}, '', url.toString());
   }, [loading, products]);
 
@@ -1431,7 +1448,7 @@ export default function DocumentosPage() {
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    <div className="hidden sm:grid grid-cols-[minmax(0,1.6fr)_96px_130px_110px_32px] gap-2 px-2 mb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    <div className="hidden sm:grid grid-cols-[minmax(0,1.6fr)_96px_130px_110px_32px] gap-2 px-2 mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                       <span>Descripción</span>
                       <span>Cant.</span>
                       <span>Precio unitario</span>
@@ -1590,7 +1607,7 @@ export default function DocumentosPage() {
                   </p>
                 ) : (
                   <div className="space-y-2 max-h-48 overflow-y-auto">
-                    <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_150px_110px_110px_32px] gap-2 px-2 mb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_150px_110px_110px_32px] gap-2 px-2 mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                       <span>Producto</span>
                       <span className="text-center">Cantidad</span>
                       <span className="text-right">Costo unit.</span>

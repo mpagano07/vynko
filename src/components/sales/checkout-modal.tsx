@@ -556,13 +556,13 @@ return (
                         </>
                       ) : isFlex ? (
                         <>
-                          <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                          <label className="text-xs font-medium text-gray-500 dark:text-gray-400">
                             Monto a cobrar
                           </label>
                           <div className="mt-1 flex h-10 items-center rounded-md border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/60 px-3 text-base font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                             {formatARS(netCents / 100)}
                           </div>
-                          <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                          <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
                             {split
                               ? `Cubre ${formatARS(allocationCents / 100)} del total`
                               : 'Se calcula automáticamente'}
@@ -572,7 +572,7 @@ return (
                         <>
                           <label
                             htmlFor={`allocation-${line.id}`}
-                            className="text-[11px] font-medium text-gray-500 dark:text-gray-400"
+                            className="text-xs font-medium text-gray-500 dark:text-gray-400"
                           >
                             Monto a repartir
                           </label>
@@ -588,7 +588,7 @@ return (
                             className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-base font-semibold tabular-nums text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                           />
                           {pct !== 0 && !isCash && allocationCents > 0 && (
-                            <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                               {adjustmentLabel(pct)} {pct > 0 ? '+' : ''}
                               {pct}% ={' '}
                               <span className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">
@@ -603,7 +603,7 @@ return (
                     <div className="flex flex-col justify-start">
                       {isCash ? (
                         <>
-                          <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
                             {split ? (
                               <>
                                 Cubre del total:{' '}
@@ -616,7 +616,7 @@ return (
                             )}
                           </p>
                           {pct !== 0 && allocationCents > 0 && !split && (
-                            <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                               {adjustmentLabel(pct)} {pct > 0 ? '+' : ''}
                               {pct}% ={' '}
                               <span className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">
@@ -628,7 +628,7 @@ return (
                       ) : isFlex ? (
                         pct !== 0 && allocationCents > 0 ? (
                           <div className="flex items-end gap-1 pb-1">
-                            <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
                               {adjustmentLabel(pct)} {pct > 0 ? '+' : ''}
                               {pct}% ={' '}
                               <span className="font-bold text-gray-900 dark:text-gray-100 tabular-nums">
@@ -639,7 +639,7 @@ return (
                         ) : null
                       ) : (
                         <div className="flex items-end gap-1 pb-1">
-                          <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
                             Se cobrará{' '}
                             <span className="font-bold text-gray-900 dark:text-gray-100 tabular-nums">
                               {formatARS(netCents / 100)}
@@ -694,7 +694,7 @@ return (
                     <div className="mt-2">
                       <label
                         htmlFor="arca-invoice-type"
-                        className="text-[11px] font-medium text-gray-600 dark:text-gray-300"
+                        className="text-xs font-medium text-gray-600 dark:text-gray-300"
                       >
                         Tipo de comprobante
                       </label>
@@ -710,12 +710,12 @@ return (
                           </option>
                         ))}
                       </select>
-                      <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                         Sugerido según la condición frente al IVA del cliente. Se solicitará el CAE a ARCA al confirmar.
                       </p>
                     </div>
                   ) : (
-                    <p className="mt-1 text-[11px] text-indigo-700 dark:text-indigo-300">
+                    <p className="mt-1 text-xs text-indigo-700 dark:text-indigo-300">
                       Se emitirá Factura {arcaInvoiceTypes[0] ?? 'B'} por {formatARS(resolved.collectedCents / 100)}. Se solicitará el CAE a ARCA al confirmar.
                     </p>
                   )
@@ -772,7 +772,7 @@ return (
                   aria-label="Número de WhatsApp"
                   className="mt-1.5 flex h-10 w-full rounded-md border border-emerald-300 bg-white px-3 py-2 text-base font-semibold tabular-nums text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                 />
-                <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   Solo números: código de área + teléfono todo junto (ej: 1122223333).
                 </p>
               </div>
@@ -818,7 +818,7 @@ return (
             </div>
           )}
 
-          <p className="text-center text-[11px] text-gray-400 dark:text-gray-500">
+          <p className="text-center text-xs text-gray-400 dark:text-gray-500">
             Atajos:{' '}
             {CHECKOUT_METHODS.map((m, i) => (
               <span key={m.id}>

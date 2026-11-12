@@ -24,7 +24,7 @@ import toast from 'react-hot-toast';
 import {
   ShieldAlert, Package, TrendingDown, AlertTriangle,
   Scale, BarChart3, ClipboardList, FilterX,
-  PieChart as PieChartIcon
+  PieChart as PieChartIcon, ExternalLink
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatARS } from '@/lib/utils/currency';
@@ -200,12 +200,24 @@ export default function LossPreventionPage() {
 
   const totalValue = losses.reduce((v, h) => v + Math.abs(h.quantity) * costOfProduct(h.productId), 0);
 
-  const topLost: [string, number][] = Object.entries(
-    losses.reduce((acc: Record<string, number>, h) => {
-      acc[h.productName] = (acc[h.productName] || 0) + Math.abs(h.quantity);
-      return acc;
-    }, {} as Record<string, number>)
-  ).sort(([, a], [, b]) => b - a).slice(0, 5);
+  const lossByProduct = losses.reduce((acc, h) => {
+    const entry = acc.get(h.productId) ?? {
+      productId: h.productId,
+      productName: h.productName,
+      units: 0,
+      value: 0,
+    };
+    const units = Math.abs(h.quantity);
+    entry.units += units;
+    entry.value += units * costOfProduct(h.productId);
+    acc.set(h.productId, entry);
+    return acc;
+  }, new Map<string, { productId: string; productName: string; units: number; value: number }>());
+
+  const topLossProducts = [...lossByProduct.values()]
+    .sort((a, b) => b.units - a.units)
+    .slice(0, 3);
+  const topLost: [string, number][] = topLossProducts.map((p) => [p.productName, p.units]);
 
   const lossByReason = losses.reduce((acc: Record<string, number>, h) => {
     const reason = baseReason(h.reason);
@@ -275,25 +287,43 @@ export default function LossPreventionPage() {
       {/* Pérdidas por motivo (donut) + Top productos */}
       {(topLost.length > 0 || donutData.length > 0) && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {topLost.length > 0 && (
+          {topLossProducts.length > 0 && (
             <Card className="p-5">
-              <h2 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                <BarChart3 className="h-4 w-4 text-rose-500" />
-                Productos con más pérdidas
-              </h2>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="flex items-center gap-2 text-sm font-bold text-gray-900 dark:text-white">
+                  <BarChart3 className="h-4 w-4 text-rose-500" />
+                  Top 3 productos con más mermas
+                </h2>
+                <span className="text-xs text-gray-400">Por unidades</span>
+              </div>
               <div className="space-y-2">
-                {topLost.map(([name, qty], i) => (
-                  <div key={name} className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-gray-400 w-5">{i + 1}</span>
-                    <div className="flex-1 h-8 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-rose-400 dark:bg-rose-600 rounded-full flex items-center px-3"
-                        style={{ width: `${Math.min((qty / topLost[0][1]) * 100, 100)}%` }}
-                      >
-                        <span className="text-xs font-semibold text-white truncate">{name}</span>
-                      </div>
+                {topLossProducts.map((product, i) => (
+                  <div
+                    key={product.productId}
+                    className="flex items-center gap-3 rounded-lg border border-gray-100 p-2 dark:border-gray-800"
+                  >
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-rose-100 text-xs font-bold text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
+                      {i + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100" title={product.productName}>
+                        {product.productName}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {product.units} u. perdidas
+                        {product.value > 0 ? ` · ${formatARS(product.value)}` : ''}
+                      </p>
                     </div>
-                    <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 w-16 text-right">{qty} u.</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => router.push(`/products?search=${encodeURIComponent(product.productName)}`)}
+                      className="shrink-0 gap-1"
+                      aria-label={`Revisar ${product.productName}`}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      Ver
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -307,7 +337,7 @@ export default function LossPreventionPage() {
                 Pérdidas por motivo
               </h2>
               <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:gap-6">
-                <div className="h-44 w-44 flex-shrink-0">
+                <div className="relative h-44 w-44 flex-shrink-0">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -330,6 +360,13 @@ export default function LossPreventionPage() {
                       />
                     </PieChart>
                   </ResponsiveContainer>
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Pérdida total</span>
+                    <span className="max-w-[7.5rem] truncate text-base font-bold tabular-nums text-rose-600 dark:text-rose-400" title={formatARS(totalValue)}>
+                      {formatARS(totalValue)}
+                    </span>
+                    <span className="text-xs text-gray-400">{totalLosses} u.</span>
+                  </div>
                 </div>
                 <div className="w-full min-w-0 flex-1 space-y-2">
                   {donutData.map((d) => {
@@ -410,7 +447,7 @@ export default function LossPreventionPage() {
                       </td>
                       <td className="py-2.5 px-4">
                         <div className="font-medium text-gray-900 dark:text-gray-100">{h.productName}</div>
-                        {h.productSku && <div className="text-[11px] text-gray-400">SKU: {h.productSku}</div>}
+                        {h.productSku && <div className="text-xs text-gray-400">SKU: {h.productSku}</div>}
                       </td>
                       <td className="py-2.5 px-4">
                         <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${reasonInfo?.color || 'text-gray-500 bg-gray-100'}`}>

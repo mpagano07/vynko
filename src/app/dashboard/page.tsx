@@ -358,7 +358,7 @@ export default function DashboardPage() {
             value={salesData ? formatARS(salesData.todayTotal / 100) : '0.00'}
             valueClassName="text-xl"
             subtitle={hasSalesToday ? `${todaySalesCount} venta${todaySalesCount !== 1 ? 's' : ''}` : 'Sin ventas'}
-            subtitleClassName="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5"
+            subtitleClassName="text-xs text-gray-600 dark:text-gray-400 mt-0.5"
             icon={TrendingUp}
             tone="emerald"
             iconVariant="small"
@@ -375,7 +375,7 @@ export default function DashboardPage() {
             value={monthlyData ? formatARS(monthlyData.total) : '0.00'}
             valueClassName="text-xl"
             subtitle={`Ticket promedio: ${monthlyData?.avgTicket != null ? formatARS(monthlyData.avgTicket) : '0.00'}`}
-            subtitleClassName="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5"
+            subtitleClassName="text-xs text-gray-600 dark:text-gray-400 mt-0.5"
             trend={!isLoading && monthlyData?.variationPercent != null ? monthlyData.variationPercent : null}
             loading={isLoading}
           />
@@ -390,7 +390,7 @@ export default function DashboardPage() {
             value={criticalCount}
             valueClassName={`text-xl ${criticalCount > 0 ? 'text-rose-600 dark:text-rose-400' : ''}`}
             subtitle={criticalCount > 0 ? 'productos por reponer' : 'todo en orden'}
-            subtitleClassName="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5"
+            subtitleClassName="text-xs text-gray-600 dark:text-gray-400 mt-0.5"
             loading={isLoading}
           />
         </Link>
@@ -404,7 +404,7 @@ export default function DashboardPage() {
             value={!hasSalesToday ? 'Sin ventas hoy' : criticalCount > 0 ? 'Stock bajo' : 'Todo OK'}
             valueClassName="text-sm font-medium text-gray-900 dark:text-white leading-snug"
             subtitle={!hasSalesToday ? 'Registrá tu primera venta' : criticalCount > 0 ? 'Reponé stock pronto' : 'Negocio funcionando'}
-            subtitleClassName="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5"
+            subtitleClassName="text-xs text-gray-600 dark:text-gray-400 mt-0.5"
             loading={isLoading}
           />
         </Link>

@@ -130,7 +130,7 @@ function ProductsPageContent() {
   const { categories, mutate: mutateCategories } = useCategories(tenantId);
 
   // Search & Filter State
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(() => searchParams?.get('search') ?? '');
   const [selectedCategoryId, setSelectedCategoryId] = useState('all');
   const [stockFilter, setStockFilter] = useState<'all' | 'critical' | 'low' | 'normal'>(() => {
     const s = searchParams?.get('stock');

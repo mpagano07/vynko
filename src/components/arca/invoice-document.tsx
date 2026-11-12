@@ -112,7 +112,7 @@ function A4Document({ invoice, tenant }: { invoice: InvoiceDocumentData; tenant:
   return (
     <div className="invoice-doc bg-white text-gray-900 text-xs p-4">
       {invoice.is_sandbox && (
-        <div className="mb-3 border-2 border-dashed border-red-500 text-red-600 text-center font-bold uppercase tracking-widest text-[11px] py-1 rounded">
+        <div className="mb-3 border-2 border-dashed border-red-500 text-red-600 text-center font-bold uppercase tracking-widest text-xs py-1 rounded">
           Documento de prueba — sin validez fiscal
         </div>
       )}
@@ -120,7 +120,7 @@ function A4Document({ invoice, tenant }: { invoice: InvoiceDocumentData; tenant:
         <div className="col-span-6">
           <h1 className="text-lg font-bold leading-tight">{tenant.company_name || tenant.razon_social || tenant.name || 'Mi Comercio'}</h1>
           {tenant.razon_social && tenant.company_name && (
-            <p className="text-[11px] text-gray-600">{tenant.razon_social}</p>
+            <p className="text-xs text-gray-600">{tenant.razon_social}</p>
           )}
           <p className="mt-1">{tenant.business_address || ''}</p>
           {(tenant.business_city || tenant.business_province) && (
@@ -147,7 +147,7 @@ function A4Document({ invoice, tenant }: { invoice: InvoiceDocumentData; tenant:
             N° {String(invoice.punto_venta).padStart(4, '0')}-{String(invoice.invoice_number).padStart(8, '0')}
           </p>
           <p className="mt-1">Fecha: {formatInvoiceDate(invoice.created_at)}</p>
-          <p className="mt-1 text-[11px]">CUIT: {invoice.cuit_emisor}</p>
+          <p className="mt-1 text-xs">CUIT: {invoice.cuit_emisor}</p>
         </div>
       </div>
 
@@ -224,7 +224,7 @@ function A4Document({ invoice, tenant }: { invoice: InvoiceDocumentData; tenant:
         <div className="flex items-center gap-3">
           <InvoiceQr invoice={invoice} className="w-24 h-24" />
           <div className="space-y-1">
-            <p className="text-[11px] font-bold">
+            <p className="text-xs font-bold">
               {invoice.is_sandbox ? 'Comprobante de Prueba (Modo Sandbox)' : 'Comprobante Autorizado por ARCA'}
             </p>
             <p><strong>CAE N°:</strong> <span className="font-mono">{invoice.cae || '—'}</span></p>
@@ -247,7 +247,7 @@ function TicketDocument({ invoice, tenant }: { invoice: InvoiceDocumentData; ten
   const showIva = letter !== 'C';
 
   return (
-    <div className="invoice-doc bg-white text-gray-900 font-mono text-[11px] leading-relaxed px-2 py-1">
+    <div className="invoice-doc bg-white text-gray-900 font-mono text-xs leading-relaxed px-2 py-1">
       {invoice.is_sandbox && (
         <p className="text-center font-bold text-red-600 border-y-2 border-dashed border-red-500 py-1 my-1">
           *** DOCUMENTO DE PRUEBA ***

@@ -194,7 +194,7 @@ export default function OnboardingChecklist({ hasCommercialData, hasImported, ha
           <h3 className="text-[13px] font-bold text-gray-900 dark:text-white">
             Primeros pasos
           </h3>
-          <span className="text-[11px] text-gray-500 dark:text-gray-400">
+          <span className="text-xs text-gray-500 dark:text-gray-400">
             {completedCount}/{steps.length}
           </span>
         </div>
@@ -262,21 +262,21 @@ export default function OnboardingChecklist({ hasCommercialData, hasImported, ha
               <p className="mt-1.5 text-xs font-bold text-gray-900 dark:text-white">
                 ¿Ocultar los Primeros pasos?
               </p>
-              <p className="mt-1 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+              <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                 Vas a dejar de ver la guía de configuración de tu negocio. Si no confirmás, seguirá apareciendo.
               </p>
             </div>
             <div className="flex items-center gap-1.5 px-3.5 pb-3.5">
               <button
                 onClick={handleAccept}
-                className="flex flex-1 items-center justify-center gap-1 rounded-md bg-amber-500 px-2 py-1.5 text-[11px] font-bold text-black transition-colors hover:bg-amber-400"
+                className="flex flex-1 items-center justify-center gap-1 rounded-md bg-amber-500 px-2 py-1.5 text-xs font-bold text-black transition-colors hover:bg-amber-400"
               >
                 Sí, ocultar
                 <ArrowRight className="h-3 w-3" />
               </button>
               <button
                 onClick={() => setConfirmOpen(false)}
-                className="rounded-md border border-gray-200 px-2 py-1.5 text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700"
+                className="rounded-md border border-gray-200 px-2 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700"
               >
                 Cancelar
               </button>

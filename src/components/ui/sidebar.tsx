@@ -221,7 +221,7 @@ function LockedNavItem({ item, compact = false, onNavClick }: { item: NavItem; c
               </p>
               <button
                 onClick={() => router.push('/billing')}
-                className="mt-2.5 flex w-full items-center justify-center gap-1 rounded-md bg-amber-500 px-2 py-1.5 text-[11px] font-bold text-black transition-colors hover:bg-amber-400"
+                className="mt-2.5 flex w-full items-center justify-center gap-1 rounded-md bg-amber-500 px-2 py-1.5 text-xs font-bold text-black transition-colors hover:bg-amber-400"
               >
                 Actualizar plan
                 <ArrowRight className="h-3.5 w-3.5" />
