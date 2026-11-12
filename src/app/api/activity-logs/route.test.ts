@@ -118,4 +118,29 @@ describe('GET /api/activity-logs', () => {
     );
     expect(entityCall).toBeDefined();
   });
+
+  it('filtra por búsqueda libre saneando caracteres de PostgREST', async () => {
+    supabaseMock.__queue('tenant_users', {
+      data: [{ role: 'owner' }],
+    });
+    supabaseMock.__queue('activity_logs', {
+      data: [{ id: 'log-1', action: 'create', entity_type: 'product' }],
+      count: 1,
+    });
+
+    const req = new Request(
+      'http://localhost/api/activity-logs?q=' + encodeURIComponent('TV (100)"%')
+    );
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+
+    const orCall = supabaseMock.__calls.find(
+      (c) => c.table === 'activity_logs' && c.method === 'or'
+    );
+    expect(orCall).toBeDefined();
+    const filter = String(orCall?.args[0] ?? '');
+    expect(filter).toContain('user_name.ilike.%TV 100%');
+    expect(filter).not.toContain('(');
+    expect(filter).not.toContain('"');
+  });
 });

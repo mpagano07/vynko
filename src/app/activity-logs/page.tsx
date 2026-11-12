@@ -13,6 +13,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Thead, Th } from '@/components/ui/table-header';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { PageHeader } from '@/components/ui/page-header';
+import { SearchInput } from '@/components/ui/search-input';
 import toast from 'react-hot-toast';
 import {
   Loader2,
@@ -376,6 +377,8 @@ export default function ActivityLogsPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [entityFilter, setEntityFilter] = useState('');
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(0);
   const [activeTab, setActiveTab] = useState<Tab>('activity');
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
@@ -410,6 +413,7 @@ export default function ActivityLogsPage() {
       while (hasMore) {
         const params = new URLSearchParams({ limit: String(batchSize), offset: String(offset) });
         if (entityFilter) params.set('entity_type', entityFilter);
+        if (debouncedSearch) params.set('q', debouncedSearch);
         const res = await authFetch(`/api/activity-logs?${params}`);
         if (!res.ok) break;
         const json = await res.json();
@@ -498,6 +502,7 @@ export default function ActivityLogsPage() {
   const fetchLogs = useCallback(async () => {
     const params = new URLSearchParams({ limit: String(limit), offset: String(page * limit) });
     if (entityFilter) params.set('entity_type', entityFilter);
+    if (debouncedSearch) params.set('q', debouncedSearch);
 
     const res = await authFetch(`/api/activity-logs?${params}`);
     if (!res.ok) {
@@ -507,7 +512,17 @@ export default function ActivityLogsPage() {
     const json = await res.json();
     setLogs(json.data || []);
     setTotal(json.total || 0);
-  }, [entityFilter, page]);
+  }, [entityFilter, page, debouncedSearch]);
+
+  // La búsqueda libre pega contra el servidor: se espera 300 ms para no
+  // disparar un request por tecla.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search.trim());
+      setPage(0);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -591,28 +606,38 @@ export default function ActivityLogsPage() {
       {activeTab === 'activity' ? (
         <>
           <Card className="p-4 border border-gray-100 dark:border-gray-800">
-            <div className="flex items-center gap-3">
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                Filtrar por:
-              </label>
-              <Select
-                value={entityFilter}
-                onChange={e => {
-                  setEntityFilter(e.target.value);
-                  setPage(0);
-                }}
-                className="w-36"
-              >
-                <option value="">Todos</option>
-                {Object.entries(ENTITY_LABELS).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </Select>
-              <span className="text-xs text-gray-400 ml-auto">
-                {total} registro{total !== 1 ? 's' : ''}
-              </span>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="min-w-0 flex-1">
+                <SearchInput
+                  placeholder="Buscar por usuario, producto o folio..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  aria-label="Buscar en el historial"
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  Filtrar por:
+                </label>
+                <Select
+                  value={entityFilter}
+                  onChange={e => {
+                    setEntityFilter(e.target.value);
+                    setPage(0);
+                  }}
+                  className="w-36"
+                >
+                  <option value="">Todos</option>
+                  {Object.entries(ENTITY_LABELS).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </Select>
+                <span className="ml-auto whitespace-nowrap text-xs text-gray-400">
+                  {total} registro{total !== 1 ? 's' : ''}
+                </span>
+              </div>
             </div>
           </Card>
 

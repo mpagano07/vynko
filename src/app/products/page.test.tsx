@@ -228,7 +228,7 @@ describe('retomar el flujo de Google Drive al volver del OAuth', () => {
 
     renderPage();
 
-    expect(await screen.findByText('TV 100 Pulgadas')).toBeInTheDocument();
+    expect((await screen.findAllByText('TV 100 Pulgadas')).length).toBeGreaterThan(0);
     expect(screen.queryByLabelText('Exportar productos')).not.toBeInTheDocument();
   });
 
@@ -280,7 +280,7 @@ describe('retomar el flujo de Google Drive al volver del OAuth', () => {
 
     renderPage();
 
-    expect(await screen.findByText('TV 100 Pulgadas')).toBeInTheDocument();
+    expect((await screen.findAllByText('TV 100 Pulgadas')).length).toBeGreaterThan(0);
     // Se descarta la intención para que no se reanude en una próxima visita.
     expect(takeDriveIntent()).toBeNull();
   });

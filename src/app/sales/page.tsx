@@ -768,7 +768,7 @@ export default function SalesPage() {
   }
 
   return (
-    <div className="space-y-6 relative">
+    <div className="space-y-6 relative pb-24 lg:pb-0">
       {flyAnim && (
         <div
           className="fixed z-[9999] pointer-events-none"
@@ -1455,6 +1455,43 @@ export default function SalesPage() {
           </div>
         )}
       </Card>
+
+      {/* Mobile: barra de cobro fija. En desktop el resumen del carrito ya
+          queda visible en la columna derecha. */}
+      {cart.length > 0 && (
+        <div
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 px-4 pt-3 backdrop-blur-sm dark:border-gray-700 dark:bg-gray-900/95 lg:hidden"
+          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+        >
+          <div className="mx-auto flex max-w-3xl items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {cart.length} {cart.length === 1 ? 'producto' : 'productos'}
+              </p>
+              <p className="truncate text-lg font-bold tabular-nums text-gray-900 dark:text-gray-100">
+                {formatARS(total)}
+              </p>
+            </div>
+            <Button
+              onClick={openCheckout}
+              disabled={isSubmitting}
+              className="h-11 shrink-0 gap-2 px-5 font-semibold active:scale-[0.99] transition-all"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Procesando...
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4" />
+                  Cobrar
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {checkoutOpen && (
         <CheckoutModal
