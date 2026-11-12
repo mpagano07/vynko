@@ -23,6 +23,8 @@ import {
   ShieldCheck,
   Upload,
   Sparkles,
+  ArrowLeft,
+  ArrowRight,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { ArcaConfig, ArcaEnvironment, ArcaConcept } from '@/lib/types/arca';
@@ -34,12 +36,22 @@ function formatCuit(value: string): string {
   return `${digits.slice(0, 2)}-${digits.slice(2, 10)}-${digits.slice(10)}`;
 }
 
+const STEPS = [
+  { title: 'Datos fiscales', description: 'CUIT, punto de venta y entorno' },
+  { title: 'Certificados', description: 'Certificado y clave privada' },
+  { title: 'Revisar y probar', description: 'Guardá y verificá la conexión' },
+] as const;
+
+type Step = 0 | 1 | 2;
+
 export function ArcaConfigCard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [savingSandbox, setSavingSandbox] = useState(false);
+  const [step, setStep] = useState<Step>(0);
+  const [dataError, setDataError] = useState<string | null>(null);
 
   const [config, setConfig] = useState<ArcaConfig | null>(null);
 
@@ -111,8 +123,39 @@ export function ArcaConfigCard() {
     reader.readAsText(file);
   };
 
+  const cuitDigits = form.cuit.replace(/\D/g, '');
+  const hasCert = Boolean(config?.has_cert || form.cert_pem);
+  const hasKey = Boolean(config?.has_key || form.key_pem);
+  const isSandbox = Boolean(config?.is_sandbox);
+  const credentialsReady = isSandbox || (hasCert && hasKey);
+
+  const goToCredentials = () => {
+    if (cuitDigits.length !== 11) {
+      setDataError('Ingresá los 11 dígitos del CUIT emisor.');
+      return;
+    }
+    if (!form.punto_venta || form.punto_venta < 1) {
+      setDataError('El punto de venta debe ser un número mayor a 0.');
+      return;
+    }
+    setDataError(null);
+    setStep(1);
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Enter en un campo de los pasos previos no puede guardar a ciegas: primero
+    // tiene que pasar por la revisión, igual que con los botones.
+    if (step === 0) {
+      goToCredentials();
+      return;
+    }
+    if (step === 1) {
+      setStep(2);
+      return;
+    }
+
     setSaving(true);
     try {
       const res = await authFetch('/api/arca/config', {
@@ -133,6 +176,11 @@ export function ArcaConfigCard() {
 
       toast.success('Configuración de ARCA guardada exitosamente');
       await fetchConfig();
+      // Los PEM ya viajaron y quedaron cifrados en el servidor; no hace falta
+      // volver a mandarlos en el próximo guardado.
+      setForm((prev) => ({ ...prev, cert_pem: '', key_pem: '' }));
+      setCertFileName('');
+      setKeyFileName('');
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al guardar');
     } finally {
@@ -182,6 +230,7 @@ export function ArcaConfigCard() {
 
       toast.success('¡Modo Sandbox activado! Ya podés emitir facturas de prueba.');
       await fetchConfig();
+      setStep(2);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al activar Sandbox');
     } finally {
@@ -210,6 +259,7 @@ export function ArcaConfigCard() {
 
       toast.success('Modo Sandbox desactivado. Podés cargar tus credenciales reales.');
       await fetchConfig();
+      setStep(1);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al desactivar Sandbox');
     } finally {
@@ -327,173 +377,305 @@ export function ArcaConfigCard() {
         </div>
       )}
 
-      {/* Formulario de Configuración */}
-      <form onSubmit={handleSave} className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div>
-            <FormLabel>CUIT Emisor</FormLabel>
-            <Input
-              type="text"
-              required
-              placeholder="20-12345678-9"
-              value={form.cuit}
-              onChange={(e) => setForm({ ...form, cuit: formatCuit(e.target.value) })}
-            />
-          </div>
+      {/* Progreso del asistente */}
+      <ol className="grid gap-2 sm:grid-cols-3" aria-label="Pasos de configuración de ARCA">
+        {STEPS.map((item, index) => {
+          const isCurrent = index === step;
+          const isDone = index < step;
+          return (
+            <li
+              key={item.title}
+              aria-current={isCurrent ? 'step' : undefined}
+              className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
+                isCurrent
+                  ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30'
+                  : isDone
+                    ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/20'
+                    : 'border-gray-200 dark:border-gray-800'
+              }`}
+            >
+              <span
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                  isDone
+                    ? 'bg-emerald-600 text-white'
+                    : isCurrent
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                }`}
+              >
+                {isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : index + 1}
+              </span>
+              <div className="min-w-0">
+                <p className={`text-xs font-semibold ${isCurrent ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-700 dark:text-gray-300'}`}>
+                  {item.title}
+                </p>
+                <p className="truncate text-xs text-gray-500 dark:text-gray-400">{item.description}</p>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
 
-          <div>
-            <FormLabel>Punto de Venta Web Services</FormLabel>
-            <Input
-              type="number"
-              min={1}
-              required
-              placeholder="1"
-              value={form.punto_venta}
-              onChange={(e) => setForm({ ...form, punto_venta: parseInt(e.target.value, 10) || 1 })}
-            />
-            <p className="text-xs text-gray-400 mt-1">
-              Debe ser tipo &ldquo;Factura Electrónica - Web Services&rdquo; en ARCA
+      <form onSubmit={handleSave} className="space-y-4">
+        {step === 0 && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <FormLabel>CUIT Emisor</FormLabel>
+                <Input
+                  type="text"
+                  required
+                  placeholder="20-12345678-9"
+                  value={form.cuit}
+                  onChange={(e) => setForm({ ...form, cuit: formatCuit(e.target.value) })}
+                />
+              </div>
+
+              <div>
+                <FormLabel>Punto de Venta Web Services</FormLabel>
+                <Input
+                  type="number"
+                  min={1}
+                  required
+                  placeholder="1"
+                  value={form.punto_venta}
+                  onChange={(e) => setForm({ ...form, punto_venta: parseInt(e.target.value, 10) || 1 })}
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Debe ser tipo &ldquo;Factura Electrónica - Web Services&rdquo; en ARCA
+                </p>
+              </div>
+
+              <div>
+                <FormLabel>Entorno de Operación</FormLabel>
+                <Select
+                  value={form.environment}
+                  onChange={(e) => setForm({ ...form, environment: e.target.value as ArcaEnvironment })}
+                >
+                  <option value="homologacion">Homologación (Pruebas sin valor fiscal)</option>
+                  <option value="produccion">Producción (Comprobantes oficiales reales)</option>
+                </Select>
+              </div>
+
+              <div>
+                <FormLabel>Concepto Predeterminado</FormLabel>
+                <Select
+                  value={String(form.concept)}
+                  onChange={(e) => setForm({ ...form, concept: Number(e.target.value) as ArcaConcept })}
+                >
+                  <option value="1">1 - Productos / Bienes</option>
+                  <option value="2">2 - Servicios</option>
+                  <option value="3">3 - Productos y Servicios</option>
+                </Select>
+              </div>
+            </div>
+
+            {form.environment === 'produccion' && (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
+                En Producción los comprobantes que emitas tienen validez fiscal real. Probá primero en Homologación.
+              </p>
+            )}
+
+            {dataError && (
+              <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                {dataError}
+              </p>
+            )}
+          </div>
+        )}
+
+        {step === 1 && (
+          <div className="space-y-4">
+            <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-gray-50/50 dark:bg-gray-900/30 space-y-4">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                  Certificados Digitales de ARCA
+                </h3>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Tus claves privadas se almacenan en la base de datos cifradas mediante AES-256-GCM y nunca se exponen al navegador.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Certificado X.509 (.crt) */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <FormLabel>Certificado Digital (.crt / .pem)</FormLabel>
+                    {hasCert && (
+                      <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" /> Certificado activo
+                      </span>
+                    )}
+                  </div>
+                  <label className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-indigo-400 rounded-lg p-4 cursor-pointer bg-white dark:bg-gray-800/50 transition-colors">
+                    <Upload className="h-5 w-5 text-gray-400 mb-1" />
+                    <span className="text-xs text-gray-600 dark:text-gray-300 text-center font-medium">
+                      {certFileName || (config?.has_cert ? 'Reemplazar certificado (.crt)' : 'Seleccionar archivo .crt')}
+                    </span>
+                    <span className="text-xs text-gray-400 mt-0.5">Emitido por ARCA para tu CUIT</span>
+                    <input
+                      type="file"
+                      accept=".crt,.pem,.txt"
+                      className="hidden"
+                      onChange={(e) => handleFileUpload(e, 'cert')}
+                    />
+                  </label>
+                </div>
+
+                {/* Clave Privada (.key) */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <FormLabel>Clave Privada (.key)</FormLabel>
+                    {hasKey && (
+                      <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" /> Clave cifrada guardada
+                      </span>
+                    )}
+                  </div>
+                  <label className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-indigo-400 rounded-lg p-4 cursor-pointer bg-white dark:bg-gray-800/50 transition-colors">
+                    <Upload className="h-5 w-5 text-gray-400 mb-1" />
+                    <span className="text-xs text-gray-600 dark:text-gray-300 text-center font-medium">
+                      {keyFileName || (config?.has_key ? 'Reemplazar clave privada (.key)' : 'Seleccionar archivo .key')}
+                    </span>
+                    <span className="text-xs text-gray-400 mt-0.5">Clave RSA generada con tu CSR</span>
+                    <input
+                      type="file"
+                      accept=".key,.pem,.txt"
+                      className="hidden"
+                      onChange={(e) => handleFileUpload(e, 'key')}
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {!credentialsReady && !isSandbox && (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
+                Podés guardar los datos ahora y subir los certificados más tarde, pero la prueba de conexión va a quedar deshabilitada hasta que cargues ambos archivos.
+              </p>
+            )}
+
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-gray-200 dark:border-gray-800">
+              <dl className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
+                <div className="flex flex-wrap justify-between gap-2 px-4 py-2.5">
+                  <dt className="text-gray-500 dark:text-gray-400">CUIT emisor</dt>
+                  <dd className="font-medium text-gray-900 dark:text-gray-100">{form.cuit || 'Sin completar'}</dd>
+                </div>
+                <div className="flex flex-wrap justify-between gap-2 px-4 py-2.5">
+                  <dt className="text-gray-500 dark:text-gray-400">Punto de venta</dt>
+                  <dd className="font-medium text-gray-900 dark:text-gray-100">{form.punto_venta}</dd>
+                </div>
+                <div className="flex flex-wrap justify-between gap-2 px-4 py-2.5">
+                  <dt className="text-gray-500 dark:text-gray-400">Entorno</dt>
+                  <dd className="font-medium text-gray-900 dark:text-gray-100">
+                    {form.environment === 'produccion' ? 'Producción' : 'Homologación'}
+                  </dd>
+                </div>
+                <div className="flex flex-wrap justify-between gap-2 px-4 py-2.5">
+                  <dt className="text-gray-500 dark:text-gray-400">Credenciales</dt>
+                  <dd className={`font-medium ${credentialsReady ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                    {isSandbox
+                      ? 'Sandbox (CAE simulado)'
+                      : credentialsReady
+                        ? 'Certificado y clave cargados'
+                        : 'Faltan certificado o clave'}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Guardá la configuración y después probá la conexión para habilitar la emisión de comprobantes.
             </p>
           </div>
-
-          <div>
-            <FormLabel>Entorno de Operación</FormLabel>
-            <Select
-              value={form.environment}
-              onChange={(e) => setForm({ ...form, environment: e.target.value as ArcaEnvironment })}
-            >
-              <option value="homologacion">Homologación (Pruebas sin valor fiscal)</option>
-              <option value="produccion">Producción (Comprobantes oficiales reales)</option>
-            </Select>
-          </div>
-
-          <div>
-            <FormLabel>Concepto Predeterminado</FormLabel>
-            <Select
-              value={String(form.concept)}
-              onChange={(e) => setForm({ ...form, concept: Number(e.target.value) as ArcaConcept })}
-            >
-              <option value="1">1 - Productos / Bienes</option>
-              <option value="2">2 - Servicios</option>
-              <option value="3">3 - Productos y Servicios</option>
-            </Select>
-          </div>
-        </div>
-
-        {/* Carga de Credenciales */}
-        <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-gray-50/50 dark:bg-gray-900/30 space-y-4">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-            <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-              Certificados Digitales de ARCA
-            </h3>
-          </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Tus claves privadas se almacenan en la base de datos cifradas mediante AES-256-GCM y nunca se exponen al navegador.
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Certificado X.509 (.crt) */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <FormLabel>Certificado Digital (.crt / .pem)</FormLabel>
-                {config?.has_cert && (
-                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-                    <CheckCircle2 className="h-3 w-3" /> Certificado activo
-                  </span>
-                )}
-              </div>
-              <label className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-indigo-400 rounded-lg p-4 cursor-pointer bg-white dark:bg-gray-800/50 transition-colors">
-                <Upload className="h-5 w-5 text-gray-400 mb-1" />
-                <span className="text-xs text-gray-600 dark:text-gray-300 text-center font-medium">
-                  {certFileName || (config?.has_cert ? 'Reemplazar certificado (.crt)' : 'Seleccionar archivo .crt')}
-                </span>
-                <span className="text-xs text-gray-400 mt-0.5">Emitido por ARCA para tu CUIT</span>
-                <input
-                  type="file"
-                  accept=".crt,.pem,.txt"
-                  className="hidden"
-                  onChange={(e) => handleFileUpload(e, 'cert')}
-                />
-              </label>
-            </div>
-
-            {/* Clave Privada (.key) */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <FormLabel>Clave Privada (.key)</FormLabel>
-                {config?.has_key && (
-                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-                    <CheckCircle2 className="h-3 w-3" /> Clave cifrada guardada
-                  </span>
-                )}
-              </div>
-              <label className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-indigo-400 rounded-lg p-4 cursor-pointer bg-white dark:bg-gray-800/50 transition-colors">
-                <Upload className="h-5 w-5 text-gray-400 mb-1" />
-                <span className="text-xs text-gray-600 dark:text-gray-300 text-center font-medium">
-                  {keyFileName || (config?.has_key ? 'Reemplazar clave privada (.key)' : 'Seleccionar archivo .key')}
-                </span>
-                <span className="text-xs text-gray-400 mt-0.5">Clave RSA generada con tu CSR</span>
-                <input
-                  type="file"
-                  accept=".key,.pem,.txt"
-                  className="hidden"
-                  onChange={(e) => handleFileUpload(e, 'key')}
-                />
-              </label>
-            </div>
-          </div>
-        </div>
+        )}
 
         {/* Acciones */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setShowGuide(!showGuide)}
-            className="flex w-full items-center justify-center gap-1.5 text-xs sm:w-auto"
-          >
-            <HelpCircle className="h-4 w-4 flex-shrink-0 text-indigo-500" />
-            {showGuide ? 'Ocultar guía de ARCA' : (
-              <ShortLabel short="Guía de ARCA">¿Cómo obtener estos certificados en ARCA?</ShortLabel>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4 dark:border-gray-800">
+          <div className="flex flex-wrap items-center gap-2">
+            {step > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setStep((prev) => (prev - 1) as Step)}
+                className="flex items-center gap-1.5 text-xs"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Volver
+              </Button>
             )}
-            {showGuide ? <ChevronUp className="h-3.5 w-3.5 flex-shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 flex-shrink-0" />}
-          </Button>
-
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             <Button
               type="button"
               variant="outline"
-              disabled={testing || saving || (!config?.has_cert && !form.cert_pem)}
-              onClick={handleTestConnection}
-              className="flex w-full items-center justify-center gap-1.5 whitespace-nowrap sm:w-auto"
+              onClick={() => setShowGuide(!showGuide)}
+              className="flex items-center justify-center gap-1.5 text-xs"
             >
-              {testing ? (
-                <>
-                  <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin text-indigo-500" />
-                  Probando conexión...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 flex-shrink-0 text-emerald-600 dark:text-emerald-400" />
-                  <ShortLabel short="Probar">Probar Conexión con ARCA</ShortLabel>
-                </>
+              <HelpCircle className="h-4 w-4 flex-shrink-0 text-indigo-500" />
+              {showGuide ? 'Ocultar guía de ARCA' : (
+                <ShortLabel short="Guía de ARCA">¿Cómo obtener estos certificados en ARCA?</ShortLabel>
               )}
+              {showGuide ? <ChevronUp className="h-3.5 w-3.5 flex-shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 flex-shrink-0" />}
             </Button>
+          </div>
 
-            <Button type="submit" disabled={saving} className="w-full whitespace-nowrap sm:w-auto">
-              {saving ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                  Guardando...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4 mr-1" />
-                  <ShortLabel short="Guardar">Guardar Configuración</ShortLabel>
-                </>
-              )}
-            </Button>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            {step === 0 && (
+              <Button type="button" onClick={goToCredentials} className="w-full whitespace-nowrap sm:w-auto">
+                Siguiente
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </Button>
+            )}
+
+            {step === 1 && (
+              <Button type="button" onClick={() => setStep(2)} className="w-full whitespace-nowrap sm:w-auto">
+                Siguiente
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </Button>
+            )}
+
+            {step === 2 && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={testing || saving || !credentialsReady}
+                  onClick={handleTestConnection}
+                  className="flex w-full items-center justify-center gap-1.5 whitespace-nowrap sm:w-auto"
+                >
+                  {testing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin text-indigo-500" />
+                      Probando conexión...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4 flex-shrink-0 text-emerald-600 dark:text-emerald-400" />
+                      <ShortLabel short="Probar">Probar Conexión con ARCA</ShortLabel>
+                    </>
+                  )}
+                </Button>
+
+                <Button type="submit" disabled={saving} className="w-full whitespace-nowrap sm:w-auto">
+                  {saving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-1" />
+                      <ShortLabel short="Guardar">Guardar Configuración</ShortLabel>
+                    </>
+                  )}
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </form>
