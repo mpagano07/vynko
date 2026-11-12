@@ -1093,11 +1093,11 @@ function ProductsPageContent() {
                             </div>
                           )}
                           <div className="min-w-0">
-                            <div className="font-semibold text-gray-900 dark:text-gray-100 truncate">{product.name}</div>
+                            <div className="font-semibold text-gray-900 dark:text-gray-100 break-words">{product.name}</div>
                             {category && (
                               <div className="sm:hidden mt-0.5">
                                 <span
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium"
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium"
                                   style={{
                                     backgroundColor: `${category.color || '#3b82f6'}15`,
                                     color: category.color || '#3b82f6',
@@ -1131,7 +1131,7 @@ function ProductsPageContent() {
                       </td>
                       <td className="hidden lg:table-cell py-4 px-3">
                         {product.deposito || product.pasillo || product.estanteria ? (
-                          <div className="text-xs text-gray-700 dark:text-gray-300 leading-tight whitespace-nowrap">
+                          <div className="text-xs text-gray-700 dark:text-gray-300 leading-tight">
                             <p>{product.deposito ? <>Depósito: {product.deposito}</> : <span className="text-gray-300 dark:text-gray-600">Depósito: —</span>}</p>
                             <p className="mt-0.5">{product.pasillo ? <>Pasillo: {product.pasillo}</> : <span className="text-gray-300 dark:text-gray-600">Pasillo: —</span>}</p>
                             <p className="mt-0.5">{product.estanteria ? <>Estantería: {product.estanteria}</> : <span className="text-gray-300 dark:text-gray-600">Estantería: —</span>}</p>
@@ -1150,7 +1150,7 @@ function ProductsPageContent() {
                           </div>
                         )}
                       </td>
-                      <td className="py-4 px-6">
+                      <td className="py-4 px-3 sm:px-6">
                         <div className="text-xs text-gray-500">
                           Costo: <span className="font-medium text-gray-700 dark:text-gray-300">{formatARS(product.cost || 0)}</span>
                         </div>
@@ -1165,7 +1165,7 @@ function ProductsPageContent() {
                           </div>
                         )}
                       </td>
-                      <td className="py-4 px-6 text-center">
+                      <td className="py-4 px-3 sm:px-6 text-center">
                         <div className="flex items-center justify-center gap-2">
                           <span
                             className={`inline-flex items-center justify-center w-10 h-10 rounded-full font-bold text-xs ${isCritical
@@ -1182,7 +1182,7 @@ function ProductsPageContent() {
                           </div>
                         </div>
                       </td>
-                      <td className="py-4 px-6 text-right">
+                      <td className="py-4 px-3 sm:px-6 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <IconAction
                             icon={Edit}

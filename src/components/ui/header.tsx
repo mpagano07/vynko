@@ -8,7 +8,6 @@ import { Menu } from 'lucide-react';
 import { useSidebar } from '@/lib/contexts/sidebar-context';
 import { TenantSwitcher } from '@/components/ui/tenant-switcher';
 import { IconAction } from '@/components/ui/icon-action';
-import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { hasCapability } from '@/lib/roles';
 
 export function Header() {
@@ -45,8 +44,7 @@ export function Header() {
         )}
       </div>
 
-      <div className="flex items-center space-x-2 sm:space-x-3">
-        <ThemeToggle />
+      <div className="flex items-center space-x-2">
         {(profile || user) ? (
           <div className="relative">
             <button
