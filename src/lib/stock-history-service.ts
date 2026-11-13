@@ -23,7 +23,7 @@ export async function getStockHistory(
     .from('stock_history')
     .select(`
       *,
-      product:products(name, sku)
+      product:products(name, sku, barcode)
     `, { count: 'exact' })
     .eq('tenant_id', auth.tenantId)
     .gte('created_at', since.toISOString())
@@ -52,6 +52,7 @@ export async function getStockHistory(
     productId: r.product_id,
     productName: r.product?.name || 'Producto',
     productSku: r.product?.sku || null,
+    productBarcode: r.product?.barcode || null,
     quantity: r.quantity,
     type: r.type,
     reason: r.reason,

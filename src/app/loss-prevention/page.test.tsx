@@ -4,13 +4,14 @@ import LossPreventionPage from './page';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useProducts } from '@/lib/hooks/useProducts';
 
-const { replaceMock, authFetchMock } = vi.hoisted(() => ({
+const { replaceMock, pushMock, authFetchMock } = vi.hoisted(() => ({
   replaceMock: vi.fn(),
+  pushMock: vi.fn(),
   authFetchMock: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: replaceMock, push: vi.fn() }),
+  useRouter: () => ({ replace: replaceMock, push: pushMock }),
 }));
 
 vi.mock('@/lib/hooks/useAuth', () => ({ useAuth: vi.fn() }));
@@ -43,6 +44,8 @@ const adjustment = (index: number) => ({
   quantity: -1,
   productId: 'p1',
   productName: `Ajuste ${String(index).padStart(2, '0')}`,
+  productSku: undefined as string | undefined,
+  productBarcode: undefined as string | undefined,
   reason: 'damaged',
   createdAt: '2026-11-01T12:00:00.000Z',
   createdBy: 'user-1',
@@ -52,7 +55,7 @@ function renderPage(count: number) {
   renderItems(Array.from({ length: count }, (_, i) => adjustment(i + 1)));
 }
 
-function renderItems(items: ReturnType<typeof adjustment>[]) {
+function renderItems(items: ReturnType<typeof adjustment>[], cost = 0) {
   authMock.mockReturnValue({
     tenant: { id: 't1', name: 'Central', subscription_plan: 'business' },
     tenants: [{ id: 't1', name: 'Central' }],
@@ -60,7 +63,7 @@ function renderItems(items: ReturnType<typeof adjustment>[]) {
   } as unknown as ReturnType<typeof useAuth>);
 
   productsMock.mockReturnValue({
-    products: [{ id: 'p1', name: 'Ajuste', cost: 0 }],
+    products: [{ id: 'p1', name: 'Ajuste', cost }],
     isLoading: false,
   } as unknown as ReturnType<typeof useProducts>);
 
@@ -135,8 +138,58 @@ describe('historial de antipérdidas: paginación', () => {
   });
 });
 
-describe('historial de antipérdidas: filtro por motivo', () => {
+describe('top 3 productos con más mermas', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('muestra SKU/GTIN y revisa el producto por su código de barras', async () => {
+    renderItems([
+      { ...adjustment(1), quantity: -5, productId: 'p1', productName: 'Mouse', productSku: 'M-1', productBarcode: '7790001' },
+      { ...adjustment(2), quantity: -2, productId: 'p2', productName: 'Mouse', productSku: 'M-2', productBarcode: '7790002' },
+      { ...adjustment(3), quantity: -1, productId: 'p3', productName: 'Otro' },
+    ]);
+    await screen.findByRole('table');
+
+    const topProducts = screen.getAllByTestId('top-loss-product');
+    expect(within(topProducts[0]).getByText('SKU: M-1 · GTIN: 7790001')).toBeInTheDocument();
+    expect(within(topProducts[1]).getByText('SKU: M-2 · GTIN: 7790002')).toBeInTheDocument();
+
+    fireEvent.click(within(topProducts[0]).getByRole('button', { name: /Revisar/ }));
+    expect(pushMock).toHaveBeenCalledWith('/products?search=7790001');
+  });
+
+  it('cae al SKU cuando el producto no tiene código de barras', async () => {
+    renderItems([
+      { ...adjustment(1), quantity: -4, productId: 'p1', productName: 'Mouse', productSku: 'M-9' },
+    ]);
+    await screen.findByRole('table');
+
+    fireEvent.click(screen.getByRole('button', { name: /Revisar Mouse \(SKU: M-9/ }));
+    expect(pushMock).toHaveBeenCalledWith('/products?search=M-9');
+  });
+});
+
+describe('donut de pérdidas por motivo', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('muestra el total completo fuera del donut aunque llegue al millón', async () => {
+    renderItems([{ ...adjustment(1), quantity: -2 }], 1_000_000);
+    await screen.findByRole('table');
+
+    const summary = screen.getByText(/Pérdida total/).parentElement;
+    const total = within(summary as HTMLElement).getByText(/2\.000\.000/);
+
+    // El total vive en la columna de la leyenda, sin truncate: a escala de millones
+    // el centro del donut no lo mostraba completo.
+    expect(total).not.toHaveClass('truncate');
+    expect(total).toHaveTextContent('2.000.000');
+  });
+});
+
+describe('historial de antipérdidas: filtro por motivo', () => {  beforeEach(() => {
     vi.clearAllMocks();
   });
 
