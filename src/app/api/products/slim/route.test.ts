@@ -29,7 +29,8 @@ const slimRows = (count: number, offset = 0) =>
     name: `Producto ${offset + i}`,
     sku: `SKU-${offset + i}`,
     barcode: null,
-    product_stock: [{ stock: 2 }, { stock: 3 }],
+    price_cents: 123450,
+    product_stock: [{ stock: 2, min_stock: 4 }, { stock: 3, min_stock: 4 }],
   }));
 
 describe('GET /api/products/slim', () => {
@@ -56,10 +57,27 @@ describe('GET /api/products/slim', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toHaveLength(1037);
-    // Sólo los campos que usa el selector (incluido el stock para limitar
-    // transferencias): nada de descripción, imágenes ni storage.
-    expect(json[0]).toEqual({ id: 'p-0', name: 'Producto 0', sku: 'SKU-0', barcode: null, stock: 5 });
-    expect(json[1036]).toEqual({ id: 'p-1036', name: 'Producto 1036', sku: 'SKU-1036', barcode: null, stock: 5 });
+    // Sólo los campos que usan los selectores (stock para limitar
+    // transferencias; precio y stock mínimo para el POS): nada de descripción,
+    // imágenes ni storage.
+    expect(json[0]).toEqual({
+      id: 'p-0',
+      name: 'Producto 0',
+      sku: 'SKU-0',
+      barcode: null,
+      price: 1234.5,
+      stock: 5,
+      min_stock: 4,
+    });
+    expect(json[1036]).toEqual({
+      id: 'p-1036',
+      name: 'Producto 1036',
+      sku: 'SKU-1036',
+      barcode: null,
+      price: 1234.5,
+      stock: 5,
+      min_stock: 4,
+    });
 
     // Mismo scoping que listProducts: el tenant activo y el stock activo.
     const eqs = callsTo(supabaseMock.__calls, 'products', 'eq').map((call) => call.args);
@@ -75,6 +93,13 @@ describe('GET /api/products/slim', () => {
 
     // Sin firma de imágenes: el slim no arrastra storage.
     expect(supabaseMock.__storageCalls).toHaveLength(0);
+
+    // Columnas explícitas: `select('*')` era el grueso del payload con un
+    // catálogo grande (repite las claves de ~20 columnas por fila).
+    const selectArg = String(callsTo(supabaseMock.__calls, 'products', 'select')[0].args[0]);
+    expect(selectArg).not.toContain('*');
+    expect(selectArg).toContain('price_cents');
+    expect(selectArg).toContain('product_stock!inner(stock, min_stock)');
   });
 
   it('devuelve 500 ante un error de base de datos', async () => {
