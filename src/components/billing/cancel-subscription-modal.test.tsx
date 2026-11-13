@@ -1,9 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  CANCEL_REASONS,
-  CancelSubscriptionModal,
-} from './cancel-subscription-modal';
+import { CANCEL_REASONS } from '@/lib/billing/cancel-reasons';
+import { CancelSubscriptionModal } from './cancel-subscription-modal';
 
 function setup() {
   const onClose = vi.fn();

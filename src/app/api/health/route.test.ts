@@ -22,14 +22,14 @@ describe('GET /api/health', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       status: string;
-      version: string;
+      release: string;
       timestamp: string;
-      uptime: number;
     };
     expect(body.status).toBe('ok');
-    expect(body.version).toBe('dev');
+    expect(body.release).toBe('dev');
     expect(new Date(body.timestamp).getTime()).toBeGreaterThan(0);
-    expect(body.uptime).toBeGreaterThanOrEqual(0);
+    expect(body).not.toHaveProperty('uptime');
+    expect(body).not.toHaveProperty('version');
     expect(supabaseMock.__calls.filter((c) => c.method === 'select')).toHaveLength(0);
   });
 

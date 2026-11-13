@@ -1,16 +1,8 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getReleaseToken } from '@/lib/release-version';
 
 export const dynamic = 'force-dynamic';
-
-function getVersion(): string {
-  return (
-    process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ||
-    process.env.VERCEL_GIT_COMMIT_SHA ||
-    process.env.SOURCE_VERSION ||
-    'dev'
-  );
-}
 
 const noStore = { 'Cache-Control': 'no-store, max-age=0' } as const;
 
@@ -29,9 +21,9 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const base = {
     status: 'ok' as const,
-    version: getVersion(),
+    // Token opaco del deploy, no el SHA: es público y no aporta diagnóstico.
+    release: getReleaseToken(),
     timestamp: new Date().toISOString(),
-    uptime: Math.round(process.uptime()),
   };
 
   if (url.searchParams.get('check') !== 'db') {

@@ -4,16 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { AlertTriangle, LifeBuoy } from 'lucide-react';
-
-export const CANCEL_REASONS = [
-  { id: 'price', label: 'Me resulta caro' },
-  { id: 'learning', label: 'No terminé de entender cómo usarlo' },
-  { id: 'low_sales', label: 'No estoy teniendo ventas' },
-  { id: 'closed', label: 'Cerré el negocio' },
-  { id: 'other', label: 'Otro motivo' },
-] as const;
-
-export type CancelReasonId = (typeof CANCEL_REASONS)[number]['id'];
+import { CANCEL_REASONS, type CancelReasonId } from '@/lib/billing/cancel-reasons';
 
 interface CancelSubscriptionModalProps {
   onClose: () => void;

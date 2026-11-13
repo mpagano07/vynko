@@ -4,6 +4,7 @@ import { isSameOriginRequest } from '@/lib/security/csrf';
 import { authErrorMessage } from '@/lib/auth-errors';
 import { validatePassword, PASSWORD_MAX_LENGTH } from '@/lib/password-policy';
 import { rateLimit, rateLimitPeek, getClientIp } from '@/lib/rate-limit';
+import { STRICT_RATE_LIMIT, rateLimitRejection } from '@/lib/security/rate-limit-response';
 import { logger } from '@/lib/logger';
 
 /**
@@ -84,12 +85,9 @@ export async function POST(request: Request) {
   // Solo los intentos fallidos consumen presupuesto: un owner que cambia su
   // contrasena cinco veces seguidas no se bloquea a si mismo.
   const verifyKey = `auth:password:verify:${user.id}:${getClientIp(request)}`;
-  const verifyLimit = await rateLimitPeek(verifyKey, MAX_VERIFY_ATTEMPTS);
+  const verifyLimit = await rateLimitPeek(verifyKey, MAX_VERIFY_ATTEMPTS, STRICT_RATE_LIMIT);
   if (!verifyLimit.ok) {
-    return NextResponse.json(
-      { error: 'Demasiados intentos. Probá de nuevo más tarde.' },
-      { status: 429, headers: { 'Retry-After': String(verifyLimit.retryAfterSeconds) } }
-    );
+    return rateLimitRejection(verifyLimit);
   }
 
   const { error: verifyError } = await supabase.auth.signInWithPassword({
@@ -100,12 +98,9 @@ export async function POST(request: Request) {
   if (verifyError) {
     // No se distingue "contrasena incorrecta" de "usuario inexistente" a
     // proposito: responder distinto permitiria enumerar cuentas registradas.
-    const limit = await rateLimit(verifyKey, MAX_VERIFY_ATTEMPTS, VERIFY_WINDOW_MS);
+    const limit = await rateLimit(verifyKey, MAX_VERIFY_ATTEMPTS, VERIFY_WINDOW_MS, STRICT_RATE_LIMIT);
     if (!limit.ok) {
-      return NextResponse.json(
-        { error: 'Demasiados intentos. Probá de nuevo más tarde.' },
-        { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } }
-      );
+      return rateLimitRejection(limit);
     }
     return NextResponse.json({ error: 'La contraseña actual es incorrecta' }, { status: 400 });
   }

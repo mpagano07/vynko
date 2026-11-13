@@ -491,7 +491,7 @@ describe('cancelSubscription', () => {
 
     mockCancelPreApproval.mockResolvedValue({});
 
-    const result = await cancelSubscription('user-1');
+    const result = await cancelSubscription('user-1', 'price');
     expect(result.ok).toBe(true);
 
     expect(mockCancelPreApproval).toHaveBeenCalledWith('pa-active');
@@ -503,6 +503,34 @@ describe('cancelSubscription', () => {
     expect(data.subscription_status).toBe('canceled');
     expect(data.subscription_plan).toBe('free');
     expect(data.mercadopago_preapproval_id).toBeNull();
+    expect(data.cancellation_reason).toBe('price');
+    expect(typeof data.cancelled_at).toBe('string');
+  });
+
+  it('guarda null como motivo cuando la persona no elige uno', async () => {
+    supabaseMock.__queue('tenant_users', {
+      data: [{ tenant_id: 'tenant-1', role: 'owner' }],
+      error: null,
+    });
+    supabaseMock.__queue('tenants', {
+      data: {
+        mercadopago_preapproval_id: 'pa-active',
+        subscription_current_period_end: null,
+        subscription_plan: 'business',
+      },
+      error: null,
+    });
+    supabaseMock.__queue('tenants', { data: null, error: null });
+
+    mockCancelPreApproval.mockResolvedValue({});
+
+    await cancelSubscription('user-1');
+
+    const tenantUpdate = supabaseMock.__calls.find(
+      (c) => c.table === 'tenants' && c.method === 'update'
+    );
+    const data = tenantUpdate!.args[0] as Record<string, unknown>;
+    expect(data.cancellation_reason).toBeNull();
   });
 
   it('propagates the cancellation to every branch of the owner', async () => {
@@ -622,7 +650,7 @@ describe('cancelSubscription', () => {
 
     mockCancelPreApproval.mockResolvedValue({});
 
-    await cancelSubscription('user-1');
+    await cancelSubscription('user-1', 'low_sales');
 
     expect(mockTrackEvent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -632,6 +660,7 @@ describe('cancelSubscription', () => {
         metadata: expect.objectContaining({
           plan: 'business',
           source: 'portal',
+          reason: 'low_sales',
         }),
       })
     );

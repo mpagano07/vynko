@@ -10,19 +10,35 @@ on:
     branches:
       - main
 
+  # Corrida semanal de los controles que dependen de secretos (RLS y escaneo de
+  # secretos). En PRs de forks esos secretos no existen, por eso ahi siguen
+  # siendo opt-in; en el repo canonico este job los exige y falla si faltan.
+  schedule:
+    - cron: '0 5 * * 0'
+  workflow_dispatch:
+
+# Minimo privilegio: el CI solo lee el repo. Cualquier action de terceros que
+# intente escribir con GITHUB_TOKEN falla en vez de poder mutar releases o
+# ramas. Los workflows que si necesitan escribir lo declaran a nivel de job.
+permissions:
+  contents: read
+
 jobs:
   quality:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        # v5.1.0 — pinneado por SHA: un tag movible permite que un maintainer
+        # comprometido cambie el codigo que corre con nuestros secretos.
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           # ggshield escanea el rango de commits del push/PR.
           fetch-depth: 0
 
       - name: Setup Node
-        uses: actions/setup-node@v5
+        # v5.0.0
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
           node-version: 24
           cache: npm
@@ -42,7 +58,7 @@ jobs:
       - name: Audit production dependencies
         run: node scripts/audit-prod.mjs
 
-      # Opt-in: requiere un proyecto Supabase de test con fixtures de
+      # Opt-in en PRs: requiere un proyecto Supabase de test con fixtures de
       # E2E_USER_* y el flag RUN_RLS_VERIFY=true en vars del repo.
       - name: Verify RLS isolation
         if: vars.RUN_RLS_VERIFY == 'true'
@@ -56,8 +72,8 @@ jobs:
           E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
           E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
 
-      # Opt-in: requiere el secret GITGUARDIAN_API_KEY. Escanea los commits del
-      # push/PR contra la API de GitGuardian (no guarda contenido).
+      # Opt-in en PRs: requiere el secret GITGUARDIAN_API_KEY. Escanea los
+      # commits del push/PR contra la API de GitGuardian (no guarda contenido).
       #
       # No se puede usar `secrets` directo en un `if:` (GitHub lo rechaza al
       # validar el workflow: "Unrecognized named-value: 'secrets'"), asi que el
@@ -76,7 +92,8 @@ jobs:
 
       - name: Secret scan (ggshield)
         if: steps.ggshield-secret.outputs.configured == 'true'
-        uses: GitGuardian/ggshield-action@v1
+        # v1.56.1
+        uses: GitGuardian/ggshield-action@5cc1ed2be3e8bf625d354c7170731880670f74de
         env:
           GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
           GITHUB_PUSH_BASE_SHA: ${{ github.event.base }}
@@ -93,3 +110,81 @@ jobs:
           NEXT_PUBLIC_TAX_RATE: ${{ vars.NEXT_PUBLIC_TAX_RATE }}
           NEXT_PUBLIC_APP_NAME: ${{ vars.NEXT_PUBLIC_APP_NAME }}
           NEXT_PUBLIC_DEFAULT_LOCALE: ${{ vars.NEXT_PUBLIC_DEFAULT_LOCALE }}
+
+  # Los dos controles que no pueden quedar en "skipped" para siempre. Corre solo
+  # por schedule/manual: en un PR de fork los secretos no se exponen, asi que el
+  # gate real es esta corrida semanal contra el repo canonico. Si falta un
+  # secreto o una var, el paso falla con un mensaje explicito en vez de saltearse
+  # en silencio.
+  security:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Require security secrets
+        run: |
+          missing=0
+          for name in SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY E2E_USER_EMAIL E2E_USER_PASSWORD GITGUARDIAN_API_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Falta el secret $name: el control de seguridad semanal no puede correr."
+              missing=1
+            fi
+          done
+          if [ -z "$NEXT_PUBLIC_SUPABASE_URL" ] || [ -z "$VERIFY_RLS_EXPECT_REF" ]; then
+            echo "::error::Faltan las vars NEXT_PUBLIC_SUPABASE_URL y/o VERIFY_RLS_EXPECT_REF."
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
+            echo "Configuralos en Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+        env:
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
+          E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          VERIFY_RLS_EXPECT_REF: ${{ vars.VERIFY_RLS_EXPECT_REF }}
+
+      # Crea fixtures y las limpia; apuntar SOLO a un proyecto de test.
+      - name: Verify RLS isolation
+        run: npm run verify:rls
+        env:
+          VERIFY_RLS_ENV_FROM: process
+          VERIFY_RLS_EXPECT_REF: ${{ vars.VERIFY_RLS_EXPECT_REF }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
+          E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
+
+      - name: Compute secret scan range
+        id: scan-range
+        run: echo "before=$(git rev-parse HEAD^)" >> "$GITHUB_OUTPUT"
+
+      # En un schedule no hay push/PR asociado, asi que el rango se calcula a
+      # mano: se escanea el ultimo commit mergeado. El historial completo se fue
+      # cubriendo en las corridas de cada push/PR.
+      - name: Secret scan (ggshield)
+        uses: GitGuardian/ggshield-action@5cc1ed2be3e8bf625d354c7170731880670f74de
+        env:
+          GITHUB_PUSH_BEFORE_SHA: ${{ steps.scan-range.outputs.before }}
+          GITHUB_PUSH_BASE_SHA: ${{ steps.scan-range.outputs.before }}
+          GITHUB_PULL_BASE_SHA: ''
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}

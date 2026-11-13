@@ -62,6 +62,31 @@ describe('rateLimit (store distribuido)', () => {
     vi.stubEnv('RATE_LIMIT_STORE', 'postgres');
   });
 
+  it('bloquea con storeUnavailable si el endpoint pidió fail-closed', async () => {
+    // Endpoints de credenciales: sin contador no hay proteccion contra fuerza
+    // bruta, asi que se corta con 503 en vez de dejar pasar en silencio.
+    rpcMock.mockResolvedValue({ data: null, error: { message: 'function does not exist' } });
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await rateLimit('auth:login:ip:1.1.1.1', 5, 60_000, { onStoreError: 'deny' });
+
+    expect(result.ok).toBe(false);
+    expect(result.storeUnavailable).toBe(true);
+    expect(result.retryAfterSeconds).toBeGreaterThan(0);
+    spy.mockRestore();
+  });
+
+  it('también deniega una respuesta con forma inesperada con fail-closed', async () => {
+    rpcMock.mockResolvedValue({ data: { algo: 'distinto' }, error: null });
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await rateLimit('auth:signup:ip:1.1.1.1', 5, 60_000, { onStoreError: 'deny' });
+
+    expect(result.ok).toBe(false);
+    expect(result.storeUnavailable).toBe(true);
+    spy.mockRestore();
+  });
+
   it('delega en rate_limit_hit y devuelve su resultado', async () => {
     mockRpc(true);
     const result = await rateLimit('auth:login:ip:1.1.1.1', 5, 60_000);
@@ -222,6 +247,17 @@ describe('rateLimitPeek (store distribuido)', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     expect((await rateLimitPeek('k', 5)).ok).toBe(true);
     expect(String(spy.mock.calls[0]?.[0])).toContain('037_rate_limit_peek');
+    spy.mockRestore();
+  });
+
+  it('deniega el peek si el endpoint pidió fail-closed', async () => {
+    rpcMock.mockResolvedValue({ data: null, error: { message: 'function does not exist' } });
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await rateLimitPeek('auth:login:account:a@b.c', 5, { onStoreError: 'deny' });
+
+    expect(result.ok).toBe(false);
+    expect(result.storeUnavailable).toBe(true);
     spy.mockRestore();
   });
 });

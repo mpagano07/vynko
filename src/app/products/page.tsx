@@ -9,7 +9,6 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { useExport } from '@/lib/hooks/useExport';
 import { usePagination } from '@/lib/hooks/usePagination';
 import { Button } from '@/components/ui/button';
-import { ShortLabel } from '@/components/ui/short-label';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -47,7 +46,8 @@ import {
   Settings2,
   Scan,
 } from 'lucide-react';
-import { formatARS, groupThousands, parseAmountInput, amountToInput } from '@/lib/utils/currency';
+import { formatARS } from '@/lib/utils/currency';
+import { marginPercent } from '@/lib/product-margin';
 import { PRICE_ROUNDING_OPTIONS, type PriceRounding } from '@/lib/price-rounding';
 import { summarizeImportRows } from '@/lib/import-preview';
 import { getTenantHeaders, authFetch } from '@/lib/fetchWithTenant';
@@ -56,6 +56,7 @@ import { IMPORT_FILE_ERROR } from '@/lib/excel-import-errors';
 import type { ExportFormat, ExportPlatform } from '@/lib/excel-export';
 import { readImportStream, type ImportProgressState } from '@/lib/import-stream';
 import type { DriveExportResult } from '@/components/products/export-products-modal';
+import { ProductFormModal } from '@/components/products/product-form-modal';
 import { rememberDriveIntent, takeDriveIntent, clearDriveIntent, type DriveIntent } from '@/lib/google/drive-intent';
 import { normalizeForSearch } from '@/lib/utils/text';
 import { SortableTh, SortDir } from '@/components/ui/sortable-th';
@@ -88,10 +89,6 @@ const DRIVE_ERROR_MESSAGES: Record<string, string> = {
  * El import lee el NDJSON con `readImportStream` (`@/lib/import-stream`), que
  * ahora también usan clientes y proveedores.
  */
-function marginPercent(price: number, cost: number): number {
-  return ((price - cost) / cost) * 100;
-}
-
 type SortKey = 'name' | 'category' | 'location' | 'sku' | 'cost' | 'price' | 'stock';
 
 interface PriceAdjustSample {
@@ -176,53 +173,6 @@ function ProductsPageContent() {
     image_storage_path: '',
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
-
-  // Los inputs de precio y costo muestran los miles separados ("80.000"), asi que
-  // necesitan un draft de texto: type="number" no acepta separadores.
-  const [amountDraft, setAmountDraft] = useState<{ price?: string; cost?: string }>({});
-  const [marginDraft, setMarginDraft] = useState<string | null>(null);
-  const priceDisplay = amountDraft.price ?? amountToInput(productForm.price);
-  const costDisplay = amountDraft.cost ?? amountToInput(productForm.cost);
-  const marginDisplay = marginDraft !== null
-    ? marginDraft
-    : productForm.cost > 0 && productForm.price > 0
-      ? `${marginPercent(productForm.price, productForm.cost) >= 0 ? '+' : ''}${marginPercent(productForm.price, productForm.cost).toFixed(0)}%`
-      : '';
-
-  const handleAmountChange = (field: 'price' | 'cost') => (raw: string) => {
-    const formatted = groupThousands(raw);
-    const parsedVal = parseAmountInput(formatted);
-    setAmountDraft((prev) => ({ ...prev, [field]: formatted }));
-
-    if (field === 'price') {
-      setMarginDraft(null);
-      setProductForm((prev) => ({ ...prev, price: parsedVal }));
-    } else {
-      setProductForm((prev) => {
-        const next = { ...prev, cost: parsedVal };
-        if (marginDraft !== null && marginDraft !== '') {
-          const marginNum = parseFloat(marginDraft.replace(',', '.'));
-          if (Number.isFinite(marginNum) && parsedVal > 0) {
-            const calculatedPrice = Math.round(parsedVal * (1 + marginNum / 100));
-            next.price = calculatedPrice;
-            setAmountDraft((d) => ({ ...d, price: amountToInput(calculatedPrice) }));
-          }
-        }
-        return next;
-      });
-    }
-  };
-
-  const handleMarginChange = (raw: string) => {
-    setMarginDraft(raw);
-    const normalized = raw.replace('%', '').replace('+', '').replace(',', '.').trim();
-    const marginNum = parseFloat(normalized);
-    if (Number.isFinite(marginNum) && productForm.cost > 0) {
-      const calculatedPrice = Math.round(productForm.cost * (1 + marginNum / 100));
-      setProductForm((prev) => ({ ...prev, price: calculatedPrice }));
-      setAmountDraft((prev) => ({ ...prev, price: amountToInput(calculatedPrice) }));
-    }
-  };
 
   // Category Modal State
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -697,8 +647,6 @@ function ProductsPageContent() {
 
   // Handlers
   const handleOpenProductModal = useCallback((product: Product | null = null) => {
-    setAmountDraft({});
-    setMarginDraft(null);
     if (product) {
       setEditingProduct(product);
       setProductForm({
@@ -1329,260 +1277,15 @@ function ProductsPageContent() {
 
       {/* PRODUCT DIALOG MODAL */}
       {isProductModalOpen && (
-        <Modal
-          aria-label="Producto"
+        <ProductFormModal
+          editingProduct={editingProduct}
+          productForm={productForm}
+          setProductForm={setProductForm}
+          categories={categories}
+          isSubmitting={isSubmittingProduct}
+          onSubmit={handleSaveProduct}
           onClose={() => setIsProductModalOpen(false)}
-          className="max-w-2xl flex flex-col max-h-[90vh]"
-          title={editingProduct ? 'Editar Producto' : 'Agregar Nuevo Producto'}
-        >
-          <form onSubmit={handleSaveProduct} className="space-y-4 overflow-y-auto pr-1 flex-1">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="sm:col-span-2">
-                  <FormLabel htmlFor="product-name">
-                    Nombre del Producto *
-                  </FormLabel>
-                  <Input
-                    id="product-name"
-                    name="name"
-                    type="text"
-                    required
-                    placeholder="Ej. Coca Cola 1.5L"
-                    value={productForm.name}
-                    onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
-                  />
-                </div>
-
-                <div>
-                  <FormLabel htmlFor="product-category">
-                    Categoría
-                  </FormLabel>
-                  <Select
-                    id="product-category"
-                    name="categoria"
-                    value={productForm.category_id}
-                    onChange={(e) => setProductForm({ ...productForm, category_id: e.target.value })}
-                  >
-                    <option value="">Seleccionar categoría...</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 sm:col-span-2">
-                  <div>
-                    <FormLabel htmlFor="product-barcode">
-                      Código de Barras / GTIN
-                    </FormLabel>
-                    <Input
-                      id="product-barcode"
-                      name="barcode"
-                      type="text"
-                      placeholder="Ej. 7791234567890"
-                      value={productForm.barcode}
-                      onChange={(e) => setProductForm({ ...productForm, barcode: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <FormLabel htmlFor="product-sku">
-                      SKU
-                    </FormLabel>
-                    <Input
-                      id="product-sku"
-                      name="sku"
-                      type="text"
-                      placeholder="Ej. REF-COCA-1.5"
-                      value={productForm.sku}
-                      onChange={(e) => setProductForm({ ...productForm, sku: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:col-span-2">
-                  <div>
-                    <FormLabel htmlFor="product-cost">
-                      Costo ($)
-                    </FormLabel>
-                    <Input
-                      id="product-cost"
-                      name="cost"
-                      type="text"
-                      inputMode="decimal"
-                      autoComplete="off"
-                      placeholder="0,00"
-                      className="tabular-nums"
-                      value={costDisplay}
-                      onChange={(e) => handleAmountChange('cost')(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <FormLabel htmlFor="product-price">
-                      Precio ($)
-                    </FormLabel>
-                    <Input
-                      id="product-price"
-                      name="price"
-                      type="text"
-                      inputMode="decimal"
-                      autoComplete="off"
-                      required
-                      placeholder="0,00"
-                      className="tabular-nums"
-                      value={priceDisplay}
-                      onChange={(e) => handleAmountChange('price')(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <FormLabel htmlFor="product-margin">
-                        Margen (%)
-                      </FormLabel>
-                      {productForm.cost > 0 && productForm.price > 0 && (
-                        <span className={`text-xs font-semibold ${productForm.price >= productForm.cost ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                          {productForm.price >= productForm.cost ? `+${formatARS(productForm.price - productForm.cost)}` : formatARS(productForm.price - productForm.cost)}
-                        </span>
-                      )}
-                    </div>
-                    <div className="relative">
-                      <Input
-                        id="product-margin"
-                        name="margin"
-                        type="text"
-                        inputMode="decimal"
-                        autoComplete="off"
-                        placeholder="Ej. 40"
-                        className="tabular-nums pr-7 font-medium"
-                        value={marginDisplay}
-                        onChange={(e) => handleMarginChange(e.target.value)}
-                      />
-                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 dark:text-gray-500 pointer-events-none">
-                        %
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 sm:col-span-2">
-                  <div>
-                    <FormLabel htmlFor="product-stock" className="text-xs">
-                      Stock Inicial
-                    </FormLabel>
-                    <Input
-                      id="product-stock"
-                      name="stock"
-                      type="number"
-                      value={productForm.stock}
-                      onChange={(e) => setProductForm({ ...productForm, stock: Number(e.target.value) })}
-                    />
-                  </div>
-                  <div>
-                    <FormLabel htmlFor="product-min-stock" className="text-xs">
-                      Mínimo Crítico
-                    </FormLabel>
-                    <Input
-                      id="product-min-stock"
-                      name="min_stock"
-                      type="number"
-                      value={productForm.min_stock}
-                      onChange={(e) => setProductForm({ ...productForm, min_stock: Number(e.target.value) })}
-                    />
-                  </div>
-                  <div>
-                    <FormLabel htmlFor="product-max-stock" className="text-xs">
-                      Máximo Sugerido
-                    </FormLabel>
-                    <Input
-                      id="product-max-stock"
-                      name="max_stock"
-                      type="number"
-                      value={productForm.max_stock}
-                      onChange={(e) => setProductForm({ ...productForm, max_stock: Number(e.target.value) })}
-                    />
-                  </div>
-                </div>
-
-                <div className="sm:col-span-2">
-                  <FormLabel>
-                    Ubicación en depósito
-                  </FormLabel>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <FormLabel htmlFor="product-deposito" className="text-xs">
-                        Depósito
-                      </FormLabel>
-                      <Input
-                        id="product-deposito"
-                        name="deposito"
-                        type="text"
-                        placeholder="Ej. A"
-                        value={productForm.deposito}
-                        onChange={(e) => setProductForm({ ...productForm, deposito: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <FormLabel htmlFor="product-pasillo" className="text-xs">
-                        Pasillo
-                      </FormLabel>
-                      <Input
-                        id="product-pasillo"
-                        name="pasillo"
-                        type="text"
-                        placeholder="Ej. 3"
-                        value={productForm.pasillo}
-                        onChange={(e) => setProductForm({ ...productForm, pasillo: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <FormLabel htmlFor="product-estanteria" className="text-xs">
-                        Estantería
-                      </FormLabel>
-                      <Input
-                        id="product-estanteria"
-                        name="estanteria"
-                        type="text"
-                        placeholder="Ej. 2"
-                        value={productForm.estanteria}
-                        onChange={(e) => setProductForm({ ...productForm, estanteria: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="sm:col-span-2">
-                  <FormLabel htmlFor="product-description">
-                    Descripción del producto
-                  </FormLabel>
-                  <textarea
-                    id="product-description"
-                    name="description"
-                    className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
-                    rows={3}
-                    placeholder="Detalles del producto, empaque, etc."
-                    value={productForm.description}
-                    onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
-                <Button type="button" variant="outline" onClick={() => setIsProductModalOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button type="submit" disabled={isSubmittingProduct}>
-                  {isSubmittingProduct ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Guardando...
-                    </>
-                  ) : (
-                    <ShortLabel short="Guardar">Guardar Cambios</ShortLabel>
-                  )}
-                </Button>
-              </div>
-            </form>
-        </Modal>
+        />
       )}
 
       {/* EXPORT FORMAT MODAL */}

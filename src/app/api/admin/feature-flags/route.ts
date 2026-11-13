@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { isAdminProfile } from '@/lib/admin';
+import { requireAdmin } from '@/lib/admin-guard';
 import { isSameOriginRequest } from '@/lib/security/csrf';
 import { listFeatureFlags, setFeatureFlag } from '@/lib/feature-flags';
 import { invalidateKillSwitchCache } from '@/lib/kill-switch';
@@ -14,30 +12,17 @@ import { logger } from '@/lib/logger';
  *
  * No es un CRUD generico a proposito: un flag se crea con la forma validada de
  * aca o en una migracion, no con cualquier objeto.
+ *
+ * Los kill switches tienen su propia ruta (`/api/admin/kill-switches`) porque
+ * cortan producción y pasan por el flujo con confirmación de `/admin/ops`.
+ * Aceptarlos acá permitiría prenderlos desde el editor genérico sin ese paso.
  */
 
 const FLAG_KEY_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
-async function requireAdmin(): Promise<{ userId: string } | NextResponse> {
-  const supabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-
-  const { data: profile, error } = await supabaseAdmin
-    .from('profiles')
-    .select('is_admin')
-    .eq('id', user.id)
-    .maybeSingle();
-
-  if (error || !isAdminProfile(profile)) {
-    if (error) logger.error('Feature flags: no se pudo leer el perfil', { error: error.message });
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  return { userId: user.id };
+/** Claves reservadas a `/api/admin/kill-switches`. */
+function isKillSwitchKey(flagKey: string): boolean {
+  return flagKey.startsWith('kill_') || flagKey === 'maintenance_mode';
 }
 
 export async function GET() {
@@ -72,6 +57,12 @@ export async function PUT(request: Request) {
 
   if (typeof input.flag_key !== 'string' || !FLAG_KEY_PATTERN.test(input.flag_key)) {
     return NextResponse.json({ error: 'flag_key invalido' }, { status: 400 });
+  }
+  if (isKillSwitchKey(input.flag_key)) {
+    return NextResponse.json(
+      { error: 'Los kill switches se administran desde /admin/ops' },
+      { status: 400 }
+    );
   }
   if (typeof input.enabled !== 'boolean') {
     return NextResponse.json({ error: 'enabled tiene que ser booleano' }, { status: 400 });

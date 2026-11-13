@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { isSameOriginRequest } from '@/lib/security/csrf';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { STRICT_RATE_LIMIT, rateLimitRejection } from '@/lib/security/rate-limit-response';
 import { validatePassword } from '@/lib/password-policy';
 import { authErrorMessage } from '@/lib/auth-errors';
 import { logger } from '@/lib/logger';
@@ -36,12 +37,14 @@ export async function POST(request: Request) {
   }
 
   const ip = getClientIp(request);
-  const limit = await rateLimit(`auth:recover:ip:${ip}`, 10, 15 * 60 * 1000);
+  const limit = await rateLimit(
+    `auth:recover:ip:${ip}`,
+    10,
+    15 * 60 * 1000,
+    STRICT_RATE_LIMIT
+  );
   if (!limit.ok) {
-    return NextResponse.json(
-      { error: 'Demasiados intentos. Probá de nuevo más tarde.' },
-      { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } }
-    );
+    return rateLimitRejection(limit);
   }
 
   let code: unknown;

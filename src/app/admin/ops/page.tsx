@@ -142,7 +142,7 @@ export default function AdminOpsPage() {
     setPending(key);
     setError(null);
     try {
-      const response = await authFetch('/api/admin/feature-flags', {
+      const response = await authFetch('/api/admin/kill-switches', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -178,6 +178,31 @@ export function downloadBlob(blob: Blob, fileName: string): void {
 }
 
 /**
+ * Neutraliza la inyección de fórmulas en CSV.
+ *
+ * Las celdas las escribe el usuario (nombre de producto, de cliente, notas) y
+ * el CSV lo abre una planilla: un valor que empieza con `=`, `+`, `-`, `@`,
+ * tab o CR se interpreta como fórmula al abrirlo en Excel/Sheets, y puede
+ * ejecutar `HYPERLINK`, `cmd` o exfiltrar datos de la hoja.
+ *
+ * Se prefija con un apóstrofo, que es la receta de OWASP: la planilla muestra
+ * el texto literal en vez de evaluarlo. Solo se aplica al CSV; en XLS el valor
+ * se escribe como celda de texto y no se evalúa.
+ */
+const FORMULA_TRIGGER = /^[=+\-@\t\r]/;
+
+export function sanitizeSpreadsheetCell(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  return FORMULA_TRIGGER.test(value) ? `'${value}` : value;
+}
+
+export function sanitizeSpreadsheetRow(row: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(row).map(([key, value]) => [key, sanitizeSpreadsheetCell(value)])
+  );
+}
+
+/**
  * Serializa filas ya armadas a un Blob de planilla.
  * Para XLS se escribe un BIFF8 real (la extension .xls es la que aceptan los
  * importadores de TN y ML); para CSV se serializa con separador coma y
@@ -190,7 +215,7 @@ export async function sheetToBlob(
 ): Promise<Blob> {
   const XLSX = await import('xlsx');
   if (format === 'csv') {
-    const ws = XLSX.utils.json_to_sheet(rows);
+    const ws = XLSX.utils.json_to_sheet(rows.map(sanitizeSpreadsheetRow));
     const csv = XLSX.utils.sheet_to_csv(ws);
     return new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' });
   }
