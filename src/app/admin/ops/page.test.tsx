@@ -57,7 +57,7 @@ function mockBackend(options: {
     if (url === '/api/admin/feature-flags' && (!init || init.method !== 'PUT')) {
       return jsonResponse({ flags: options.flags ?? ALL_FLAGS });
     }
-    if (url === '/api/admin/feature-flags' && init?.method === 'PUT') {
+    if (url === '/api/admin/kill-switches' && init?.method === 'PUT') {
       return options.putOk === false
         ? jsonResponse({ error: 'No se pudo guardar el flag.' }, false)
         : jsonResponse({ flag: { flag_key: 'kill_sales', enabled: true, rollout_percent: 100 } });
@@ -119,7 +119,7 @@ describe('/admin/ops', () => {
 
     // Antes de confirmar no se disparo el PUT.
     expect(fetchMock).not.toHaveBeenCalledWith(
-      '/api/admin/feature-flags',
+      '/api/admin/kill-switches',
       expect.objectContaining({ method: 'PUT' })
     );
 
@@ -127,7 +127,7 @@ describe('/admin/ops', () => {
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/admin/feature-flags',
+        '/api/admin/kill-switches',
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify({
@@ -150,7 +150,7 @@ describe('/admin/ops', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(fetchMock).not.toHaveBeenCalledWith(
-      '/api/admin/feature-flags',
+      '/api/admin/kill-switches',
       expect.objectContaining({ method: 'PUT' })
     );
   });
@@ -168,7 +168,7 @@ describe('/admin/ops', () => {
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/admin/feature-flags',
+        '/api/admin/kill-switches',
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify({

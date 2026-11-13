@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { STRICT_RATE_LIMIT, rateLimitRejection } from '@/lib/security/rate-limit-response';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { isSameOriginRequest } from '@/lib/security/csrf';
 import { safeInternalRedirect } from '@/lib/security/redirects';
@@ -53,20 +54,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: passwordCheck.error }, { status: 400 });
   }
 
-  const ipLimit = await rateLimit(`auth:signup:ip:${ip}`, MAX_IP_ATTEMPTS, WINDOW_MS);
+  const ipLimit = await rateLimit(`auth:signup:ip:${ip}`, MAX_IP_ATTEMPTS, WINDOW_MS, STRICT_RATE_LIMIT);
   if (!ipLimit.ok) {
-    return NextResponse.json(
-      { error: 'Demasiados registros desde esta conexión. Probá más tarde.' },
-      { status: 429, headers: { 'Retry-After': String(ipLimit.retryAfterSeconds) } }
-    );
+    return rateLimitRejection(ipLimit, 'Demasiados registros desde esta conexión. Probá más tarde.');
   }
 
-  const emailLimit = await rateLimit(`auth:signup:email:${normalizedEmail}`, MAX_EMAIL_ATTEMPTS, WINDOW_MS);
+  const emailLimit = await rateLimit(
+    `auth:signup:email:${normalizedEmail}`,
+    MAX_EMAIL_ATTEMPTS,
+    WINDOW_MS,
+    STRICT_RATE_LIMIT
+  );
   if (!emailLimit.ok) {
-    return NextResponse.json(
-      { error: 'Demasiados registros para este email. Probá más tarde.' },
-      { status: 429, headers: { 'Retry-After': String(emailLimit.retryAfterSeconds) } }
-    );
+    return rateLimitRejection(emailLimit, 'Demasiados registros para este email. Probá más tarde.');
   }
 
   const redirectTo = safeInternalRedirect(

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient, type ServerCookie } from '@/lib/supabase';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { STRICT_RATE_LIMIT, rateLimitRejection } from '@/lib/security/rate-limit-response';
 import { getAppOrigin, safeInternalRedirect } from '@/lib/security/redirects';
 
 // Lista explicita en vez de pasar el provider que pida el cliente: si se
@@ -30,12 +31,9 @@ export async function GET(request: Request) {
   }
 
   const ip = getClientIp(request);
-  const limit = await rateLimit(`auth:oauth:ip:${ip}`, 20, 15 * 60 * 1000);
+  const limit = await rateLimit(`auth:oauth:ip:${ip}`, 20, 15 * 60 * 1000, STRICT_RATE_LIMIT);
   if (!limit.ok) {
-    return NextResponse.json(
-      { error: 'Demasiados intentos. Probá de nuevo más tarde.' },
-      { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } }
-    );
+    return rateLimitRejection(limit);
   }
 
   const origin = getAppOrigin(request);

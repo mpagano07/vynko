@@ -12,6 +12,43 @@ const MAX_BUCKETS = 10_000;
 export interface RateLimitResult {
   ok: boolean;
   retryAfterSeconds: number;
+  /**
+   * El store distribuido no respondio y el resultado depende de la politica
+   * elegida. Solo aparece cuando `onStoreError` es `'deny'`: sin este campo el
+   * endpoint no puede distinguir "te bloqueé por exceso de intentos" (429) de
+   * "no pude verificar el limite" (503).
+   */
+  storeUnavailable?: boolean;
+}
+
+export interface RateLimitOptions {
+  /**
+   * Que hacer si el store distribuido falla.
+   *
+   * - `'allow'` (default): deja pasar el request. Es lo correcto para limites
+   *   que son defensa en profundidad sobre funciones que igual necesitan la
+   *   base (imports, uploads, analytics, el throttle generico de `/api/*`): si
+   *   Postgres no responde, cortar ademas esas rutas no protege nada y amplifica
+   *   el incidente.
+   * - `'deny'`: bloquea con `storeUnavailable` y un retry corto. Es lo correcto
+   *   para endpoints de credenciales (login, alta, recuperacion, cambio de
+   *   contrasena): si el contador no se puede leer ni escribir, no hay limite, y
+   *   dejar pasar convierte una migracion faltante o un RPC roto en fuerza bruta
+   *   ilimitada. Un 503 visible es preferible a una proteccion que desaparece en
+   *   silencio.
+   */
+  onStoreError?: 'allow' | 'deny';
+}
+
+/** Retry-after que se devuelve cuando el store falla con `onStoreError: 'deny'`. */
+const STORE_UNAVAILABLE_RETRY_SECONDS = 30;
+
+function storeUnavailableResult(): RateLimitResult {
+  return {
+    ok: false,
+    retryAfterSeconds: STORE_UNAVAILABLE_RETRY_SECONDS,
+    storeUnavailable: true,
+  };
 }
 
 let warnedAboutE2eBypass = false;
@@ -152,11 +189,16 @@ async function rateLimitPeekInPostgres(key: string, limit: number): Promise<Rate
  * incremento siguiente ya los ve y bloquea, asi que el exceso esta acotado por la
  * concurrencia y no por el limite.
  *
- * El fail-open es el mismo que en `rateLimit` y por el mismo motivo: si Postgres
- * no responde, la app entera esta caida igual, y cortar el login por eso
- * amplifica un incidente.
+ * Si el store falla, la politica la elige el endpoint con `onStoreError`: los
+ * endpoints de credenciales usan `'deny'` porque sin contador no hay proteccion
+ * contra fuerza bruta; el resto deja pasar para no amplificar una caida de la
+ * base.
  */
-export async function rateLimitPeek(key: string, limit: number): Promise<RateLimitResult> {
+export async function rateLimitPeek(
+  key: string,
+  limit: number,
+  options: RateLimitOptions = {}
+): Promise<RateLimitResult> {
   if (isE2eBypassEnabled()) {
     if (!warnedAboutE2eBypass) {
       warnedAboutE2eBypass = true;
@@ -173,11 +215,11 @@ export async function rateLimitPeek(key: string, limit: number): Promise<RateLim
     return await rateLimitPeekInPostgres(key, limit);
   } catch (error) {
     logStoreUnavailable(
-      '[rate-limit] rate_limit_peek no respondio; se permite el request sin limite.',
+      '[rate-limit] rate_limit_peek no respondio.',
       'Sintoma tipico: falta aplicar migrations/037_rate_limit_peek.sql.',
       error
     );
-    return { ok: true, retryAfterSeconds: 0 };
+    return options.onStoreError === 'deny' ? storeUnavailableResult() : { ok: true, retryAfterSeconds: 0 };
   }
 }
 
@@ -239,18 +281,23 @@ function logStoreUnavailable(message: string, hint: string, error: unknown): voi
  * limite sea el mismo en todas las instancias. Con un `Map` en memoria cada
  * instancia cuenta por separado y el limite efectivo es `limite x instancias`.
  *
- * Que falle el store no significa bloquear el request. Si Postgres no responde,
- * la app entera no funciona: el login, el alta de empresa y las consultas de
- * datos pasan por el mismo Supabase. Un fail-closed convierte eso en un corte
- * total de servicio por un problema que igual afecta a todo, asi que se prefiere
- * un fail-open con log periodico, que deja el incidente visible sin amplificar el
- * impacto. El trade-off es que durante el incidente el limite no protege: es una
- * capa de defensa en profundidad, no la unica.
+ * Que falle el store no significa bloquear el request por defecto. Si Postgres no
+ * responde, la app entera no funciona: el login, el alta de empresa y las
+ * consultas de datos pasan por el mismo Supabase. Un fail-closed universal
+ * convierte eso en un corte total de servicio por un problema que igual afecta a
+ * todo, asi que se prefiere un fail-open con log periodico, que deja el incidente
+ * visible sin amplificar el impacto.
+ *
+ * La excepcion son los endpoints de credenciales, que pasan
+ * `onStoreError: 'deny'`: ahi quedarse sin contador no es "menos defensa", es
+ * fuerza bruta ilimitada contra cuentas. Para esos casos un 503 corto es mejor
+ * que una proteccion que desaparece en silencio.
  */
 export async function rateLimit(
   key: string,
   limit: number,
-  windowMs: number
+  windowMs: number,
+  options: RateLimitOptions = {}
 ): Promise<RateLimitResult> {
   if (isE2eBypassEnabled()) {
     if (!warnedAboutE2eBypass) {
@@ -268,11 +315,11 @@ export async function rateLimit(
     return await rateLimitInPostgres(key, limit, windowMs);
   } catch (error) {
     logStoreUnavailable(
-      '[rate-limit] El store distribuido no respondio; se permite el request sin limite.',
+      '[rate-limit] El store distribuido no respondio.',
       'Sintoma tipico: falta aplicar migrations/036_rate_limit_buckets.sql.',
       error
     );
-    return { ok: true, retryAfterSeconds: 0 };
+    return options.onStoreError === 'deny' ? storeUnavailableResult() : { ok: true, retryAfterSeconds: 0 };
   }
 }
 

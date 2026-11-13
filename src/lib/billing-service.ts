@@ -16,6 +16,7 @@ import { canManageTenant } from '@/lib/membership-role';
 import { safeInternalRedirect } from '@/lib/security/redirects';
 import { trackEvent } from '@/lib/track-event';
 import { logger } from '@/lib/logger';
+import type { CancelReasonId } from '@/lib/billing/cancel-reasons';
 
 export type BillingResult<T = unknown> =
   | { ok: true; data: T }
@@ -369,7 +370,10 @@ export async function downgradePlan(
   return { ok: true, data: { success: true, plan, url } };
 }
 
-export async function cancelSubscription(userId: string): Promise<BillingResult> {
+export async function cancelSubscription(
+  userId: string,
+  reason: CancelReasonId | null = null
+): Promise<BillingResult> {
   const { data: tu } = await supabaseAdmin
     .from('tenant_users')
     .select('tenant_id, role')
@@ -416,6 +420,8 @@ export async function cancelSubscription(userId: string): Promise<BillingResult>
         paddle_pending_transaction_id: null,
         paddle_pending_plan: null,
         subscription_current_period_end: tenant.subscription_current_period_end ?? null,
+        cancellation_reason: reason,
+        cancelled_at: new Date().toISOString(),
       })
       .in('id', ownerBranchIds);
 
@@ -428,6 +434,7 @@ export async function cancelSubscription(userId: string): Promise<BillingResult>
         subscription_id: tenant.paddle_subscription_id,
         provider: 'paddle',
         source: 'portal',
+        reason,
       },
     });
 
@@ -447,6 +454,8 @@ export async function cancelSubscription(userId: string): Promise<BillingResult>
       subscription_plan: 'free',
       mercadopago_preapproval_id: null,
       subscription_current_period_end: tenant.subscription_current_period_end ?? null,
+      cancellation_reason: reason,
+      cancelled_at: new Date().toISOString(),
     })
     .in('id', ownerBranchIds);
 
@@ -464,6 +473,7 @@ export async function cancelSubscription(userId: string): Promise<BillingResult>
       plan: tenant.subscription_plan ?? 'unknown',
       preapproval_id: tenant.mercadopago_preapproval_id,
       source: 'portal',
+      reason,
     },
   });
 

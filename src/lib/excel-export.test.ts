@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   buildExportRows,
   exportFileName,
+  sanitizeSpreadsheetCell,
+  sanitizeSpreadsheetRow,
+  sheetToBlob,
   slugify,
 } from './excel-export';
 import type { Category } from '@/lib/types/category';
@@ -198,5 +201,49 @@ describe('exportFileName', () => {
     expect(exportFileName('generico', 'xls', now)).toBe('productos_2026-10-15.xls');
     expect(exportFileName('tiendanube', 'xls', now)).toBe('productos_tiendanube_2026-10-15.xls');
     expect(exportFileName('mercadolibre', 'csv', now)).toBe('productos_mercadolibre_2026-10-15.csv');
+  });
+});
+
+describe('sanitizeSpreadsheetCell', () => {
+  it.each(['=1+1', '+SUM(A1)', '-2+3', '@cmd', '\tfoo', '\rfoo'])(
+    'prefija con apóstrofo el valor peligroso %j',
+    (value) => {
+      expect(sanitizeSpreadsheetCell(value)).toBe(`'${value}`);
+    }
+  );
+
+  it('deja intacto el texto normal y los números', () => {
+    expect(sanitizeSpreadsheetCell('Coca Cola')).toBe('Coca Cola');
+    expect(sanitizeSpreadsheetCell('a=b')).toBe('a=b');
+    expect(sanitizeSpreadsheetCell(1500)).toBe(1500);
+    expect(sanitizeSpreadsheetCell(-5)).toBe(-5);
+    expect(sanitizeSpreadsheetCell(null)).toBeNull();
+  });
+
+  it('sanea todas las celdas de una fila', () => {
+    expect(
+      sanitizeSpreadsheetRow({ Nombre: '=HYPERLINK("http://evil")', Precio: 100 })
+    ).toEqual({ Nombre: `'=HYPERLINK("http://evil")`, Precio: 100 });
+  });
+});
+
+describe('sheetToBlob', () => {
+  it('neutraliza fórmulas al exportar CSV', async () => {
+    const blob = await sheetToBlob(
+      [{ Nombre: '=HYPERLINK("http://evil","click")', Precio: 100 }],
+      'Productos',
+      'csv'
+    );
+
+    const csv = await blob.text();
+    expect(csv).toContain(`'=HYPERLINK`);
+  });
+
+  it('no altera el texto normal en CSV', async () => {
+    const blob = await sheetToBlob([{ Nombre: 'Coca Cola', Precio: 100 }], 'Productos', 'csv');
+
+    const csv = await blob.text();
+    expect(csv).toContain('Coca Cola');
+    expect(csv).not.toContain(`'Coca Cola`);
   });
 });

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { rateLimit, rateLimitPeek, getClientIp } from '@/lib/rate-limit';
+import { STRICT_RATE_LIMIT, rateLimitRejection } from '@/lib/security/rate-limit-response';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { isSameOriginRequest } from '@/lib/security/csrf';
 import { logger } from '@/lib/logger';
@@ -53,16 +54,13 @@ export async function POST(request: Request) {
   // recibia 429. Para un usuario detras de una IP compartida eso es un bloqueo
   // sin haber fallado nunca una credencial.
   const [ipLimit, accountLimit] = await Promise.all([
-    rateLimitPeek(ipKey, MAX_FAILED_ATTEMPTS_PER_IP),
-    rateLimitPeek(accountKey, MAX_FAILED_ATTEMPTS),
+    rateLimitPeek(ipKey, MAX_FAILED_ATTEMPTS_PER_IP, STRICT_RATE_LIMIT),
+    rateLimitPeek(accountKey, MAX_FAILED_ATTEMPTS, STRICT_RATE_LIMIT),
   ]);
 
   const blocked = !ipLimit.ok ? ipLimit : !accountLimit.ok ? accountLimit : null;
   if (blocked) {
-    return NextResponse.json(
-      { error: 'Demasiados intentos. Probá de nuevo más tarde.' },
-      { status: 429, headers: { 'Retry-After': String(blocked.retryAfterSeconds) } }
-    );
+    return rateLimitRejection(blocked);
   }
 
   const supabase = await createServerSupabaseClient();
@@ -72,11 +70,17 @@ export async function POST(request: Request) {
   });
 
   if (error) {
-    // Aca si: un intento fallido es lo que consume presupuesto.
-    await Promise.all([
-      rateLimit(ipKey, MAX_FAILED_ATTEMPTS_PER_IP, WINDOW_MS),
-      rateLimit(accountKey, MAX_FAILED_ATTEMPTS, WINDOW_MS),
+    // Aca si: un intento fallido es lo que consume presupuesto. Si el contador
+    // no responde, se corta con 503 en vez de devolver 401 y dejar el intento
+    // sin registrar: con el contador caido no habria ninguna proteccion.
+    const [ipHit, accountHit] = await Promise.all([
+      rateLimit(ipKey, MAX_FAILED_ATTEMPTS_PER_IP, WINDOW_MS, STRICT_RATE_LIMIT),
+      rateLimit(accountKey, MAX_FAILED_ATTEMPTS, WINDOW_MS, STRICT_RATE_LIMIT),
     ]);
+    const hitBlocked = !ipHit.ok ? ipHit : !accountHit.ok ? accountHit : null;
+    if (hitBlocked) {
+      return rateLimitRejection(hitBlocked);
+    }
     // El email no va al log: es PII y no hace falta para diagnosticar. El codigo
     // de Supabase alcanza para separar credenciales invalidas de email sin
     // confirmar o cuenta bloqueada.

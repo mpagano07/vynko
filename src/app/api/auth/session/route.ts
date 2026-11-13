@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient, type ServerCookie } from '@/lib/supabase';
 import { isSameOriginRequest } from '@/lib/security/csrf';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { STRICT_RATE_LIMIT, rateLimitRejection } from '@/lib/security/rate-limit-response';
 import { LAST_SEEN_COOKIE, LAST_SEEN_COOKIE_OPTIONS } from '@/lib/session-policy';
 
 interface ResponseCookieOptions {
@@ -19,9 +20,14 @@ export async function POST(request: Request) {
   }
 
   const ip = getClientIp(request);
-  const limit = await rateLimit(`auth:session-token:ip:${ip}`, 30, 15 * 60 * 1000);
+  const limit = await rateLimit(
+    `auth:session-token:ip:${ip}`,
+    30,
+    15 * 60 * 1000,
+    STRICT_RATE_LIMIT
+  );
   if (!limit.ok) {
-    return NextResponse.json({ error: 'Demasiados intentos' }, { status: 429 });
+    return rateLimitRejection(limit, 'Demasiados intentos');
   }
 
   let access_token: unknown;

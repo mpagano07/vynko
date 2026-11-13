@@ -5,6 +5,7 @@ import { authErrorMessage } from '@/lib/auth-errors';
 import { validatePassword } from '@/lib/password-policy';
 import { getInvitationAccountScope } from '@/lib/accept-invitations';
 import { rateLimit, rateLimitPeek } from '@/lib/rate-limit';
+import { STRICT_RATE_LIMIT, rateLimitRejection } from '@/lib/security/rate-limit-response';
 import { logger } from '@/lib/logger';
 
 /** Intentos de fijar la contrasena por cuenta. */
@@ -68,12 +69,9 @@ export async function POST(request: Request) {
   // una contrasena debil: el endpoint no la exige, se elige, asi que es el punto
   // obvio de fuerza bruta. La clave es por usuario, no por IP.
   const scopeLimitKey = `auth:invitation-password:${user.id}`;
-  const scopeLimit = await rateLimitPeek(scopeLimitKey, MAX_SET_ATTEMPTS);
+  const scopeLimit = await rateLimitPeek(scopeLimitKey, MAX_SET_ATTEMPTS, STRICT_RATE_LIMIT);
   if (!scopeLimit.ok) {
-    return NextResponse.json(
-      { error: 'Demasiados intentos. Probá de nuevo más tarde.' },
-      { status: 429, headers: { 'Retry-After': String(scopeLimit.retryAfterSeconds) } }
-    );
+    return rateLimitRejection(scopeLimit);
   }
 
   const scope = await getInvitationAccountScope(user.id, user.email);
@@ -123,7 +121,10 @@ export async function POST(request: Request) {
       password: newPassword as string,
     });
     if (updateError) {
-      await rateLimit(scopeLimitKey, MAX_SET_ATTEMPTS, SET_WINDOW_MS);
+      const limit = await rateLimit(scopeLimitKey, MAX_SET_ATTEMPTS, SET_WINDOW_MS, STRICT_RATE_LIMIT);
+      if (!limit.ok) {
+        return rateLimitRejection(limit);
+      }
       return NextResponse.json({ error: authErrorMessage(updateError) }, { status: 400 });
     }
     changed = true;

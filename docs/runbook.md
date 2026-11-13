@@ -142,10 +142,18 @@ consuma.
 
 ### 5. 429 / usuarios bloqueados
 
-El limiter es fail-open (`src/lib/rate-limit.ts`): si el store de Postgres
-esta caido deja pasar, no corta el servicio. Un pico de 429 con trafico legitimo
-se revisa en los logs con `msg` de rate limiting; el bypass `E2E=1` existe solo
-para tests con `NODE_ENV != production`.
+El limiter es fail-open **salvo en los endpoints de credenciales**
+(`src/lib/rate-limit.ts`). Si el store de Postgres está caído:
+
+- login, alta, recuperación y cambio de contraseña responden **503** (sin
+  contador no hay protección contra fuerza bruta; el 503 es corto y visible);
+- el resto de los límites (imports, uploads, analytics, throttle de `/api/*`)
+  deja pasar, para no amplificar la caída.
+
+Un 503 de auth con `storeUnavailable` en los logs suele significar que falta
+aplicar `036_rate_limit_buckets.sql` o `037_rate_limit_peek.sql`. Un pico de 429
+con tráfico legítimo se revisa en los logs con `msg` de rate limiting; el bypass
+`E2E=1` existe solo para tests con `NODE_ENV != production`.
 
 ### 6. Secretos filtrados o rotos
 

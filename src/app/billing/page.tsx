@@ -9,6 +9,7 @@ import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { SupportModal } from '@/components/ui/support-modal';
 import { SalesContactModal } from '@/components/ui/sales-contact-modal';
 import { CancelSubscriptionModal } from '@/components/billing/cancel-subscription-modal';
+import type { CancelReasonId } from '@/lib/billing/cancel-reasons';
 import {
   PLANS,
   PLAN_ORDER,
@@ -77,6 +78,8 @@ function BillingContent() {
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [showCancelReasonModal, setShowCancelReasonModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  // Motivo elegido en el paso de retención; se manda en el POST de la baja.
+  const [cancelReason, setCancelReason] = useState<CancelReasonId | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [showRevocationModal, setShowRevocationModal] = useState(false);
   const [showRevocationTooltip, setShowRevocationTooltip] = useState(false);
@@ -230,6 +233,7 @@ function BillingContent() {
       const res = await authFetch('/api/billing/portal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: cancelReason }),
       });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error || 'Error'); return; }
@@ -240,6 +244,7 @@ function BillingContent() {
       toast.error(err instanceof Error ? err.message : 'Error');
     } finally {
       setCancelling(false);
+      setCancelReason(null);
       setShowCancelModal(false);
       setShowRevocationModal(false);
     }
@@ -627,7 +632,8 @@ function BillingContent() {
             setShowCancelReasonModal(false);
             setShowSupportModal(true);
           }}
-          onContinue={() => {
+          onContinue={(reason) => {
+            setCancelReason(reason);
             setShowCancelReasonModal(false);
             setShowCancelModal(true);
           }}
