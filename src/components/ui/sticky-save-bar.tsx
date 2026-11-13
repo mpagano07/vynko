@@ -1,5 +1,6 @@
 'use client';
 
+import { PencilLine, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface StickySaveBarProps {
@@ -15,8 +16,9 @@ interface StickySaveBarProps {
 /**
  * Barra fija para formularios largos. Se renderiza dentro del `<form>`, así el
  * botón principal hace `submit` sin duplicar handlers ni conectar formularios
- * por id. En escritorio arranca después del sidebar (`md:left-60`) para no
- * taparlo; en mobile ocupa todo el ancho.
+ * por id. Es una tarjeta flotante, con el mismo lenguaje visual que las cards
+ * (borde suave, sombra y acento indigo) y arranca después del sidebar para no
+ * taparlo.
  */
 export function StickySaveBar({
   open,
@@ -32,18 +34,20 @@ export function StickySaveBar({
     <div
       role="region"
       aria-label={message}
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 px-4 py-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] backdrop-blur-sm dark:border-gray-700 dark:bg-gray-900/95 md:left-60"
+      className="fixed inset-x-0 bottom-0 z-40 px-4 md:left-60 md:px-6 lg:px-8"
       style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
     >
-      <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3">
-        <p className="flex min-w-0 items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur-sm dark:border-gray-700 dark:bg-gray-800/95 sm:flex-row sm:items-center sm:justify-between">
+        <p className="flex min-w-0 items-center gap-2.5 text-sm text-gray-700 dark:text-gray-200">
           <span
-            className="h-2 w-2 shrink-0 rounded-full bg-amber-500"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300"
             aria-hidden="true"
-          />
-          <span className="truncate">{message}</span>
+          >
+            <PencilLine className="h-4 w-4" />
+          </span>
+          <span className="truncate font-medium">{message}</span>
         </p>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center justify-end gap-2">
           <Button
             type="button"
             variant="ghost"
@@ -54,7 +58,14 @@ export function StickySaveBar({
             Descartar
           </Button>
           <Button type="submit" size="sm" loading={saving} disabled={disabled}>
-            {saving ? 'Guardando...' : saveLabel}
+            {saving ? (
+              'Guardando...'
+            ) : (
+              <>
+                <Save className="h-4 w-4" aria-hidden="true" />
+                {saveLabel}
+              </>
+            )}
           </Button>
         </div>
       </div>
