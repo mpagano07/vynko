@@ -6,14 +6,13 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { authFetch } from '@/lib/fetchWithTenant';
 import { Button } from '@/components/ui/button';
-import { ShortLabel } from '@/components/ui/short-label';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabPanel } from '@/components/ui/tabs';
 import { EditCollaboratorModal } from '@/components/ui/edit-collaborator-modal';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
-import { Settings, User, Building2, Loader2, Save, KeyRound, Users, Mail, X, Shield, ShieldCheck, FileText, MapPin, Palette, ListChecks, Percent, Ticket, Pencil, HelpCircle, RefreshCw, Search, Trash2, UserCheck, UserX, Crown, Clock } from 'lucide-react';
+import { Settings, User, Building2, Loader2, KeyRound, Users, Mail, X, Shield, ShieldCheck, FileText, MapPin, Palette, ListChecks, Percent, Ticket, Pencil, HelpCircle, RefreshCw, Search, Trash2, UserCheck, UserX, Crown, Clock } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Select } from '@/components/ui/select';
 import { FormLabel } from '@/components/ui/form-label';
@@ -273,15 +272,14 @@ function SettingsContent() {
   );
   const [checkoutPaperSize, setCheckoutPaperSize] = useState<'58mm' | '80mm'>('58mm');
   const [checkoutShowReceipt, setCheckoutShowReceipt] = useState(true);
-  const [checkoutBaseline, setCheckoutBaseline] = useState({
+  const [preferencesBaseline, setPreferencesBaseline] = useState({
     adjustments: DEFAULT_CHECKOUT_SETTINGS.payment_adjustments,
     disabledMethods: DEFAULT_CHECKOUT_SETTINGS.disabled_methods,
     paperSize: '58mm' as '58mm' | '80mm',
     showReceipt: true,
   });
-  const [checkoutSynced, setCheckoutSynced] = useState(false);
-  const [savingCheckout, setSavingCheckout] = useState(false);
-  const [savingTicket, setSavingTicket] = useState(false);
+  const [preferencesSynced, setPreferencesSynced] = useState(false);
+  const [savingPreferences, setSavingPreferences] = useState(false);
   const [canEditCheckout, setCanEditCheckout] = useState(false);
 
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
@@ -408,7 +406,7 @@ function SettingsContent() {
   }, [authLoading, canManageTenant, reloadCollaborators]);
 
   useEffect(() => {
-    if (!canManageTenant || !tenant || checkoutSynced) return;
+    if (!canManageTenant || !tenant || preferencesSynced) return;
     let cancelled = false;
     (async () => {
       try {
@@ -420,7 +418,7 @@ function SettingsContent() {
         setCheckoutDisabledMethods(settings.disabled_methods);
         setCheckoutPaperSize(settings.paper_size);
         setCheckoutShowReceipt(settings.show_receipt);
-        setCheckoutBaseline({
+        setPreferencesBaseline({
           adjustments: settings.payment_adjustments,
           disabledMethods: settings.disabled_methods,
           paperSize: settings.paper_size,
@@ -430,15 +428,15 @@ function SettingsContent() {
       } catch {
         // silent
       } finally {
-        if (!cancelled) setCheckoutSynced(true);
+        if (!cancelled) setPreferencesSynced(true);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [tenant, checkoutSynced, canManageTenant]);
+  }, [tenant, preferencesSynced, canManageTenant]);
 
-  const saveCheckoutConfig = useCallback(async () => {
+  const savePreferences = useCallback(async () => {
     const res = await authFetch('/api/settings/checkout', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -456,7 +454,7 @@ function SettingsContent() {
     // La caja lee el tamaño de papel del tenant al cargar; esta copia local
     // evita que el primer render use el valor viejo.
     window.localStorage.setItem('vynko:paper-size', checkoutPaperSize);
-    setCheckoutBaseline({
+    setPreferencesBaseline({
       adjustments: checkoutForm,
       disabledMethods: checkoutDisabledMethods,
       paperSize: checkoutPaperSize,
@@ -464,33 +462,21 @@ function SettingsContent() {
     });
   }, [checkoutForm, checkoutDisabledMethods, checkoutPaperSize, checkoutShowReceipt]);
 
-  const handleSaveCheckout = useCallback(async (e: React.FormEvent) => {
+  // Los ajustes por medio de pago y la configuración del ticket comparten
+  // endpoint y payload, así que se guardan juntos desde una sola barra.
+  const handleSavePreferences = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canEditCheckout) return;
-    setSavingCheckout(true);
+    setSavingPreferences(true);
     try {
-      await saveCheckoutConfig();
-      toast.success('Ajustes por medio de pago guardados');
+      await savePreferences();
+      toast.success('Preferencias guardadas');
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al guardar la configuración');
     } finally {
-      setSavingCheckout(false);
+      setSavingPreferences(false);
     }
-  }, [canEditCheckout, saveCheckoutConfig]);
-
-  const handleSaveTicket = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canEditCheckout) return;
-    setSavingTicket(true);
-    try {
-      await saveCheckoutConfig();
-      toast.success('Configuración de ticket guardada');
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Error al guardar la configuración');
-    } finally {
-      setSavingTicket(false);
-    }
-  }, [canEditCheckout, saveCheckoutConfig]);
+  }, [canEditCheckout, savePreferences]);
 
   // Dirty check contra el último valor confirmado por el servidor. Así el aviso
   // desaparece al guardar, no cuando el contexto de auth refresca.
@@ -498,25 +484,25 @@ function SettingsContent() {
     profileSynced && profileForm.full_name.trim() !== profileBaseline.full_name.trim();
   const tenantDirty =
     tenantSynced && JSON.stringify(tenantForm) !== JSON.stringify(tenantBaseline);
-  const checkoutDirty =
-    checkoutSynced &&
-    (JSON.stringify(checkoutForm) !== JSON.stringify(checkoutBaseline.adjustments) ||
-      JSON.stringify(checkoutDisabledMethods) !== JSON.stringify(checkoutBaseline.disabledMethods));
-  const ticketDirty =
-    checkoutSynced &&
-    (checkoutPaperSize !== checkoutBaseline.paperSize ||
-      checkoutShowReceipt !== checkoutBaseline.showReceipt);
-  const hasUnsavedChanges = profileDirty || tenantDirty || checkoutDirty || ticketDirty;
+  const preferencesDirty =
+    preferencesSynced &&
+    (JSON.stringify(checkoutForm) !== JSON.stringify(preferencesBaseline.adjustments) ||
+      JSON.stringify(checkoutDisabledMethods) !== JSON.stringify(preferencesBaseline.disabledMethods) ||
+      checkoutPaperSize !== preferencesBaseline.paperSize ||
+      checkoutShowReceipt !== preferencesBaseline.showReceipt);
+  // El relleno inferior solo hace falta en la pestaña que muestra la barra.
+  const activeTabHasUnsavedChanges =
+    (activeTab === 'perfil' && profileDirty) ||
+    (activeTab === 'empresa' && tenantDirty) ||
+    (activeTab === 'preferencias' && preferencesDirty);
 
   const discardProfile = () => setProfileForm(profileBaseline);
   const discardTenant = () => setTenantForm(tenantBaseline);
-  const discardCheckout = () => {
-    setCheckoutForm(checkoutBaseline.adjustments);
-    setCheckoutDisabledMethods(checkoutBaseline.disabledMethods);
-  };
-  const discardTicket = () => {
-    setCheckoutPaperSize(checkoutBaseline.paperSize);
-    setCheckoutShowReceipt(checkoutBaseline.showReceipt);
+  const discardPreferences = () => {
+    setCheckoutForm(preferencesBaseline.adjustments);
+    setCheckoutDisabledMethods(preferencesBaseline.disabledMethods);
+    setCheckoutPaperSize(preferencesBaseline.paperSize);
+    setCheckoutShowReceipt(preferencesBaseline.showReceipt);
   };
 
   const handleInvite = async (e: React.FormEvent) => {
@@ -995,7 +981,7 @@ function SettingsContent() {
   if (authLoading) return null;
 
   return (
-    <div className={`space-y-6 ${hasUnsavedChanges ? 'pb-24' : ''}`}>
+    <div className={`space-y-6 ${activeTabHasUnsavedChanges ? 'pb-32 md:pb-24' : ''}`}>
       <PageHeader
         icon={<Settings className="h-8 w-8 text-gray-600 dark:text-gray-400" />}
         title="Configuración"
@@ -1040,13 +1026,6 @@ function SettingsContent() {
                     />
                   </div>
 
-                  <Button type="submit" disabled={savingProfile}>
-                    {savingProfile ? (
-                      <><Loader2 className="h-4 w-4 animate-spin mr-1" />Guardando...</>
-                    ) : (
-                      <><Save className="h-4 w-4 mr-1" /><ShortLabel short="Guardar">Guardar cambios</ShortLabel></>
-                    )}
-                  </Button>
                   <StickySaveBar
                     open={profileDirty}
                     saving={savingProfile}
@@ -1350,13 +1329,6 @@ function SettingsContent() {
                 </div>
               </div>
 
-              <Button type="submit" disabled={savingTenant}>
-                {savingTenant ? (
-                  <><Loader2 className="h-4 w-4 animate-spin mr-1" />Guardando...</>
-                ) : (
-                  <><Save className="h-4 w-4 mr-1" /><ShortLabel short="Guardar">Guardar cambios</ShortLabel></>
-                )}
-              </Button>
               <StickySaveBar
                 open={tenantDirty}
                 saving={savingTenant}
@@ -1809,7 +1781,8 @@ function SettingsContent() {
           </div>
 
           {canManageTenant && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+          <form onSubmit={handleSavePreferences}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
               <Card className="p-6">
                 <div className="flex items-center gap-2 mb-4">
                   <Percent className="h-5 w-5 text-indigo-500" />
@@ -1819,7 +1792,7 @@ function SettingsContent() {
                   )}
                 </div>
 
-                <form onSubmit={handleSaveCheckout} className="space-y-4">
+                <div className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {PAYMENT_METHODS.map((method) => {
                       const value = checkoutForm[method.id];
@@ -1827,7 +1800,7 @@ function SettingsContent() {
                       const isLastEnabled =
                         enabled && checkoutDisabledMethods.length >= PAYMENT_METHODS.length - 1;
                       const toggleEnabled = () => {
-                        if (!canEditCheckout || savingCheckout) return;
+                        if (!canEditCheckout || savingPreferences) return;
                         setCheckoutDisabledMethods((prev) => {
                           if (prev.includes(method.id)) {
                             return prev.filter((id) => id !== method.id);
@@ -1853,7 +1826,7 @@ function SettingsContent() {
                                 aria-label={`Mostrar ${method.label} al cobrar`}
                                 title={enabled ? 'Visible al cobrar' : 'Oculto al cobrar'}
                                 onClick={toggleEnabled}
-                                disabled={!canEditCheckout || savingCheckout || isLastEnabled}
+                                disabled={!canEditCheckout || savingPreferences || isLastEnabled}
                                 className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
                                   enabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'
                                 }`}
@@ -1881,7 +1854,7 @@ function SettingsContent() {
                                 max={100}
                                 step={0.5}
                                 value={value}
-                                disabled={!canEditCheckout || savingCheckout || !enabled}
+                                disabled={!canEditCheckout || savingPreferences || !enabled}
                                 onChange={(e) => {
                                   const next = e.target.value === '' ? 0 : Number(e.target.value);
                                   setCheckoutForm((prev) => ({
@@ -1908,22 +1881,7 @@ function SettingsContent() {
                   <p className="text-xs text-gray-400">
                     Desactivá un medio para que no aparezca en Cobrar venta. Negativo = descuento, positivo = recargo; se aplican automáticamente según el medio utilizado.
                   </p>
-
-                  <Button type="submit" disabled={!canEditCheckout || savingCheckout}>
-                    {savingCheckout ? (
-                      <><Loader2 className="h-4 w-4 animate-spin mr-1" />Guardando...</>
-                    ) : (
-                      <><Save className="h-4 w-4 mr-1" /><ShortLabel short="Guardar">Guardar cambios</ShortLabel></>
-                    )}
-                  </Button>
-                  <StickySaveBar
-                    open={checkoutDirty}
-                    saving={savingCheckout}
-                    disabled={!canEditCheckout}
-                    onDiscard={discardCheckout}
-                    saveLabel="Guardar ajustes"
-                  />
-                </form>
+                </div>
               </Card>
 
               <Card className="p-6">
@@ -1932,13 +1890,13 @@ function SettingsContent() {
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Configuración de ticket</h2>
                 </div>
 
-                <form onSubmit={handleSaveTicket} className="space-y-4">
+                <div className="space-y-4">
                   <div>
                     <FormLabel className="mb-2">
                       Tamaño de ticket
                     </FormLabel>
                     <Select
-                      disabled={!canEditCheckout || savingTicket}
+                      disabled={!canEditCheckout || savingPreferences}
                       value={checkoutPaperSize}
                       onChange={(e) => setCheckoutPaperSize(e.target.value as '58mm' | '80mm')}
                       className="w-full"
@@ -1951,31 +1909,25 @@ function SettingsContent() {
                   <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
-                      disabled={!canEditCheckout || savingTicket}
+                      disabled={!canEditCheckout || savingPreferences}
                       checked={checkoutShowReceipt}
                       onChange={(e) => setCheckoutShowReceipt(e.target.checked)}
                       className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                     />
                     <span className="text-sm text-gray-700 dark:text-gray-300">Mostrar ticket al finalizar la venta</span>
                   </label>
-
-                  <Button type="submit" disabled={!canEditCheckout || savingTicket}>
-                    {savingTicket ? (
-                      <><Loader2 className="h-4 w-4 animate-spin mr-1" />Guardando...</>
-                    ) : (
-                      <><Save className="h-4 w-4 mr-1" /><ShortLabel short="Guardar">Guardar cambios</ShortLabel></>
-                    )}
-                  </Button>
-                  <StickySaveBar
-                    open={ticketDirty}
-                    saving={savingTicket}
-                    disabled={!canEditCheckout}
-                    onDiscard={discardTicket}
-                    saveLabel="Guardar ticket"
-                  />
-                </form>
+                </div>
               </Card>
             </div>
+
+            <StickySaveBar
+              open={preferencesDirty}
+              saving={savingPreferences}
+              disabled={!canEditCheckout}
+              onDiscard={discardPreferences}
+              saveLabel="Guardar preferencias"
+            />
+          </form>
           )}
         </div>
       </TabPanel>
