@@ -70,6 +70,27 @@ function reasonNote(reason?: string): string {
 // motivo nuevo no deje el formulario y el envio con criterios distintos.
 const POSITIVE_REASONS = new Set(['found', 'stock_in', 'correction']);
 
+interface ProductCode {
+  sku?: string | null;
+  barcode?: string | null;
+}
+
+/**
+ * Identificación visible del producto. El nombre solo no alcanza: dos productos
+ * pueden llamarse igual y, sin SKU/código, el "Ver" no dice cuál se rompió.
+ */
+function productCodeLabel(product: ProductCode): string {
+  const parts: string[] = [];
+  if (product.sku) parts.push(`SKU: ${product.sku}`);
+  if (product.barcode) parts.push(`GTIN: ${product.barcode}`);
+  return parts.join(' · ');
+}
+
+/** El código de barras es único; si falta, el SKU; el nombre queda como último recurso. */
+function productSearchTerm(product: ProductCode, fallbackName: string): string {
+  return product.barcode || product.sku || fallbackName;
+}
+
 // Mismo tamaño de página que /invoices: el historial puede traer hasta 500
 // ajustes (12 meses), así que la tabla necesita cortarse igual que el resto.
 const ADJUSTMENTS_PER_PAGE = 15;
@@ -80,6 +101,7 @@ interface StockAdjustment {
   productId: string;
   productName: string;
   productSku?: string;
+  productBarcode?: string;
   reason?: string;
   createdAt: string;
   createdBy: string;
@@ -207,6 +229,8 @@ export default function LossPreventionPage() {
     const entry = acc.get(h.productId) ?? {
       productId: h.productId,
       productName: h.productName,
+      sku: h.productSku,
+      barcode: h.productBarcode,
       units: 0,
       value: 0,
     };
@@ -215,12 +239,12 @@ export default function LossPreventionPage() {
     entry.value += units * costOfProduct(h.productId);
     acc.set(h.productId, entry);
     return acc;
-  }, new Map<string, { productId: string; productName: string; units: number; value: number }>());
+  }, new Map<string, { productId: string; productName: string; sku?: string; barcode?: string; units: number; value: number }>());
 
   const topLossProducts = [...lossByProduct.values()]
     .sort((a, b) => b.units - a.units)
     .slice(0, 3);
-  const topLost: [string, number][] = topLossProducts.map((p) => [p.productName, p.units]);
+  const topLossProduct = topLossProducts[0];
 
   const lossByReason = losses.reduce((acc: Record<string, number>, h) => {
     const reason = baseReason(h.reason);
@@ -279,16 +303,20 @@ export default function LossPreventionPage() {
         <StatCard
           title="Producto más afectado"
           titleClassName="text-gray-500 dark:text-gray-400"
-          value={topLost.length > 0 ? topLost[0][0] : '—'}
+          value={topLossProduct ? topLossProduct.productName : '—'}
           valueClassName="text-lg truncate"
-          subtitle={`${topLost.length > 0 ? topLost[0][1] : 0} unidades perdidas`}
+          subtitle={
+            topLossProduct
+              ? `${productCodeLabel(topLossProduct) || 'Sin SKU ni código'} · ${topLossProduct.units} u. perdidas`
+              : '0 unidades perdidas'
+          }
           icon={Package}
           tone="indigo"
         />
       </div>
 
       {/* Pérdidas por motivo (donut) + Top productos */}
-      {(topLost.length > 0 || donutData.length > 0) && (
+      {(topLossProducts.length > 0 || donutData.length > 0) && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {topLossProducts.length > 0 && (
             <Card className="p-5">
@@ -300,35 +328,46 @@ export default function LossPreventionPage() {
                 <span className="text-xs text-gray-400">Por unidades</span>
               </div>
               <div className="space-y-2">
-                {topLossProducts.map((product, i) => (
-                  <div
-                    key={product.productId}
-                    className="flex items-center gap-3 rounded-lg border border-gray-100 p-2 dark:border-gray-800"
-                  >
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-rose-100 text-xs font-bold text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
-                      {i + 1}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100" title={product.productName}>
-                        {product.productName}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {product.units} u. perdidas
-                        {product.value > 0 ? ` · ${formatARS(product.value)}` : ''}
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => router.push(`/products?search=${encodeURIComponent(product.productName)}`)}
-                      className="group shrink-0 gap-1 transition-colors hover:text-indigo-600 dark:hover:text-indigo-400"
-                      aria-label={`Revisar ${product.productName}`}
+                {topLossProducts.map((product, i) => {
+                  const code = productCodeLabel(product);
+                  const searchTarget = productSearchTerm(product, product.productName);
+                  return (
+                    <div
+                      key={product.productId}
+                      data-testid="top-loss-product"
+                      className="flex items-center gap-3 rounded-lg border border-gray-100 p-2 dark:border-gray-800"
                     >
-                      <ExternalLink className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
-                      Ver
-                    </Button>
-                  </div>
-                ))}
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-rose-100 text-xs font-bold text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
+                        {i + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100" title={product.productName}>
+                          {product.productName}
+                        </p>
+                        <p
+                          className={`truncate text-xs ${code ? 'font-mono text-gray-500 dark:text-gray-400' : 'text-gray-400 dark:text-gray-500'}`}
+                          title={code || 'Sin SKU ni código'}
+                        >
+                          {code || 'Sin SKU ni código'}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {product.units} u. perdidas
+                          {product.value > 0 ? ` · ${formatARS(product.value)}` : ''}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => router.push(`/products?search=${encodeURIComponent(searchTarget)}`)}
+                        className="group shrink-0 gap-1 transition-colors hover:text-indigo-600 dark:hover:text-indigo-400"
+                        aria-label={`Revisar ${product.productName}${code ? ` (${code})` : ''}`}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+                        Ver
+                      </Button>
+                    </div>
+                  );
+                })}
               </div>
             </Card>
           )}
@@ -340,15 +379,15 @@ export default function LossPreventionPage() {
                 Pérdidas por motivo
               </h2>
               <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:gap-6">
-                <div className="relative h-44 w-44 flex-shrink-0">
+                <div className="h-48 w-48 flex-shrink-0">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
                         data={donutData}
                         dataKey="value"
                         nameKey="name"
-                        innerRadius={52}
-                        outerRadius={70}
+                        innerRadius={56}
+                        outerRadius={76}
                         paddingAngle={3}
                         strokeWidth={0}
                         isAnimationActive={false}
@@ -363,13 +402,6 @@ export default function LossPreventionPage() {
                       />
                     </PieChart>
                   </ResponsiveContainer>
-                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Pérdida total</span>
-                    <span className="max-w-[7.5rem] truncate text-base font-bold tabular-nums text-rose-600 dark:text-rose-400" title={formatARS(totalValue)}>
-                      {formatARS(totalValue)}
-                    </span>
-                    <span className="text-xs text-gray-400">{totalLosses} u.</span>
-                  </div>
                 </div>
                 <div className="w-full min-w-0 flex-1 space-y-2">
                   {donutData.map((d) => {
@@ -384,6 +416,14 @@ export default function LossPreventionPage() {
                     );
                   })}
                 </div>
+              </div>
+              <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-gray-100 pt-3 dark:border-gray-800">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Pérdida total · <span className="tabular-nums">{totalLosses} u.</span>
+                </p>
+                <p className="whitespace-nowrap text-lg font-bold leading-none tabular-nums text-rose-600 dark:text-rose-400">
+                  {formatARS(totalValue)}
+                </p>
               </div>
             </Card>
           )}
@@ -450,7 +490,11 @@ export default function LossPreventionPage() {
                       </td>
                       <td className="py-2.5 px-4">
                         <div className="font-medium text-gray-900 dark:text-gray-100">{h.productName}</div>
-                        {h.productSku && <div className="text-xs text-gray-400">SKU: {h.productSku}</div>}
+                        {(h.productSku || h.productBarcode) && (
+                          <div className="font-mono text-xs text-gray-400">
+                            {productCodeLabel({ sku: h.productSku, barcode: h.productBarcode })}
+                          </div>
+                        )}
                       </td>
                       <td className="py-2.5 px-4">
                         <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${reasonInfo?.color || 'text-gray-500 bg-gray-100'}`}>
