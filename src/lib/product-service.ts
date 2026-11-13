@@ -166,8 +166,22 @@ export async function listProducts(auth: AuthInfo): Promise<ListProductsResult> 
   const buildPage = (from: number, to: number) => {
     let q = supabaseAdmin
       .from('products')
+      // Columnas explícitas en vez de `*`: con ~1000 filas, PostgREST repite el
+      // nombre de cada clave en cada fila JSON y `*` mandaba ~600 KB por el
+      // simple hecho de incluir `metadata`, `status`, `cost_cents`, la `price`
+      // legacy y los timestamps — ninguno se usa en la UI. Pedir sólo lo que se
+      // renderiza baja el payload a ~la mitad sin cambiar el shape de salida.
       .select(`
-        *,
+        id,
+        category_id,
+        sku,
+        barcode,
+        name,
+        description,
+        cost,
+        price_cents,
+        image_url,
+        image_storage_path,
         stock_data:product_stock!inner(
           stock,
           min_stock,
@@ -215,26 +229,40 @@ export async function listProducts(auth: AuthInfo): Promise<ListProductsResult> 
 }
 
 /**
- * Catálogo "slim" para selectores de productos (transferencias, y cualquier
- * pantalla que sólo necesite buscar y elegir): id, nombre, SKU y código de
- * barras.
+ * Catálogo "slim" para selectores de productos (transferencias y el POS de
+ * ventas): id, nombre, SKU, código de barras, precio, stock y stock mínimo.
  *
  * `listProducts` manda TODAS las columnas de `products` más el join de stock y
- * firma las URLs de imagen: con ~1000 artículos son ~500 KB y varios segundos
+ * firma las URLs de imagen: con ~1000 artículos son ~600 KB y varios segundos
  * para llenar un buscador. Esta versión devuelve la misma población de filas
  * (mismo join por `product_stock`, mismo `active`, mismo orden determinístico
- * para el paging de `selectAllRows`) en ~4 veces menos bytes y sin trabajo de
+ * para el paging de `selectAllRows`) en ~5 veces menos bytes y sin trabajo de
  * storage.
+ *
+ * Los campos extra (`price`, `min_stock`) son los que necesita el POS para
+ * cobrar y pintar el badge de stock; el selector de transferencias ignora los
+ * que no usa.
  */
+export interface SlimProduct {
+  id: string;
+  name: string;
+  sku: string | null;
+  barcode: string | null;
+  stock: number;
+  min_stock: number;
+  price: number;
+}
+
 export async function listProductsSlim(
   auth: AuthInfo
-): Promise<{ ok: true; products: Array<{ id: string; name: string; sku: string | null; barcode: string | null; stock: number }> } | { ok: false; error: string }> {
+): Promise<{ ok: true; products: SlimProduct[] } | { ok: false; error: string }> {
   const buildPage = (from: number, to: number) => {
     let q = supabaseAdmin
       .from('products')
       // `product_stock!inner()` filtra por tenant; además trae el stock para
-      // que el selector de transferencias pueda limitar la cantidad a enviar.
-      .select('id, name, sku, barcode, product_stock!inner(stock)')
+      // que el selector de transferencias pueda limitar la cantidad a enviar y
+      // el POS pueda bloquear la venta sin stock.
+      .select('id, name, sku, barcode, price_cents, product_stock!inner(stock, min_stock)')
       .order('created_at', { ascending: false, nullsFirst: false })
       .order('id', { ascending: true });
     if (auth.allTenants) {
@@ -250,13 +278,21 @@ export async function listProductsSlim(
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
   }
   const products = (data ?? []).map((p) => {
-    const stockRows = (p.product_stock ?? []) as Array<{ stock?: number | null }>;
+    const stockRows = (p.product_stock ?? []) as Array<{
+      stock?: number | null;
+      min_stock?: number | null;
+    }>;
+    const priceCents = (p as { price_cents?: number | null }).price_cents;
     return {
       id: String(p.id),
       name: String(p.name ?? ''),
       sku: (p.sku ?? null) as string | null,
       barcode: (p.barcode ?? null) as string | null,
+      // Igual que `listProducts`: el precio vive en `price_cents` (la columna
+      // `price` es legacy y quedó con valores viejos).
+      price: priceCents != null ? Number(priceCents) / 100 : 0,
       stock: stockRows.reduce((sum, row) => sum + (Number(row.stock) || 0), 0),
+      min_stock: Number(stockRows[0]?.min_stock) || 0,
     };
   });
   return { ok: true, products };

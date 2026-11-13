@@ -288,7 +288,11 @@ export default function SalesPage() {
 
     (async () => {
       const [prodRes, custRes] = await Promise.all([
-        authFetch('/api/products'),
+        // Catálogo slim: el POS sólo usa id, nombre, precio, stock, stock
+        // mínimo, SKU y código de barras. `/api/products` manda todas las
+        // columnas (~600 KB con 1000 artículos) y bloqueaba la grilla varios
+        // segundos sin aportar nada acá.
+        authFetch('/api/products/slim'),
         authFetch('/api/customers'),
       ]);
 
@@ -685,7 +689,9 @@ export default function SalesPage() {
       }
 
       const [pRes, cRes] = await Promise.all([
-        authFetch('/api/products'),
+        // Mismo catálogo slim que la carga inicial: refrescar stock después de
+        // cobrar no puede costar otro medio megabyte.
+        authFetch('/api/products/slim'),
         authFetch('/api/customers'),
       ]);
       if (pRes.ok) setProducts(await pRes.json());
