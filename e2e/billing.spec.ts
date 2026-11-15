@@ -40,8 +40,8 @@ test.describe('Facturación E2E', () => {
     await expect(page.getByText(/\$.*19\.900/).first()).toBeVisible();
     await expect(page.getByText(/\$.*34\.900/).first()).toBeVisible();
 
-    // Enterprise se posiciona como "A medida"
-    await expect(page.getByText('A medida').first()).toBeVisible();
+    // Enterprise también muestra su precio publicado
+    await expect(page.getByText(/\$.*120\.000/).first()).toBeVisible();
 
     // At least one "Suscribirse" button exists
     await expect(page.getByRole('button', { name: /Suscribirse/ }).first()).toBeVisible();
@@ -232,13 +232,13 @@ test.describe('Facturación E2E', () => {
     await page.goto('/billing');
     await page.waitForLoadState('networkidle');
 
-    // Enterprise should show a "Pensado a tu medida" button in the grid
-    const salesButton = page.locator('.grid').getByRole('button', { name: 'Pensado a tu medida' });
+    // Enterprise should show a "Hablar con ventas" button in the grid
+    const salesButton = page.locator('.grid').getByRole('button', { name: 'Hablar con ventas' });
     await expect(salesButton).toBeVisible({ timeout: 10_000 });
 
     // Clicking it opens the sales contact modal with the ventas email
     await salesButton.click();
-    await expect(page.getByText('Plan Enterprise a medida')).toBeVisible();
+    await expect(page.getByText('Plan Enterprise', { exact: true })).toBeVisible();
     await expect(page.getByText(/ventas@/)).toBeVisible();
   });
 

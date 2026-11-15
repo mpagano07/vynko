@@ -1192,14 +1192,14 @@ function ProductsPageContent() {
                       <p className="font-semibold text-gray-900 dark:text-gray-100 break-words">{product.name}</p>
                       {category ? (
                         <span
-                          className="mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium"
+                          className="mt-1 inline-flex max-w-full items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium"
                           style={{
                             backgroundColor: `${category.color || '#3b82f6'}15`,
                             color: category.color || '#3b82f6',
                           }}
                         >
-                          <Tag className="h-3 w-3" />
-                          {category.name}
+                          <Tag className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{category.name}</span>
                         </span>
                       ) : (
                         <span className="mt-1 block text-xs italic text-gray-400">Sin categoría</span>
@@ -1219,12 +1219,12 @@ function ProductsPageContent() {
                     </span>
                   </div>
 
-                  <div className="flex items-end justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-lg font-bold tabular-nums text-indigo-600 dark:text-indigo-400">
+                  <div className="flex flex-wrap items-end justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-lg font-bold tabular-nums text-indigo-600 dark:text-indigo-400">
                         {formatARS(product.price)}
                       </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                      <p className="break-words text-xs text-gray-500 dark:text-gray-400">
                         Costo {formatARS(product.cost || 0)}
                         {margin !== null && (
                           <span className={margin >= 0 ? 'ml-1 text-emerald-600 dark:text-emerald-400' : 'ml-1 text-red-600 dark:text-red-400'}>

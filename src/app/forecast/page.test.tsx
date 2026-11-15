@@ -194,6 +194,49 @@ describe('ForecastPage', () => {
     expect(within(panel).getByText(/— quedan 20 u/)).toBeInTheDocument();
   });
 
+  it('muestra el inventario aunque ningún producto haya vendido en los últimos 30 días', async () => {
+    fetchHandler.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ...payload,
+        predictions: [
+          prediction({
+            productId: 'p-sin-ventas',
+            productName: 'Sin ventas',
+            currentStock: 3,
+            minStock: 5,
+            totalSoldLast30: 0,
+          }),
+        ],
+        topProducts: [],
+        needsReorder: [],
+        upcomingStockout: [],
+        summary: {
+          ...payload.summary,
+          totalSales30: 0,
+          totalTransactions30: 0,
+          productsWithSales: 0,
+          totalProducts: 1,
+          needsReorderCount: 0,
+          stockoutRiskCount: 0,
+          deadStockCount: 1,
+          immobilizedCapital: 150,
+          purchaseSuggestion15: 0,
+          stockEffectivenessPct: 0,
+        },
+        trends: null,
+      }),
+    });
+
+    render(<ForecastPage />);
+    await screen.findByText('Efectividad del stock');
+
+    expect(screen.queryByText('Sin datos suficientes')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Todos1/ }));
+    expect(within(productsTable()).getByText('Sin ventas')).toBeInTheDocument();
+  });
+
   it('registra forecast_opened una sola vez cuando el usuario llega a la pagina', async () => {
     render(<ForecastPage />);
     await screen.findByText('Efectividad del stock');
@@ -311,8 +354,6 @@ describe('ForecastPage', () => {
   });
 
   describe('productos que se venden bajo su costo', () => {
-    // Ojo: la pagina cae en "Sin datos suficientes" si ningun producto vendio
-    // (forecast/page.tsx:144), asi que los mocks necesitan totalSoldLast30 > 0.
     function mockWithPredictions(predictions: Record<string, unknown>[]) {
       fetchHandler.mockResolvedValue({
         ok: true,

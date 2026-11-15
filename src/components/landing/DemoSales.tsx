@@ -267,9 +267,9 @@ export default function DemoSales() {
               <thead>
                 <tr className="bg-gray-950/40 border-b border-gray-800 text-xs font-semibold text-gray-400 uppercase tracking-wider">
                   <th className="py-3 px-4 sm:px-5">Producto</th>
-                  <th className="py-3 px-3">Categoría</th>
-                  <th className="py-3 px-4 sm:px-5">Ubicación</th>
-                  <th className="py-3 px-4 sm:px-5">Código</th>
+                  <th className="hidden py-3 px-3 sm:table-cell">Categoría</th>
+                  <th className="hidden py-3 px-4 sm:px-5 lg:table-cell">Ubicación</th>
+                  <th className="hidden py-3 px-4 sm:px-5 md:table-cell">Código</th>
                   <th className="py-3 px-4 sm:px-5">Precios (Costo / Venta)</th>
                   <th className="py-3 px-4 sm:px-5 text-center">Stock</th>
                 </tr>
@@ -285,7 +285,7 @@ export default function DemoSales() {
                         <p className="font-semibold text-gray-100 text-sm">{p.name}</p>
                         <p className="text-xs text-gray-400 font-mono">{p.sku}</p>
                       </td>
-                      <td className="py-3.5 px-3">
+                      <td className="hidden py-3.5 px-3 sm:table-cell">
                         <span
                           className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap"
                           style={{ backgroundColor: `${p.categoryColor}15`, color: p.categoryColor }}
@@ -294,13 +294,13 @@ export default function DemoSales() {
                           {p.category}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 sm:px-5">
+                      <td className="hidden py-3.5 px-4 sm:px-5 lg:table-cell">
                         <div className="text-xs text-gray-400 leading-tight whitespace-nowrap">
                           <p>Depósito: {p.deposito}</p>
                           <p className="mt-0.5">Pasillo: {p.pasillo} · Est.: {p.estanteria}</p>
                         </div>
                       </td>
-                      <td className="py-3.5 px-4 sm:px-5">
+                      <td className="hidden py-3.5 px-4 sm:px-5 md:table-cell">
                         <p className="text-gray-300 font-mono text-xs">{p.sku}</p>
                         <p className="text-xs text-gray-400 font-mono mt-0.5">GTIN: {p.barcode}</p>
                       </td>

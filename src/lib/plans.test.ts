@@ -48,10 +48,11 @@ describe('plans configuration', () => {
     });
   });
 
-  it('positions enterprise as a made-to-measure available plan', () => {
+  it('positions enterprise as an available paid plan', () => {
     const enterprise = PLANS.enterprise;
     expect(enterprise.comingSoon).toBeFalsy();
-    expect(enterprise.price).toBe(0);
+    expect(enterprise.price).toBeGreaterThan(0);
+    expect(enterprise.price).toBeGreaterThan(PLANS.business.price);
     expect(enterprise.features.length).toBeGreaterThan(0);
     const labels = enterprise.features.map(f => f.label);
     expect(labels).toContain('Módulos');

@@ -55,12 +55,68 @@ export function formatReceiptDate(iso?: string | null): string {
   });
 }
 
+/**
+ * Deja el número en el formato que espera `wa.me` para Argentina: `549` +
+ * código de área + abonado, sin `0`, sin `15` y sin el `9` duplicado.
+ *
+ * El input del POS sólo guarda dígitos, así que lo normal es recibir
+ * `1165602587`. Si se manda tal cual, WhatsApp lo interpreta como un número
+ * de otro país y el ticket llega a cualquier lado. Los números con `+`/`00`
+ * de otro país se dejan internacionales, sin tocar.
+ */
+export function normalizeWhatsAppPhone(raw?: string | null): string {
+  const value = (raw ?? '').trim();
+  if (!value) return '';
+
+  const rawDigits = value.replace(/\D/g, '');
+  if (!rawDigits) return '';
+
+  const hadInternationalPrefix = value.startsWith('+') || rawDigits.startsWith('00');
+  let digits = rawDigits.startsWith('00') ? rawDigits.slice(2) : rawDigits;
+
+  if (digits.startsWith('54')) {
+    digits = digits.slice(2);
+    if (digits.startsWith('9')) digits = digits.slice(1);
+    return normalizeArgentineMobile(digits);
+  }
+
+  if (hadInternationalPrefix) return digits.replace(/^0+/, '');
+  return normalizeArgentineMobile(digits);
+}
+
+function normalizeArgentineMobile(raw: string): string {
+  let digits = raw.replace(/^0+/, '');
+  if (digits.startsWith('15')) digits = digits.slice(2);
+
+  // El "15" va después del código de área (2 a 4 dígitos). Sólo se quita si
+  // el resultado queda con los 10 dígitos de un número nacional.
+  const withoutAreaMobilePrefix = digits.replace(/^(\d{2,4})15/, '$1');
+  if (withoutAreaMobilePrefix.length === 10) {
+    digits = withoutAreaMobilePrefix;
+  }
+
+  if (digits.length === 10) return `549${digits}`;
+  if (digits.length === 11 && digits.startsWith('9')) return `549${digits.slice(1)}`;
+  return digits;
+}
+
 function buildWhatsAppText(sale: ReceiptSale, tenant: ReceiptTenant): string {
   const lines: string[] = [];
   lines.push('🧾 *COMPROBANTE DE VENTA*');
   lines.push('');
-  if (tenant.company_name) lines.push(tenant.company_name);
-  if (tenant.name) lines.push(tenant.name);
+
+  // `company_name` se precarga con `name` en Configuración, así que en la
+  // mayoría de los locales son el mismo texto. No repetirlo en el ticket.
+  const seenNames = new Set<string>();
+  for (const value of [tenant.company_name, tenant.name]) {
+    const name = value?.trim();
+    if (!name) continue;
+    const key = name.toLocaleLowerCase('es-AR');
+    if (seenNames.has(key)) continue;
+    seenNames.add(key);
+    lines.push(name);
+  }
+
   if (tenant.business_address) lines.push(tenant.business_address);
   if (tenant.business_phone) lines.push(`Tel: ${tenant.business_phone}`);
   lines.push(`Fecha: ${formatReceiptDate(sale.created_at)}`);
@@ -103,9 +159,8 @@ function buildWhatsAppText(sale: ReceiptSale, tenant: ReceiptTenant): string {
 
 export function buildWhatsAppUrl(sale: ReceiptSale, tenant: ReceiptTenant): string {
   const text = buildWhatsAppText(sale, tenant);
-  if (sale.customer_phone) {
-    const digits = sale.customer_phone.replace(/\D/g, '');
-    const phone = digits.replace(/^0+/, '');
+  const phone = normalizeWhatsAppPhone(sale.customer_phone);
+  if (phone) {
     return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
   }
   return `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;

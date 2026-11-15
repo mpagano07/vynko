@@ -34,12 +34,12 @@ export function SalesContactModal({ open, onClose }: SalesContactModalProps) {
           </div>
 
           <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-            Plan Enterprise a medida
+            Plan Enterprise
           </h2>
 
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-            Diseñamos módulos, integraciones y reportes personalizados para tu
-            operación. Escribinos para recibir una cotización exclusiva.
+            Enterprise suma módulos, integraciones y reportes personalizados para tu
+            operación. Escribinos para coordinar la activación y la cotización final.
           </p>
 
           <div className="flex items-center gap-2 w-full mb-5">

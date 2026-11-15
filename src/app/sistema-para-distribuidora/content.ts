@@ -157,7 +157,7 @@ export const content: SeoLandingContent = {
   ],
   pricingTitle: 'Planes para distribuidora',
   pricingIntro:
-    'Business incluye hasta 5 sucursales y usuarios ilimitados. Si necesitás más, Enterprise se arma a medida.',
+    'Business incluye hasta 5 sucursales y usuarios ilimitados. Si necesitás más, Enterprise suma hasta 99 sucursales, integraciones y acompañamiento dedicado.',
   faqTitle: 'Preguntas frecuentes de distribuidoras',
   faq: [
     {

@@ -96,7 +96,7 @@ export function partyExportFileName(kind: PartyExportKind, format: ExportFormat,
   return `${PARTY_LABELS[kind].fileBase}_${day}.${format}`;
 }
 
-/** Genera el Blob sin descargarlo (lo usa el modal de export para mostrar el conteo). */
+/** Genera el Blob sin descargarlo. */
 export async function generatePartyExportBlob(options: {
   parties: PartyExportRecord[];
   kind: PartyExportKind;
