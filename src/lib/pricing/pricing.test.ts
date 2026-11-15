@@ -83,6 +83,11 @@ describe('pricing', () => {
       expect(getDisplayPrice('AR', 'business')).toBeGreaterThan(0);
     });
 
+    it('publica el precio de Enterprise en Argentina', () => {
+      expect(getDisplayPrice('AR', 'enterprise')).toBe(120000);
+      expect(getDisplayPrice('AR', 'enterprise')).toBeGreaterThan(getDisplayPrice('AR', 'business'));
+    });
+
     it('fuera de Argentina usa el precio local de la tabla', () => {
       expect(getDisplayPrice('CO', 'business')).toBe(PRICES_BY_COUNTRY.CO.business);
       expect(getDisplayPrice('MX', 'starter')).toBe(PRICES_BY_COUNTRY.MX.starter);

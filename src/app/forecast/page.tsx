@@ -158,11 +158,11 @@ export default function ForecastPage() {
     );
   }
 
-  if (!data || data.predictions.length === 0 || data.predictions.every((p) => p.totalSoldLast30 === 0)) {
+  if (!data || data.predictions.length === 0) {
     return (
       <div className="space-y-6">
         {header}
-        <EmptyState icon={BarChart3} title="Sin datos suficientes" description="Se necesitan ventas en los últimos 30 días para generar proyecciones." />
+        <EmptyState icon={BarChart3} title="Sin datos suficientes" description="No hay productos activos para analizar." />
       </div>
     );
   }

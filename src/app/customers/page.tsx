@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import dynamicImport from 'next/dynamic';
 import { authFetch } from '@/lib/fetchWithTenant';
-import { useExport } from '@/lib/hooks/useExport';
+import { ExportButton } from '@/components/ui/export-button';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
@@ -34,18 +34,13 @@ import {
   formatDocumentNumberInput,
   validatePartyTaxFields,
 } from '@/lib/tax-fields';
-import type { ExportFormat } from '@/lib/excel-export';
 import toast from 'react-hot-toast';
 
-// Modales de import/export fuera del bundle inicial de la página: el parser de
+// Modales de import fuera del bundle inicial de la página: el parser de
 // planillas arrastra SheetJS (~1MB) y sólo hace falta cuando el usuario abre el
 // modal.
 const ImportPartiesModal = dynamicImport(
   () => import('@/components/parties/import-parties-modal').then((m) => ({ default: m.ImportPartiesModal })),
-  { ssr: false },
-);
-const ExportPartiesModal = dynamicImport(
-  () => import('@/components/parties/export-parties-modal').then((m) => ({ default: m.ExportPartiesModal })),
   { ssr: false },
 );
 
@@ -224,30 +219,22 @@ export default function CustomersPage() {
   );
 
   // Import / Export
-  const { exporting, busy, run } = useExport();
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
-  const openExportModal = () => {
+  // Export client-side de la lista filtrada (mismo criterio que productos):
+  // el archivo se arma en el navegador con SheetJS y se descarga directo, sin
+  // modal de formato. El historial de actividad usa el mismo patrón.
+  const handleExport = async () => {
     if (filtered.length === 0) {
       toast.error('No hay clientes para exportar');
       return;
     }
-    setIsExportModalOpen(true);
-  };
-
-  // Export client-side de la lista filtrada (mismo criterio que productos):
-  // el archivo se arma en el navegador con SheetJS y se descarga directo.
-  const handleExport = async (format: ExportFormat) => {
-    await run(async () => {
-      try {
-        const { exportPartiesFile } = await import('@/lib/party-export');
-        await exportPartiesFile({ parties: filtered, kind: 'customers', format });
-        setIsExportModalOpen(false);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Error al exportar clientes');
-      }
-    });
+    try {
+      const { exportPartiesFile } = await import('@/lib/party-export');
+      await exportPartiesFile({ parties: filtered, kind: 'customers', format: 'xls' });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al exportar clientes');
+    }
   };
 
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
@@ -292,9 +279,13 @@ export default function CustomersPage() {
             <Button variant="outline" onClick={() => setIsImportModalOpen(true)} className="flex items-center gap-2">
               <Upload className="h-4 w-4" /> Importar
             </Button>
-            <Button variant="outline" onClick={openExportModal} disabled={busy} className="flex items-center gap-2">
-              <Download className="h-4 w-4" /> Exportar
-            </Button>
+            <ExportButton
+              variant="outline"
+              icon={Download}
+              label="Exportar"
+              onExport={handleExport}
+              className="flex items-center gap-2"
+            />
             <Button onClick={openCreate} className="flex items-center gap-2">
               <Plus className="h-4 w-4" /> Nuevo Cliente
             </Button>
@@ -516,18 +507,6 @@ export default function CustomersPage() {
           open
           onClose={() => setIsImportModalOpen(false)}
           onImported={fetchCustomers}
-        />
-      )}
-
-      {/* EXPORT MODAL */}
-      {isExportModalOpen && (
-        <ExportPartiesModal
-          kind="customers"
-          open
-          onClose={() => setIsExportModalOpen(false)}
-          onExport={handleExport}
-          exporting={exporting}
-          count={filtered.length}
         />
       )}
     </div>

@@ -187,6 +187,23 @@ describe('donut de pérdidas por motivo', () => {
     expect(total).not.toHaveClass('truncate');
     expect(total).toHaveTextContent('2.000.000');
   });
+
+  it('no cuenta las correcciones como pérdidas', async () => {
+    renderItems([
+      { ...adjustment(1), quantity: -3, reason: 'damaged' },
+      { ...adjustment(2), quantity: -7, reason: 'correction' },
+    ], 100);
+    await screen.findByRole('table');
+
+    const summary = screen.getByText(/Pérdida total/).parentElement as HTMLElement;
+    expect(within(summary).getByText('3 u.')).toBeInTheDocument();
+    expect(within(summary).getByText(/\$\s300,00/)).toBeInTheDocument();
+
+    // La corrección sigue visible en el historial y en el filtro, pero no suma
+    // al donut, al valor perdido ni al top de productos.
+    expect(screen.getByText('Ajuste 02')).toBeInTheDocument();
+    expect(screen.getAllByTestId('top-loss-product')).toHaveLength(1);
+  });
 });
 
 describe('historial de antipérdidas: filtro por motivo', () => {  beforeEach(() => {

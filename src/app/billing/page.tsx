@@ -449,45 +449,42 @@ function BillingContent() {
               </div>
             </div>
             {subscription.status === 'active' && (
-              <Button variant="outline" onClick={() => setShowCancelReasonModal(true)} className="flex items-center gap-2 text-red-600 border-red-200 hover:bg-red-50 self-start whitespace-nowrap">
-                <ShortLabel short="Cancelar">Cancelar suscripción</ShortLabel>
-              </Button>
-            )}
-          </div>
-          {subscription.status === 'active' && (
-            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  type="button"
-                  onClick={() => setShowRevocationModal(true)}
-                  className="text-indigo-600 border-indigo-200 hover:bg-indigo-50 dark:border-indigo-800 dark:hover:bg-indigo-950/30"
-                >
-                  Botón de arrepentimiento
+              <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center sm:justify-end">
+                <Button variant="outline" onClick={() => setShowCancelReasonModal(true)} className="w-full sm:w-auto flex items-center justify-center gap-2 text-red-600 border-red-200 hover:bg-red-50 whitespace-nowrap">
+                  <ShortLabel short="Cancelar">Cancelar suscripción</ShortLabel>
                 </Button>
-                <div className="relative" ref={revocationTooltipRef}>
-                  <IconAction
-                    icon={Info}
-                    label="Detalle del derecho de arrepentimiento"
-                    tone="muted"
-                    className="rounded-full hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-transparent dark:hover:bg-transparent"
-                    onClick={() => setShowRevocationTooltip((v) => !v)}
-                  />
-                  {showRevocationTooltip && (
-                    <div className="absolute left-0 top-full mt-1.5 z-30 w-72 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3.5 shadow-2xl shadow-black/15 dark:shadow-black/60">
-                      <p className="text-xs font-bold text-gray-900 dark:text-white">
-                        Botón de arrepentimiento
-                      </p>
-                      <p className="mt-1.5 text-xs leading-relaxed text-gray-600 dark:text-gray-400">
-                        Podés revocar la contratación desde el mismo medio electrónico por el que lo realizaste, sin trámites adicionales y dentro de los diez (10) días corridos.
-                      </p>
-                    </div>
-                  )}
+                <div className="flex min-w-0 items-center gap-1">
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => setShowRevocationModal(true)}
+                    className="h-full w-full sm:w-auto text-indigo-600 border-indigo-200 hover:bg-indigo-50 dark:border-indigo-800 dark:hover:bg-indigo-950/30"
+                  >
+                    <ShortLabel short="Arrepentimiento">Botón de arrepentimiento</ShortLabel>
+                  </Button>
+                  <div className="relative shrink-0" ref={revocationTooltipRef}>
+                    <IconAction
+                      icon={Info}
+                      label="Detalle del derecho de arrepentimiento"
+                      tone="muted"
+                      className="rounded-full hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-transparent dark:hover:bg-transparent"
+                      onClick={() => setShowRevocationTooltip((v) => !v)}
+                    />
+                    {showRevocationTooltip && (
+                      <div className="absolute right-0 top-full mt-1.5 z-30 w-72 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3.5 shadow-2xl shadow-black/15 dark:shadow-black/60">
+                        <p className="text-xs font-bold text-gray-900 dark:text-white">
+                          Botón de arrepentimiento
+                        </p>
+                        <p className="mt-1.5 text-xs leading-relaxed text-gray-600 dark:text-gray-400">
+                          Podés revocar la contratación desde el mismo medio electrónico por el que lo realizaste, sin trámites adicionales y dentro de los diez (10) días corridos.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </Card>
       )}
 
@@ -567,7 +564,7 @@ function BillingContent() {
                   onClick={() => handleSubscribe('enterprise')}
                   className="w-full bg-amber-500 text-black hover:bg-amber-400"
                 >
-                  Pensado a tu medida <ArrowRight className="h-4 w-4 ml-1" />
+                  Hablar con ventas <ArrowRight className="h-4 w-4 ml-1" />
                 </Button>
               ) : (!isCurrent || !isPlanActive) && (
                 <Button

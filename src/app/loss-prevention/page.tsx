@@ -50,9 +50,8 @@ const reasonMap = Object.fromEntries(reasonOptions.map(r => [r.value, r]));
 // El `reason` de `stock_history` no siempre es uno de los motivos del
 // formulario: la edición de producto y la re-importación escriben texto libre
 // ("Edición de producto", "Importación de productos") y los datos viejos pueden
-// venir vacíos. El donut y la tabla ya caían en "Corrección"; el filtro no, así
-// que esos ajustes se veían en "Productos con más pérdidas" pero no en ninguna
-// opción del filtro. Este helper unifica los tres lugares.
+// venir vacíos. El filtro y la tabla los agrupan en "Corrección"; el donut de
+// pérdidas no los cuenta porque no son merma. Este helper unifica el criterio.
 function baseReason(reason?: string): string {
   const base = reason?.split(':')[0]?.trim() || '';
   return reasonMap[base] ? base : 'correction';
@@ -69,6 +68,12 @@ function reasonNote(reason?: string): string {
 // Motivos que suman stock; el resto resta. Centralizado para que agregar un
 // motivo nuevo no deje el formulario y el envio con criterios distintos.
 const POSITIVE_REASONS = new Set(['found', 'stock_in', 'correction']);
+
+// Motivos que representan una merma real. Las correcciones (y los motivos
+// viejos/libres que caen en "Correction") también restan stock, pero son
+// ajustes de inventario, no pérdidas: no deben inflar unidades, valor, top de
+// productos ni el donut de motivos.
+const LOSS_REASONS = new Set(['damaged', 'lost', 'stolen', 'expired']);
 
 interface ProductCode {
   sku?: string | null;
@@ -215,11 +220,16 @@ export default function LossPreventionPage() {
     }
   };
 
-  const losses = history.filter((h) => h.quantity < 0);
+  // El balance neto conserva todos los ajustes (incluidas las correcciones)
+  // porque refleja el stock real. Las métricas de pérdida, en cambio, sólo
+  // miran los motivos de merma.
+  const negativeAdjustments = history.filter((h) => h.quantity < 0);
+  const losses = negativeAdjustments.filter((h) => LOSS_REASONS.has(baseReason(h.reason)));
+  const correctionAdjustments = negativeAdjustments.filter((h) => !LOSS_REASONS.has(baseReason(h.reason)));
   const gains = history.filter((h) => h.quantity > 0);
   const totalLosses = losses.reduce((sum, h) => sum + Math.abs(h.quantity), 0);
   const totalGains = gains.reduce((sum, h) => sum + h.quantity, 0);
-  const netBalance = totalGains - totalLosses;
+  const netBalance = history.reduce((sum, h) => sum + h.quantity, 0);
 
   const costOfProduct = (productId: string) => products?.find(p => p.id === productId)?.cost || 0;
 
@@ -279,7 +289,7 @@ export default function LossPreventionPage() {
           titleClassName="text-gray-500 dark:text-gray-400"
           value={<>{netBalance > 0 ? '+' : ''}{netBalance} u.</>}
           valueClassName={netBalance > 0 ? 'text-emerald-600 dark:text-emerald-400' : netBalance < 0 ? 'text-rose-600 dark:text-rose-400' : undefined}
-          subtitle={`${totalGains} recuperadas · ${totalLosses} perdidas`}
+          subtitle={`${totalGains} recuperadas · ${totalLosses} perdidas${correctionAdjustments.length > 0 ? ` · ${correctionAdjustments.length} correcciones` : ''}`}
           icon={Scale}
           tone="gray"
         />

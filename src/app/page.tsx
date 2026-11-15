@@ -556,7 +556,10 @@ export default function LandingPage() {
                     {plan.comingSoon ? (
                       <span className="text-2xl font-semibold text-gray-400">Próximamente</span>
                     ) : id === 'enterprise' ? (
-                      <span className="text-4xl font-extrabold">A medida</span>
+                      <div className="flex flex-wrap items-baseline gap-x-1">
+                        <span className="text-4xl font-extrabold">{formatPriceByCountry({ amount: price, country, configuredCurrencies })}</span>
+                        {price > 0 && <span className="text-sm text-gray-400">/mes</span>}
+                      </div>
                     ) : isTrialPlan ? (
                       <div>
                         <div className="flex flex-wrap items-center gap-2">

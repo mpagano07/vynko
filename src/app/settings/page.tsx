@@ -1384,7 +1384,7 @@ function SettingsContent() {
                 {filteredCollaborators.map((c) => (
                   <div
                     key={c.user_id}
-                    className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700"
+                    className="flex flex-col gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                       <div className="h-9 w-9 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-sm font-medium text-indigo-600 dark:text-indigo-300 flex-shrink-0">
@@ -1458,7 +1458,7 @@ function SettingsContent() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                    <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2 dark:border-gray-800 sm:ml-3 sm:flex-shrink-0 sm:border-0 sm:pt-0">
                       <StatusBadge
                         tone={roleBadgeTone(c.role)}
                         className="py-1"

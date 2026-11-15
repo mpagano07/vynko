@@ -14,7 +14,7 @@ export interface PriceSet {
 // según el tipo de cambio aproximado de cada moneda, con un leve uplift
 // psicológico para mercados con mayor poder adquisitivo.
 export const PRICES_BY_COUNTRY: Record<CountryCode, PriceSet> = {
-  AR: { starter: 19900, business: 29900, enterprise: 0 },
+  AR: { starter: 19900, business: 29900, enterprise: 120000 },
   BO: { starter: 119, business: 179, enterprise: 0 },
   BR: { starter: 89, business: 139, enterprise: 0 },
   CL: { starter: 15990, business: 23990, enterprise: 0 },

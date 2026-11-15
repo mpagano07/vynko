@@ -25,7 +25,7 @@ const PATH = '/precios';
 
 const TITLE = 'Precios de Vynko: planes y qué incluye cada uno';
 const DESCRIPTION =
-  'Precios de Vynko en pesos: Starter para comercios chicos, Business con productos y usuarios ilimitados y Enterprise a medida. 45 días gratis, sin tarjeta.';
+  'Precios de Vynko: Starter para comercios chicos, Business con productos y usuarios ilimitados y Enterprise con integraciones dedicadas. 45 días gratis.';
 
 export const metadata: Metadata = {
   title: 'Precios: planes de gestión de stock y ventas',
@@ -143,7 +143,7 @@ const COMPARISON_GROUPS: ReadonlyArray<{
 const FAQ = [
   {
     q: '¿Cuánto cuesta Vynko?',
-    a: 'El plan Starter cuesta lo que se muestra arriba por mes; el plan Business tiene un precio mayor porque incluye productos y usuarios ilimitados y hasta 5 sucursales. Enterprise se cotiza según la cantidad de sucursales y el acompañamiento que necesites.',
+    a: 'El plan Starter cuesta lo que se muestra arriba por mes; el plan Business tiene un precio mayor porque incluye productos y usuarios ilimitados y hasta 5 sucursales. Enterprise tiene su propio precio y suma hasta 99 sucursales, integraciones y acompañamiento dedicado.',
   },
   {
     q: '¿Hay prueba gratis?',
@@ -319,7 +319,12 @@ export default async function PreciosPage() {
 
                   <div className="mb-6">
                     {id === 'enterprise' ? (
-                      <span className="text-4xl font-extrabold">A medida</span>
+                      <div className="flex flex-wrap items-baseline gap-x-1">
+                        <span className="text-4xl font-extrabold">
+                          {formatPriceByCountry({ amount: price, country, configuredCurrencies })}
+                        </span>
+                        {price > 0 && <span className="text-sm text-gray-400">/mes</span>}
+                      </div>
                     ) : isTrial ? (
                       <div>
                         <div className="flex flex-wrap items-baseline gap-x-2">

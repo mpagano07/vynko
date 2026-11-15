@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { buildWhatsAppUrl, type ReceiptSale } from './sales-receipt';
+import {
+  buildWhatsAppUrl,
+  normalizeWhatsAppPhone,
+  type ReceiptSale,
+  type ReceiptTenant,
+} from './sales-receipt';
 
-function receiptText(sale: ReceiptSale): string {
-  const url = new URL(buildWhatsAppUrl(sale, { name: 'Kiosco' }));
+function receiptText(sale: ReceiptSale, tenant: ReceiptTenant = { name: 'Kiosco' }): string {
+  const url = new URL(buildWhatsAppUrl(sale, tenant));
   return url.searchParams.get('text') ?? '';
 }
 
@@ -68,5 +73,51 @@ describe('buildWhatsAppUrl', () => {
     );
 
     expect(text).toContain('c/u');
+  });
+
+  it('no repite el nombre del comercio cuando company_name y name son iguales', () => {
+    const text = receiptText(saleWith({}), { name: 'Kiosco', company_name: 'Kiosco' });
+
+    expect(text.match(/Kiosco/g)).toHaveLength(1);
+  });
+
+  it('mantiene ambos nombres cuando son distintos', () => {
+    const text = receiptText(saleWith({}), { name: 'Sucursal Centro', company_name: 'Kiosco' });
+
+    expect(text).toContain('Kiosco');
+    expect(text).toContain('Sucursal Centro');
+  });
+});
+
+describe('normalizeWhatsAppPhone', () => {
+  it('agrega el código de país a un celular argentino de 10 dígitos', () => {
+    expect(normalizeWhatsAppPhone('1165602587')).toBe('5491165602587');
+  });
+
+  it('acepta el número ya internacionalizado sin duplicar el 54 ni el 9', () => {
+    expect(normalizeWhatsAppPhone('+54 9 11 6560-2587')).toBe('5491165602587');
+    expect(normalizeWhatsAppPhone('5491165602587')).toBe('5491165602587');
+    expect(normalizeWhatsAppPhone('0054 9 11 6560 2587')).toBe('5491165602587');
+  });
+
+  it('quita el 0 y el 15 del formato local', () => {
+    expect(normalizeWhatsAppPhone('011 15 6560-2587')).toBe('5491165602587');
+    expect(normalizeWhatsAppPhone('11 15 6560 2587')).toBe('5491165602587');
+    expect(normalizeWhatsAppPhone('0221 15 555-1234')).toBe('5492215551234');
+  });
+
+  it('deja intacto un número internacional de otro país', () => {
+    expect(normalizeWhatsAppPhone('+1 555 123 4567')).toBe('15551234567');
+  });
+
+  it('devuelve vacío si no hay dígitos', () => {
+    expect(normalizeWhatsAppPhone('')).toBe('');
+    expect(normalizeWhatsAppPhone('sin número')).toBe('');
+  });
+
+  it('usa el teléfono normalizado en el link de WhatsApp', () => {
+    const url = buildWhatsAppUrl(saleWith({ customer_phone: '1165602587' }), { name: 'Kiosco' });
+
+    expect(url.startsWith('https://wa.me/5491165602587?text=')).toBe(true);
   });
 });
