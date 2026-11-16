@@ -13,6 +13,7 @@ export interface Supplier {
   iva_condition?: string | null;
   document_type?: string | null;
   document_number?: string | null;
+  payment_term_days?: number | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -45,6 +46,8 @@ export interface PurchaseOrder {
   expected_date?: string;
   received_date?: string;
   notes?: string;
+  payment_term_days?: number | null;
+  payment_due_date?: string | null;
   created_by?: string;
   created_at?: string;
   updated_at?: string;

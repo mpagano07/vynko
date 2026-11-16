@@ -120,6 +120,8 @@ export default function DocumentosPage() {
   const [isPoModalOpen, setIsPoModalOpen] = useState(false);
   const [poSupplierId, setPoSupplierId] = useState('');
   const [poExpectedDate, setPoExpectedDate] = useState(today);
+  const [poPaymentTermDays, setPoPaymentTermDays] = useState<string>('');
+  const [poPaymentDueDate, setPoPaymentDueDate] = useState('');
   const [poNotes, setPoNotes] = useState('');
   const [poItems, setPoItems] = useState<{ product_id: string; quantity: number; unit_cost: number }[]>([]);
   const [isSubmittingPo, setIsSubmittingPo] = useState(false);
@@ -441,6 +443,8 @@ export default function DocumentosPage() {
   const resetPoForm = () => {
     setPoSupplierId('');
     setPoExpectedDate(today);
+    setPoPaymentTermDays('');
+    setPoPaymentDueDate('');
     setPoNotes('');
     setPoItems([]);
     setPoStatus('draft');
@@ -535,6 +539,8 @@ export default function DocumentosPage() {
         body: JSON.stringify({
           supplier_id: poSupplierId,
           expected_date: poExpectedDate || null,
+          payment_term_days: poPaymentTermDays === '' ? null : Number(poPaymentTermDays),
+          payment_due_date: poPaymentDueDate || null,
           notes: poNotes || null,
           status: poStatus,
           items: poItems.map((i) => ({
@@ -1551,7 +1557,14 @@ export default function DocumentosPage() {
                   <FormLabel>
                     Proveedor *
                   </FormLabel>
-                  <Select value={poSupplierId} onChange={(e) => setPoSupplierId(e.target.value)} required>
+                  <Select value={poSupplierId} onChange={(e) => {
+                    const id = e.target.value;
+                    setPoSupplierId(id);
+                    if (id) {
+                      const sup = suppliers.find((s) => s.id === id);
+                      if (sup?.payment_term_days != null && poPaymentTermDays === '') setPoPaymentTermDays(String(sup.payment_term_days));
+                    }
+                  }} required>
                     <option value="">Seleccionar proveedor...</option>
                     {suppliers.map((s) => (
                       <option key={s.id} value={s.id}>{s.name}</option>
@@ -1566,6 +1579,29 @@ export default function DocumentosPage() {
                     type="date"
                     value={poExpectedDate}
                     onChange={(e) => setPoExpectedDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <FormLabel>
+                    Plazo de pago (d?as)
+                  </FormLabel>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={1}
+                    placeholder="Ej: 30"
+                    value={poPaymentTermDays}
+                    onChange={(e) => setPoPaymentTermDays(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <FormLabel>
+                    Fecha de vencimiento
+                  </FormLabel>
+                  <Input
+                    type="date"
+                    value={poPaymentDueDate}
+                    onChange={(e) => setPoPaymentDueDate(e.target.value)}
                   />
                 </div>
                 <div>
