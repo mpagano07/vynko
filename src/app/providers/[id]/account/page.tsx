@@ -5,8 +5,10 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { authFetch } from '@/lib/fetchWithTenant';
-import { formatARS } from '@/lib/utils/currency';
+import { formatARS, groupThousands, parseAmountInput } from '@/lib/utils/currency';
 import { formatDate } from '@/lib/utils/format';
+import { usePagination } from '@/lib/hooks/usePagination';
+import { Pagination } from '@/components/ui/pagination';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -111,14 +113,16 @@ export default function SupplierAccountPage() {
     void Promise.resolve().then(() => load());
   }, [load]);
 
-  const openPayables = useMemo(() => (data?.payables ?? []).filter((p) => p.balance_cents > 0), [data]);
+  const payables = useMemo(() => data?.payables ?? [], [data?.payables]);
+  const { currentPage, setCurrentPage, totalPages, pageItems: paginatedPayables } = usePagination(payables, 10);
+  const openPayables = useMemo(() => payables.filter((p) => p.balance_cents > 0), [payables]);
   const allocSumCents = useMemo(() => {
     return openPayables.reduce((sum, p) => {
-      const v = Math.round(Number(allocs[p.document_id] || 0) * 100);
+      const v = Math.round(parseAmountInput(allocs[p.document_id] || '') * 100);
       return sum + (Number.isFinite(v) && v > 0 ? v : 0);
     }, 0);
   }, [allocs, openPayables]);
-  const amountCents = Math.round(Number(amount || 0) * 100);
+  const amountCents = Math.round(parseAmountInput(amount || '') * 100);
 
   const openPay = () => {
     const initial: Record<string, string> = {};
@@ -139,7 +143,7 @@ export default function SupplierAccountPage() {
       return;
     }
     const allocations = openPayables
-      .map((p) => ({ purchase_order_id: p.purchase_order_id, document_id: p.document_id, amount_cents: Math.round(Number(allocs[p.document_id] || 0) * 100) }))
+      .map((p) => ({ purchase_order_id: p.purchase_order_id, document_id: p.document_id, amount_cents: Math.round(parseAmountInput(allocs[p.document_id] || '') * 100) }))
       .filter((a) => a.amount_cents > 0);
     if (allocations.length === 0) {
       toast.error('Imputá el pago a al menos un documento');
@@ -216,12 +220,13 @@ export default function SupplierAccountPage() {
   };
 
   const autoFillAllocations = () => {
-    let remaining = Math.max(0, Math.round(Number(amount || 0) * 100));
+    let remaining = Math.max(0, Math.round(parseAmountInput(amount || '') * 100));
     const next: Record<string, string> = {};
     for (const p of openPayables) {
       if (remaining <= 0) { next[p.document_id] = ''; continue; }
       const take = Math.min(remaining, p.balance_cents);
-      next[p.document_id] = (take / 100).toFixed(2);
+      const val = (take / 100).toFixed(2).replace('.', ',');
+      next[p.document_id] = groupThousands(val);
       remaining -= take;
     }
     setAllocs(next);
@@ -230,7 +235,7 @@ export default function SupplierAccountPage() {
   if (loading) return <LoadingState />;
   if (error || !data) return <div className="p-6 text-red-600">{error || 'Error'}</div>;
 
-  const { supplier, cutoff_date, summary, payables, payments } = data;
+  const { supplier, cutoff_date, summary, payments } = data;
 
   return (
     <div className="space-y-6">
@@ -241,7 +246,7 @@ export default function SupplierAccountPage() {
 
       <Card className="p-4">
         <h2 className="text-sm font-semibold mb-2">Fecha de corte de cuenta corriente</h2>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Solo se incluyen recepciones (remitos de ingreso) desde esta fecha. Dejar vac?o excluye todo lo hist?rico hasta configurar un corte (4B).</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Solo se incluyen recepciones (remitos de ingreso) desde esta fecha. Dejar vacío excluye todo lo histórico hasta configurar un corte (4B).</p>
         <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-end">
           <div>
             <label className="block text-xs font-medium mb-1">Fecha de corte</label>
@@ -272,7 +277,7 @@ export default function SupplierAccountPage() {
             <table className="w-full text-sm">
               <thead><tr className="text-left text-gray-500 border-b border-gray-200 dark:border-gray-700"><th className="py-2">Fecha</th><th>Remito</th><th>OC</th><th>Vence</th><th className="text-right">Deuda</th><th className="text-right">Pagado</th><th className="text-right">Saldo</th><th>Estado</th></tr></thead>
               <tbody>
-                {payables.map((p) => (
+                {paginatedPayables.map((p) => (
                   <tr key={p.document_id} className="border-b border-gray-100 dark:border-gray-800">
                     <td className="py-2">{formatDate(p.document_date || '')}</td>
                     <td>#{p.document_number ?? '-'}</td>
@@ -287,6 +292,15 @@ export default function SupplierAccountPage() {
               </tbody>
             </table>
           </div>
+        )}
+        {payables.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            resultInfo={`Mostrando ${payables.length === 0 ? 0 : (currentPage - 1) * 10 + 1}–${Math.min(currentPage * 10, payables.length)} de ${payables.length} documentos`}
+            className="mt-2"
+          />
         )}
       </Card>
 
@@ -323,7 +337,7 @@ export default function SupplierAccountPage() {
         <Modal onClose={() => setPayOpen(false)} className="max-w-2xl" title="Registrar pago">
           <form onSubmit={submitPayment} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div><label className="block text-sm font-medium mb-1">Monto</label><Input type="number" min={0} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required /></div>
+              <div><label className="block text-sm font-medium mb-1">Monto</label><Input type="text" inputMode="decimal" placeholder="0,00" value={amount} onChange={(e) => setAmount(groupThousands(e.target.value.replace(/[^0-9,]/g, '')))} required /></div>
               <div><label className="block text-sm font-medium mb-1">Fecha</label><Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} required /></div>
               <div><label className="block text-sm font-medium mb-1">Medio</label>
                 <Select value={method} onChange={(e) => setMethod(e.target.value)}>
@@ -350,7 +364,7 @@ export default function SupplierAccountPage() {
                       <div>Remito #{p.document_number ?? '-'} · OC {p.purchase_order_id.slice(0,8)} · vence {p.due_date ? formatDate(p.due_date) : '-'}</div>
                       <div className="text-xs text-gray-500">Saldo: {formatARS(p.balance_cents / 100)}</div>
                     </div>
-                    <Input className="w-32" type="number" min={0} step="0.01" value={allocs[p.document_id] ?? ''} onChange={(e) => setAllocs({ ...allocs, [p.document_id]: e.target.value })} />
+                    <Input className="w-32" type="text" inputMode="decimal" placeholder="0,00" value={allocs[p.document_id] ?? ''} onChange={(e) => setAllocs({ ...allocs, [p.document_id]: groupThousands(e.target.value.replace(/[^0-9,]/g, '')) })} />
                   </div>
                 ))}
               </div>
