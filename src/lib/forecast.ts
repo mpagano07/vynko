@@ -205,7 +205,12 @@ export async function getForecast(tenantId: string): Promise<ForecastPayload> {
       const projectedMonthly = Math.round(avgDaily * 30);
       const avgDailySales = Math.round(avgDaily * 10) / 10;
       const stock = Number(product.stock) || 0;
-      const daysUntilStockout = avgDailySales > 0 ? Math.round(stock / avgDailySales) : Infinity;
+      // Sin stock no hace falta demanda para saber que hay quiebre: el producto
+      // ya está agotado. Antes esto dependía de que hubiera ventas (si no,
+      // quedaba en null y el producto no figuraba en riesgo). Un stock negativo
+      // (ajustes) también cuenta como agotado, no como cobertura negativa.
+      const daysUntilStockout =
+        stock <= 0 ? 0 : avgDailySales > 0 ? Math.round(stock / avgDailySales) : Infinity;
       const minStock = Number(product.min_stock) || 0;
       const needsReorder = totalQty > 0 && (stock <= projectedMonthly * 0.5 || stock <= minStock);
       const suggestedOrder15 = totalQty > 0 ? Math.max(Math.ceil(avgDaily * 15) - stock, 0) : 0;
@@ -241,7 +246,7 @@ export async function getForecast(tenantId: string): Promise<ForecastPayload> {
   const stockEffectivenessPct =
     productIds.length > 0 ? Math.round((productsWithSales / productIds.length) * 100) : null;
   const upcomingStockout = predictions
-    .filter((p) => p.daysUntilStockout !== null && p.daysUntilStockout > 0 && p.daysUntilStockout <= 15)
+    .filter((p) => p.daysUntilStockout !== null && p.daysUntilStockout >= 0 && p.daysUntilStockout <= 15)
     .sort((a, b) => (a.daysUntilStockout ?? Infinity) - (b.daysUntilStockout ?? Infinity))
     .slice(0, 5)
     .map((p) => ({

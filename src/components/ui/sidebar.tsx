@@ -27,6 +27,12 @@ interface NavItem {
   requiredCapability?: Capability;
   requiredMultiBranch?: boolean;
   /**
+   * La sección opera sobre una sucursal concreta (ventas, caja, documentos,
+   * pronóstico...). En "Todas las sucursales" no se puede usar: se muestra con
+   * candado y la página explica que hay que elegir una.
+   */
+  requiredSingleBranch?: boolean;
+  /**
    * Requiere tener la facturación electrónica habilitada. Mientras la feature
    * esté en pruebas eso significa sólo la cuenta admin (ver `canUseFacturacion`).
    */
@@ -37,7 +43,11 @@ interface NavItem {
 /** Campos de un item que participan del filtrado por plan/capacidad/feature. */
 export type NavItemAccess = Pick<
   NavItem,
-  'requiredPlan' | 'requiredCapability' | 'requiredMultiBranch' | 'requiresFacturacion'
+  | 'requiredPlan'
+  | 'requiredCapability'
+  | 'requiredMultiBranch'
+  | 'requiredSingleBranch'
+  | 'requiresFacturacion'
 >;
 
 export interface NavAccessContext {
@@ -50,11 +60,15 @@ export interface NavAccessContext {
   facturacion?: boolean;
   /** País del visitante (ISO-2). ARCA (ex-AFIP) sólo opera en Argentina. */
   country?: string | null;
+  /** El usuario está viendo el consolidado de todas las sucursales. */
+  allTenants?: boolean;
 }
 
 interface FilterResult {
   visible: boolean;
   locked: boolean;
+  /** Por qué está bloqueado: upgrade de plan o falta elegir sucursal. */
+  lockedReason?: 'plan' | 'branch';
 }
 
 /**
@@ -78,6 +92,12 @@ export function resolveNavAccess(item: NavItemAccess, ctx: NavAccessContext): Fi
   const planBlocked = Boolean(item.requiredPlan && !item.requiredPlan.includes(ctx.plan));
 
   if (capabilityBlocked || multiBranchBlocked) return { visible: false, locked: false };
+  // El candado por sucursal gana sobre el de plan: si la cuenta ya tiene el
+  // plan, lo único que falta es elegir una sucursal, y mandarla a /billing
+  // sería un desvío equivocado.
+  if (item.requiredSingleBranch && ctx.allTenants) {
+    return { visible: true, locked: true, lockedReason: 'branch' };
+  }
   if (planBlocked) return { visible: true, locked: true };
   return { visible: true, locked: false };
 }
@@ -94,8 +114,8 @@ const navGroups: NavGroup[] = [
     label: 'Principal',
     items: [
       { name: 'Dashboard', href: '/dashboard', requiredPlan: ALL_PLANS },
-      { name: 'Ventas', href: '/sales', requiredPlan: ALL_PLANS },
-      { name: 'Caja', href: '/sales/cash-register', requiredPlan: ALL_PLANS },
+      { name: 'Ventas', href: '/sales', requiredPlan: ALL_PLANS, requiredSingleBranch: true },
+      { name: 'Caja', href: '/sales/cash-register', requiredPlan: ALL_PLANS, requiredSingleBranch: true },
     ],
   },
   {
@@ -104,26 +124,26 @@ const navGroups: NavGroup[] = [
       { name: 'Productos', href: '/products', requiredPlan: ALL_PLANS },
       { name: 'Proveedores', href: '/providers', requiredPlan: ALL_PLANS },
       { name: 'Clientes', href: '/customers', requiredPlan: ALL_PLANS },
-      { name: 'Documentos', href: '/documents', requiredPlan: ALL_PLANS },
+      { name: 'Documentos', href: '/documents', requiredPlan: ALL_PLANS, requiredSingleBranch: true },
       // Facturación ARCA: feature en pruebas, sólo la ve quien la tenga
       // habilitada (hoy, la cuenta admin). Al lanzarla, `canUseFacturacion`
       // también la habilita para business/enterprise.
-      { name: 'Facturación', href: '/invoices', requiresFacturacion: true },
+      { name: 'Facturación', href: '/invoices', requiresFacturacion: true, requiredSingleBranch: true },
     ],
   },
   {
     label: 'Análisis',
     items: [
-      { name: 'Pronóstico', href: '/forecast', requiredPlan: ['business', 'enterprise'], requiredCapability: 'view_reports' },
-      { name: 'Antipérdidas', href: '/loss-prevention', requiredPlan: ['business', 'enterprise'] },
+      { name: 'Pronóstico', href: '/forecast', requiredPlan: ['business', 'enterprise'], requiredCapability: 'view_reports', requiredSingleBranch: true },
+      { name: 'Antipérdidas', href: '/loss-prevention', requiredPlan: ['business', 'enterprise'], requiredSingleBranch: true },
       { name: 'Historial', href: '/activity-logs', requiredPlan: ['business', 'enterprise'], requiredCapability: 'view_reports' },
     ],
   },
 ];
 
 const operacionesItems: NavItem[] = [
-  { name: 'QR', href: '/qr-codes', requiredPlan: ALL_PLANS },
-  { name: 'Escáner', href: '/scanning', requiredPlan: ALL_PLANS },
+  { name: 'QR', href: '/qr-codes', requiredPlan: ALL_PLANS, requiredSingleBranch: true },
+  { name: 'Escáner', href: '/scanning', requiredPlan: ALL_PLANS, requiredSingleBranch: true },
 ];
 
 const LOCKED_ITEM_DESCRIPTIONS: Record<string, string> = {
@@ -132,7 +152,7 @@ const LOCKED_ITEM_DESCRIPTIONS: Record<string, string> = {
   '/activity-logs': 'Historial de actividad completo para auditar la operación de tu equipo.',
 };
 
-function LockedNavItem({ item, compact = false, onNavClick }: { item: NavItem; compact?: boolean; onNavClick?: () => void }) {
+function LockedNavItem({ item, compact = false, onNavClick, lockedReason = 'plan' }: { item: NavItem; compact?: boolean; onNavClick?: () => void; lockedReason?: 'plan' | 'branch' }) {
   const btnRef = useRef<HTMLButtonElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
@@ -185,8 +205,12 @@ function LockedNavItem({ item, compact = false, onNavClick }: { item: NavItem; c
         onFocus={show}
         onBlur={hide}
         onClick={() => {
-          toast('Disponible en el plan Business. Actualizá tu plan para acceder.', { icon: '🔒' });
           onNavClick?.();
+          if (lockedReason === 'branch') {
+            toast('Elegí una sucursal para usar esta sección.', { icon: '🔒' });
+            return;
+          }
+          toast('Disponible en el plan Business. Actualizá tu plan para acceder.', { icon: '🔒' });
           router.push('/billing');
         }}
         className={cn(
@@ -209,23 +233,31 @@ function LockedNavItem({ item, compact = false, onNavClick }: { item: NavItem; c
             <div className="w-60 rounded-xl border border-amber-300/60 bg-white dark:border-amber-800/40 dark:bg-gray-800 p-3.5 shadow-2xl shadow-black/15 dark:shadow-black/60">
               <div className="flex items-center gap-1.5">
                 <Lock className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
-                <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-300">Business</span>
-                <span className="ml-auto flex items-center gap-0.5 text-xs font-bold text-amber-500 dark:text-amber-400/90">
-                  <Sparkles className="h-3 w-3" />
-                  Premium
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-300">
+                  {lockedReason === 'branch' ? 'Elegí una sucursal' : 'Business'}
                 </span>
+                {lockedReason === 'plan' && (
+                  <span className="ml-auto flex items-center gap-0.5 text-xs font-bold text-amber-500 dark:text-amber-400/90">
+                    <Sparkles className="h-3 w-3" />
+                    Premium
+                  </span>
+                )}
               </div>
               <p className="mt-1.5 text-xs font-bold text-gray-900 dark:text-white">{item.name}</p>
               <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                {LOCKED_ITEM_DESCRIPTIONS[item.href] ?? 'Disponible en el plan Business.'}
+                {lockedReason === 'branch'
+                  ? 'Esta sección trabaja con una sucursal a la vez. Usá el selector de sucursal de arriba para entrar.'
+                  : LOCKED_ITEM_DESCRIPTIONS[item.href] ?? 'Disponible en el plan Business.'}
               </p>
-              <button
-                onClick={() => router.push('/billing')}
-                className="mt-2.5 flex w-full items-center justify-center gap-1 rounded-md bg-amber-500 px-2 py-1.5 text-xs font-bold text-black transition-colors hover:bg-amber-400"
-              >
-                Actualizar plan
-                <ArrowRight className="h-3.5 w-3.5" />
-              </button>
+              {lockedReason === 'plan' && (
+                <button
+                  onClick={() => router.push('/billing')}
+                  className="mt-2.5 flex w-full items-center justify-center gap-1 rounded-md bg-amber-500 px-2 py-1.5 text-xs font-bold text-black transition-colors hover:bg-amber-400"
+                >
+                  Actualizar plan
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           </div>,
           document.body
@@ -234,14 +266,14 @@ function LockedNavItem({ item, compact = false, onNavClick }: { item: NavItem; c
   );
 }
 
-function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, isAdmin, facturacion, country }: { onNavClick?: () => void; tenantPlan?: string; userRole?: string | null; isBlocked?: boolean; multiBranch?: boolean; isAdmin?: boolean; facturacion?: boolean; country?: string | null }) {
+function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, isAdmin, facturacion, country, allTenants }: { onNavClick?: () => void; tenantPlan?: string; userRole?: string | null; isBlocked?: boolean; multiBranch?: boolean; isAdmin?: boolean; facturacion?: boolean; country?: string | null; allTenants?: boolean }) {
   const pathname = usePathname();
   const [operacionesOpen, setOperacionesOpen] = useState(false);
 
   const effectivePlan = !tenantPlan || tenantPlan === 'free' ? 'starter' : tenantPlan;
 
   const filterItem = (item: NavItem): FilterResult =>
-    resolveNavAccess(item, { plan: effectivePlan, role: userRole, multiBranch, isAdmin, facturacion, country });
+    resolveNavAccess(item, { plan: effectivePlan, role: userRole, multiBranch, isAdmin, facturacion, country, allTenants });
 
   const visibleOperaciones = operacionesItems.map((item) => ({ item, ...filterItem(item) })).filter((r) => r.visible);
   const isOperacionesActive = visibleOperaciones.some((r) => pathname === r.item.href);
@@ -268,9 +300,9 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
             <p className="px-3 pt-4 pb-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
               {group.label}
             </p>
-            {visibleItems.map(({ item, locked }) =>
+            {visibleItems.map(({ item, locked, lockedReason }) =>
               locked ? (
-                <LockedNavItem key={item.name} item={item} onNavClick={onNavClick} />
+                <LockedNavItem key={item.name} item={item} onNavClick={onNavClick} lockedReason={lockedReason} />
               ) : (
                 <Link
                   key={item.name}
@@ -360,9 +392,9 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
           >
             <div className="overflow-hidden min-h-0">
               <div className="ml-4 mt-1 space-y-1 border-l border-gray-200 dark:border-gray-700 pl-3">
-                {visibleOperaciones.map(({ item, locked }) =>
+                {visibleOperaciones.map(({ item, locked, lockedReason }) =>
                   locked ? (
-                    <LockedNavItem key={item.name} item={item} compact onNavClick={onNavClick} />
+                    <LockedNavItem key={item.name} item={item} compact onNavClick={onNavClick} lockedReason={lockedReason} />
                   ) : (
                     <Link
                       key={item.name}
@@ -394,10 +426,33 @@ function SidebarNav({ onNavClick, tenantPlan, userRole, isBlocked, multiBranch, 
   );
 }
 
+/**
+ * Plan efectivo para el sidebar. En "Todas las sucursales" `tenant` es null,
+ * pero `tenants` sigue teniendo las sucursales y su plan: mirar sólo
+ * `tenant?.subscription_plan` caía a starter y bloqueaba ítems Business que la
+ * cuenta sí tiene. Se toma el plan más alto de la empresa.
+ */
+export function resolveSidebarPlan(
+  tenantPlan: string | null | undefined,
+  tenants: Array<{ subscription_plan?: string }>
+): string {
+  const rank: Record<string, number> = { enterprise: 3, business: 2, starter: 1, free: 0 };
+  let best: string | undefined;
+  for (const plan of [tenantPlan, ...tenants.map((t) => t.subscription_plan)]) {
+    if (!plan) continue;
+    if (!best || (rank[plan] ?? -1) > (rank[best] ?? -1)) best = plan;
+  }
+  return !best || best === 'free' ? 'starter' : best;
+}
+
 export function Sidebar() {
   const pathname = usePathname();
-  const { profile, tenant, tenants, role, user, loading } = useAuth();
+  const { profile, tenant, tenants, role, user, loading, allTenants } = useAuth();
   const isAdmin = isAdminProfile(profile);
+  // En "Todas las sucursales" (`tenant` null) el plan tiene que salir de la
+  // lista de sucursales. Si no, el sidebar cae a starter y bloquea Pronóstico,
+  // Antipérdidas e Historial aunque la empresa tenga Business.
+  const sidebarPlan = resolveSidebarPlan(tenant?.subscription_plan, tenants);
   const canFacturacion = canUseFacturacion(profile, tenant);
   // País del visitante: la cookie `vynko_country` la setea el proxy con la
   // geolocalización de la request. ARCA (ex-AFIP) sólo opera en Argentina, así
@@ -475,7 +530,7 @@ export function Sidebar() {
           <IconAction icon={X} label="Cerrar menú" size="md" onClick={close} />
         </div>
         <nav className="flex-1 space-y-2 overflow-y-auto">
-          <SidebarNav onNavClick={close} tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} isAdmin={isAdmin} facturacion={canFacturacion} country={country} />
+          <SidebarNav onNavClick={close} tenantPlan={sidebarPlan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} isAdmin={isAdmin} facturacion={canFacturacion} country={country} allTenants={allTenants} />
         </nav>
         <TrialCounter tenant={tenant} />
         {userSection}
@@ -489,7 +544,7 @@ export function Sidebar() {
           </div>
         </div>
         <nav className="flex-1 overflow-y-auto">
-          <SidebarNav tenantPlan={tenant?.subscription_plan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} isAdmin={isAdmin} facturacion={canFacturacion} country={country} />
+          <SidebarNav tenantPlan={sidebarPlan} userRole={role} isBlocked={isBlocked} multiBranch={tenants.length > 1} isAdmin={isAdmin} facturacion={canFacturacion} country={country} allTenants={allTenants} />
         </nav>
         <TrialCounter tenant={tenant} />
         {userSection}

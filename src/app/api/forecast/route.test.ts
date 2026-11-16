@@ -254,6 +254,35 @@ describe('GET /api/forecast', () => {
     expect(json.upcomingStockout).toHaveLength(1);
   });
 
+  it('marca agotado y en riesgo un producto con stock 0 aunque no tenga ventas', async () => {
+    supabaseMock.__queue('product_stock', {
+      data: [
+        stockRow('p0', 0, 5, 10, product('p0', 'Agotado', 1000, 10)),
+        stockRow('p1', 4, 0, 10, product('p1', 'Sano', 1000, 10)),
+      ],
+    });
+    // p0 no vendió nunca: el quiebre no puede depender de la demanda.
+    supabaseMock.__queue('sale_items', { data: [] });
+    supabaseMock.__queue('sales_daily_totals', { data: [] });
+    supabaseMock.__queue('sale_items', { data: [] });
+    supabaseMock.__queue('sales_daily_totals', { data: [] });
+
+    const res = await GET(makeRequest());
+    const json = await res.json();
+
+    const agotado = json.predictions.find((p: { productId: string }) => p.productId === 'p0');
+    expect(agotado.currentStock).toBe(0);
+    expect(agotado.daysUntilStockout).toBe(0);
+    expect(json.summary.stockoutRiskCount).toBe(1);
+    // "Próximo a agotarse" incluye el agotado primero, no lo esconde por tener
+    // cobertura 0.
+    expect(json.upcomingStockout[0]).toMatchObject({
+      productId: 'p0',
+      currentStock: 0,
+      daysUntilStockout: 0,
+    });
+  });
+
   it('excluye de "Próximo a agotarse" productos con cobertura mayor a 15 días', async () => {
     supabaseMock.__queue('product_stock', {
       data: [stockRow('p1', 50, 0, 200, product('p1', 'Amplio', 10000, 90))],

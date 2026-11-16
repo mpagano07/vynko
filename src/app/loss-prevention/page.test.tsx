@@ -188,6 +188,41 @@ describe('donut de pérdidas por motivo', () => {
     expect(total).toHaveTextContent('2.000.000');
   });
 
+  it('descuenta las unidades recuperadas de las mermas, el valor y el top', async () => {
+    renderItems([
+      { ...adjustment(1), quantity: -5, reason: 'damaged' },
+      {
+        ...adjustment(2),
+        quantity: 2,
+        reason: 'found',
+        createdAt: '2026-11-02T12:00:00.000Z',
+      },
+    ], 100);
+    await screen.findByRole('table');
+
+    // 5 dañadas - 2 encontradas = 3 netas, a $100 = $300.
+    const summary = screen.getByText(/Pérdida total neta/).parentElement as HTMLElement;
+    expect(within(summary).getByText('3 u.')).toBeInTheDocument();
+    expect(within(summary).getByText(/\$\s300,00/)).toBeInTheDocument();
+
+    const top = screen.getAllByTestId('top-loss-product');
+    expect(top).toHaveLength(1);
+    expect(within(top[0]).getByText(/3 u\. perdidas/)).toBeInTheDocument();
+    expect(screen.getByText('Pérdidas netas por motivo')).toBeInTheDocument();
+  });
+
+  it('un ingreso de mercadería o una corrección no descuentan mermas', async () => {
+    renderItems([
+      { ...adjustment(1), quantity: -4, reason: 'lost' },
+      { ...adjustment(2), quantity: 10, reason: 'stock_in', createdAt: '2026-11-02T12:00:00.000Z' },
+      { ...adjustment(3), quantity: 10, reason: 'correction', createdAt: '2026-11-02T12:00:00.000Z' },
+    ], 10);
+    await screen.findByRole('table');
+
+    const summary = screen.getByText(/Pérdida total neta/).parentElement as HTMLElement;
+    expect(within(summary).getByText('4 u.')).toBeInTheDocument();
+  });
+
   it('no cuenta las correcciones como pérdidas', async () => {
     renderItems([
       { ...adjustment(1), quantity: -3, reason: 'damaged' },
