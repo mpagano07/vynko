@@ -21,8 +21,8 @@
   },
   "dependencies": {
     "@paddle/paddle-js": "^1.6.5",
-    "@sentry/core": "11.8.0",
-    "@sentry/nextjs": "^11.4.0",
+    "@sentry/core": "11.13.0",
+    "@sentry/nextjs": "^11.13.0",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.108.0",
     "@vercel/analytics": "^2.0.1",
@@ -31,7 +31,7 @@
     "cookie": "^1.1.1",
     "lucide-react": "^1.17.0",
     "mercadopago": "^3.1.0",
-    "next": "^16.4.2",
+    "next": "16.4.5",
     "node-forge": "^1.4.3",
     "qrcode": "^1.5.4",
     "react": "19.2.4",
@@ -70,9 +70,9 @@
   },
   "overrides": {
     "serialize-javascript": "7.1.0",
-    "@sentry/core": "11.8.0",
+    "@sentry/core": "11.13.0",
     "@sentry/nextjs": {
-      "@sentry/core": "11.8.0"
+      "@sentry/core": "11.13.0"
     },
     "@sentry/bundler-plugins": {
       "glob": "14.0.3"
