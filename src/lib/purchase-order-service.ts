@@ -61,6 +61,8 @@ interface CreatePurchaseOrderBody {
   expected_date?: string;
   notes?: string;
   status?: string;
+  payment_term_days?: number | null;
+  payment_due_date?: string | null;
   items: { product_id: string; quantity: number; unit_cost?: number }[];
 }
 
@@ -69,7 +71,7 @@ export async function createPurchaseOrder(
   body: CreatePurchaseOrderBody
 ): Promise<PurchaseOrderResult> {
   try {
-    const { supplier_id, expected_date, notes, status, items } = body;
+    const { supplier_id, expected_date, notes, status, items, payment_term_days, payment_due_date } = body;
 
     const role = await getRoleInTenant(auth.userId, auth.tenantId);
     if (!hasCapability(role, 'manage_purchases')) {
@@ -122,10 +124,11 @@ export async function createPurchaseOrder(
       .eq('id', supplier_id)
       .eq('tenant_id', auth.tenantId);
 
+    let supplierDefaultTerm: number | null = null;
     if (!existingProvider || existingProvider.length === 0) {
       const { data: supplier } = await supabaseAdmin
         .from('suppliers')
-        .select('name, email, phone, address')
+        .select('name, email, phone, address, payment_term_days')
         .eq('id', supplier_id)
         .eq('tenant_id', auth.tenantId);
 
@@ -138,6 +141,7 @@ export async function createPurchaseOrder(
       if (!sup) {
         return { ok: false, error: 'El proveedor no pertenece a esta sucursal', status: 400 };
       }
+      supplierDefaultTerm = (sup.payment_term_days as number | null | undefined) ?? null;
       await supabaseAdmin
         .from('providers')
         .insert({
@@ -148,7 +152,30 @@ export async function createPurchaseOrder(
           phone: (sup.phone as string) || null,
           address: (sup.address as string) || null,
         });
+    } else {
+      const { data: supplier } = await supabaseAdmin
+        .from('suppliers')
+        .select('payment_term_days')
+        .eq('id', supplier_id)
+        .eq('tenant_id', auth.tenantId)
+        .maybeSingle();
+      supplierDefaultTerm = (supplier?.payment_term_days as number | null | undefined) ?? null;
     }
+
+    const rawTerm = payment_term_days;
+    let resolvedTermDays: number | null = supplierDefaultTerm;
+    if (rawTerm !== undefined) {
+      if (rawTerm === null || rawTerm === ('' as unknown)) {
+        resolvedTermDays = null;
+      } else {
+        const n = Number(rawTerm);
+        if (!Number.isFinite(n) || n < 0) {
+          return { ok: false, error: 'El plazo de pago debe ser un número de días válido', status: 400 };
+        }
+        resolvedTermDays = Math.trunc(n);
+      }
+    }
+    const resolvedDueDate = payment_due_date ? String(payment_due_date).slice(0, 10) : null;
 
     const { data: order, error: poError } = await supabaseAdmin
       .from('purchase_orders')
@@ -160,6 +187,8 @@ export async function createPurchaseOrder(
         status: status || 'draft',
         expected_date: expected_date || null,
         notes: notes || null,
+        payment_term_days: resolvedTermDays,
+        payment_due_date: resolvedDueDate,
         created_by: auth.userId,
       })
       .select()
@@ -207,18 +236,56 @@ export async function createPurchaseOrder(
 export async function updatePurchaseOrder(
   auth: AuthInfo,
   id: string,
-  body: { status?: string }
+  body: { status?: string; payment_term_days?: number | null; payment_due_date?: string | null }
 ): Promise<PurchaseOrderResult> {
   try {
-    const { status } = body;
+    const { status, payment_term_days, payment_due_date } = body;
 
     const role = await getRoleInTenant(auth.userId, auth.tenantId);
     if (!hasCapability(role, 'manage_purchases')) {
       return { ok: false, error: 'Solo el dueño o un administrador puede modificar pedidos', status: 403 };
     }
 
+    // Actualización de vencimiento/plazo sin cambiar estado
     if (!status) {
-      return { ok: false, error: 'Estado requerido', status: 400 };
+      if (payment_term_days === undefined && payment_due_date === undefined) {
+        return { ok: false, error: 'Estado requerido', status: 400 };
+      }
+      const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (payment_term_days !== undefined) {
+        if (payment_term_days === null || (payment_term_days as unknown) === '') {
+          updateData.payment_term_days = null;
+        } else {
+          const n = Number(payment_term_days);
+          if (!Number.isFinite(n) || n < 0) {
+            return { ok: false, error: 'El plazo de pago debe ser un número de días válido', status: 400 };
+          }
+          updateData.payment_term_days = Math.trunc(n);
+        }
+      }
+      if (payment_due_date !== undefined) {
+        updateData.payment_due_date = payment_due_date ? String(payment_due_date).slice(0, 10) : null;
+      }
+      const { data: updatedOrder, error: poError } = await supabaseAdmin
+        .from('purchase_orders')
+        .update(updateData)
+        .eq('id', id)
+        .eq('tenant_id', auth.tenantId)
+        .select()
+        .single();
+      if (poError) {
+        logger.error('DB error:', { error: poError });
+        return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
+      }
+      await createActivityLog({
+        tenantId: auth.tenantId,
+        userId: auth.userId,
+        action: 'updated',
+        entityType: 'purchase_order',
+        entityId: id,
+        details: { folio: id.slice(0, 8), payment_term_days: updateData.payment_term_days, payment_due_date: updateData.payment_due_date },
+      });
+      return { ok: true, data: updatedOrder, status: 200 };
     }
 
     const validStatuses = ['draft', 'sent', 'partial', 'received', 'cancelled'];

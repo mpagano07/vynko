@@ -33,6 +33,7 @@ import {
   Loader2,
   Upload,
   Download,
+  Wallet,
 } from 'lucide-react';
 import { PO_STATUS_LABELS, PO_STATUS_TONES, type Supplier, type PurchaseOrder } from '@/lib/types/supplier';
 import type { CommercialDocument } from '@/lib/types/document';
@@ -75,6 +76,7 @@ function emptySupplierForm() {
     iva_condition: 'responsable_inscripto',
     document_type: 'CUIT',
     document_number: '',
+    payment_term_days: '' as string | number,
   };
 }
 
@@ -93,6 +95,7 @@ function supplierFormFrom(s: Supplier): SupplierForm {
     iva_condition: s.iva_condition || 'responsable_inscripto',
     document_type: documentType,
     document_number: formatDocumentNumberInput(s.document_number || '', documentType),
+    payment_term_days: s.payment_term_days ?? '',
   };
 }
 
@@ -422,6 +425,12 @@ export default function ProvidersPage() {
                       <td className="py-4 px-6 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <IconAction
+                            icon={Wallet}
+                            label={`Cuenta corriente de ${supplier.name}`}
+                            tone="indigo"
+                            onClick={(e) => { e.stopPropagation(); router.push(`/providers/${supplier.id}/account`); }}
+                          />
+                          <IconAction
                             icon={Edit}
                             label={`Editar ${supplier.name}`}
                             tone="indigo"
@@ -603,15 +612,28 @@ export default function ProvidersPage() {
                 </div>
                 <div>
                   <FormLabel>
-                    Teléfono
+                    Tel?fono
                   </FormLabel>
                   <Input
                     type="text"
-                    placeholder="Teléfono"
+                    placeholder="Tel?fono"
                     value={supplierForm.phone}
                     onChange={(e) => setSupplierForm({ ...supplierForm, phone: e.target.value })}
                   />
                 </div>
+              </div>
+
+              <div>
+                <FormLabel>Condici?n de pago (d?as, opcional)</FormLabel>
+                <Input
+                  type="number"
+                  min={0}
+                  step={1}
+                  placeholder="Ej: 30"
+                  value={supplierForm.payment_term_days ?? ''}
+                  onChange={(e) => setSupplierForm({ ...supplierForm, payment_term_days: e.target.value === '' ? '' : Number(e.target.value) })}
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Se sugerir? como plazo por defecto en nuevas ?rdenes de compra.</p>
               </div>
 
               <div>

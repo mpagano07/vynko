@@ -92,6 +92,17 @@ export async function createSupplier(
       return { ok: false, error: 'Ya existe un proveedor con ese nombre', status: 409 };
     }
 
+    const rawTerm = body.payment_term_days;
+    const paymentTermDays =
+      rawTerm === '' || rawTerm === null || rawTerm === undefined
+        ? null
+        : Number.isFinite(Number(rawTerm)) && Number(rawTerm) >= 0
+          ? Math.trunc(Number(rawTerm))
+          : null;
+    if (rawTerm !== '' && rawTerm !== null && rawTerm !== undefined && paymentTermDays === null) {
+      return { ok: false, error: 'La condición de pago debe ser un número de días válido', status: 400 };
+    }
+
     const { data, error } = await supabaseAdmin
       .from('suppliers')
       .insert({
@@ -106,6 +117,7 @@ export async function createSupplier(
         iva_condition: tax.iva_condition,
         document_type: tax.document_type,
         document_number: tax.document_number,
+        payment_term_days: paymentTermDays,
       })
       .select()
       .single();
@@ -158,6 +170,7 @@ const SUPPLIER_ALLOWED_FIELDS = [
   'iva_condition',
   'document_type',
   'document_number',
+  'payment_term_days',
 ];
 
 export async function updateSupplier(
@@ -187,6 +200,19 @@ export async function updateSupplier(
 
       const taxError = validatePartyTaxFields({ ...(existing || {}), ...updateData });
       if (taxError) return { ok: false, error: taxError, status: 400 };
+    }
+
+    if (body.payment_term_days !== undefined) {
+      const rawTerm = body.payment_term_days;
+      if (rawTerm === '' || rawTerm === null) {
+        updateData.payment_term_days = null;
+      } else {
+        const n = Number(rawTerm);
+        if (!Number.isFinite(n) || n < 0) {
+          return { ok: false, error: 'La condición de pago debe ser un número de días válido', status: 400 };
+        }
+        updateData.payment_term_days = Math.trunc(n);
+      }
     }
 
     updateData.updated_at = new Date().toISOString();
