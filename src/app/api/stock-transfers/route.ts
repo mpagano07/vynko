@@ -7,9 +7,11 @@ export async function GET(request: Request) {
   const auth = await getAuth(request);
   if (!auth) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-  const statusFilter = new URL(request.url).searchParams.get('status');
+  const { searchParams } = new URL(request.url);
+  const statusFilter = searchParams.get('status');
+  const days = searchParams.get('days');
 
-  const result = await listTransfers(auth, statusFilter);
+  const result = await listTransfers(auth, statusFilter, days ? Number(days) : undefined);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
   return NextResponse.json(fixResponse(result.data));
 }

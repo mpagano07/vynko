@@ -16,6 +16,7 @@ export async function GET(request: Request) {
       offset: searchParams.get('offset'),
       entity_type: searchParams.get('entity_type'),
       q: searchParams.get('q'),
+      days: searchParams.get('days'),
     });
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
     return NextResponse.json(fixResponse(result.data));

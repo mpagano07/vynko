@@ -8,7 +8,10 @@ export type StockTransferResult<T = unknown> =
   | { ok: true; data: T; status: number }
   | { ok: false; error: string; status: number };
 
-export async function listTransfers(auth: AuthInfo, statusFilter: string | null): Promise<StockTransferResult> {
+export async function listTransfers(auth: AuthInfo, statusFilter: string | null, days?: number | null): Promise<StockTransferResult> {
+  const daysRaw = Number(days);
+  const allowedDays = [7, 30, 60, 0];
+  const daysFilter = allowedDays.includes(daysRaw) ? daysRaw : 7;
   let q = supabaseAdmin
     .from('stock_transfers')
     .select(`
@@ -23,9 +26,6 @@ export async function listTransfers(auth: AuthInfo, statusFilter: string | null)
   const filter = `from_tenant_id.in.(${ids}),to_tenant_id.in.(${ids})`;
   q = q.or(filter);
   if (statusFilter) {
-    // `?status=pending,in_transit` trae los estados activos en UNA llamada:
-    // la bandeja hacía dos GET secuenciales (uno por estado), que con la
-    // latencia de PostgREST duplicaban la espera de cada actualización.
     const statuses = statusFilter.split(',').map((s) => s.trim()).filter(Boolean);
     if (statuses.length === 1) {
       q = q.eq('status', statuses[0]);
@@ -33,7 +33,10 @@ export async function listTransfers(auth: AuthInfo, statusFilter: string | null)
       q = q.in('status', statuses);
     }
   }
-
+  if (daysFilter > 0) {
+    const since = new Date(Date.now() - daysFilter * 24 * 60 * 60 * 1000).toISOString();
+    q = q.gte('created_at', since);
+  }
   q = q.order('created_at', { ascending: false });
 
   const { data, error } = await q;

@@ -69,6 +69,7 @@ const ENTITY_LABELS: Record<string, string> = {
   stock_transfer: 'Transferencia',
   cash_register_session: 'Sesión de caja',
   cash_movement: 'Movimiento de caja',
+  supplier_payment: 'Pago a proveedor',
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -104,15 +105,32 @@ const DETAIL_LABELS: Record<string, string> = {
   total_counted_cents: 'Contado',
   total_difference_cents: 'Diferencia',
   amount_cents: 'Monto',
+  supplier_id: 'Proveedor',
+  allocations: 'Imputaciones',
+  document_id: 'Documento',
+  payment_id: 'Pago',
+  purchase_order_id: 'Orden de compra',
+  method: 'Método',
+  reference: 'Referencia',
 };
 
 function formatDetailValue(key: string, value: unknown): string {
   if (value === null || value === undefined || value === '') return '';
   if (key === 'total_cents' && typeof value === 'number') return formatARS(value / 100);
   if (['initial_fund_cents', 'total_expected_cents', 'total_counted_cents', 'total_difference_cents', 'amount_cents'].includes(key) && typeof value === 'number') return formatARS(value / 100);
-  if (key === 'from_tenant_id' || key === 'to_tenant_id') return `#${String(value).slice(0, 8)}`;
+  if (key === 'from_tenant_id' || key === 'to_tenant_id' || key === 'supplier_id') return `#${String(value).slice(0, 8)}`;
   if (key === 'status' && typeof value === 'string') {
     return TRANSFER_STATUS_LABELS[value as TransferStatus] ?? value;
+  }
+  if (key === 'allocations' && Array.isArray(value)) {
+    if (value.length === 0) return 'Sin imputaciones';
+    return value
+      .map((a: { document_id?: string; purchase_order_id?: string; amount_cents?: number }) => {
+        const doc = a.document_id ? `Doc #${String(a.document_id).slice(0, 8)}` : (a.purchase_order_id ? `OC #${String(a.purchase_order_id).slice(0, 8)}` : 'Documento');
+        const amt = typeof a.amount_cents === 'number' ? formatARS(a.amount_cents / 100) : '';
+        return `${doc}${amt ? ` — ${amt}` : ''}`;
+      })
+      .join('; ');
   }
   return typeof value === 'string' || typeof value === 'number' ? String(value) : JSON.stringify(value);
 }
@@ -152,7 +170,8 @@ function TransfersHistoryTab() {
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
-  const limit = 20;
+  const [daysFilter, setDaysFilter] = useState<7 | 30 | 60 | 0>(7);
+  const limit = 10;
   const [expandedTransfers, setExpandedTransfers] = useState<Set<string>>(new Set());
 
   const toggleTransfer = (id: string) => {
@@ -167,7 +186,7 @@ function TransfersHistoryTab() {
   const fetchTransfers = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await authFetch('/api/stock-transfers');
+      const res = await authFetch(`/api/stock-transfers?days=${daysFilter}`);
       if (res.ok) {
         const data: Transfer[] = await res.json();
         setTransfers(data);
@@ -175,7 +194,7 @@ function TransfersHistoryTab() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [daysFilter]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -195,6 +214,35 @@ function TransfersHistoryTab() {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-end gap-2 flex-wrap">
+        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">
+          Período
+        </span>
+        <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-800/40 p-0.5 gap-0.5">
+          {([
+            { days: 7, label: '7 días' },
+            { days: 30, label: '30 días' },
+            { days: 60, label: '60 días' },
+            { days: 0, label: 'Todo' },
+          ] as const).map((opt) => (
+            <button
+              key={opt.days}
+              type="button"
+              onClick={() => {
+                setDaysFilter(opt.days);
+                setPage(0);
+              }}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                daysFilter === opt.days
+                  ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <Thead>
@@ -379,11 +427,12 @@ export default function ActivityLogsPage() {
   const [entityFilter, setEntityFilter] = useState('');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [daysFilter, setDaysFilter] = useState<7 | 30 | 60 | 0>(7);
   const [page, setPage] = useState(0);
   const [activeTab, setActiveTab] = useState<Tab>('activity');
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
   const [saleDetails, setSaleDetails] = useState<Record<string, SaleDetail>>({});
-  const limit = 20;
+  const limit = 10;
 
   const toggleLog = (log: ActivityLog) => {
     const isOpen = expandedLogs.has(log.id);
@@ -411,7 +460,7 @@ export default function ActivityLogsPage() {
       let hasMore = true;
 
       while (hasMore) {
-        const params = new URLSearchParams({ limit: String(batchSize), offset: String(offset) });
+        const params = new URLSearchParams({ limit: String(batchSize), offset: String(offset), days: String(daysFilter) });
         if (entityFilter) params.set('entity_type', entityFilter);
         if (debouncedSearch) params.set('q', debouncedSearch);
         const res = await authFetch(`/api/activity-logs?${params}`);
@@ -500,7 +549,7 @@ export default function ActivityLogsPage() {
   };
 
   const fetchLogs = useCallback(async () => {
-    const params = new URLSearchParams({ limit: String(limit), offset: String(page * limit) });
+    const params = new URLSearchParams({ limit: String(limit), offset: String(page * limit), days: String(daysFilter) });
     if (entityFilter) params.set('entity_type', entityFilter);
     if (debouncedSearch) params.set('q', debouncedSearch);
 
@@ -512,7 +561,7 @@ export default function ActivityLogsPage() {
     const json = await res.json();
     setLogs(json.data || []);
     setTotal(json.total || 0);
-  }, [entityFilter, page, debouncedSearch]);
+  }, [entityFilter, page, debouncedSearch, daysFilter]);
 
   // La búsqueda libre pega contra el servidor: se espera 300 ms para no
   // disparar un request por tecla.
@@ -615,7 +664,34 @@ export default function ActivityLogsPage() {
                   aria-label="Buscar en el historial"
                 />
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  Período:
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    { days: 7, label: '7 días' },
+                    { days: 30, label: '30 días' },
+                    { days: 60, label: '60 días' },
+                    { days: 0, label: 'Todo' },
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.days}
+                      type="button"
+                      onClick={() => {
+                        setDaysFilter(opt.days);
+                        setPage(0);
+                      }}
+                      className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
+                        daysFilter === opt.days
+                          ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-indigo-400 dark:bg-indigo-950/40 dark:text-indigo-300'
+                          : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   Filtrar por:
                 </label>
@@ -639,6 +715,9 @@ export default function ActivityLogsPage() {
                 </span>
               </div>
             </div>
+            <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+              Los registros se eliminan automáticamente después de 90 días.
+            </p>
           </Card>
 
           <Card className="overflow-hidden border border-gray-100 dark:border-gray-800 p-0">
