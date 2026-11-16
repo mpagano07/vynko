@@ -49,6 +49,17 @@ function formatDailyDemand(p: Prediction): string {
   return String(p.avgDailySales);
 }
 
+/**
+ * Un producto está en riesgo si ya se agotó (sin importar si vendió) o si,
+ * vendiendo, se agota en ≤ 7 días o está en/bajo el mínimo. Es el mismo
+ * criterio para la tarjeta, la distribución y la pestaña "En riesgo".
+ */
+function isStockoutRisk(p: Prediction): boolean {
+  if (p.currentStock <= 0) return true;
+  if (p.totalSoldLast30 === 0) return false;
+  return p.needsReorder || p.currentStock <= p.minStock || (p.daysUntilStockout !== null && p.daysUntilStockout <= 7);
+}
+
 export default function ForecastPage() {
   const { role, tenant, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -181,8 +192,8 @@ export default function ForecastPage() {
   let nInmovilizado = 0;
   let nSaludable = 0;
   for (const p of data.predictions) {
+    if (isStockoutRisk(p)) { nEnRiesgo += 1; continue; }
     if (p.totalSoldLast30 === 0) { nInmovilizado += 1; continue; }
-    if ((p.daysUntilStockout !== null && p.daysUntilStockout <= 7) || p.currentStock <= p.minStock) { nEnRiesgo += 1; continue; }
     if (p.needsReorder) { nReponer += 1; continue; }
     nSaludable += 1;
   }
@@ -195,9 +206,11 @@ export default function ForecastPage() {
 
   const filteredPredictions = data.predictions.filter((p) => {
     if (filterTab === 'todos') return true;
-    if (filterTab === 'riesgo') return p.totalSoldLast30 > 0 && (p.needsReorder || p.currentStock <= p.minStock);
+    if (filterTab === 'riesgo') return isStockoutRisk(p);
     if (filterTab === 'alta') return avgDailyAll > 0 && p.avgDailySales > avgDailyAll;
-    if (filterTab === 'sin') return p.totalSoldLast30 === 0;
+    // "Sin movimiento" no se solapa con "En riesgo": un producto agotado es
+    // riesgo aunque no tenga ventas, y repetirlo en las dos pestañas confunde.
+    if (filterTab === 'sin') return p.totalSoldLast30 === 0 && p.currentStock > 0;
     return true;
   });
 
@@ -254,7 +267,7 @@ export default function ForecastPage() {
           title="Riesgo de quiebre"
           value={s.stockoutRiskCount}
           valueClassName={s.stockoutRiskCount > 0 ? 'text-rose-600 dark:text-rose-400' : undefined}
-          subtitle={`${s.stockoutRiskCount === 1 ? 'Se agota' : 'Se agotan'} en menos de 7 días`}
+          subtitle="Agotados o con cobertura menor a 7 días"
           icon={AlertTriangle}
           tone="rose"
         />
@@ -345,9 +358,18 @@ export default function ForecastPage() {
                       </span>
                       <span className="text-gray-700 dark:text-gray-300">
                         <strong className="text-gray-900 dark:text-white">{p.productName}</strong>{' '}
-                        — quedan {p.currentStock} u.
-                        {p.daysUntilStockout !== null && (
-                          <> → se agota en <strong className={urgent ? 'text-rose-600 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}>{p.daysUntilStockout} días</strong></>
+                        {p.currentStock <= 0 ? (
+                          <>
+                            —{' '}
+                            <strong className="text-rose-600 dark:text-rose-400">sin stock</strong>
+                          </>
+                        ) : (
+                          <>
+                            — quedan {p.currentStock} u.
+                            {p.daysUntilStockout !== null && p.daysUntilStockout > 0 && (
+                              <> → se agota en <strong className={urgent ? 'text-rose-600 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}>{p.daysUntilStockout} días</strong></>
+                            )}
+                          </>
                         )}
                       </span>
                     </div>
@@ -446,10 +468,10 @@ export default function ForecastPage() {
             )}
             <div className="flex gap-1.5">
             {([
-              { key: 'riesgo', label: 'En riesgo', count: data.predictions.filter((p) => p.totalSoldLast30 > 0 && (p.needsReorder || p.currentStock <= p.minStock)).length },
+              { key: 'riesgo', label: 'En riesgo', count: data.predictions.filter(isStockoutRisk).length },
               { key: 'todos', label: 'Todos', count: data.predictions.length },
               { key: 'alta', label: 'Alta demanda', count: data.predictions.filter((p) => avgDailyAll > 0 && p.avgDailySales > avgDailyAll).length },
-              { key: 'sin', label: 'Sin movimiento', count: data.predictions.filter((p) => p.totalSoldLast30 === 0).length },
+              { key: 'sin', label: 'Sin movimiento', count: data.predictions.filter((p) => p.totalSoldLast30 === 0 && p.currentStock > 0).length },
             ] as const).map((tab) => (
               <button
                 key={tab.key}
@@ -490,13 +512,15 @@ export default function ForecastPage() {
                   <tr key={p.productId} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
                     <td className="py-3 px-6 font-medium text-gray-900 dark:text-gray-100">{p.productName}</td>
                     <td className="py-3 px-6 text-center">
-                      <span className={`font-semibold ${p.totalSoldLast30 === 0 ? 'text-gray-900 dark:text-gray-100' : p.currentStock <= p.minStock ? 'text-rose-600 dark:text-rose-400' : p.needsReorder ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-gray-100'}`}>
+                      <span className={`font-semibold ${p.currentStock <= 0 || p.currentStock <= p.minStock ? 'text-rose-600 dark:text-rose-400' : p.needsReorder ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-gray-100'}`}>
                         {p.currentStock}
                       </span>
                     </td>
                     <td className="py-3 px-6 text-center text-gray-600 dark:text-gray-400">{formatDailyDemand(p)}</td>
                     <td className="py-3 px-6 text-center text-gray-600 dark:text-gray-400">
-                      {p.daysUntilStockout !== null ? (
+                      {p.daysUntilStockout === 0 ? (
+                        <span className="font-semibold text-rose-600 dark:text-rose-400">Agotado</span>
+                      ) : p.daysUntilStockout !== null ? (
                         <span className="inline-flex items-center justify-center gap-1.5">
                           <span
                             className={`h-2 w-2 shrink-0 rounded-full ${
@@ -524,7 +548,9 @@ export default function ForecastPage() {
                       )}
                     </td>
                     <td className="py-3 px-6 text-center">
-                      {p.totalSoldLast30 === 0 ? (
+                      {p.currentStock <= 0 ? (
+                        <StatusBadge size="xs" tone="rose">Agotado</StatusBadge>
+                      ) : p.totalSoldLast30 === 0 ? (
                         <StatusBadge size="xs" tone="gray">Sin movimiento</StatusBadge>
                       ) : p.currentStock <= p.minStock ? (
                         <StatusBadge size="xs" tone="rose">Crítico</StatusBadge>

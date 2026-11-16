@@ -13,6 +13,8 @@ import { NetworkStatusNotifier } from '@/components/ui/NetworkStatusNotifier';
 import CookieConsent from '@/components/cookies/CookieConsent';
 import { KillSwitchBanner } from '@/components/ui/kill-switch-banner';
 import { isShelllessPath } from '@/lib/marketing/public-routes';
+import { requiresSingleBranch } from '@/lib/navigation/single-branch-routes';
+import { BranchRequiredState } from '@/components/ui/branch-required-state';
 
 const LazyToaster = dynamic(() => import('@/components/ui/lazy-toaster'), { ssr: false });
 const LazyInstallAppBanner = dynamic(() => import('@/components/ui/lazy-install-app-banner'), { ssr: false });
@@ -57,6 +59,12 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
   // vencido tiene que poder matar/revivir un area igual. La autorizacion real
   // la hace `/api/admin/feature-flags` con `is_admin`.
   const isOpsRoute = pathname?.startsWith('/admin/ops');
+
+  // En "Todas las sucursales" no hay un tenant contra el que consultar ventas,
+  // caja, stock o documentos. Sin este corte esas páginas quedaban en
+  // "Cargando..." para siempre (el fetch esperaba un `tenant.id` que nunca
+  // llegaba). Se muestra una pantalla para elegir sucursal en su lugar.
+  const branchLocked = !loading && allTenants && requiresSingleBranch(pathname ?? '');
 
   useEffect(() => {
     if (!loading && !isPublicRoute && !isBillingRoute && !isOpsRoute && tenant) {
@@ -196,9 +204,15 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
           </React.Suspense>
           <KillSwitchBanner />
           <main className="flex-1 w-full overflow-auto bg-gray-50 dark:bg-gray-950">
-            <div key={pageKey} className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full">
-              {children}
-            </div>
+            {branchLocked ? (
+              <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+                <BranchRequiredState />
+              </div>
+            ) : (
+              <div key={pageKey} className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+                {children}
+              </div>
+            )}
           </main>
         </div>
       </div>

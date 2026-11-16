@@ -112,6 +112,21 @@ interface StockAdjustment {
   createdBy: string;
 }
 
+/**
+ * Lote de merma listo para netear recuperaciones. Se guarda el motivo y el
+ * costo de cada evento para que, al descontar unidades recuperadas, el total,
+ * el valor y el donut por motivo sigan siendo coherentes entre sí.
+ */
+interface LossLot {
+  productId: string;
+  productName: string;
+  sku?: string;
+  barcode?: string;
+  reason: string;
+  remaining: number;
+  cost: number;
+}
+
 export default function LossPreventionPage() {
   const { tenant, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -222,43 +237,84 @@ export default function LossPreventionPage() {
 
   // El balance neto conserva todos los ajustes (incluidas las correcciones)
   // porque refleja el stock real. Las métricas de pérdida, en cambio, sólo
-  // miran los motivos de merma.
+  // miran los motivos de merma y descuentan las recuperaciones.
   const negativeAdjustments = history.filter((h) => h.quantity < 0);
   const losses = negativeAdjustments.filter((h) => LOSS_REASONS.has(baseReason(h.reason)));
   const correctionAdjustments = negativeAdjustments.filter((h) => !LOSS_REASONS.has(baseReason(h.reason)));
   const gains = history.filter((h) => h.quantity > 0);
-  const totalLosses = losses.reduce((sum, h) => sum + Math.abs(h.quantity), 0);
   const totalGains = gains.reduce((sum, h) => sum + h.quantity, 0);
   const netBalance = history.reduce((sum, h) => sum + h.quantity, 0);
 
   const costOfProduct = (productId: string) => products?.find(p => p.id === productId)?.cost || 0;
 
-  const totalValue = losses.reduce((v, h) => v + Math.abs(h.quantity) * costOfProduct(h.productId), 0);
+  // Recuperaciones: sólo "Encontrado". Un ingreso de mercadería o una
+  // corrección también suman stock, pero no son mercadería perdida que
+  // reaparece, así que no descuentan mermas.
+  const recoveries = history
+    .filter((h) => h.quantity > 0 && baseReason(h.reason) === 'found')
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-  const lossByProduct = losses.reduce((acc, h) => {
-    const entry = acc.get(h.productId) ?? {
+  // FIFO por producto: cada recuperación cancela primero la merma más vieja.
+  // Sin esto, el top de productos, el donut y el valor seguían mostrando la
+  // pérdida bruta aunque el stock hubiera vuelto.
+  const lossLots: LossLot[] = [...losses]
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .map((h) => ({
       productId: h.productId,
       productName: h.productName,
       sku: h.productSku,
       barcode: h.productBarcode,
+      reason: baseReason(h.reason),
+      remaining: Math.abs(h.quantity),
+      cost: costOfProduct(h.productId),
+    }));
+
+  for (const recovery of recoveries) {
+    let units = recovery.quantity;
+    for (const lot of lossLots) {
+      if (units <= 0) break;
+      if (lot.productId !== recovery.productId || lot.remaining <= 0) continue;
+      const applied = Math.min(lot.remaining, units);
+      lot.remaining -= applied;
+      units -= applied;
+    }
+  }
+
+  const netLossLots = lossLots.filter((lot) => lot.remaining > 0);
+  const totalLosses = netLossLots.reduce((sum, lot) => sum + lot.remaining, 0);
+  const totalValue = netLossLots.reduce((sum, lot) => sum + lot.remaining * lot.cost, 0);
+  const totalRecovered = recoveries.reduce((sum, h) => sum + h.quantity, 0);
+
+  const lossByProduct = netLossLots.reduce((acc, lot) => {
+    const entry = acc.get(lot.productId) ?? {
+      productId: lot.productId,
+      productName: lot.productName,
+      sku: lot.sku,
+      barcode: lot.barcode,
       units: 0,
       value: 0,
+      reasons: {} as Record<string, number>,
     };
-    const units = Math.abs(h.quantity);
-    entry.units += units;
-    entry.value += units * costOfProduct(h.productId);
-    acc.set(h.productId, entry);
+    entry.units += lot.remaining;
+    entry.value += lot.remaining * lot.cost;
+    entry.reasons[lot.reason] = (entry.reasons[lot.reason] || 0) + lot.remaining;
+    acc.set(lot.productId, entry);
     return acc;
-  }, new Map<string, { productId: string; productName: string; sku?: string; barcode?: string; units: number; value: number }>());
+  }, new Map<string, { productId: string; productName: string; sku?: string; barcode?: string; units: number; value: number; reasons: Record<string, number> }>());
+
+  const formatLossReasons = (reasons: Record<string, number>) =>
+    Object.entries(reasons)
+      .sort((a, b) => b[1] - a[1])
+      .map(([reason]) => reasonMap[reason]?.label || reason)
+      .join(', ');
 
   const topLossProducts = [...lossByProduct.values()]
     .sort((a, b) => b.units - a.units)
     .slice(0, 3);
   const topLossProduct = topLossProducts[0];
 
-  const lossByReason = losses.reduce((acc: Record<string, number>, h) => {
-    const reason = baseReason(h.reason);
-    acc[reason] = (acc[reason] || 0) + Math.abs(h.quantity);
+  const lossByReason = netLossLots.reduce((acc: Record<string, number>, lot) => {
+    acc[lot.reason] = (acc[lot.reason] || 0) + lot.remaining;
     return acc;
   }, {} as Record<string, number>);
   const donutData = Object.entries(lossByReason)
@@ -289,7 +345,7 @@ export default function LossPreventionPage() {
           titleClassName="text-gray-500 dark:text-gray-400"
           value={<>{netBalance > 0 ? '+' : ''}{netBalance} u.</>}
           valueClassName={netBalance > 0 ? 'text-emerald-600 dark:text-emerald-400' : netBalance < 0 ? 'text-rose-600 dark:text-rose-400' : undefined}
-          subtitle={`${totalGains} recuperadas · ${totalLosses} perdidas${correctionAdjustments.length > 0 ? ` · ${correctionAdjustments.length} correcciones` : ''}`}
+          subtitle={`${totalGains} ingresadas · ${totalLosses} pérdidas netas${correctionAdjustments.length > 0 ? ` · ${correctionAdjustments.length} correcciones` : ''}`}
           icon={Scale}
           tone="gray"
         />
@@ -298,7 +354,7 @@ export default function LossPreventionPage() {
           titleClassName="text-gray-500 dark:text-gray-400"
           value={totalLosses}
           valueClassName="text-rose-600 dark:text-rose-400"
-          subtitle={`${losses.length} eventos`}
+          subtitle={totalRecovered > 0 ? `${netLossLots.length} eventos · ${totalRecovered} recuperadas` : `${netLossLots.length} eventos`}
           icon={TrendingDown}
           tone="rose"
         />
@@ -317,7 +373,7 @@ export default function LossPreventionPage() {
           valueClassName="text-lg truncate"
           subtitle={
             topLossProduct
-              ? `${productCodeLabel(topLossProduct) || 'Sin SKU ni código'} · ${topLossProduct.units} u. perdidas`
+              ? `${productCodeLabel(topLossProduct) || 'Sin SKU ni código'} · ${topLossProduct.units} u. perdidas · ${formatLossReasons(topLossProduct.reasons)}`
               : '0 unidades perdidas'
           }
           icon={Package}
@@ -361,7 +417,7 @@ export default function LossPreventionPage() {
                           {code || 'Sin SKU ni código'}
                         </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">
-                          {product.units} u. perdidas
+                          {product.units} u. perdidas · {formatLossReasons(product.reasons)}
                           {product.value > 0 ? ` · ${formatARS(product.value)}` : ''}
                         </p>
                       </div>
@@ -384,10 +440,14 @@ export default function LossPreventionPage() {
 
           {donutData.length > 0 && (
             <Card className="p-5">
-              <h2 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+              <h2 className="text-sm font-bold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
                 <PieChartIcon className="h-4 w-4 text-rose-500" />
-                Pérdidas por motivo
+                Pérdidas netas por motivo
               </h2>
+              <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
+                Las recuperaciones (&quot;Encontrado&quot;) se descuentan de las mermas. Las correcciones son
+                ajustes de inventario, no pérdidas.
+              </p>
               <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:gap-6">
                 <div className="h-48 w-48 flex-shrink-0">
                   <ResponsiveContainer width="100%" height="100%">
@@ -429,7 +489,7 @@ export default function LossPreventionPage() {
               </div>
               <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-gray-100 pt-3 dark:border-gray-800">
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Pérdida total · <span className="tabular-nums">{totalLosses} u.</span>
+                  Pérdida total neta · <span className="tabular-nums">{totalLosses} u.</span>
                 </p>
                 <p className="whitespace-nowrap text-lg font-bold leading-none tabular-nums text-rose-600 dark:text-rose-400">
                   {formatARS(totalValue)}

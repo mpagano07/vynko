@@ -319,6 +319,46 @@ describe('ForecastPage', () => {
     expect(within(table).queryByText('Top')).not.toBeInTheDocument();
   });
 
+  it('"En riesgo" incluye productos agotados sin ventas y "Sin movimiento" no los repite', async () => {
+    const zero = prediction({
+      productId: 'p0',
+      productName: 'Agotado',
+      currentStock: 0,
+      minStock: 5,
+      daysUntilStockout: 0,
+      totalSoldLast30: 0,
+    });
+    fetchHandler.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ...payload,
+        predictions: [zero],
+        topProducts: [],
+        needsReorder: [],
+        upcomingStockout: [
+          { productId: 'p0', productName: 'Agotado', currentStock: 0, daysUntilStockout: 0 },
+        ],
+        summary: { ...payload.summary, totalProducts: 1, productsWithSales: 0, stockoutRiskCount: 1, deadStockCount: 1 },
+      }),
+    });
+
+    render(<ForecastPage />);
+    await screen.findByText('Efectividad del stock');
+
+    // La pestaña por defecto es "En riesgo": el agotado no puede quedar afuera
+    // solo porque no vendió en los últimos 30 días.
+    expect(screen.getByRole('button', { name: /En riesgo1/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Sin movimiento0/ })).toBeInTheDocument();
+
+    const table = productsTable();
+    const row = within(table).getAllByText('Agotado')[0].closest('tr')!;
+    expect(within(row).getByText('0')).toBeInTheDocument();
+    expect(within(row).getAllByText('Agotado').length).toBeGreaterThan(0);
+
+    const panel = screen.getByText('Próximo a agotarse').closest('div') as HTMLElement;
+    expect(within(panel).getByText(/sin stock/)).toBeInTheDocument();
+  });
+
   it('"En riesgo" excluye productos sin ventas aunque estén bajo el mínimo', async () => {
     render(<ForecastPage />);
     await screen.findByText('Efectividad del stock');

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveNavAccess } from './sidebar';
+import { resolveNavAccess, resolveSidebarPlan } from './sidebar';
 
 // Item con la config real de Facturación ARCA: sólo se muestra a quien tenga la
 // feature habilitada (hoy, la cuenta admin; al lanzarla, business/enterprise).
@@ -89,5 +89,44 @@ describe('resolveNavAccess', () => {
         resolveNavAccess({ requiredMultiBranch: true }, { plan: 'business', multiBranch: true })
       ).toEqual({ visible: true, locked: false });
     });
+  });
+
+  describe('secciones que requieren una sucursal', () => {
+    const ventas = { requiredSingleBranch: true };
+
+    it('se ven con candado de sucursal en "Todas las sucursales"', () => {
+      expect(resolveNavAccess(ventas, { plan: 'business', allTenants: true })).toEqual({
+        visible: true,
+        locked: true,
+        lockedReason: 'branch',
+      });
+    });
+
+    it('quedan habilitadas con una sucursal activa', () => {
+      expect(resolveNavAccess(ventas, { plan: 'business', allTenants: false })).toEqual({
+        visible: true,
+        locked: false,
+      });
+    });
+  });
+});
+
+describe('resolveSidebarPlan', () => {
+  it('usa el plan de las sucursales cuando no hay tenant activo', () => {
+    expect(resolveSidebarPlan(null, [{ subscription_plan: 'business' }])).toBe('business');
+  });
+
+  it('toma el plan más alto de la empresa', () => {
+    expect(
+      resolveSidebarPlan(undefined, [
+        { subscription_plan: 'starter' },
+        { subscription_plan: 'enterprise' },
+      ])
+    ).toBe('enterprise');
+  });
+
+  it('normaliza free/sin plan a starter', () => {
+    expect(resolveSidebarPlan(null, [])).toBe('starter');
+    expect(resolveSidebarPlan('free', [{ subscription_plan: 'free' }])).toBe('starter');
   });
 });
