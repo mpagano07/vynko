@@ -1561,7 +1561,7 @@ export default function DocumentosPage() {
                     const id = e.target.value;
                     setPoSupplierId(id);
                     if (id) {
-                      const sup = suppliers.find((s) => s.id === id) as any;
+                      const sup = suppliers.find((s) => s.id === id);
                       if (sup?.payment_term_days != null && poPaymentTermDays === '') setPoPaymentTermDays(String(sup.payment_term_days));
                     }
                   }} required>

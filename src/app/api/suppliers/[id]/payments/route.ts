@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/api-auth';
-import { createSupplierPayment, getSupplierAccount } from '@/lib/supplier-account-service';
+import { createSupplierPayment, getSupplierAccount, type CreateSupplierPaymentInput } from '@/lib/supplier-account-service';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -25,7 +25,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const result = await createSupplierPayment(auth, id, body as any);
+  const result = await createSupplierPayment(auth, id, body as CreateSupplierPaymentInput);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
   return NextResponse.json(result.data, { status: result.status });
 }

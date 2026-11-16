@@ -87,7 +87,7 @@ export default function SupplierAccountPage() {
   const [cutoffInput, setCutoffInput] = useState<string>('');
   const [savingCutoff, setSavingCutoff] = useState(false);
 
-  const load = async () => {
+  const load = React.useCallback(async () => {
     if (!supplierId) return;
     setLoading(true);
     setError(null);
@@ -105,9 +105,11 @@ export default function SupplierAccountPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [supplierId]);
 
-  useEffect(() => { load(); }, [supplierId]);
+  useEffect(() => {
+    void Promise.resolve().then(() => load());
+  }, [load]);
 
   const openPayables = useMemo(() => (data?.payables ?? []).filter((p) => p.balance_cents > 0), [data]);
   const allocSumCents = useMemo(() => {
