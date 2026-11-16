@@ -31,7 +31,7 @@
     "cookie": "^1.1.1",
     "lucide-react": "^1.17.0",
     "mercadopago": "^3.1.0",
-    "next": "^16.4.2",
+    "next": "16.4.5",
     "node-forge": "^1.4.3",
     "qrcode": "^1.5.4",
     "react": "19.2.4",
