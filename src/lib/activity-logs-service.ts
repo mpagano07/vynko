@@ -9,7 +9,7 @@ export type ActivityLogsResult<T = unknown> =
 
 export async function getActivityLogs(
   auth: AuthInfo,
-  options: { limit?: string | null; offset?: string | null; entity_type?: string | null; q?: string | null }
+  options: { limit?: string | null; offset?: string | null; entity_type?: string | null; q?: string | null; days?: string | null }
 ): Promise<ActivityLogsResult> {
   const tenantId = auth.tenantId;
 
@@ -26,6 +26,9 @@ export async function getActivityLogs(
   const limit = Math.min(Number(options.limit) || 50, 200);
   const offset = Number(options.offset) || 0;
   const entityType = options.entity_type;
+  const daysRaw = Number(options.days);
+  const allowedDays = [7, 30, 60, 0];
+  const days = allowedDays.includes(daysRaw) ? daysRaw : 30;
   // Búsqueda libre por usuario, producto, SKU o folio. Se limpian los
   // separadores de PostgREST para no romper el filtro `or`.
   // Sanitize free-text search to reduce PostgREST filter-injection risk.
@@ -39,8 +42,12 @@ export async function getActivityLogs(
   let query = supabaseAdmin
     .from('activity_logs')
     .select('*', { count: 'exact' })
-    .order('created_at', { ascending: false })
-    .range(offset, offset + limit - 1);
+    .order('created_at', { ascending: false });
+  if (days > 0) {
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    query = query.gte('created_at', since);
+  }
+  query = query.range(offset, offset + limit - 1);
   if (auth.allTenants) query = query.in('tenant_id', auth.tenantIds);
   else query = query.eq('tenant_id', tenantId);
 
