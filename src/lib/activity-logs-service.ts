@@ -28,7 +28,13 @@ export async function getActivityLogs(
   const entityType = options.entity_type;
   // Búsqueda libre por usuario, producto, SKU o folio. Se limpian los
   // separadores de PostgREST para no romper el filtro `or`.
-  const q = (options.q ?? '').trim().replace(/[%,()*"\\]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+  // Sanitize free-text search to reduce PostgREST filter-injection risk.
+  const qRaw = (options.q ?? '').trim().slice(0, 80);
+  const q = qRaw
+    .replace(/[%,()*"\\]/g, ' ')
+    .replace(/[%_]/g, (m) => `\\${m}`)
+    .replace(/\s+/g, ' ')
+    .trim();
 
   let query = supabaseAdmin
     .from('activity_logs')
