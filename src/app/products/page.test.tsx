@@ -9,7 +9,7 @@ import type { Product } from '@/lib/types/product';
 import { rememberDriveIntent, takeDriveIntent } from '@/lib/google/drive-intent';
 
 const { searchParamsMock, replaceMock } = vi.hoisted(() => ({
-  searchParamsMock: { get: vi.fn((_key: string): string | null => null) },
+  searchParamsMock: { get: vi.fn((): string | null => null) },
   replaceMock: vi.fn(),
 }));
 

@@ -125,7 +125,7 @@ function formatDetailValue(key: string, value: unknown): string {
   if (key === 'allocations' && Array.isArray(value)) {
     if (value.length === 0) return 'Sin imputaciones';
     return value
-      .map((a: any) => {
+      .map((a: { document_id?: string; purchase_order_id?: string; amount_cents?: number }) => {
         const doc = a.document_id ? `Doc #${String(a.document_id).slice(0, 8)}` : (a.purchase_order_id ? `OC #${String(a.purchase_order_id).slice(0, 8)}` : 'Documento');
         const amt = typeof a.amount_cents === 'number' ? formatARS(a.amount_cents / 100) : '';
         return `${doc}${amt ? ` — ${amt}` : ''}`;
