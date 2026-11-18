@@ -18,15 +18,6 @@ import { formatPriceByCountry, getDisplayPrice, getConfiguredCurrenciesFromCooki
 import PromoCountdown from '@/components/landing/PromoCountdown';
 import { LazyMount } from '@/components/ui/lazy-mount';
 
-const DemoSales = dynamic(() => import('@/components/landing/DemoSales'), {
-  ssr: false,
-  loading: () => (
-    <div className="bg-gray-900/80 border border-gray-800 rounded-2xl p-12 text-center">
-      <div className="h-8 w-48 bg-gray-800 animate-pulse rounded mx-auto" />
-    </div>
-  ),
-});
-
 const ROICalculator = dynamic(() => import('@/components/landing/ROICalculator'), {
   ssr: false,
   loading: () => (
@@ -151,7 +142,6 @@ export default function LandingPage() {
                 <Link href="#features" className="text-sm text-gray-400 hover:text-white transition-colors">Características</Link>
                 <Link href="#how-it-works" className="text-sm text-gray-400 hover:text-white transition-colors">Cómo funciona</Link>
                 <Link href="#pricing" className="text-sm text-gray-400 hover:text-white transition-colors">Precios</Link>
-                <Link href="#demo" className="text-sm text-gray-400 hover:text-white transition-colors">Ver demo</Link>
                 <Link href="#roi" className="text-sm text-gray-400 hover:text-white transition-colors">Calculá cuánto podés ahorrar</Link>
               </div>
             </div>
@@ -290,25 +280,6 @@ export default function LandingPage() {
                 {item}
               </div>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Interactive Demo Section */}
-      <section className="py-20 bg-gray-900/30" id="demo">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-medium mb-4">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-              Probá ahora — sin registro
-            </div>
-            <h2 className="text-3xl sm:text-4xl font-bold">Probá Vynko <span className="text-indigo-400">en acción</span></h2>
-            <p className="mt-4 text-gray-400 max-w-lg mx-auto">Sumá productos al carrito, simulá una venta y experimentá la interfaz. Sin crear cuenta, sin compromiso.</p>
-          </div>
-          <div className="max-w-5xl mx-auto">
-            <LazyMount fallback={<div className="h-72 rounded-2xl bg-gray-900/60 animate-pulse" />}>
-              <DemoSales />
-            </LazyMount>
           </div>
         </div>
       </section>
@@ -723,13 +694,7 @@ export default function LandingPage() {
       {/* Sticky Mobile CTA */}
       {isMounted && !user && !hasSession && (
         <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden border-t border-gray-800/50 bg-gray-950/95 px-3 sm:px-4 py-2.5 sm:py-3" style={{ paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom))' }}>
-          <div className="grid grid-cols-2 gap-2">
-            <Link
-              href="#demo"
-              className="flex items-center justify-center gap-1.5 py-3 px-3 rounded-xl border border-gray-700 bg-gray-900 text-xs sm:text-sm font-semibold text-gray-200 transition-colors hover:border-indigo-500/50 hover:text-white"
-            >
-              Probar demo
-            </Link>
+          <div className="grid grid-cols-1 gap-2">
             <Link
               href="/auth/signup"
               className="flex items-center justify-center gap-2 py-3 px-3 bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white font-bold rounded-xl text-xs sm:text-sm transition-colors shadow-lg shadow-indigo-500/20 text-center leading-tight whitespace-normal break-words"
