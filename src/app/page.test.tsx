@@ -140,14 +140,13 @@ describe('LandingPage navbar', () => {
     expect(getNavbar().queryByRole('button', { name: 'Cerrar sesión' })).not.toBeInTheDocument();
   });
 
-  it('sin sesión muestra la barra móvil con los dos CTAs (demo y registro)', async () => {
+  it('sin sesión muestra la barra móvil con el CTA de registro', async () => {
     mockUseAuth({ user: null, profile: null, loading: false });
 
     render(<LandingPage />);
 
     // La barra se monta después del efecto de hidratación para no romper el SSR.
-    const demo = await screen.findByRole('link', { name: 'Probar demo' });
-    expect(demo).toHaveAttribute('href', '#demo');
+    await screen.findByRole('link', { name: /empezar gratis/i });
 
     const signupLinks = screen.getAllByRole('link', { name: /empezar gratis/i });
     expect(signupLinks).toHaveLength(1);
