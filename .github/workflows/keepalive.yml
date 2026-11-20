@@ -28,7 +28,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          for wf in backup.yml keepalive.yml; do
+          for wf in backup.yml keepalive.yml tests.yml; do
             echo "Habilitando $wf"
             gh workflow enable "$wf" --repo "$GITHUB_REPOSITORY"
           done

@@ -4,7 +4,19 @@ import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Vercel Cron llama por GET; POST sirve para dispararlo a mano desde el runbook.
+ * Ambos comparten el mismo manejo y la misma validacion de CRON_SECRET.
+ */
+export async function GET(request: Request) {
+  return handle(request);
+}
+
 export async function POST(request: Request) {
+  return handle(request);
+}
+
+async function handle(request: Request) {
   try {
     const authHeader = request.headers.get('authorization') || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';

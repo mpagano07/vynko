@@ -23,9 +23,20 @@ los dumps del backup caen en `scripts/dumps/`, también ignorado. ggshield
 | DSN de Sentry | `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN` | Vercel env | `instrumentation.ts`, `sentry.client.ts` | Sentry → Project → Client Keys |
 | Credenciales E2E | `E2E_USER_EMAIL`, `E2E_USER_PASSWORD`, `E2E_NEW_USER_*`, `E2E_MEMBER_USER_*` | `.env.local`, secreto de CI | Playwright, load test | cuenta Supabase dedicada |
 | Guard de secrets en CI | `GITGUARDIAN_API_KEY` | Secreto de GitHub Actions | ggshield-action | GitGuardian Dashboard |
+| Ref esperado de la DB de test (var, no secreta) | `VERIFY_RLS_EXPECT_REF` | Variable de GitHub Actions | `scripts/verify-rls.mjs` (barrera anti base equivocada) | n/a: son los 6 primeros caracteres del project ref de la URL de test |
+| Flag opt-in de RLS en PRs (var, no secreta) | `RUN_RLS_VERIFY` | Variable de GitHub Actions | job `quality` de `.github/workflows/tests.yml` | n/a: dejarla sin setear salvo que se quiera correr RLS en cada PR |
 | URL de la DB (session pooler) | `PROD_DB_URL`, `DEV_DB_URL` en `scripts/.env.db` | fuera del repo (`.env.db` ignorado); nunca en Vercel | `sync-prod-to-dev.ps1`, `backup-db.ps1` | Supabase → Project Settings → Connect (regenera la password del pooler) |
 | Clave publica de backup (`age`) | `AGE_RECIPIENT` | Secreto de GitHub Actions | `.github/workflows/backup.yml` (cifra los dumps) | `age-keygen` (regenerar el par) |
 | Clave privada de backup (`age`) | (sin variable) | **Fuera del repo y del CI**: gestor de passwords / copia fisica de quien restaura | quien ejecuta el restore (`age --decrypt`) | n/a (no se rota sola; ver regla 4) |
+
+El job `security` de "Vynko CI" (domingos 05:00 UTC y `workflow_dispatch`)
+exige los secrets de Supabase/E2E y las vars `NEXT_PUBLIC_SUPABASE_URL` y
+`VERIFY_RLS_EXPECT_REF`, **todos del proyecto de test**: el verify crea y borra
+fixtures con `service_role`. En PRs el job aparece como *skipped* por diseño
+(`if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'`);
+la corrida semanal contra el repo canónico es el gate real.
+`RUN_RLS_VERIFY=true` habilita el paso opcional del job `quality` en PRs, donde
+los secrets de forks no están disponibles: no setearlo por defecto.
 
 ## Reglas
 

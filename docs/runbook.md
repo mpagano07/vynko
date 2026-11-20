@@ -248,8 +248,23 @@ se prepara el fix.
 | Backup de prod | diario 03:30 UTC | `.github/workflows/backup.yml` (verifica estructura, publica Release cifrado y rota los viejos) |
 | Reconciliacion de suscripciones | diario 05:17 UTC | cron de `vercel.json` → `/api/cron/reconcile-subscriptions` |
 | Cola de trabajos de fondo | diario 05:23 UTC | cron de `vercel.json` → `/api/cron/process-jobs` (playbook 8) |
+| Purga de registros >90 días | diario 05:29 UTC | cron de `vercel.json` → `/api/cron/purge-old-records` (borra `activity_logs` y `stock_transfers`) |
 | Drill de restore | trimestral | `docs/continuity.md` → Drill |
 | Rotacion de secretos | segun politica | `docs/security-secrets-rotation.md` |
+
+La purga se puede forzar a mano (acepta `GET` del cron y `POST` para disparos
+manuales, ambos con el mismo secreto):
+
+```bash
+curl -X POST https://<app>/api/cron/purge-old-records \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
+Responde `{ "ok": true, "cutoff": "...", "deleted": { "activity_logs": N,
+"stock_transfers": N } }`. Si el campo `deleted.activity_logs` queda en 0 con
+un `cutoff` de hace 90 días, revisar que el cron de `vercel.json` siga
+habilitado en el panel de Vercel (un redeploy no lo habilita si estaba
+pausado).
 
 ## Contactos / escalamiento
 
