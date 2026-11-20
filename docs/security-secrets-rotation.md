@@ -30,13 +30,24 @@ los dumps del backup caen en `scripts/dumps/`, también ignorado. ggshield
 | Clave privada de backup (`age`) | (sin variable) | **Fuera del repo y del CI**: gestor de passwords / copia fisica de quien restaura | quien ejecuta el restore (`age --decrypt`) | n/a (no se rota sola; ver regla 4) |
 
 El job `security` de "Vynko CI" (domingos 05:00 UTC y `workflow_dispatch`)
-exige los secrets de Supabase/E2E y las vars `NEXT_PUBLIC_SUPABASE_URL` y
+exige `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `E2E_USER_EMAIL`,
+`E2E_USER_PASSWORD`, `GITGUARDIAN_API_KEY`, `NEXT_PUBLIC_SUPABASE_URL` y
 `VERIFY_RLS_EXPECT_REF`, **todos del proyecto de test**: el verify crea y borra
 fixtures con `service_role`. En PRs el job aparece como *skipped* por diseño
 (`if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'`);
 la corrida semanal contra el repo canónico es el gate real.
 `RUN_RLS_VERIFY=true` habilita el paso opcional del job `quality` en PRs, donde
 los secrets de forks no están disponibles: no setearlo por defecto.
+
+Los tres valores que mas seguido se cargan en el store equivocado
+(`SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `VERIFY_RLS_EXPECT_REF`) se
+aceptan **tanto en Secrets como en Variables** de GitHub Actions; la anon key
+tambien con el nombre legacy `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Precedencia:
+`secrets` sobre `vars` para la anon key, `vars` sobre `secrets` para URL y ref.
+Si el gate sigue fallando, el paso "Require security secrets" imprime una linea
+`Origenes (nunca valores)` con si/no por store, sin exponer ningun valor.
+Ojo: Vercel y GitHub Actions son stores distintos; `CRON_SECRET` vive en Vercel
+y no reemplaza a estas variables del CI.
 
 ## Reglas
 

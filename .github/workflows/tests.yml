@@ -60,14 +60,17 @@ jobs:
 
       # Opt-in en PRs: requiere un proyecto Supabase de test con fixtures de
       # E2E_USER_* y el flag RUN_RLS_VERIFY=true en vars del repo.
+      # Los valores publicos (URL/ref/anon key) se aceptan desde Secrets o desde
+      # Variables: el error mas comun es cargarlos en el store equivocado y que
+      # el gate muera aunque el valor exista. Ver job `security` mas abajo.
       - name: Verify RLS isolation
         if: vars.RUN_RLS_VERIFY == 'true'
         run: npm run verify:rls
         env:
           VERIFY_RLS_ENV_FROM: process
-          VERIFY_RLS_EXPECT_REF: ${{ vars.VERIFY_RLS_EXPECT_REF }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          VERIFY_RLS_EXPECT_REF: ${{ vars.VERIFY_RLS_EXPECT_REF || secrets.VERIFY_RLS_EXPECT_REF }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || vars.SUPABASE_ANON_KEY || secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
           E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
@@ -104,8 +107,8 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || vars.SUPABASE_ANON_KEY || secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           NEXT_PUBLIC_CURRENCY: ${{ vars.NEXT_PUBLIC_CURRENCY }}
           NEXT_PUBLIC_TAX_RATE: ${{ vars.NEXT_PUBLIC_TAX_RATE }}
           NEXT_PUBLIC_APP_NAME: ${{ vars.NEXT_PUBLIC_APP_NAME }}
@@ -135,40 +138,72 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Cada valor se acepta desde Secrets o desde Variables (y la anon key
+      # tambien con el nombre legacy NEXT_PUBLIC_SUPABASE_ANON_KEY). Antes el
+      # gate solo miraba un store por nombre: si la URL/ref estaban como secret
+      # o la anon key como variable, fallaba aunque el valor existiera.
       - name: Require security secrets
         run: |
           missing=0
-          for name in SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY E2E_USER_EMAIL E2E_USER_PASSWORD GITGUARDIAN_API_KEY; do
-            if [ -z "${!name}" ]; then
-              echo "::error::Falta el secret $name: el control de seguridad semanal no puede correr."
-              missing=1
-            fi
-          done
-          if [ -z "$NEXT_PUBLIC_SUPABASE_URL" ] || [ -z "$VERIFY_RLS_EXPECT_REF" ]; then
-            echo "::error::Faltan las vars NEXT_PUBLIC_SUPABASE_URL y/o VERIFY_RLS_EXPECT_REF."
+          if [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::Falta SUPABASE_ANON_KEY: cargalo en Secrets (o en Variables con el nombre legacy NEXT_PUBLIC_SUPABASE_ANON_KEY)."
             missing=1
           fi
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::Falta SUPABASE_SERVICE_ROLE_KEY en Secrets."
+            missing=1
+          fi
+          if [ -z "$E2E_USER_EMAIL" ] || [ -z "$E2E_USER_PASSWORD" ]; then
+            echo "::error::Faltan E2E_USER_EMAIL y/o E2E_USER_PASSWORD en Secrets."
+            missing=1
+          fi
+          if [ -z "$GITGUARDIAN_API_KEY" ]; then
+            echo "::error::Falta GITGUARDIAN_API_KEY en Secrets."
+            missing=1
+          fi
+          if [ -z "$NEXT_PUBLIC_SUPABASE_URL" ]; then
+            echo "::error::Falta NEXT_PUBLIC_SUPABASE_URL: cargalo en Variables o en Secrets."
+            missing=1
+          fi
+          if [ -z "$VERIFY_RLS_EXPECT_REF" ]; then
+            echo "::error::Falta VERIFY_RLS_EXPECT_REF: cargalo en Variables o en Secrets (6 primeros caracteres del project ref)."
+            missing=1
+          fi
+
+          # Diagnostico de origen: solo presence (si/no), NUNCA el valor. Asi la
+          # proxima corrida dice en que pestaña esta cada una sin exponer secretos.
+          yesno() { if [ -n "$1" ]; then echo si; else echo no; fi; }
+          echo "Origenes (nunca valores): anon[secret=$(yesno "$ANON_FROM_SECRET") var=$(yesno "$ANON_FROM_VAR") legacy=$(yesno "$ANON_FROM_LEGACY")] url[var=$(yesno "$URL_FROM_VAR") secret=$(yesno "$URL_FROM_SECRET")] ref[var=$(yesno "$REF_FROM_VAR") secret=$(yesno "$REF_FROM_SECRET")]"
+
           if [ "$missing" -ne 0 ]; then
-            echo "Configuralos en Settings > Secrets and variables > Actions."
+            echo "Configuralos en Settings > Secrets and variables > Actions del repo mpagano07/vynko, con el nombre exacto (sin espacios)."
             exit 1
           fi
         env:
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || vars.SUPABASE_ANON_KEY || secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
           E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
           GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
-          VERIFY_RLS_EXPECT_REF: ${{ vars.VERIFY_RLS_EXPECT_REF }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          VERIFY_RLS_EXPECT_REF: ${{ vars.VERIFY_RLS_EXPECT_REF || secrets.VERIFY_RLS_EXPECT_REF }}
+          # Solo para el diagnostico de origen; no se imprimen sus valores.
+          ANON_FROM_SECRET: ${{ secrets.SUPABASE_ANON_KEY }}
+          ANON_FROM_VAR: ${{ vars.SUPABASE_ANON_KEY }}
+          ANON_FROM_LEGACY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          URL_FROM_VAR: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          URL_FROM_SECRET: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          REF_FROM_VAR: ${{ vars.VERIFY_RLS_EXPECT_REF }}
+          REF_FROM_SECRET: ${{ secrets.VERIFY_RLS_EXPECT_REF }}
 
       # Crea fixtures y las limpia; apuntar SOLO a un proyecto de test.
       - name: Verify RLS isolation
         run: npm run verify:rls
         env:
           VERIFY_RLS_ENV_FROM: process
-          VERIFY_RLS_EXPECT_REF: ${{ vars.VERIFY_RLS_EXPECT_REF }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          VERIFY_RLS_EXPECT_REF: ${{ vars.VERIFY_RLS_EXPECT_REF || secrets.VERIFY_RLS_EXPECT_REF }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || vars.SUPABASE_ANON_KEY || secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
           E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
