@@ -83,3 +83,4 @@ y no `console.error`: el primero es busquable, el segundo es texto libre.
 | Errores de UI | `src/app/**/error.tsx` | render de error + captura a Sentry |
 | Metricas de producto | `/admin/analytics` (`src/app/admin/analytics/page.tsx`) | funnel signup → primera venta |
 | Bitacora de acciones | tabla `activity_logs` | que hizo cada usuario dentro del tenant |
+| Purga de registros | `GET /api/cron/purge-old-records` (diario 05:29 UTC) | borra `activity_logs` y `stock_transfers` con más de 90 días; devuelve `cutoff` y cantidades borradas |

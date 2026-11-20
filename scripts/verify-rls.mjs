@@ -47,10 +47,22 @@ function loadEnv() {
   // Opt-in para apuntar a otro proyecto (p.ej. produccion) pasando las
   // variables en el entorno del proceso, SIN editar .env.local. Exige
   // VERIFY_RLS_ENV_FROM=process para que un shell con variables viejas no
-  // desvíe la verificacion a otra base sin querer. Solo se sobreescriben las
-  // claves que ya existen en .env.local, asi que PATH y similares no aplican.
+  // desvíe la verificacion a otra base sin querer.
+  // En CI (job `security`) no existe .env.local: ademas de sobreescribir las
+  // claves del archivo hay que cargar las que el script consume desde
+  // process.env. Antes el loop recorria solo Object.keys(env) (vacio en CI),
+  // asi que los secrets llegaban al runner y el script igual moria con
+  // "Faltan variables en .env.local".
+  const PROCESS_KEYS = [
+    'NEXT_PUBLIC_SUPABASE_URL',
+    'SUPABASE_ANON_KEY',
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'E2E_USER_EMAIL',
+    'E2E_USER_PASSWORD',
+    'VERIFY_RLS_EXPECT_REF',
+  ];
   if (process.env.VERIFY_RLS_ENV_FROM === 'process') {
-    for (const key of Object.keys(env)) {
+    for (const key of new Set([...Object.keys(env), ...PROCESS_KEYS])) {
       const v = process.env[key];
       if (v !== undefined && v !== '') env[key] = v;
     }
