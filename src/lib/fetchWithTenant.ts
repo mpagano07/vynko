@@ -77,7 +77,11 @@ export async function authFetch(input: RequestInfo | URL, init?: RequestInit): P
   }
 
   const retried = await send();
-  if (retried.status === 401) redirectToLoginForExpiredSession();
+  // `/api/session` acaba de confirmar que la sesion sigue activa, asi que un
+  // 401 aca NO es una sesion vencida: es un problema de permisos/tenant (por
+  // ejemplo, analytics durante el onboarding, cuando todavia no hay empresas).
+  // Mandarlo a `/login?reason=expired` devolveria al usuario al mismo 401 en un
+  // bucle. Se devuelve el 401 tal cual y la UI/guards deciden como mostrarlo.
   return retried;
 }
 
