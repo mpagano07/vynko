@@ -48,6 +48,23 @@ describe('GET /auth/callback', () => {
     expect(res.cookies.get(LAST_SEEN_COOKIE)?.value).toBeTruthy();
   });
 
+  it('no deja que un next=/dashboard sobrescriba el onboarding de un usuario nuevo de Google', async () => {
+    getUserTenantIds.mockResolvedValueOnce([]);
+
+    const res = await GET(callback('code=abc&next=%2Fdashboard'));
+
+    expect(getUserTenantIds).toHaveBeenCalledWith('user-1');
+    expect(createCompanyForUser).not.toHaveBeenCalled();
+    expect(res.headers.get('location')).toContain('/onboarding');
+    expect(res.headers.get('location')).not.toContain('/dashboard');
+  });
+
+  it('respeta un next explícito cuando el usuario ya tiene empresa', async () => {
+    const res = await GET(callback('code=abc&next=%2Fsettings'));
+
+    expect(res.headers.get('location')).toContain('/settings');
+  });
+
   it('deja la aceptación para /accept-invite cuando el link viene de una invitación', async () => {
     const res = await GET(callback('code=abc&next=%2Faccept-invite'));
 

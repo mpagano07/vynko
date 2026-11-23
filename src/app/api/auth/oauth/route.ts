@@ -37,10 +37,15 @@ export async function GET(request: Request) {
   }
 
   const origin = getAppOrigin(request);
-  const next = safeInternalRedirect(request, searchParams.get('next'), '/dashboard');
-  // El callback recibe solo rutas internas, nunca una URL absoluta enviada por
-  // el cliente, para que no se pueda usar como redirector abierto.
-  const callbackPath = `/auth/callback?next=${encodeURIComponent(nextPath(next))}`;
+  // No inventamos un `next=/dashboard`: el callback es quien sabe si el usuario
+  // ya tiene empresa o necesita onboarding. Mandar un destino por defecto hacía
+  // que sobrescribiera la derivación y dejara a los usuarios nuevos de Google
+  // dando vueltas entre /dashboard y /onboarding. Solo se propaga un `next`
+  // explícito del cliente, y siempre como path interno validado.
+  const requestedNext = searchParams.get('next');
+  const callbackPath = requestedNext
+    ? `/auth/callback?next=${encodeURIComponent(nextPath(safeInternalRedirect(request, requestedNext, '/dashboard')))}`
+    : '/auth/callback';
 
   // El verifier PKCE se escribe como cookie. Se captura y se aplica al response
   // a mano, igual que en `/auth/callback`, para no depender de que la escritura
