@@ -225,6 +225,55 @@ describe('authFetch', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('no redirige al login si el refresh confirmó sesión activa y el retry vuelve a dar 401', async () => {
+    // Caso real: `AppReturnTracker` tiraba /api/analytics/track en onboarding.
+    // getAuth rechaza al usuario sin tenants, /api/session lo clasifica como
+    // 'active' y el retry volvía a 401. Ese 401 es de permisos, no de sesión:
+    // mandarlo a /login?reason=expired deja al usuario nuevo en un bucle.
+    const originalLocation = window.location;
+    const replace = vi.fn();
+    Object.defineProperty(window, 'location', {
+      value: { pathname: '/onboarding', replace },
+      writable: true,
+      configurable: true,
+    });
+    vi.stubEnv('NODE_ENV', 'production');
+
+    try {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(new Response('', { status: 401 }))
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              user: { id: 'user-1' },
+              tenants: [],
+              onboarding_pending: true,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          )
+        )
+        .mockResolvedValueOnce(new Response('', { status: 401 }));
+      global.fetch = fetchMock;
+
+      const response = await authFetch('/api/analytics/track', {
+        method: 'POST',
+        body: '{}',
+      });
+
+      expect(response.status).toBe(401);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(replace).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+      Object.defineProperty(window, 'location', {
+        value: originalLocation,
+        writable: true,
+        configurable: true,
+      });
+    }
+  });
+
   it('does not retry a body that cannot be replayed', async () => {
     // FormData/streams consumen el cuerpo: reenviarlo mandaría una request
     // distinta o vacía. Es preferible devolver el 401 tal cual.
