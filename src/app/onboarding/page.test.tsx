@@ -108,14 +108,38 @@ describe('OnboardingPage guard', () => {
     expect(screen.queryByText('Configurá tu negocio')).not.toBeInTheDocument();
   });
 
-  it('redirige a login si no hay sesión', async () => {
+  it('reintenta antes de mandar a login si /api/session devuelve user:null', async () => {
     // `user: null` es la señal de "sin sesión": el navegador no puede leer la
-    // cookie, así que la respuesta del servidor es lo único que la delata.
+    // cookie, así que la respuesta del servidor es lo único que la delata. Tras
+    // un callback OAuth puede ser transitorio, así que se reintenta y se
+    // conserva el destino al expulsar.
     mockApiSession({ user: null, tenants: [], tenant: null });
 
     render(<OnboardingPage />);
 
-    await vi.waitFor(() => expect(router.replace).toHaveBeenCalledWith('/login'));
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3), { timeout: 3000 });
+    await vi.waitFor(() =>
+      expect(router.replace).toHaveBeenCalledWith('/login?redirect_to=/onboarding')
+    );
+    expect(screen.queryByText('Configurá tu negocio')).not.toBeInTheDocument();
+  });
+
+  it('muestra el formulario si el user:null era transitorio tras el callback OAuth', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ user: null, tenants: [], tenant: null }),
+      })
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({ user: AUTHENTICATED_USER, tenants: [], tenant: null }),
+      });
+
+    render(<OnboardingPage />);
+
+    expect(await screen.findByText('Configurá tu negocio')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(router.replace).not.toHaveBeenCalledWith('/login?redirect_to=/onboarding');
   });
 
   it('NO muestra el formulario si la verificación falla: redirige al dashboard (fail closed)', async () => {

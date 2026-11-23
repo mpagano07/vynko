@@ -52,6 +52,10 @@ export async function GET(request: Request) {
 
   const user = data.user;
   let redirectPath = '/dashboard';
+  // Un usuario nuevo sin empresa debe pasar por el onboarding sí o sí. Se marca
+  // aparte para que un `next` explícito (o el viejo default /dashboard) no pueda
+  // ganarle a esta decisión y dejarlo trabado en un ping-pong de redirects.
+  let onboardingRequired = false;
 
   // La pantalla de invitación acepta la invitación y pide nombre/contraseña.
   // Si el callback la aceptara antes, la página vería `accepted = 0` y mandaría
@@ -92,15 +96,19 @@ export async function GET(request: Request) {
           ownerName
         );
         redirectPath = tenantId ? '/dashboard' : '/onboarding';
+        onboardingRequired = !tenantId;
       } else {
         redirectPath = '/onboarding';
+        onboardingRequired = true;
       }
     }
   }
 
   // `next` sólo se acepta si es un path interno del propio origen: evita
-  // open redirect con un enlace de confirmación manipulado.
-  if (requestedNext) {
+  // open redirect con un enlace de confirmación manipulado. Tampoco se aplica
+  // cuando el usuario recién se registró y todavía no tiene empresa: en ese
+  // caso el onboarding es el único destino válido, venga o no un `next`.
+  if (requestedNext && !onboardingRequired) {
     redirectPath = new URL(safeInternalRedirect(request, requestedNext, '/dashboard')).pathname;
   }
 

@@ -35,6 +35,20 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   ]);
 }
 
+type SessionCheck = {
+  user?: { user_metadata?: Record<string, unknown> } | null;
+  tenants?: unknown[];
+  tenant?: unknown;
+  onboarding_pending?: boolean;
+};
+
+// Justo después del callback OAuth la cookie HttpOnly puede no haber sido
+// propagada aún al request que hace este guard. Un `user: null` aislado no
+// alcanza para expulsar a alguien que acaba de registrarse: se reintenta un par
+// de veces antes de decidir que realmente no hay sesión.
+const ANON_SESSION_RETRIES = 2;
+const ANON_SESSION_RETRY_DELAY_MS = 200;
+
 type BusinessType = 'kiosco' | 'bazar' | 'indumentaria' | 'distribuidora' | 'gastronomia' | 'otro';
 type SalesMode = 'mostrador' | 'mayorista' | 'mixto';
 type FirstAction = 'import' | 'manual' | 'explore';
@@ -149,12 +163,34 @@ export default function OnboardingPage() {
   useEffect(() => {
     let cancelled = false;
 
-    async function checkExistingCompany() {
-      try {
+    type SessionResult =
+      | { status: 'ok'; data: SessionCheck }
+      | { status: 'anonymous' }
+      | { status: 'unavailable' };
+
+    async function readSession(): Promise<SessionResult> {
+      for (let attempt = 0; attempt <= ANON_SESSION_RETRIES; attempt++) {
         const response = await withTimeout(
-          fetch('/api/session', { credentials: 'include' }),
+          fetch('/api/session', { credentials: 'include', cache: 'no-store' }),
           10_000
         );
+        if (!response.ok) return { status: 'unavailable' };
+
+        const data = (await response.json().catch(() => null)) as SessionCheck | null;
+        if (data === null) return { status: 'unavailable' };
+        if (data.user) return { status: 'ok', data };
+        if (attempt === ANON_SESSION_RETRIES) return { status: 'anonymous' };
+
+        await new Promise((resolve) =>
+          setTimeout(resolve, ANON_SESSION_RETRY_DELAY_MS * (attempt + 1))
+        );
+      }
+      return { status: 'anonymous' };
+    }
+
+    async function checkExistingCompany() {
+      try {
+        const session = await readSession();
         if (cancelled) return;
 
         // Solo una respuesta OK y con JSON válido nos permite afirmar si el
@@ -162,37 +198,29 @@ export default function OnboardingPage() {
         // es un resultado indeterminado: no debemos exponer el formulario a
         // alguien que quizá ya tiene cuenta. Se va al dashboard, cuyos guardas
         // redirigen acá solo si la membresía está definitivamente vacía.
-        if (!response.ok) {
-          if (!cancelled) {
-            // Navegación dura: evita el loop de router.push + reload
-            // sobre la misma ruta /onboarding. El proxy re-verifica el estado.
-            window.location.replace('/dashboard');
-          }
+        if (session.status === 'unavailable') {
+          // Navegación dura: evita el loop de router.push + reload
+          // sobre la misma ruta /onboarding. El proxy re-verifica el estado.
+          window.location.replace('/dashboard');
           return;
         }
 
-        const data: {
-          user?: { user_metadata?: Record<string, unknown> } | null;
-          tenants?: unknown[];
-          tenant?: unknown;
-          onboarding_pending?: boolean;
-        } | null = await response.json().catch(() => null);
-        if (cancelled) return;
-
-        // Sin sesion no se muestra el formulario: se manda al login. La cookie es
-        // HttpOnly, asi que la unica forma de saberlo es la respuesta del servidor.
-        if (!data?.user) {
-          if (!cancelled) router.replace('/login');
+        // Persistió el `user: null` tras los reintentos: no hay sesión, pero se
+        // conserva el destino para que el login devuelva al usuario acá.
+        if (session.status === 'anonymous') {
+          if (!cancelled) router.replace('/login?redirect_to=/onboarding');
           return;
         }
 
-        const hasCompany = (data?.tenants?.length ?? 0) > 0 || !!data?.tenant;
+        const data = session.data;
+
+        const hasCompany = (data.tenants?.length ?? 0) > 0 || !!data.tenant;
         // Flag directo de la DB (onboarding_pending): FALSE = el usuario ya
         // completó el onboarding y NUNCA debe ver este formulario, aunque el
         // listado de sucursales llegue vacío.
-        const onboardingPending = data?.onboarding_pending ?? true;
+        const onboardingPending = data.onboarding_pending ?? true;
 
-        if (data === null || hasCompany || onboardingPending === false) {
+        if (hasCompany || onboardingPending === false) {
           if (!cancelled) window.location.replace('/dashboard');
         } else {
           // El usuario se registró cargando nombre/empresa, pero la empresa no
