@@ -9,6 +9,12 @@ import {
 } from './arca-service';
 import type { AuthInfo } from '@/lib/api-auth';
 import { canUseFacturacionForUser } from '@/lib/arca/access-server';
+import { supabaseMock } from '@/test/supabase-mock';
+
+vi.mock('@/lib/supabaseAdmin', async () => {
+  const mod = await import('@/test/supabase-mock');
+  return { supabaseAdmin: mod.supabaseMock };
+});
 
 // La feature es sólo para la cuenta admin mientras dure la prueba; se mockea el
 // chequeo para poder testear el resto del servicio sin pegarle a Supabase.
@@ -19,6 +25,7 @@ vi.mock('@/lib/arca/access-server', () => ({
 const auth = { tenantId: 't1', userId: 'u1', allTenants: false, tenantIds: ['t1'] } as AuthInfo;
 
 beforeEach(() => {
+  supabaseMock.__reset();
   vi.mocked(canUseFacturacionForUser).mockReset();
   vi.mocked(canUseFacturacionForUser).mockResolvedValue(true);
 });
@@ -196,6 +203,118 @@ describe('createElectronicInvoice', () => {
   });
 });
 
+const SANDBOX_CONFIG = {
+  id: 'cfg-1',
+  tenant_id: 't1',
+  cuit: '20409378472',
+  punto_venta: 1,
+  environment: 'homologacion',
+  concept: 1,
+  cert_pem: 'SANDBOX_DEMO_CERT',
+  key_encrypted: 'SANDBOX_DEMO_KEY',
+  is_active: true,
+};
+
+const queueInvoiceFlow = (variantRow?: unknown) => {
+  if (variantRow) supabaseMock.__queue('product_variants', { data: variantRow, error: null });
+  supabaseMock.__queue('tenant_arca_config', { data: SANDBOX_CONFIG, error: null });
+  supabaseMock.__queue('tenants', {
+    data: { iva_condition: 'monotributista', razon_social: 'Mi Negocio' },
+    error: null,
+  });
+  supabaseMock.__queue('electronic_invoices', { data: { invoice_number: 4 }, error: null });
+  supabaseMock.__queue('electronic_invoices', { data: { id: 'inv-1' }, error: null });
+  supabaseMock.__queue('invoice_items', { data: null, error: null });
+};
+
+const invoiceItemsInsert = () =>
+  supabaseMock.__calls.find(
+    (c) => c.table === 'invoice_items' && c.method === 'insert'
+  )?.args[0] as Array<Record<string, unknown>> | undefined;
+
+describe('createElectronicInvoice con variantes', () => {
+  it('guarda items simples sin variant_id', async () => {
+    queueInvoiceFlow();
+
+    const res = await createElectronicInvoice(auth, {
+      customer_name: 'Cliente',
+      items: [{ product_id: 'prod-1', description: 'Producto', quantity: 2, unit_price_cents: 500 }],
+    });
+
+    expect(res.ok).toBe(true);
+    expect(invoiceItemsInsert()).toEqual([
+      {
+        invoice_id: 'inv-1',
+        product_id: 'prod-1',
+        description: 'Producto',
+        quantity: 2,
+        unit_price_cents: 500,
+        subtotal_cents: 1000,
+        iva_percentage: 0,
+        iva_cents: 0,
+      },
+    ]);
+    expect(supabaseMock.__calls.some((c) => c.table === 'product_variants')).toBe(false);
+  });
+
+  it('valida la variante, completa la descripción y la persiste', async () => {
+    queueInvoiceFlow({
+      id: 'var-1',
+      product_id: 'prod-1',
+      label: '128 GB',
+      variant_stock: [{ tenant_id: 't1', stock: 3, active: true }],
+    });
+
+    const res = await createElectronicInvoice(auth, {
+      customer_name: 'Cliente',
+      items: [{
+        product_id: 'prod-1',
+        variant_id: 'var-1',
+        description: 'Producto',
+        quantity: 1,
+        unit_price_cents: 700,
+      }],
+    });
+
+    expect(res.ok).toBe(true);
+    expect(invoiceItemsInsert()?.[0]).toMatchObject({
+      product_id: 'prod-1',
+      variant_id: 'var-1',
+      description: 'Producto · 128 GB',
+      subtotal_cents: 700,
+    });
+  });
+
+  it('rechaza una variante de otra sucursal', async () => {
+    queueInvoiceFlow({
+      id: 'var-1',
+      product_id: 'prod-1',
+      label: '128 GB',
+      variant_stock: [{ tenant_id: 't2', stock: 3, active: true }],
+    });
+
+    const res = await createElectronicInvoice(auth, {
+      customer_name: 'Cliente',
+      items: [{
+        product_id: 'prod-1',
+        variant_id: 'var-1',
+        description: 'Producto',
+        quantity: 1,
+        unit_price_cents: 700,
+      }],
+    });
+
+    expect(res).toMatchObject({
+      ok: false,
+      status: 400,
+      error: 'La variante no pertenece al producto o a la sucursal',
+    });
+    expect(
+      supabaseMock.__calls.some((c) => c.table === 'electronic_invoices' && c.method === 'insert')
+    ).toBe(false);
+  });
+});
+
 describe('createCreditNote', () => {
   it('rechaza la emisión (403) si la cuenta no tiene la facturación habilitada', async () => {
     vi.mocked(canUseFacturacionForUser).mockResolvedValue(false);
@@ -207,6 +326,55 @@ describe('createCreditNote', () => {
       expect(res.status).toBe(403);
       expect(res.error).toMatch(/no está habilitada/);
     }
+  });
+
+  it('copia variant_id y la descripción completa de la factura original', async () => {
+    supabaseMock.__queue('electronic_invoices', {
+      data: {
+        id: 'inv-1',
+        tenant_id: 't1',
+        status: 'approved',
+        invoice_type: 'C',
+        invoice_number: 7,
+        punto_venta: 1,
+        customer_name: 'Cliente',
+        document_type: 'DNI',
+        document_number: '12345678',
+        iva_condition: 'consumidor_final',
+        total_cents: 700,
+        net_cents: 700,
+        iva_cents: 0,
+        iva_percentage: 0,
+        items: [{
+          id: 'ii-1',
+          product_id: 'prod-1',
+          variant_id: 'var-1',
+          description: 'Producto · 128 GB',
+          quantity: 1,
+          unit_price_cents: 700,
+          subtotal_cents: 700,
+          iva_percentage: 0,
+          iva_cents: 0,
+        }],
+      },
+      error: null,
+    });
+    supabaseMock.__queue('electronic_invoices', { data: null, error: null });
+    supabaseMock.__queue('tenant_arca_config', { data: SANDBOX_CONFIG, error: null });
+    supabaseMock.__queue('electronic_invoices', { data: { invoice_number: 4 }, error: null });
+    supabaseMock.__queue('electronic_invoices', { data: { id: 'nc-1' }, error: null });
+    supabaseMock.__queue('invoice_items', { data: null, error: null });
+    supabaseMock.__queue('electronic_invoices', { data: null, error: null });
+
+    const res = await createCreditNote(auth, 'inv-1');
+
+    expect(res.ok).toBe(true);
+    expect(invoiceItemsInsert()?.[0]).toMatchObject({
+      invoice_id: 'nc-1',
+      product_id: 'prod-1',
+      variant_id: 'var-1',
+      description: 'Producto · 128 GB',
+    });
   });
 });
 

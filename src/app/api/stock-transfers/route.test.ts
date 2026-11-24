@@ -244,6 +244,94 @@ describe('Stock Transfers API', () => {
       const json = await res.json();
       expect(json.error).toBe('Error al crear transferencia');
     });
+
+    it('guarda variant_id en los items cuando se transfiere una variante', async () => {
+      vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 't1', 't2'] });
+      supabaseMock.__queue('tenant_users', { data: { role: 'owner' } }, { data: { role: 'owner' } });
+      supabaseMock.__queue('product_stock', {
+        data: [{ product_id: 'p1', tenant_id: 't1', stock: 10 }],
+        error: null,
+      });
+      supabaseMock.__queue('products', { data: [{ id: 'p1', name: 'Coca Cola' }] });
+      supabaseMock.__queue('product_variants', {
+        data: {
+          id: 'v1',
+          product_id: 'p1',
+          label: '500 ml',
+          variant_stock: [{ tenant_id: 't1', stock: 8, active: true }],
+        },
+        error: null,
+      });
+      supabaseMock.__queue('stock_transfers', {
+        data: { id: 'tr1', from_tenant_id: 't1', to_tenant_id: 't2', status: 'pending' },
+      });
+      supabaseMock.__queue('stock_transfer_items', { data: null, error: null });
+
+      const res = await POST(makeRequest('POST', {
+        from_tenant_id: 't1',
+        to_tenant_id: 't2',
+        items: [{ product_id: 'p1', variant_id: 'v1', quantity: 5 }]
+      }));
+
+      expect(res.status).toBe(201);
+      const itemsInsert = supabaseMock.__calls.find(
+        (c) => c.table === 'stock_transfer_items' && c.method === 'insert'
+      );
+      expect(itemsInsert?.args[0]).toEqual([
+        { transfer_id: 'tr1', product_id: 'p1', quantity: 5, variant_id: 'v1' }
+      ]);
+    });
+
+    it('rechaza una variante de otra sucursal (400)', async () => {
+      vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 't1', 't2'] });
+      supabaseMock.__queue('tenant_users', { data: { role: 'owner' } }, { data: { role: 'owner' } });
+      supabaseMock.__queue('product_stock', {
+        data: [{ product_id: 'p1', tenant_id: 't1', stock: 10 }],
+        error: null,
+      });
+      supabaseMock.__queue('products', { data: [{ id: 'p1', name: 'Coca Cola' }] });
+      supabaseMock.__queue('product_variants', {
+        data: {
+          id: 'v1',
+          product_id: 'p1',
+          label: '500 ml',
+          variant_stock: [{ tenant_id: 't2', stock: 8, active: true }],
+        },
+        error: null,
+      });
+
+      const res = await POST(makeRequest('POST', {
+        from_tenant_id: 't1',
+        to_tenant_id: 't2',
+        items: [{ product_id: 'p1', variant_id: 'v1', quantity: 5 }]
+      }));
+
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toBe('La variante no pertenece al producto o a la sucursal origen');
+      expect(
+        supabaseMock.__calls.some((c) => c.table === 'stock_transfers' && c.method === 'insert')
+      ).toBe(false);
+    });
+
+    it('no mezcla el producto padre con sus variantes en una misma transferencia', async () => {
+      vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 't1', 't2'] });
+      supabaseMock.__queue('tenant_users', { data: { role: 'owner' } }, { data: { role: 'owner' } });
+
+      const res = await POST(makeRequest('POST', {
+        from_tenant_id: 't1',
+        to_tenant_id: 't2',
+        items: [
+          { product_id: 'p1', quantity: 1 },
+          { product_id: 'p1', variant_id: 'v1', quantity: 1 },
+        ]
+      }));
+
+      expect(res.status).toBe(400);
+      expect(
+        supabaseMock.__calls.some((c) => c.table === 'stock_transfers' && c.method === 'insert')
+      ).toBe(false);
+    });
   });
 
   describe('GET /api/stock-transfers', () => {
@@ -299,6 +387,34 @@ describe('Stock Transfers API', () => {
 
       const orCall = supabaseMock.__calls.find((c) => c.method === 'or');
       expect(orCall?.args[0]).toBe('from_tenant_id.in.("tenant-1"),to_tenant_id.in.("tenant-1")');
+    });
+
+    it('muestra la etiqueta de la variante en el nombre del item', async () => {
+      supabaseMock.__queue('stock_transfers', {
+        data: [
+          {
+            id: 'tr1',
+            from_tenant_id: 't1',
+            to_tenant_id: 't2',
+            created_by: 'user-1',
+            items: [
+              { id: 'i1', product: { name: 'Coca' }, variant: { label: '500 ml' } },
+            ],
+          },
+        ],
+      });
+      supabaseMock.__queue('tenants', {
+        data: [
+          { id: 't1', name: 'Central' },
+          { id: 't2', name: 'Norte' },
+        ],
+      });
+      supabaseMock.__queue('profiles', { data: [{ id: 'user-1', full_name: 'Ana' }] });
+
+      const res = await GET(makeGetRequest());
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json[0].items[0].product_name).toBe('Coca · 500 ml');
     });
 
     it('aplica el filtro de estado y usa or() con in() para todos los tenants', async () => {

@@ -62,25 +62,51 @@ export default async function globalTeardown() {
   const tenantIds = [...new Set((tu ?? []).map((t) => t.tenant_id as string))];
 
   // 1) Limpiar productos E2E residuales, acotado a las sucursales del usuario
-  // E2E. Antes borraba cualquier producto con "E2E" en el nombre de TODA la
-  // base, incluyendo clientes reales en un entorno remoto.
+  // E2E. `products` es global desde la migración 016: el tenant se resuelve por
+  // `product_stock`, nunca por una columna `products.tenant_id` que ya no existe.
   if (tenantIds.length > 0) {
-    const { data: products } = await admin
-      .from('products')
-      .select('id')
-      .in('tenant_id', tenantIds)
-      .ilike('name', '%E2E%');
-    const ids = (products ?? []).map((p) => p.id);
+    const { data: stockRows } = await admin
+      .from('product_stock')
+      .select('product_id')
+      .in('tenant_id', tenantIds);
+    const stockProductIds = [
+      ...new Set((stockRows ?? []).map((s) => s.product_id as string).filter(Boolean)),
+    ];
+
+    const ids: string[] = [];
+    for (let i = 0; i < stockProductIds.length; i += 200) {
+      const chunk = stockProductIds.slice(i, i + 200);
+      const { data: products } = await admin
+        .from('products')
+        .select('id')
+        .in('id', chunk)
+        .ilike('name', '%E2E%');
+      ids.push(...(products ?? []).map((p) => p.id as string));
+    }
+
     if (ids.length > 0) {
       const { data: items } = await admin
         .from('sale_items')
         .select('sale_id')
         .in('product_id', ids);
       const saleIds = [...new Set((items ?? []).map((i: { sale_id: string }) => i.sale_id))];
+      // `sale_items` no tiene tenant_id: el scope lo pone `sales.tenant_id`.
       if (saleIds.length > 0) {
-        await admin.from('sales').delete().in('id', saleIds);
+        const { data: scopedSales } = await admin
+          .from('sales')
+          .select('id')
+          .in('tenant_id', tenantIds)
+          .in('id', saleIds);
+        const scopedSaleIds = (scopedSales ?? []).map((s) => s.id as string);
+        if (scopedSaleIds.length > 0) {
+          await admin.from('sales').delete().in('id', scopedSaleIds);
+        }
       }
-      await admin.from('product_stock').delete().in('product_id', ids);
+      await admin
+        .from('product_stock')
+        .delete()
+        .in('product_id', ids)
+        .in('tenant_id', tenantIds);
       for (const id of ids) {
         await admin.from('products').delete().eq('id', id);
       }

@@ -5,6 +5,7 @@ import type {
   ArcaEnvironment,
   ArcaConcept,
   ArcaVoucherType,
+  CreateElectronicInvoiceItem,
   CreateElectronicInvoiceRequest,
   ElectronicInvoiceRecord,
   ArcaIvaItem,
@@ -33,6 +34,64 @@ import { toArgentinaDate, toArgentinaDateCompact } from '@/lib/arca/date';
 import { canUseFacturacionForUser } from '@/lib/arca/access-server';
 import { getRoleInTenant, hasCapability } from '@/lib/membership-role';
 import { logger } from '@/lib/logger';
+import { sellableDisplayName } from '@/lib/types/variant';
+
+/** Variante ya validada contra su producto y el tenant que factura. */
+interface ResolvedVariant {
+  label: string;
+}
+
+type VariantLookup =
+  | { ok: true; variant: ResolvedVariant }
+  | { ok: false; error: string; status: 400 | 500 };
+
+function variantStockRows(value: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(value)) return value as Array<Record<string, unknown>>;
+  return value ? [value as Record<string, unknown>] : [];
+}
+
+/**
+ * `product_variants` no tiene tenant_id: sin el join con `variant_stock` una
+ * factura podía quedar vinculada a una variante de otra sucursal.
+ */
+async function lookupInvoiceVariant(
+  tenantId: string,
+  productId: string,
+  variantId: string,
+  cache: Map<string, VariantLookup>
+): Promise<VariantLookup> {
+  const key = `${tenantId}|${productId}|${variantId}`;
+  const cached = cache.get(key);
+  if (cached) return cached;
+
+  const { data, error } = await supabaseAdmin
+    .from('product_variants')
+    .select('id, product_id, label, variant_stock!inner(tenant_id, active)')
+    .eq('id', variantId)
+    .maybeSingle();
+
+  if (error) {
+    logger.error('DB error:', { error });
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
+  }
+  const row = data as Record<string, unknown> | null;
+  const ownStock = variantStockRows(row?.variant_stock).find(
+    (s) => String(s.tenant_id) === tenantId && Boolean(s.active)
+  );
+  let result: VariantLookup;
+  if (!row || String(row.product_id) !== productId || !ownStock) {
+    result = { ok: false, error: 'La variante no pertenece al producto o a la sucursal', status: 400 };
+  } else {
+    result = { ok: true, variant: { label: String(row.label ?? '') } };
+  }
+  cache.set(key, result);
+  return result;
+}
+
+function fullInvoiceDescription(description: string, label: string): string {
+  if (!label || description.includes(` · ${label}`)) return description;
+  return sellableDisplayName(description, label);
+}
 
 interface ServiceResult<T> {
   ok: boolean;
@@ -576,6 +635,28 @@ export async function createElectronicInvoice(
       return { ok: false, error: 'La factura debe tener al menos un ítem', status: 400 };
     }
 
+    const variantCache = new Map<string, VariantLookup>();
+    const resolvedItems: CreateElectronicInvoiceItem[] = [];
+    for (const item of payload.items) {
+      const variantId = item.variant_id ? String(item.variant_id) : null;
+      if (!variantId) {
+        resolvedItems.push(item);
+        continue;
+      }
+      const productId = item.product_id ? String(item.product_id) : '';
+      if (!productId) {
+        return { ok: false, error: 'La variante requiere un producto', status: 400 };
+      }
+      const lookup = await lookupInvoiceVariant(auth.tenantId, productId, variantId, variantCache);
+      if (!lookup.ok) return lookup;
+      resolvedItems.push({
+        ...item,
+        product_id: productId,
+        variant_id: variantId,
+        description: fullInvoiceDescription(item.description, lookup.variant.label),
+      });
+    }
+
     const { data: config } = await supabaseAdmin
       .from('tenant_arca_config')
       .select('*')
@@ -628,7 +709,7 @@ export async function createElectronicInvoice(
     // La factura se emite por el importe final de la venta. El descuento/recargo
     // se reparte proporcionalmente entre los ítems para que la suma de los
     // netos + IVA coincida exactamente con lo cobrado.
-    const lineTotals = payload.items.map((item) => item.quantity * item.unit_price_cents);
+    const lineTotals = resolvedItems.map((item) => item.quantity * item.unit_price_cents);
     const discountShares = allocateProportionally(lineTotals, Math.max(0, Math.round(payload.discount_cents || 0)));
     const surchargeShares = allocateProportionally(lineTotals, Math.max(0, Math.round(payload.surcharge_cents || 0)));
     const effectiveLineTotals = lineTotals.map((lineTotal, i) =>
@@ -638,8 +719,8 @@ export async function createElectronicInvoice(
     // Alícuotas agrupadas para ARCA
     const ivaMap = new Map<number, { baseImp: number; importe: number }>();
 
-    for (let i = 0; i < payload.items.length; i++) {
-      const item = payload.items[i];
+    for (let i = 0; i < resolvedItems.length; i++) {
+      const item = resolvedItems[i];
       const lineTotal = effectiveLineTotals[i];
       totalCents += lineTotal;
 
@@ -793,7 +874,7 @@ export async function createElectronicInvoice(
     }
 
     // Insertar ítems
-    const invoiceItems = payload.items.map((it, i) => {
+    const invoiceItems = resolvedItems.map((it, i) => {
       const lineTotal = effectiveLineTotals[i];
       const rate = voucherType === 11 ? 0 : (it.iva_percentage !== undefined ? it.iva_percentage : 21);
       const lineNet = voucherType === 11 ? lineTotal : Math.round(lineTotal / (1 + rate / 100));
@@ -802,6 +883,7 @@ export async function createElectronicInvoice(
       return {
         invoice_id: inserted.id,
         product_id: it.product_id || null,
+        ...(it.variant_id ? { variant_id: it.variant_id } : {}),
         description: it.description,
         quantity: it.quantity,
         unit_price_cents: it.unit_price_cents,
@@ -1087,6 +1169,7 @@ export async function createCreditNote(
         originalItems.map((it) => ({
           invoice_id: inserted.id,
           product_id: (it.product_id as string) || null,
+          ...(it.variant_id ? { variant_id: it.variant_id } : {}),
           description: it.description as string,
           quantity: it.quantity as number,
           unit_price_cents: it.unit_price_cents as number,

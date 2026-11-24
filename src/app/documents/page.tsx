@@ -47,10 +47,11 @@ import {
   DOCUMENT_STATUS_LABELS,
   VALID_STATUSES_PER_TYPE,
 } from '@/lib/types/document';
-import { PO_STATUS_LABELS, PO_STATUS_TONES, type PurchaseOrder, type PurchaseOrderStatus } from '@/lib/types/supplier';
+import { PO_STATUS_LABELS, PO_STATUS_TONES, type PurchaseOrder, type PurchaseOrderItem, type PurchaseOrderStatus } from '@/lib/types/supplier';
 import type { Customer } from '@/lib/types/sale';
 import type { Product } from '@/lib/types/product';
 import type { Supplier } from '@/lib/types/supplier';
+import type { SellableItem } from '@/lib/types/variant';
 
 const DOCUMENT_TYPE_COLORS: Record<DocumentType, { border: string; bg: string; text: string }> = {
   presupuesto: { border: 'border-l-purple-500', bg: 'bg-purple-50 dark:bg-purple-950/20', text: 'text-purple-700 dark:text-purple-400' },
@@ -71,6 +72,7 @@ const DOCUMENT_STATUS_COLORS_TONE: Record<DocumentStatus, StatusTone> = {
 interface DocumentItem {
   uid: string;
   product_id?: string;
+  variant_id?: string;
   description: string;
   quantity: number;
   unit_price_cents: number;
@@ -84,6 +86,7 @@ export default function DocumentosPage() {
   const [documents, setDocuments] = useState<CommercialDocument[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [sellableItems, setSellableItems] = useState<SellableItem[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -123,7 +126,7 @@ export default function DocumentosPage() {
   const [poPaymentTermDays, setPoPaymentTermDays] = useState<string>('');
   const [poPaymentDueDate, setPoPaymentDueDate] = useState('');
   const [poNotes, setPoNotes] = useState('');
-  const [poItems, setPoItems] = useState<{ product_id: string; quantity: number; unit_cost: number }[]>([]);
+  const [poItems, setPoItems] = useState<{ product_id: string; variant_id?: string; displayName?: string; quantity: number; unit_cost: number }[]>([]);
   const [isSubmittingPo, setIsSubmittingPo] = useState(false);
   const [poStatus, setPoStatus] = useState<'draft' | 'sent'>('draft');
   const poIntentHandled = useRef(false);
@@ -136,7 +139,7 @@ export default function DocumentosPage() {
   const [receivePasillo, setReceivePasillo] = useState('');
   const [receiveEstanteria, setReceiveEstanteria] = useState('');
   const [receiveNotes, setReceiveNotes] = useState('');
-  const [receiveItems, setReceiveItems] = useState<{ product_id: string; product_name: string; quantity_ordered: number; already_received: number; quantity_received: number }[]>([]);
+  const [receiveItems, setReceiveItems] = useState<{ product_id: string; variant_id?: string; product_name: string; quantity_ordered: number; already_received: number; quantity_received: number }[]>([]);
   const [isSubmittingReceive, setIsSubmittingReceive] = useState(false);
   const [autoReceiveId, setAutoReceiveId] = useState<string | null>(null);
 
@@ -149,10 +152,11 @@ export default function DocumentosPage() {
     let cancelled = false;
 
     (async () => {
-      const [docsRes, custRes, prodRes, suppRes, poRes] = await Promise.all([
+      const [docsRes, custRes, prodRes, sellableRes, suppRes, poRes] = await Promise.all([
         authFetch('/api/documents'),
         authFetch('/api/customers'),
         authFetch('/api/products'),
+        authFetch('/api/documents/sellable'),
         authFetch('/api/suppliers'),
         authFetch('/api/purchase-orders'),
       ]);
@@ -164,6 +168,7 @@ export default function DocumentosPage() {
         const allProducts: Product[] = await prodRes.json();
         setProducts(allProducts.filter(p => p.is_active !== false));
       }
+      if (sellableRes.ok) setSellableItems(await sellableRes.json());
       if (suppRes.ok) setSuppliers(await suppRes.json());
       if (poRes.ok) setPurchaseOrders(await poRes.json());
     })().catch(() => {
@@ -479,6 +484,29 @@ export default function DocumentosPage() {
     }));
   };
 
+  const addItemFromSellable = (sellableId: string) => {
+    const sellable = sellableItems.find(s => s.id === sellableId);
+    if (!sellable) {
+      addItemFromProduct(sellableId);
+      return;
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      items: [
+        ...prev.items,
+        {
+          uid: crypto.randomUUID(),
+          product_id: sellable.productId,
+          ...(sellable.variantId ? { variant_id: sellable.variantId } : {}),
+          description: sellable.displayName,
+          quantity: 1,
+          unit_price_cents: Math.round(sellable.price * 100),
+        },
+      ],
+    }));
+  };
+
   const updateItem = (index: number, field: keyof DocumentItem, value: string | number) => {
     setFormData(prev => ({
       ...prev,
@@ -503,6 +531,24 @@ export default function DocumentosPage() {
     const product = products.find((p) => p.id === productId);
     if (!product) return;
     setPoItems((prev) => [...prev, { product_id: productId, quantity: 1, unit_cost: product.cost || 0 }]);
+  };
+
+  const addPoItemFromSellable = (sellableId: string) => {
+    const sellable = sellableItems.find(s => s.id === sellableId);
+    if (!sellable) {
+      addPoItemFromProduct(sellableId);
+      return;
+    }
+    setPoItems((prev) => [
+      ...prev,
+      {
+        product_id: sellable.productId,
+        ...(sellable.variantId ? { variant_id: sellable.variantId } : {}),
+        displayName: sellable.displayName,
+        quantity: 1,
+        unit_cost: sellable.cost ?? 0,
+      },
+    ]);
   };
 
   const updatePoItem = (index: number, field: 'quantity' | 'unit_cost', value: number) => {
@@ -545,6 +591,7 @@ export default function DocumentosPage() {
           status: poStatus,
           items: poItems.map((i) => ({
             product_id: i.product_id,
+            ...(i.variant_id ? { variant_id: i.variant_id } : {}),
             quantity: i.quantity,
             unit_cost: i.unit_cost,
           })),
@@ -573,11 +620,12 @@ export default function DocumentosPage() {
     setReceiveDate(new Date().toISOString().split('T')[0]);
     setReceiveNotes('');
 
-    const items = order.items.map(item => {
+    const items = (order.items as Array<PurchaseOrderItem & { variant_id?: string }>).map(item => {
       const alreadyReceived = item.quantity_received || 0;
       const pending = Math.max(0, item.quantity_ordered - alreadyReceived);
       return {
         product_id: item.product_id,
+        ...(item.variant_id ? { variant_id: item.variant_id } : {}),
         product_name: item.product_name || 'Producto',
         quantity_ordered: item.quantity_ordered,
         already_received: alreadyReceived,
@@ -662,6 +710,7 @@ export default function DocumentosPage() {
           notes: receiveNotes || undefined,
           items: receiveItems.map(i => ({
             product_id: i.product_id,
+            ...(i.variant_id ? { variant_id: i.variant_id } : {}),
             quantity_received: i.quantity_received,
           })),
         }),
@@ -1423,7 +1472,26 @@ export default function DocumentosPage() {
               <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Items</h3>
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-3">
-                  {products.length > 0 && (
+                  {sellableItems.length > 0 ? (
+                    <Select
+                      value=""
+                      searchable
+                      onChange={e => {
+                        if (e.target.value) {
+                          addItemFromSellable(e.target.value);
+                          e.target.value = '';
+                        }
+                      }}
+                      className="text-xs sm:w-1/2"
+                    >
+                      <option value="">+ Agregar producto...</option>
+                      {sellableItems.map(item => (
+                        <option key={item.id} value={item.id}>
+                          {item.displayName} - {formatARS(item.price)}
+                        </option>
+                      ))}
+                    </Select>
+                  ) : products.length > 0 ? (
                     <Select
                       value=""
                       searchable
@@ -1442,7 +1510,7 @@ export default function DocumentosPage() {
                         </option>
                       ))}
                     </Select>
-                  )}
+                  ) : null}
                   <Button type="button" variant="outline" size="sm" onClick={addItem} className="sm:w-auto">
                     <Plus className="h-3.5 w-3.5 mr-1" /> Agregar item
                   </Button>
@@ -1618,23 +1686,39 @@ export default function DocumentosPage() {
               <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Productos</h3>
                 <div className="mb-3">
-                  <Select
-                    value=""
-                    searchable
-                    onChange={e => {
-                      if (e.target.value) {
-                        addPoItemFromProduct(e.target.value);
-                      }
-                    }}
-                    className="text-xs sm:w-1/2"
-                  >
-                    <option value="">+ Agregar producto...</option>
-                    {products.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} - {formatARS(p.cost || 0)}
-                      </option>
-                    ))}
-                  </Select>
+                  {sellableItems.length > 0 ? (
+                    <Select
+                      value=""
+                      searchable
+                      onChange={e => {
+                        if (e.target.value) addPoItemFromSellable(e.target.value);
+                      }}
+                      className="text-xs sm:w-1/2"
+                    >
+                      <option value="">+ Agregar producto...</option>
+                      {sellableItems.map(item => (
+                        <option key={item.id} value={item.id}>
+                          {item.displayName} - {formatARS(item.cost ?? 0)}
+                        </option>
+                      ))}
+                    </Select>
+                  ) : (
+                    <Select
+                      value=""
+                      searchable
+                      onChange={e => {
+                        if (e.target.value) addPoItemFromProduct(e.target.value);
+                      }}
+                      className="text-xs sm:w-1/2"
+                    >
+                      <option value="">+ Agregar producto...</option>
+                      {products.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} - {formatARS(p.cost || 0)}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
                 </div>
 
                 {poItems.length === 0 ? (
@@ -1653,10 +1737,10 @@ export default function DocumentosPage() {
                     {poItems.map((item, index) => {
                       const product = products.find((p) => p.id === item.product_id);
                       return (
-                        <div key={item.product_id} className="grid grid-cols-2 sm:grid-cols-[minmax(0,1fr)_150px_110px_110px_32px] gap-2 items-center p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                        <div key={`${item.product_id}|${item.variant_id || ''}`} className="grid grid-cols-2 sm:grid-cols-[minmax(0,1fr)_150px_110px_110px_32px] gap-2 items-center p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50">
                           <div className="col-span-2 sm:col-span-1 min-w-0">
                             <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                              {product?.name || item.product_id}
+                              {item.displayName || product?.name || item.product_id}
                             </p>
                           </div>
                           <div className="flex items-center justify-center gap-1">
@@ -1832,7 +1916,7 @@ export default function DocumentosPage() {
                 <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-3">Productos</h3>
                 <div className="space-y-2 max-h-60 overflow-y-auto">
                   {receiveItems.map((item, index) => { return (
-                    <div key={item.product_id} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                    <div key={`${item.product_id}|${item.variant_id || ''}`} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                           {item.product_name}

@@ -10,7 +10,14 @@ import { isAllowedImagePath, pathFromLegacyPublicUrl, signProductImageUrls } fro
 import { getRoleInTenant, hasCapability } from '@/lib/membership-role';
 import { trackEvent } from '@/lib/track-event';
 import { rateLimit } from '@/lib/rate-limit';
-import { MAX_IMPORT_ROWS } from '@/lib/excel-import-parse';
+import {
+  foldImportHeader,
+  isVariantImportRow,
+  MAX_IMPORT_ROWS,
+  parseVariantAttributes,
+  VARIANT_ATTRIBUTE_REQUIRED_ERROR,
+  VARIANT_LABEL_REQUIRED_ERROR,
+} from '@/lib/excel-import-parse';
 import { logger } from '@/lib/logger';
 import { selectAllRows } from '@/lib/supabase-paging';
 import {
@@ -137,6 +144,60 @@ async function requireCatalogManager(
     };
   }
   return { ok: true };
+}
+
+const DUPLICATE_CODE_MESSAGE = 'El SKU o código de barras ya lo usa otro artículo de esta sucursal';
+
+/**
+ * Reserva los códigos comerciales de un producto simple en la misma transacción
+ * lógica que lo crea o lo edita. La unicidad la garantiza la RPC (advisory lock
+ * en `sellable_codes`), no este código: acá sólo se traduce el error a un
+ * mensaje accionable. El tenant SIEMPRE es el activo de la sesión, nunca un
+ * campo del body. Los códigos vacíos no se registran (Tiendanube exporta sin
+ * SKU y `''` no identifica nada).
+ */
+async function registerProductCodes(
+  auth: AuthInfo,
+  productId: string,
+  sku: unknown,
+  barcode: unknown
+): Promise<{ ok: true } | { ok: false; error: string; status: 400 }> {
+  const codes: Array<{ kind: 'sku' | 'barcode'; code: string }> = [];
+  for (const [kind, raw] of [['sku', sku], ['barcode', barcode]] as const) {
+    const code = raw == null ? '' : String(raw).trim();
+    if (code) codes.push({ kind, code });
+  }
+
+  for (const { kind, code } of codes) {
+    const { error } = await supabaseAdmin.rpc('register_sellable_code', {
+      p_tenant_id: auth.tenantId,
+      p_kind: kind,
+      p_code: code,
+      p_product_id: productId,
+      p_variant_id: null,
+    });
+    if (!error) continue;
+    const message = String(error.message ?? '');
+    if (message.includes('duplicate_sellable_code')) {
+      return { ok: false, error: DUPLICATE_CODE_MESSAGE, status: 400 };
+    }
+    logger.error('register_sellable_code fallo:', { error });
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
+  }
+  return { ok: true };
+}
+
+/**
+ * Cada RPC es su propia transacción: si la segunda reserva falla, la primera
+ * ya quedó commitada. Limpiar las reservas del producto que se va a borrar
+ * evita dejar códigos huérfanos apuntando a un producto inexistente.
+ */
+async function removeProductCodes(productId: string): Promise<void> {
+  await supabaseAdmin
+    .from('sellable_codes')
+    .delete()
+    .eq('product_id', productId)
+    .is('variant_id', null);
 }
 
 /**
@@ -393,6 +454,15 @@ export async function createProduct(auth: AuthInfo, body: Record<string, unknown
   }
   const created = data?.[0];
   if (created) {
+    // Si la RPC rechaza el código, el producto se borra: no puede quedar un
+    // producto sin reserva de su propio SKU (y `sellable_codes` cae en cascada).
+    const codeCheck = await registerProductCodes(auth, String(created.id), created.sku, created.barcode);
+    if (!codeCheck.ok) {
+      await removeProductCodes(String(created.id));
+      await supabaseAdmin.from('products').delete().eq('id', created.id);
+      return codeCheck;
+    }
+
     const { error: stockError } = await supabaseAdmin
       .from('product_stock')
       .insert({
@@ -409,6 +479,7 @@ export async function createProduct(auth: AuthInfo, body: Record<string, unknown
         category_id: body.category_id || null,
       });
     if (stockError) {
+      await removeProductCodes(String(created.id));
       await supabaseAdmin.from('products').delete().eq('id', created.id);
       logger.error('DB error:', { error: stockError });
       return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 400 };
@@ -499,6 +570,12 @@ export async function updateProduct(auth: AuthInfo, id: string, body: Record<str
     }
     if (updateData.category_id === '') updateData.category_id = null;
     updateData.updated_at = new Date().toISOString();
+
+    // Registrar ANTES de escribir: un código ajeno no debe dejar el producto a
+    // medias (nuevo SKU guardado sin reserva). La RPC es idempotente para el
+    // mismo producto, así que reenviar un código que no cambió es inofensivo.
+    const codeCheck = await registerProductCodes(auth, id, updateData.sku, updateData.barcode);
+    if (!codeCheck.ok) return codeCheck;
 
     const { data, error } = await supabaseAdmin
       .from('products')
@@ -729,6 +806,12 @@ export const LOOKUP_CHUNK = 200;
 
 /** Filas por lote de escritura: una fila con 3 inserts son 6000 round trips a 2000 filas. */
 export const WRITE_CHUNK = 100;
+/** Par atributo/valor de una fila de variante (creación manual, sin combos). */
+interface VariantAttributeInput {
+  attribute: string;
+  value: string;
+}
+
 /** Fila que ya paso las validaciones y esta lista para escribirse. */
 interface ValidatedRow {
   index: number;
@@ -746,6 +829,20 @@ interface ValidatedRow {
   hasMaxStock: boolean;
   hasLocation: boolean;
   categoryName: string;
+  /** `variant` = una fila por variante; el padre se crea/reutiliza, nunca se combinan. */
+  kind: 'product' | 'variant';
+  parentName: string;
+  parentKey: string;
+  variantLabel: string;
+  variantSku: string;
+  variantBarcode: string;
+  variantPriceCents: number;
+  variantCost: number | null;
+  variantStock: number;
+  variantMinStock: number;
+  variantMaxStock: number;
+  attributes: VariantAttributeInput[];
+  branchName: string;
 }
 
 /**
@@ -778,6 +875,291 @@ async function findProductIdsByField(
     }
   }
   return map;
+}
+
+/** Padres de variantes reutilizables por nombre, siempre dentro del tenant. */
+async function findProductIdsByName(
+  tenantId: string,
+  names: string[]
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const unique = Array.from(new Set(names.map((n) => String(n ?? '').trim()).filter(Boolean)));
+  for (let i = 0; i < unique.length; i += LOOKUP_CHUNK) {
+    const chunk = unique.slice(i, i + LOOKUP_CHUNK);
+    const { data } = await supabaseAdmin
+      .from('products')
+      .select('id, name, product_stock!inner(tenant_id)')
+      .in('name', chunk)
+      .eq('product_stock.tenant_id', tenantId);
+    for (const row of Array.isArray(data) ? data : []) {
+      const record = row as Record<string, unknown>;
+      const key = foldImportHeader(String(record.name ?? ''));
+      if (key && !map.has(key)) map.set(key, String(record.id));
+    }
+  }
+  return map;
+}
+
+/** Variantes ya existentes del tenant, por SKU o código de barras. */
+async function findVariantIdsByCodes(
+  tenantId: string,
+  skus: string[],
+  barcodes: string[]
+): Promise<{ bySku: Map<string, string>; byBarcode: Map<string, string> }> {
+  const bySku = new Map<string, string>();
+  const byBarcode = new Map<string, string>();
+  for (const [field, values, target] of [
+    ['sku', skus, bySku],
+    ['barcode', barcodes, byBarcode],
+  ] as const) {
+    const unique = Array.from(new Set(values.map((v) => String(v ?? '').trim()).filter(Boolean)));
+    for (let i = 0; i < unique.length; i += LOOKUP_CHUNK) {
+      const chunk = unique.slice(i, i + LOOKUP_CHUNK);
+      const { data } = await supabaseAdmin
+        .from('product_variants')
+        .select(`id, ${field}, variant_stock!inner(tenant_id)`)
+        .in(field, chunk)
+        .eq('variant_stock.tenant_id', tenantId);
+      for (const row of Array.isArray(data) ? data : []) {
+        const record = row as Record<string, unknown>;
+        const key = String(record[field] ?? '');
+        if (key && !target.has(key)) target.set(key, String(record.id));
+      }
+    }
+  }
+  return { bySku, byBarcode };
+}
+
+async function readVariantStock(
+  tenantId: string,
+  variantId: string
+): Promise<{ ok: true; stock: number; minStock: number; maxStock: number } | { ok: false; error: string }> {
+  const { data, error } = await supabaseAdmin
+    .from('variant_stock')
+    .select('stock, min_stock, max_stock')
+    .eq('variant_id', variantId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+  if (error) return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
+  const row = (data ?? {}) as Record<string, unknown>;
+  return {
+    ok: true,
+    stock: Number(row.stock) || 0,
+    minStock: Number(row.min_stock) || 0,
+    maxStock: Number(row.max_stock) || 0,
+  };
+}
+
+/** Upsert del catálogo global de atributos/valores usados por la variante. */
+async function resolveVariantValueIds(
+  attributes: VariantAttributeInput[]
+): Promise<{ ok: true; ids: string[] } | { ok: false; error: string }> {
+  const ids: string[] = [];
+  for (const { attribute, value } of attributes) {
+    const cleanAttribute = attribute.trim();
+    const cleanValue = value.trim();
+    if (!cleanAttribute || !cleanValue) continue;
+
+    const { data: attributeRow, error: attributeError } = await supabaseAdmin
+      .from('product_attributes')
+      .upsert({ name: cleanAttribute, updated_at: new Date().toISOString() }, { onConflict: 'name' })
+      .select('id')
+      .single();
+    if (attributeError || !attributeRow?.id) {
+      logger.error('resolveVariantValueIds: atributo', { error: attributeError });
+      return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
+    }
+    const attributeId = String(attributeRow.id);
+
+    const { error: valuesError } = await supabaseAdmin
+      .from('product_attribute_values')
+      .upsert(
+        { attribute_id: attributeId, value: cleanValue },
+        { onConflict: 'attribute_id,value', ignoreDuplicates: true }
+      );
+    if (valuesError) {
+      logger.error('resolveVariantValueIds: valor', { error: valuesError });
+      return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
+    }
+
+    const { data: valueRows, error: lookupError } = await supabaseAdmin
+      .from('product_attribute_values')
+      .select('id, value')
+      .eq('attribute_id', attributeId)
+      .eq('value', cleanValue);
+    const valueId = (valueRows ?? []).find((row) => String((row as Record<string, unknown>).value) === cleanValue);
+    if (lookupError || !valueId?.id) {
+      logger.error('resolveVariantValueIds: lookup', { error: lookupError });
+      return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
+    }
+    ids.push(String(valueId.id));
+  }
+  if (ids.length === 0) {
+    return { ok: false, error: VARIANT_ATTRIBUTE_REQUIRED_ERROR };
+  }
+  return { ok: true, ids: Array.from(new Set(ids)) };
+}
+
+function rpcVariantErrorMessage(error: { message?: string }): string {
+  const message = String(error.message ?? '');
+  if (message.includes('duplicate_sellable_code')) return DUPLICATE_CODE_MESSAGE;
+  if (message.includes('product_not_in_tenant')) return 'Producto no encontrado en tu sucursal';
+  if (message.includes('variant_values_required') || message.includes('invalid_attribute_value')) {
+    return VARIANT_ATTRIBUTE_REQUIRED_ERROR;
+  }
+  return 'Ocurrio un error inesperado. Intenta de nuevo.';
+}
+
+/** Padre sintético: el import de variantes no crea combinaciones automáticas. */
+async function createImportedParent(
+  auth: AuthInfo,
+  candidate: ValidatedRow
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const id = globalThis.crypto.randomUUID();
+  const productData: Record<string, unknown> = {
+    ...candidate.productData,
+    id,
+    name: candidate.parentName,
+    sku: '',
+    barcode: '',
+    price_cents: candidate.variantPriceCents,
+  };
+  const { error } = await supabaseAdmin.from('products').insert(productData);
+  if (error) {
+    logger.error('createImportedParent: producto', { error });
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
+  }
+  const { error: stockError } = await supabaseAdmin.from('product_stock').insert({
+    product_id: id,
+    tenant_id: auth.tenantId,
+    stock: 0,
+    min_stock: 0,
+    max_stock: 0,
+    deposito: null,
+    pasillo: null,
+    estanteria: null,
+    category_id: productData.category_id ?? null,
+  });
+  if (stockError) {
+    await supabaseAdmin.from('products').delete().eq('id', id);
+    logger.error('createImportedParent: stock', { error: stockError });
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
+  }
+  return { ok: true, id };
+}
+
+async function removeImportedParent(auth: AuthInfo, parentId: string): Promise<void> {
+  await supabaseAdmin
+    .from('product_stock')
+    .delete()
+    .eq('product_id', parentId)
+    .eq('tenant_id', auth.tenantId);
+  await supabaseAdmin.from('products').delete().eq('id', parentId).eq('sku', '');
+}
+
+async function createImportedVariant(
+  auth: AuthInfo,
+  parentId: string,
+  candidate: ValidatedRow,
+  valueIds: string[]
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const { data, error } = await supabaseAdmin.rpc('create_product_variant', {
+    p_product_id: parentId,
+    p_tenant_id: auth.tenantId,
+    p_by: auth.userId,
+    p_sku: candidate.variantSku,
+    p_barcode: candidate.variantBarcode,
+    p_label: candidate.variantLabel,
+    p_price_cents: candidate.variantPriceCents,
+    p_cost: candidate.variantCost,
+    p_value_ids: valueIds,
+    p_stock: candidate.variantStock,
+    p_min_stock: candidate.variantMinStock,
+    p_max_stock: candidate.variantMaxStock,
+    p_deposito: candidate.deposito,
+    p_pasillo: candidate.pasillo,
+    p_estanteria: candidate.estanteria,
+    p_category_id: candidate.productData.category_id ?? null,
+  });
+  if (error) {
+    logger.error('createImportedVariant:', { error });
+    return { ok: false, error: rpcVariantErrorMessage(error) };
+  }
+  const row = (Array.isArray(data) ? data?.[0] : data) as Record<string, unknown> | null;
+  if (!row?.id) {
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
+  }
+  return { ok: true, id: String(row.id) };
+}
+
+async function updateImportedVariant(
+  auth: AuthInfo,
+  variantId: string,
+  candidate: ValidatedRow,
+  valueIds: string[]
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { error } = await supabaseAdmin.rpc('update_product_variant', {
+    p_variant_id: variantId,
+    p_tenant_id: auth.tenantId,
+    p_sku: candidate.variantSku,
+    p_barcode: candidate.variantBarcode,
+    p_label: candidate.variantLabel,
+    p_price_cents: candidate.variantPriceCents,
+    p_cost: candidate.variantCost,
+    p_active: true,
+    p_value_ids: valueIds,
+  });
+  if (error) {
+    logger.error('updateImportedVariant:', { error });
+    return { ok: false, error: rpcVariantErrorMessage(error) };
+  }
+
+  const previous = await readVariantStock(auth.tenantId, variantId);
+  if (!previous.ok) return previous;
+
+  const nextStock = candidate.hasStock ? candidate.variantStock : previous.stock;
+  const delta = nextStock - previous.stock;
+  if (delta !== 0) {
+    const { data, error: adjustError } = await supabaseAdmin.rpc('adjust_variant_stock_atomic', {
+      p_variant_id: variantId,
+      p_tenant_id: auth.tenantId,
+      p_quantity: delta,
+      p_reason: 'Reimportación de variantes',
+      p_created_by: auth.userId,
+    });
+    const row = (Array.isArray(data) ? data?.[0] : data) as Record<string, unknown> | null;
+    if (adjustError || !row?.ok) {
+      logger.error('updateImportedVariant: stock', { error: adjustError ?? row });
+      return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
+    }
+  }
+
+  const { error: limitsError } = await supabaseAdmin
+    .from('variant_stock')
+    .update({
+      min_stock: candidate.hasMinStock ? candidate.variantMinStock : previous.minStock,
+      max_stock: candidate.hasMaxStock ? candidate.variantMaxStock : previous.maxStock,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('variant_id', variantId)
+    .eq('tenant_id', auth.tenantId);
+  if (limitsError) {
+    logger.error('updateImportedVariant: limites', { error: limitsError });
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
+  }
+  return { ok: true };
+}
+
+/** Lee un valor por cualquiera de sus alias, plegando acentos y mayusculas. */
+function rowValue(row: Record<string, unknown>, ...keys: string[]): unknown {
+  const folded = new Map(
+    Object.entries(row).map(([key, value]) => [foldImportHeader(key), value] as const)
+  );
+  for (const key of keys) {
+    const value = folded.get(foldImportHeader(key));
+    if (value !== undefined && value !== null && value !== '') return value;
+  }
+  return undefined;
 }
 
 export interface ImportProgress {
@@ -866,49 +1248,93 @@ export async function prepareImport(
   for (let i = 0; i < products.length; i++) {
     const row = products[i] ?? {};
     const rowNumber = i + 1;
-    const name = String(row.name ?? '');
+    const isVariant = isVariantImportRow(row);
+
+    // En una fila de variante, `Producto` / `Producto Principal` es el padre;
+    // `branch_name` solo informa la sucursal del archivo (el tenant siempre es
+    // el de la sesión). En una fila simple el nombre sigue siendo `name`.
+    const rawParentName = isVariant
+      ? rowValue(row, 'parent_name', 'producto principal', 'producto padre', 'nombre padre', 'parent', 'name', 'nombre', 'producto', 'titulo')
+      : row.name;
+    const name = String(rawParentName ?? '');
+    const displayName = isVariant
+      ? `${name.trim()} · ${String(rowValue(row, 'variant_label', 'etiqueta variante', 'etiqueta de variante', 'variante', 'variant') ?? '').trim()}`.trim()
+      : name;
 
     if (!name.trim()) {
       slots[i] = { row: rowNumber, status: 'skipped', error: 'Nombre requerido' };
       continue;
     }
 
-    const hasPrice = row.price !== undefined && row.price !== null && row.price !== '';
-    const priceError = hasPrice ? validatePrice(row.price) : null;
-    if (priceError) {
-      slots[i] = { row: rowNumber, status: 'skipped', name, error: priceError };
+    const variantLabel = isVariant
+      ? String(rowValue(row, 'variant_label', 'etiqueta variante', 'etiqueta de variante', 'variante', 'variant') ?? '').trim()
+      : '';
+    if (isVariant && !variantLabel) {
+      slots[i] = { row: rowNumber, status: 'skipped', name: displayName, error: VARIANT_LABEL_REQUIRED_ERROR };
       continue;
     }
 
-    if (row.cost !== undefined && row.cost !== null && row.cost !== '') {
-      const cost = Number(row.cost);
+    const attributes = isVariant
+      ? parseVariantAttributes(
+          rowValue(row, 'variant_attributes', 'atributos variante', 'atributos de variante', 'atributos') ?? ''
+        )
+      : [];
+    if (isVariant && attributes.length === 0) {
+      slots[i] = { row: rowNumber, status: 'skipped', name: displayName, error: VARIANT_ATTRIBUTE_REQUIRED_ERROR };
+      continue;
+    }
+
+    const priceSource = isVariant
+      ? rowValue(row, 'variant_price', 'precio variante', 'precio de variante', 'price', 'precio')
+      : row.price;
+    const hasPrice = priceSource !== undefined && priceSource !== null && priceSource !== '';
+    const priceError = hasPrice ? validatePrice(priceSource) : null;
+    if (priceError) {
+      slots[i] = { row: rowNumber, status: 'skipped', name: displayName, error: priceError };
+      continue;
+    }
+
+    const costSource = isVariant
+      ? rowValue(row, 'variant_cost', 'costo variante', 'costo de variante', 'cost', 'costo')
+      : row.cost;
+    const hasCost = costSource !== undefined && costSource !== null && costSource !== '';
+    if (hasCost) {
+      const cost = Number(costSource);
       if (Number.isNaN(cost) || cost < 0) {
-        slots[i] = { row: rowNumber, status: 'skipped', name, error: 'El costo debe ser un número no negativo' };
+        slots[i] = { row: rowNumber, status: 'skipped', name: displayName, error: 'El costo debe ser un número no negativo' };
         continue;
       }
     }
 
+    const stockSources = isVariant
+      ? {
+          stock: rowValue(row, 'variant_stock', 'stock variante', 'stock de variante', 'stock'),
+          min_stock: rowValue(row, 'variant_min_stock', 'stock minimo variante', 'stock mínimo variante', 'min stock variante', 'min_stock'),
+          max_stock: rowValue(row, 'variant_max_stock', 'stock maximo variante', 'stock máximo variante', 'max stock variante', 'max_stock'),
+        }
+      : { stock: row.stock, min_stock: row.min_stock, max_stock: row.max_stock };
     let stockValidationError: string | null = null;
     for (const field of ['stock', 'min_stock', 'max_stock'] as const) {
-      const stockFieldError = validateStock(row[field]);
+      const stockFieldError = validateStock(stockSources[field]);
       if (stockFieldError) {
         stockValidationError = stockFieldError;
         break;
       }
     }
     if (stockValidationError) {
-      slots[i] = { row: rowNumber, status: 'skipped', name, error: stockValidationError };
+      slots[i] = { row: rowNumber, status: 'skipped', name: displayName, error: stockValidationError };
       continue;
     }
 
+    const priceValue = hasPrice ? Number(priceSource) : 0;
+    const variantPriceCents = Number.isFinite(priceValue) ? Math.round(priceValue * 100) : 0;
     const productData: Record<string, unknown> = {};
     // La API es publica y `price` puede llegar como '' o null desde cualquier
     // cliente. Sin este chequeo un precio en blanco se guardaba como
     // price_cents = 0: poner el precio del producto en cero sin que nadie lo
     // haya pedido en la planilla.
-    if (hasPrice) {
-      const priceValue = Number(row.price);
-      if (Number.isFinite(priceValue)) productData.price_cents = Math.round(priceValue * 100);
+    if (!isVariant && hasPrice && Number.isFinite(priceValue)) {
+      productData.price_cents = Math.round(priceValue * 100);
     }
     for (const key of IMPORT_ALLOWED_FIELDS) {
       if (row[key] !== undefined && row[key] !== null && row[key] !== '') {
@@ -916,24 +1342,33 @@ export async function prepareImport(
           key === 'image_url' ? sanitizeImageUrl(row[key], auth.tenantId) : row[key];
       }
     }
+    if (isVariant) {
+      // El padre nunca hereda el código de la variante: `sellable_codes` lo
+      // reserva la RPC con el variant_id correcto.
+      productData.name = name.trim();
+      productData.sku = '';
+      productData.barcode = '';
+      productData.price_cents = variantPriceCents;
+      if (hasCost) productData.cost = Number(costSource);
+    }
 
     // Una celda de stock vacía significa "no informar", no "dejar en cero". En
     // una actualización se conserva el valor que ya tiene el producto; en un
     // alta nueva arranca en 0.
-    const hasStock = row.stock !== undefined && row.stock !== null && row.stock !== '';
-    const hasMinStock = row.min_stock !== undefined && row.min_stock !== null && row.min_stock !== '';
-    const hasMaxStock = row.max_stock !== undefined && row.max_stock !== null && row.max_stock !== '';
+    const hasStock = stockSources.stock !== undefined && stockSources.stock !== null && stockSources.stock !== '';
+    const hasMinStock = stockSources.min_stock !== undefined && stockSources.min_stock !== null && stockSources.min_stock !== '';
+    const hasMaxStock = stockSources.max_stock !== undefined && stockSources.max_stock !== null && stockSources.max_stock !== '';
     const hasLocation =
       row.deposito !== undefined || row.pasillo !== undefined || row.estanteria !== undefined;
 
     candidates.push({
       index: i,
       row: rowNumber,
-      name,
+      name: displayName,
       productData,
-      stock: Number(row.stock) || 0,
-      minStock: Number(row.min_stock) || 0,
-      maxStock: Number(row.max_stock) || 0,
+      stock: Number(stockSources.stock) || 0,
+      minStock: Number(stockSources.min_stock) || 0,
+      maxStock: Number(stockSources.max_stock) || 0,
       deposito: String(row.deposito ?? '').trim() || null,
       pasillo: String(row.pasillo ?? '').trim() || null,
       estanteria: String(row.estanteria ?? '').trim() || null,
@@ -942,12 +1377,28 @@ export async function prepareImport(
       hasMaxStock,
       hasLocation,
       categoryName: String(row.category_name ?? ''),
+      kind: isVariant ? 'variant' : 'product',
+      parentName: name.trim(),
+      parentKey: foldImportHeader(name.trim()),
+      variantLabel,
+      variantSku: String(rowValue(row, 'variant_sku', 'sku variante', 'sku de variante') ?? '').trim(),
+      variantBarcode: String(rowValue(row, 'variant_barcode', 'código de barras variante', 'codigo de barras variante', 'barcode variante', 'gtin variante') ?? '').trim(),
+      variantPriceCents,
+      variantCost: hasCost ? Number(costSource) : null,
+      variantStock: Number(stockSources.stock) || 0,
+      variantMinStock: Number(stockSources.min_stock) || 0,
+      variantMaxStock: Number(stockSources.max_stock) || 0,
+      attributes,
+      branchName: String(rowValue(row, 'branch_name', 'sucursal', 'branch') ?? '').trim(),
     });
   }
 
   // ── Fase 2: resolver contra la base, todo lectura ────────────────────────
   const existingBySku = new Map<string, string>();
   const existingByBarcode = new Map<string, string>();
+  const parentIdsByName = new Map<string, string>();
+  const variantIdsBySku = new Map<string, string>();
+  const variantIdsByBarcode = new Map<string, string>();
   let categories: CategoryResolver;
   try {
     const bySku = await findProductIdsByField(
@@ -962,6 +1413,22 @@ export async function prepareImport(
     );
     for (const [key, id] of bySku) existingBySku.set(key, id);
     for (const [key, id] of byBarcode) existingByBarcode.set(key, id);
+
+    const variantCandidates = candidates.filter((c) => c.kind === 'variant');
+    if (variantCandidates.length > 0) {
+      const parents = await findProductIdsByName(
+        auth.tenantId,
+        variantCandidates.map((c) => c.parentName)
+      );
+      for (const [key, id] of parents) parentIdsByName.set(key, id);
+      const variants = await findVariantIdsByCodes(
+        auth.tenantId,
+        variantCandidates.map((c) => c.variantSku),
+        variantCandidates.map((c) => c.variantBarcode)
+      );
+      for (const [key, id] of variants.bySku) variantIdsBySku.set(key, id);
+      for (const [key, id] of variants.byBarcode) variantIdsByBarcode.set(key, id);
+    }
     // Una sola lectura del catálogo de categorías para todo el archivo. Las
     // filas con categoría nueva van creando las suyas sobre este estado, así
     // que el total de queries de `categories` queda en 1 + nuevas.
@@ -1024,11 +1491,25 @@ const execute = async (onProgress?: ImportProgressCallback) => {
     // base (que es lo que permitía atribuir un error a una fila concreta).
     const toCreate: { candidate: ValidatedRow; id: string }[] = [];
     const toUpdate: { candidate: ValidatedRow; id: string }[] = [];
+    const toCreateVariants: ValidatedRow[] = [];
+    const toUpdateVariants: { candidate: ValidatedRow; id: string }[] = [];
 
     for (const candidate of candidates) {
       if (candidate.categoryName.trim()) {
         const categoryId = await resolveCategory(auth.tenantId, candidate.categoryName, categories);
         if (categoryId) candidate.productData.category_id = categoryId;
+      }
+
+      if (candidate.kind === 'variant') {
+        const existingVariantId =
+          (candidate.variantSku ? variantIdsBySku.get(candidate.variantSku) : undefined) ??
+          (candidate.variantBarcode ? variantIdsByBarcode.get(candidate.variantBarcode) : undefined);
+        if (existingVariantId) {
+          toUpdateVariants.push({ candidate, id: existingVariantId });
+        } else {
+          toCreateVariants.push(candidate);
+        }
+        continue;
       }
 
       let existingId: string | undefined;
@@ -1103,6 +1584,34 @@ const execute = async (onProgress?: ImportProgressCallback) => {
           }
         }
       }
+
+      // Reservar los códigos ANTES del stock: si la RPC rechaza un SKU ajeno,
+      // el producto recién insertado se borra y la fila se reporta como omitida.
+      const withCodes: typeof saved = [];
+      for (const item of saved) {
+        const codeCheck = await registerProductCodes(
+          auth,
+          item.id,
+          item.candidate.productData.sku,
+          item.candidate.productData.barcode
+        );
+        if (!codeCheck.ok) {
+          await removeProductCodes(item.id);
+          await supabaseAdmin.from('products').delete().eq('id', item.id);
+          slots[item.candidate.index] = {
+            row: item.candidate.row,
+            status: 'skipped',
+            name: item.candidate.name,
+            error: codeCheck.error,
+          };
+          skipped++;
+          processed++;
+          emit();
+          continue;
+        }
+        withCodes.push(item);
+      }
+      saved = withCodes;
 
       if (saved.length > 0) {
         const { error: stockError } = await supabaseAdmin.from('product_stock').insert(
@@ -1185,6 +1694,25 @@ const execute = async (onProgress?: ImportProgressCallback) => {
     for (const item of toUpdate) {
       const candidate = item.candidate;
       candidate.productData.updated_at = now;
+      // Igual que en el alta: reservar primero para no guardar un SKU ajeno.
+      const codeCheck = await registerProductCodes(
+        auth,
+        item.id,
+        candidate.productData.sku,
+        candidate.productData.barcode
+      );
+      if (!codeCheck.ok) {
+        slots[candidate.index] = {
+          row: candidate.row,
+          status: 'skipped',
+          name: candidate.name,
+          error: codeCheck.error,
+        };
+        skipped++;
+        processed++;
+        emit();
+        continue;
+      }
       const { error } = await supabaseAdmin
         .from('products')
         .update(candidate.productData)
@@ -1238,6 +1766,93 @@ const execute = async (onProgress?: ImportProgressCallback) => {
         if (delta !== 0) {
           await insertStockMovement(auth, item.id, delta, 'adjustment');
         }
+        slots[candidate.index] = { row: candidate.row, status: 'updated', name: candidate.name };
+        updated++;
+      }
+      processed++;
+      emit();
+    }
+
+    // ── Variantes: una fila por variante creada a mano ───────────────────────
+    // El padre se reutiliza por nombre dentro del tenant; si no existe se crea
+    // sintético (sin código y con stock 0) y se descarta si ninguna variante
+    // llega a crearse. Nunca se generan combinaciones automáticas.
+    const parentsWithVariant = new Set<string>();
+
+    for (const candidate of toCreateVariants) {
+      const values = await resolveVariantValueIds(candidate.attributes);
+      if (!values.ok) {
+        slots[candidate.index] = { row: candidate.row, status: 'skipped', name: candidate.name, error: values.error };
+        skipped++;
+        processed++;
+        emit();
+        continue;
+      }
+
+      let parentId = parentIdsByName.get(candidate.parentKey);
+      let parentCreatedHere = false;
+      if (!parentId) {
+        if (productCount !== null && productCount >= maxProducts) {
+          slots[candidate.index] = {
+            row: candidate.row,
+            status: 'skipped',
+            name: candidate.name,
+            error: 'Límite de productos alcanzado para tu plan',
+          };
+          skipped++;
+          processed++;
+          emit();
+          continue;
+        }
+        const parent = await createImportedParent(auth, candidate);
+        if (!parent.ok) {
+          slots[candidate.index] = { row: candidate.row, status: 'skipped', name: candidate.name, error: parent.error };
+          skipped++;
+          processed++;
+          emit();
+          continue;
+        }
+        parentId = parent.id;
+        parentCreatedHere = true;
+        parentIdsByName.set(candidate.parentKey, parentId);
+        if (productCount !== null) productCount++;
+      }
+
+      const createdVariant = await createImportedVariant(auth, parentId, candidate, values.ids);
+      if (!createdVariant.ok) {
+        // No puede quedar un padre huérfano creado sólo para esta fila.
+        if (parentCreatedHere && !parentsWithVariant.has(parentId)) {
+          await removeImportedParent(auth, parentId);
+          parentIdsByName.delete(candidate.parentKey);
+        }
+        slots[candidate.index] = { row: candidate.row, status: 'skipped', name: candidate.name, error: createdVariant.error };
+        skipped++;
+        processed++;
+        emit();
+        continue;
+      }
+      parentsWithVariant.add(parentId);
+      slots[candidate.index] = { row: candidate.row, status: 'created', name: candidate.name };
+      created++;
+      processed++;
+      emit();
+    }
+
+    for (const item of toUpdateVariants) {
+      const candidate = item.candidate;
+      const values = await resolveVariantValueIds(candidate.attributes);
+      if (!values.ok) {
+        slots[candidate.index] = { row: candidate.row, status: 'skipped', name: candidate.name, error: values.error };
+        skipped++;
+        processed++;
+        emit();
+        continue;
+      }
+      const updatedVariant = await updateImportedVariant(auth, item.id, candidate, values.ids);
+      if (!updatedVariant.ok) {
+        slots[candidate.index] = { row: candidate.row, status: 'skipped', name: candidate.name, error: updatedVariant.error };
+        skipped++;
+      } else {
         slots[candidate.index] = { row: candidate.row, status: 'updated', name: candidate.name };
         updated++;
       }

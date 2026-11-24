@@ -26,6 +26,8 @@ import { IconAction } from '@/components/ui/icon-action';
 import { Tooltip } from '@/components/ui/tooltip';
 import type { Product } from '@/lib/types/product';
 import type { Category } from '@/lib/types/category';
+import type { ProductVariant } from '@/lib/types/variant';
+import { VariantManagerModal } from '@/components/products/variant-manager-modal';
 import toast from 'react-hot-toast';
 import {
   Search,
@@ -43,6 +45,8 @@ import {
   Percent,
   ArrowRightLeft,
   ChevronDown,
+  ChevronUp,
+  Layers3,
   Settings2,
   Scan,
 } from 'lucide-react';
@@ -154,6 +158,12 @@ function ProductsPageContent() {
 
   // Product Modal State
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [variantsByProduct, setVariantsByProduct] = useState<Record<string, ProductVariant[]>>({});
+  const [managerProduct, setManagerProduct] = useState<Product | null>(null);
+  const [variantDraftOpen, setVariantDraftOpen] = useState(false);
+  const [variantDraft, setVariantDraft] = useState({ name: '', sku: '', barcode: '', description: '', category_id: '' });
+  const [creatingVariantParent, setCreatingVariantParent] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productForm, setProductForm] = useState({
     name: '',
@@ -705,6 +715,91 @@ function ProductsPageContent() {
     handleOpenProductModal(target);
   }, [products, productsLoading, handleOpenProductModal]);
 
+  const loadProductVariants = useCallback(async (productId: string) => {
+    const res = await authFetch(`/api/variants/products/${encodeURIComponent(productId)}`);
+    if (!res.ok) return;
+    const rows = (await res.json()) as ProductVariant[];
+    setVariantsByProduct((prev) => ({ ...prev, [productId]: rows }));
+  }, []);
+
+  const toggleProductRow = useCallback((productId: string) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(productId)) next.delete(productId);
+      else {
+        next.add(productId);
+        void loadProductVariants(productId);
+      }
+      return next;
+    });
+  }, [loadProductVariants]);
+
+  const openVariantManager = useCallback((product: Product) => {
+    setManagerProduct(product);
+  }, []);
+
+  // Deep-link desde el escáner: /products?variants=<id> despliega las variantes
+  // del producto para elegir una, sin volver a buscarlo a mano.
+  const variantDeepLinkHandled = useRef(false);
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('variants');
+    if (!id || variantDeepLinkHandled.current || productsLoading) return;
+    const target = (products ?? []).find((p) => p.id === id);
+    if (!target) return;
+    variantDeepLinkHandled.current = true;
+    // Respuesta al deep-link del escáner: recién acá está cargado el catálogo
+    // para saber qué producto desplegar (mismo patrón que otros fetch+effect).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setExpandedRows((prev) => new Set(prev).add(id));
+    void loadProductVariants(id);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('variants');
+    window.history.replaceState({}, '', url.pathname + url.search);
+  }, [products, productsLoading, loadProductVariants]);
+
+  const handleCreateVariantParent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!variantDraft.name.trim()) {
+      toast.error('El nombre del producto es requerido');
+      return;
+    }
+    setCreatingVariantParent(true);
+    try {
+      const res = await authFetch('/api/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getTenantHeaders() },
+        body: JSON.stringify({
+          name: variantDraft.name.trim(),
+          sku: variantDraft.sku,
+          barcode: variantDraft.barcode,
+          description: variantDraft.description,
+          category_id: variantDraft.category_id || categories[0]?.id || '',
+          price: 0,
+          cost: 0,
+          stock: 0,
+          min_stock: 0,
+          max_stock: 0,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al crear el producto');
+      toast.success('Producto creado. Ahora configurá sus variantes');
+      setVariantDraftOpen(false);
+      setVariantDraft({ name: '', sku: '', barcode: '', description: '', category_id: '' });
+      mutateProducts();
+      const created = data.product ?? data;
+      if (created?.id) {
+        setExpandedRows((prev) => new Set(prev).add(String(created.id)));
+        void loadProductVariants(String(created.id));
+        setManagerProduct(created as Product);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al crear el producto');
+    } finally {
+      setCreatingVariantParent(false);
+    }
+  };
+
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!productForm.name) {
@@ -942,11 +1037,17 @@ function ProductsPageContent() {
             )}
           </div>
 
-          {/* New Product Button */}
-          <Button size="sm" onClick={() => handleOpenProductModal(null)} className="flex items-center gap-1.5">
-            <Plus className="h-3.5 w-3.5 shrink-0" />
-            Nuevo
-          </Button>
+          {/* Alta simple vs alta con variantes */}
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={() => handleOpenProductModal(null)} className="flex items-center gap-1.5">
+              <Plus className="h-3.5 w-3.5 shrink-0" />
+              Nuevo
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setVariantDraftOpen(true)} className="flex items-center gap-1.5">
+              <Layers3 className="h-3.5 w-3.5 shrink-0" />
+              Con variantes
+            </Button>
+          </div>
           </>
         }
       />
@@ -1018,6 +1119,7 @@ function ProductsPageContent() {
           <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-left border-collapse">
               <Thead>
+                <Th className="w-8 px-2" />
                 <SortableTh label="Producto" sortFor="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="px-3 sm:px-6" />
                 <SortableTh label="Categoría" sortFor="category" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="hidden sm:table-cell px-3" />
                 <SortableTh label="Ubicación" sortFor="location" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="hidden lg:table-cell px-3" />
@@ -1032,8 +1134,22 @@ function ProductsPageContent() {
                   const isCritical = (product.stock ?? 0) <= (product.min_stock ?? 0);
                   const isLow = !isCritical && (product.stock ?? 0) <= (product.min_stock ?? 0) * 1.5;
 
+                  const productVariants = variantsByProduct[product.id] ?? [];
+                  const expanded = expandedRows.has(product.id);
+
                   return (
-                    <tr key={product.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
+                    <React.Fragment key={product.id}>
+                    <tr className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
+                      <td className="py-4 pl-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleProductRow(product.id)}
+                          aria-label={expanded ? `Ocultar variantes de ${product.name}` : `Ver variantes de ${product.name}`}
+                          className="rounded p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                        >
+                          {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </button>
+                      </td>
                       <td className="py-4 px-3 sm:px-6">
                         <div className="flex items-center gap-3">
                           {product.image_url && (
@@ -1049,6 +1165,12 @@ function ProductsPageContent() {
                           )}
                           <div className="min-w-0">
                             <div className="font-semibold text-gray-900 dark:text-gray-100 break-words">{product.name}</div>
+                            {productVariants.length > 0 && (
+                              <div className="inline-flex items-center gap-1 mt-0.5 text-xs font-medium text-indigo-600 dark:text-indigo-400">
+                                <Layers3 className="h-3 w-3" />
+                                {productVariants.length} variante{productVariants.length === 1 ? '' : 's'} · stock total {productVariants.reduce((sum, v) => sum + (v.stock ?? 0), 0)}
+                              </div>
+                            )}
                             {category && (
                               <div className="sm:hidden mt-0.5">
                                 <span
@@ -1156,6 +1278,67 @@ function ProductsPageContent() {
                         </div>
                       </td>
                     </tr>
+                    {expanded && (
+                      <tr className="bg-gray-50/70 dark:bg-gray-900/40">
+                        <td colSpan={8} className="px-4 py-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                              Stock por variante · {product.name}
+                            </span>
+                            <Button size="sm" variant="outline" onClick={() => openVariantManager(product)}>
+                              <Layers3 className="h-3.5 w-3.5 mr-1" /> Administrar variantes
+                            </Button>
+                          </div>
+                          {productVariants.length === 0 ? (
+                            <p className="text-sm text-gray-500 py-2">
+                              Este producto todavía no tiene variantes. Podés crearlas manualmente desde “Administrar variantes”.
+                            </p>
+                          ) : (
+                            <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+                              <table className="w-full text-left text-xs border-collapse">
+                                <thead className="bg-gray-100 dark:bg-gray-800 text-gray-500 uppercase">
+                                  <tr>
+                                    <th className="px-3 py-2">Variante</th>
+                                    <th className="px-3 py-2">SKU / Código</th>
+                                    <th className="px-3 py-2 text-right">Costo</th>
+                                    <th className="px-3 py-2 text-right">Precio</th>
+                                    <th className="px-3 py-2 text-right">Margen</th>
+                                    <th className="px-3 py-2 text-right">Stock</th>
+                                    <th className="px-3 py-2">Ubicación</th>
+                                    <th className="px-3 py-2 text-right">Estado</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                                  {productVariants.map((variant) => (
+                                    <tr key={variant.id}>
+                                      <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100">{variant.label}</td>
+                                      <td className="px-3 py-2 font-mono text-gray-500">
+                                        {variant.sku || '—'}{variant.barcode ? ` · ${variant.barcode}` : ''}
+                                      </td>
+                                      <td className="px-3 py-2 text-right">{formatARS(variant.cost ?? 0)}</td>
+                                      <td className="px-3 py-2 text-right font-semibold text-green-600 dark:text-green-400">{formatARS(variant.price)}</td>
+                                      <td className="px-3 py-2 text-right text-gray-500">
+                                        {variant.cost != null && variant.cost > 0 ? `${marginPercent(variant.price, variant.cost).toFixed(0)}%` : '—'}
+                                      </td>
+                                      <td className="px-3 py-2 text-right font-semibold">{variant.stock ?? 0}</td>
+                                      <td className="px-3 py-2 text-gray-500">
+                                        {[variant.deposito, variant.pasillo, variant.estanteria].filter(Boolean).join(' · ') || '—'}
+                                      </td>
+                                      <td className="px-3 py-2 text-right">
+                                        <span className={variant.active ? 'text-emerald-600' : 'text-gray-400'}>
+                                          {variant.active ? 'Activa' : 'Inactiva'}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>
@@ -1245,6 +1428,12 @@ function ProductsPageContent() {
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
                       <IconAction
+                        icon={expandedRows.has(product.id) ? ChevronUp : ChevronDown}
+                        label={`Ver variantes de ${product.name} (móvil)`}
+                        title="Variantes"
+                        onClick={() => toggleProductRow(product.id)}
+                      />
+                      <IconAction
                         icon={Edit}
                         label={`Editar ${product.name} (móvil)`}
                         title="Editar"
@@ -1260,6 +1449,32 @@ function ProductsPageContent() {
                       />
                     </div>
                   </div>
+                  {expandedRows.has(product.id) && (
+                    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 p-3">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className="text-xs font-semibold uppercase text-gray-500">Stock por variante</span>
+                        <Button size="sm" variant="outline" onClick={() => openVariantManager(product)}>Administrar</Button>
+                      </div>
+                      {(variantsByProduct[product.id] ?? []).length === 0 ? (
+                        <p className="text-xs text-gray-500">Sin variantes cargadas.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {(variantsByProduct[product.id] ?? []).map((variant) => (
+                            <div key={variant.id} className="flex items-center justify-between gap-2 text-xs">
+                              <div className="min-w-0">
+                                <p className="truncate font-medium text-gray-900 dark:text-gray-100">{variant.label}</p>
+                                <p className="truncate font-mono text-gray-500">{variant.sku || '—'}</p>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className="font-semibold text-indigo-600 dark:text-indigo-400">{formatARS(variant.price)}</p>
+                                <p className="text-gray-500">{variant.stock ?? 0} u. · {variant.active ? 'Activa' : 'Inactiva'}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -1285,6 +1500,59 @@ function ProductsPageContent() {
           isSubmitting={isSubmittingProduct}
           onSubmit={handleSaveProduct}
           onClose={() => setIsProductModalOpen(false)}
+        />
+      )}
+
+      {/* Alta de producto principal con variantes */}
+      {variantDraftOpen && (
+        <Modal
+          onClose={() => setVariantDraftOpen(false)}
+          className="max-w-lg"
+          header={<span className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2"><Layers3 className="h-5 w-5 text-indigo-600" /> Nuevo producto con variantes</span>}
+        >
+          <form onSubmit={handleCreateVariantParent} className="p-4 space-y-3">
+            <p className="text-xs text-gray-500">
+              Primero se crea el producto principal. Después configurás los atributos y creás cada variante manualmente.
+            </p>
+            <div>
+              <FormLabel>Nombre del producto</FormLabel>
+              <Input value={variantDraft.name} onChange={(e) => setVariantDraft({ ...variantDraft, name: e.target.value })} placeholder="Ej: Remera" />
+            </div>
+            <div>
+              <FormLabel>Categoría</FormLabel>
+              <select
+                value={variantDraft.category_id}
+                onChange={(e) => setVariantDraft({ ...variantDraft, category_id: e.target.value })}
+                className="w-full rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-2 text-sm"
+              >
+                <option value="">Sin categoría</option>
+                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div><FormLabel>SKU (opcional)</FormLabel><Input value={variantDraft.sku} onChange={(e) => setVariantDraft({ ...variantDraft, sku: e.target.value })} /></div>
+              <div><FormLabel>Código de barras</FormLabel><Input value={variantDraft.barcode} onChange={(e) => setVariantDraft({ ...variantDraft, barcode: e.target.value })} /></div>
+            </div>
+            <div>
+              <FormLabel>Descripción</FormLabel>
+              <Input value={variantDraft.description} onChange={(e) => setVariantDraft({ ...variantDraft, description: e.target.value })} />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setVariantDraftOpen(false)}>Cancelar</Button>
+              <Button type="submit" disabled={creatingVariantParent}>
+                {creatingVariantParent ? 'Creando…' : 'Crear y configurar variantes'}
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {managerProduct && (
+        <VariantManagerModal
+          product={managerProduct}
+          categories={categories}
+          onClose={() => setManagerProduct(null)}
+          onChanged={() => { mutateProducts(); void loadProductVariants(managerProduct.id); }}
         />
       )}
 

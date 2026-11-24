@@ -53,4 +53,32 @@ describe('summarizeImportRows', () => {
       { row: 2, name: 'Mal', error: 'El precio no puede ser negativo' },
     ]);
   });
+
+  it('acepta una fila de variante completa con nombre compuesto', () => {
+    const preview = summarizeImportRows([
+      {
+        parent_name: 'Remera',
+        variant_label: 'Rojo / M',
+        variant_attributes: 'Color: Rojo; Talle: M',
+        variant_sku: 'REM-1',
+        variant_price: 15900,
+        variant_stock: 3,
+      },
+    ]);
+
+    expect(preview).toEqual({ total: 1, valid: 1, skipped: [] });
+  });
+
+  it('rechaza variantes sin etiqueta ni atributos con los mismos mensajes del servidor', () => {
+    const preview = summarizeImportRows([
+      { parent_name: 'Remera', variant_attributes: 'Color: Rojo' },
+      { parent_name: 'Remera', variant_label: 'Rojo' },
+    ]);
+
+    expect(preview.valid).toBe(0);
+    expect(preview.skipped.map((issue) => issue.error)).toEqual([
+      'La etiqueta de la variante es requerida',
+      'La variante debe tener al menos un valor de atributo',
+    ]);
+  });
 });

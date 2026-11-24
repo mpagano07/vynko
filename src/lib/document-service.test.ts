@@ -126,3 +126,147 @@ describe('concurrencia de numeracion (Fase 2)', () => {
     expect(advances).toEqual([6, 6, 7]);
   });
 });
+
+const queueDocumentFlow = (variantRow?: unknown) => {
+  if (variantRow) supabaseMock.__queue('product_variants', { data: variantRow, error: null });
+  supabaseMock.__queue('commercial_document_sequences', { data: { next_number: 5 }, error: null });
+  supabaseMock.__queue('commercial_document_sequences', { data: [{ next_number: 6 }], error: null });
+  supabaseMock.__queue('commercial_documents', { data: { id: 'doc-1' }, error: null });
+  supabaseMock.__queue('commercial_document_items', { data: null, error: null });
+  supabaseMock.__queue('commercial_documents', { data: { id: 'doc-1', items: [] }, error: null });
+};
+
+const documentItemsInsert = () =>
+  supabaseMock.__calls.find(
+    (c) => c.table === 'commercial_document_items' && c.method === 'insert'
+  )?.args[0] as Array<Record<string, unknown>> | undefined;
+
+describe('createDocument con variantes', () => {
+  beforeEach(() => {
+    supabaseMock.__reset();
+  });
+
+  it('guarda items simples sin variant_id (forma exacta sin cambios)', async () => {
+    queueDocumentFlow();
+
+    const result = await createDocument(AUTH, baseBody);
+
+    expect(result.ok).toBe(true);
+    expect(documentItemsInsert()).toEqual([
+      {
+        document_id: 'doc-1',
+        product_id: null,
+        description: 'Producto',
+        quantity: 1,
+        unit_price_cents: 100,
+        subtotal_cents: 100,
+      },
+    ]);
+    expect(supabaseMock.__calls.some((c) => c.table === 'product_variants')).toBe(false);
+  });
+
+  it('valida la variante y guarda la descripción completa', async () => {
+    queueDocumentFlow({
+      id: 'var-1',
+      product_id: 'prod-1',
+      label: '128 GB',
+      variant_stock: [{ tenant_id: 'tenant-1', stock: 3, active: true }],
+    });
+
+    const result = await createDocument(AUTH, {
+      ...baseBody,
+      items: [{
+        product_id: 'prod-1',
+        variant_id: 'var-1',
+        description: 'Producto',
+        quantity: 2,
+        unit_price_cents: 500,
+      }],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(documentItemsInsert()).toEqual([
+      {
+        document_id: 'doc-1',
+        product_id: 'prod-1',
+        variant_id: 'var-1',
+        description: 'Producto · 128 GB',
+        quantity: 2,
+        unit_price_cents: 500,
+        subtotal_cents: 1000,
+      },
+    ]);
+  });
+
+  it('no duplica la etiqueta si la descripción ya está completa', async () => {
+    queueDocumentFlow({
+      id: 'var-1',
+      product_id: 'prod-1',
+      label: '128 GB',
+      variant_stock: [{ tenant_id: 'tenant-1', stock: 3, active: true }],
+    });
+
+    await createDocument(AUTH, {
+      ...baseBody,
+      items: [{
+        product_id: 'prod-1',
+        variant_id: 'var-1',
+        description: 'Producto · 128 GB',
+        quantity: 1,
+        unit_price_cents: 500,
+      }],
+    });
+
+    expect(documentItemsInsert()?.[0].description).toBe('Producto · 128 GB');
+  });
+
+  it('rechaza una variante de otra sucursal antes de reservar número', async () => {
+    queueDocumentFlow({
+      id: 'var-1',
+      product_id: 'prod-1',
+      label: '128 GB',
+      variant_stock: [{ tenant_id: 'tenant-2', stock: 3, active: true }],
+    });
+
+    const result = await createDocument(AUTH, {
+      ...baseBody,
+      items: [{
+        product_id: 'prod-1',
+        variant_id: 'var-1',
+        description: 'Producto',
+        quantity: 1,
+        unit_price_cents: 500,
+      }],
+    });
+
+    expect(result).toMatchObject({ ok: false, status: 400, error: 'La variante no pertenece al producto o a la sucursal' });
+    expect(
+      supabaseMock.__calls.some((c) => c.table === 'commercial_documents' && c.method === 'insert')
+    ).toBe(false);
+  });
+
+  it('rechaza una variante de otro producto', async () => {
+    queueDocumentFlow({
+      id: 'var-1',
+      product_id: 'prod-other',
+      label: '128 GB',
+      variant_stock: [{ tenant_id: 'tenant-1', stock: 3, active: true }],
+    });
+
+    const result = await createDocument(AUTH, {
+      ...baseBody,
+      items: [{
+        product_id: 'prod-1',
+        variant_id: 'var-1',
+        description: 'Producto',
+        quantity: 1,
+        unit_price_cents: 500,
+      }],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(
+      supabaseMock.__calls.some((c) => c.table === 'commercial_documents' && c.method === 'insert')
+    ).toBe(false);
+  });
+});

@@ -80,6 +80,37 @@ interface SalesEntry {
   total_cents: number;
 }
 
+interface CriticalVariant {
+  id: string;
+  product_id: string;
+  name: string;
+  label?: string | null;
+  display_name?: string;
+  stock: number;
+  min_stock: number;
+}
+
+type CriticalRow = { id: string; name: string; stock: number; min_stock: number };
+
+/**
+ * Los críticos por variante reemplazan al producto padre en la lista: mostrar
+ * ambos duplicaría el mismo riesgo dos veces. El id de la variante mantiene
+ * estable la clave de la fila.
+ */
+function mergeCriticalVariants(products: CriticalRow[], variants: CriticalVariant[]): CriticalRow[] {
+  const parentsWithVariants = new Set(variants.map((v) => String(v.product_id ?? '')));
+  const merged = products.filter((p) => !parentsWithVariants.has(p.id));
+  const seen = new Set(merged.map((p) => p.id));
+  for (const variant of variants) {
+    if (seen.has(variant.id)) continue;
+    seen.add(variant.id);
+    const label = String(variant.display_name ?? '').trim() ||
+      (variant.label ? `${variant.name} · ${variant.label}` : variant.name);
+    merged.push({ id: variant.id, name: label, stock: variant.stock, min_stock: variant.min_stock });
+  }
+  return merged;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const { profile, tenant, tenants, allTenants, loading: authLoading, isAuthenticated, switchTenant } = useAuth();
@@ -130,19 +161,23 @@ export default function DashboardPage() {
           // el dashboard tarda lo que la sucursal más lenta, no la suma.
           const perTenantRows = await Promise.all(
             tenants.map(async (t) => {
-              const [sales, monthly, critical, pending, counters] = await Promise.all([
+              const [sales, monthly, critical, criticalVariants, pending, counters] = await Promise.all([
                 fetchWithTenant(`/api/sales?today=true&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, t.id),
                 fetchWithTenant('/api/sales/monthly', t.id),
                 fetchWithTenant('/api/products/critical', t.id),
+                fetchWithTenant('/api/dashboard/variants', t.id),
                 fetchWithTenant('/api/purchase-orders/pending', t.id),
                 fetchWithTenant('/api/products/counters', t.id),
               ]);
-              if (!sales || !monthly || !critical || !pending || !counters) failed = true;
+              if (!sales || !monthly || !critical || !criticalVariants || !pending || !counters) failed = true;
 
               const todayTotal = (sales as SalesEntry[] || []).reduce((sum, s) => sum + (s.total_cents || 0), 0);
               const saleCount = (sales as SalesEntry[] || []).length;
               const md = monthly as MonthlyData | null;
-              const cp = (critical as CriticalProduct[] || []);
+              const cp = mergeCriticalVariants(
+                (critical as CriticalProduct[] || []),
+                (criticalVariants as CriticalVariant[] || [])
+              );
               const po = (pending as PendingOrder[] || []);
               const countersData = counters as {
                 hasStock?: boolean;
@@ -221,16 +256,17 @@ export default function DashboardPage() {
             });
           }
         } else if (tenant?.id) {
-          const [salesRes, monthlyRes, criticalRes, pendingRes, countersRes] = await Promise.all([
+          const [salesRes, monthlyRes, criticalRes, variantsRes, pendingRes, countersRes] = await Promise.all([
             authFetch(`/api/sales?today=true&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`),
             authFetch('/api/sales/monthly'),
             authFetch('/api/products/critical'),
+            authFetch('/api/dashboard/variants'),
             authFetch('/api/purchase-orders/pending'),
             authFetch('/api/products/counters'),
           ]);
 
           if (cancelled) return;
-          if (!salesRes.ok || !monthlyRes.ok || !criticalRes.ok || !pendingRes.ok || !countersRes.ok) failed = true;
+          if (!salesRes.ok || !monthlyRes.ok || !criticalRes.ok || !variantsRes.ok || !pendingRes.ok || !countersRes.ok) failed = true;
 
           if (countersRes.ok) {
             const counters = await countersRes.json() as {
@@ -258,9 +294,10 @@ export default function DashboardPage() {
             const md = await monthlyRes.json();
             startTransition(() => setMonthlyData(md));
           }
-          if (criticalRes.ok) {
-            const cp = await criticalRes.json();
-            startTransition(() => setCriticalProducts(cp));
+          if (criticalRes.ok || variantsRes.ok) {
+            const cp = criticalRes.ok ? await criticalRes.json() as CriticalProduct[] : [];
+            const cv = variantsRes.ok ? await variantsRes.json() as CriticalVariant[] : [];
+            startTransition(() => setCriticalProducts(mergeCriticalVariants(cp, cv)));
           }
           if (pendingRes.ok) {
             const po = await pendingRes.json();

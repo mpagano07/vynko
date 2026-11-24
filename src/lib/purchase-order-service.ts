@@ -8,6 +8,64 @@ import type { AuthInfo } from '@/lib/api-auth';
 import { getRoleInTenant, hasCapability } from '@/lib/membership-role';
 import { trackEvent } from '@/lib/track-event';
 import { logger } from '@/lib/logger';
+import { sellableDisplayName } from '@/lib/types/variant';
+
+/** Fila minima de una variante ya validada contra el tenant. */
+interface ResolvedVariant {
+  label: string;
+  cost: number | null;
+}
+
+type VariantLookup =
+  | { ok: true; variant: ResolvedVariant }
+  | { ok: false; error: string; status: 400 | 500 };
+
+function stockRows(value: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(value)) return value as Array<Record<string, unknown>>;
+  return value ? [value as Record<string, unknown>] : [];
+}
+
+/**
+ * Una variante sólo es válida si la fila de `product_variants` pertenece al
+ * producto de la línea y tiene stock activo en el tenant que opera. La tabla
+ * `product_variants` es global; el aislamiento lo da `variant_stock`.
+ */
+async function lookupOrderedVariant(
+  tenantId: string,
+  productId: string,
+  variantId: string,
+  cache: Map<string, VariantLookup>
+): Promise<VariantLookup> {
+  const key = `${tenantId}|${productId}|${variantId}`;
+  const cached = cache.get(key);
+  if (cached) return cached;
+
+  const { data, error } = await supabaseAdmin
+    .from('product_variants')
+    .select('id, product_id, label, cost, variant_stock!inner(tenant_id, stock, active)')
+    .eq('id', variantId)
+    .maybeSingle();
+
+  if (error) {
+    logger.error('DB error:', { error });
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
+  }
+  const row = data as Record<string, unknown> | null;
+  const ownStock = stockRows(row?.variant_stock).find(
+    (s) => String(s.tenant_id) === tenantId && Boolean(s.active)
+  );
+  let result: VariantLookup;
+  if (!row || String(row.product_id) !== productId || !ownStock) {
+    result = { ok: false, error: 'La variante no pertenece al producto o a la sucursal', status: 400 };
+  } else {
+    result = {
+      ok: true,
+      variant: { label: String(row.label ?? ''), cost: row.cost == null ? null : Number(row.cost) },
+    };
+  }
+  cache.set(key, result);
+  return result;
+}
 
 export type PurchaseOrderResult<T = unknown> =
   | { ok: true; data: T; status: number }
@@ -24,7 +82,8 @@ export async function listPurchaseOrders(
       supplier:suppliers(name),
       items:purchase_order_items(
         *,
-        product:products(name)
+        product:products(name),
+        variant:product_variants(label)
       )
     `)
     .eq('tenant_id', auth.tenantId);
@@ -45,9 +104,13 @@ export async function listPurchaseOrders(
       supplier_name: supplier?.name ?? null,
       items: items.map((i: Record<string, unknown>) => {
         const product = i.product as Record<string, unknown> | undefined;
+        const variant = i.variant as Record<string, unknown> | undefined;
         return {
           ...i,
-          product_name: product?.name ?? null,
+          product_name: sellableDisplayName(
+            String(product?.name ?? ''),
+            variant?.label ? String(variant.label) : null
+          ) || null,
         };
       }),
     };
@@ -63,7 +126,7 @@ interface CreatePurchaseOrderBody {
   status?: string;
   payment_term_days?: number | null;
   payment_due_date?: string | null;
-  items: { product_id: string; quantity: number; unit_cost?: number }[];
+  items: { product_id: string; variant_id?: string | null; quantity: number; unit_cost?: number }[];
 }
 
 export async function createPurchaseOrder(
@@ -100,7 +163,16 @@ export async function createPurchaseOrder(
     type ProductRow = { id: string; name: string; cost: number; cost_cents?: number };
     const productMap = new Map((products ?? []).map((p) => [p.id, p as unknown as ProductRow]));
 
-    const poItems = items.map((item) => {
+    const variantCache = new Map<string, VariantLookup>();
+    const poItems: Array<{
+      product_id: string;
+      variant_id?: string;
+      quantity_ordered: number;
+      quantity_received: number;
+      unit_cost_cents: number;
+    }> = [];
+
+    for (const item of items) {
       const product = productMap.get(item.product_id);
       if (!product) throw new Error(`Producto no encontrado: ${item.product_id}`);
 
@@ -108,13 +180,31 @@ export async function createPurchaseOrder(
       if (!Number.isFinite(rawQuantity) || rawQuantity <= 0) {
         throw new Error(`Cantidad inválida para "${product.name}"`);
       }
-      const quantity = rawQuantity;
-      const unit_cost_cents = item.unit_cost != null
-        ? Math.round(Number(item.unit_cost) * 100)
-        : (product.cost_cents ?? Math.round(Number(product.cost) * 100));
+      const variantId = item.variant_id ? String(item.variant_id) : null;
+      let variantCostCents: number | null = null;
+      if (variantId) {
+        const resolved = await lookupOrderedVariant(auth.tenantId, item.product_id, variantId, variantCache);
+        if (!resolved.ok) return resolved;
+        // El costo de la variante viene de la base: el `unit_cost` del cliente
+        // no puede fijar el importe de una línea con variante.
+        variantCostCents = resolved.variant.cost == null
+          ? null
+          : Math.round(Number(resolved.variant.cost) * 100);
+      }
 
-      return { product_id: item.product_id, quantity_ordered: quantity, quantity_received: 0, unit_cost_cents };
-    });
+      const productCostCents = product.cost_cents ?? Math.round(Number(product.cost) * 100);
+      const unit_cost_cents = variantId
+        ? (variantCostCents ?? productCostCents)
+        : (item.unit_cost != null ? Math.round(Number(item.unit_cost) * 100) : productCostCents);
+
+      poItems.push({
+        product_id: item.product_id,
+        ...(variantId ? { variant_id: variantId } : {}),
+        quantity_ordered: rawQuantity,
+        quantity_received: 0,
+        unit_cost_cents,
+      });
+    }
 
     const total_cents = poItems.reduce((sum, item) => sum + item.quantity_ordered * item.unit_cost_cents, 0);
 
@@ -205,6 +295,7 @@ export async function createPurchaseOrder(
         poItems.map((item) => ({
           purchase_order_id: order.id,
           product_id: item.product_id,
+          ...(item.variant_id ? { variant_id: item.variant_id } : {}),
           quantity_ordered: item.quantity_ordered,
           quantity_received: 0,
           unit_cost_cents: item.unit_cost_cents,
@@ -367,9 +458,11 @@ export async function listPendingPurchaseOrders(auth: AuthInfo): Promise<Purchas
       created_at,
       supplier:suppliers(name),
       items:purchase_order_items(
+        *,
         quantity_ordered,
         quantity_received,
-        product:products(id, name)
+        product:products(id, name),
+        variant:product_variants(label)
       )
     `)
     .eq('tenant_id', auth.tenantId)
@@ -387,11 +480,16 @@ export async function listPendingPurchaseOrders(auth: AuthInfo): Promise<Purchas
       const items = ((o.items as Record<string, unknown>[] | undefined) ?? [])
         .map((i: Record<string, unknown>) => {
           const product = i.product as Record<string, unknown> | undefined;
+          const variant = i.variant as Record<string, unknown> | undefined;
+          const variantId = i.variant_id ? String(i.variant_id) : null;
           const ordered = Number(i.quantity_ordered) || 0;
           const received = Number(i.quantity_received) || 0;
           return {
             product_id: (product?.id as string) ?? null,
-            product_name: (product?.name as string) ?? 'Producto',
+            product_name: variantId
+              ? sellableDisplayName(String(product?.name ?? 'Producto'), variant?.label ? String(variant.label) : null)
+              : ((product?.name as string) ?? 'Producto'),
+            ...(variantId ? { variant_id: variantId } : {}),
             quantity_ordered: ordered,
             quantity_received: received,
             quantity_pending: Math.max(0, ordered - received),
@@ -423,8 +521,15 @@ interface ReceiveBody {
   pasillo?: string;
   estanteria?: string;
   notes?: string;
-  items: { product_id: string; quantity_received: number }[];
+  items: { product_id: string; variant_id?: string | null; quantity_received: number }[];
 }
+
+// La RPC de recepcion hace match por (product_id, variant_id): agrupar sólo
+// por producto mezclaría dos variantes de la misma orden. `null` y ausente
+// significan "producto simple" y se normalizan a la misma clave.
+const receiveItemKey = (productId: string, variantId?: string | null) =>
+  JSON.stringify([productId, variantId ? String(variantId) : '']);
+
 
 export async function receivePurchaseOrder(
   auth: AuthInfo,
@@ -465,7 +570,7 @@ export async function receivePurchaseOrder(
 
   const { data: poItems } = await supabaseAdmin
     .from('purchase_order_items')
-    .select('*, product:products(id, name)')
+    .select('*, product:products(id, name), variant:product_variants(label)')
     .eq('purchase_order_id', purchaseOrderId);
 
   if (!poItems || poItems.length === 0) {
@@ -473,25 +578,32 @@ export async function receivePurchaseOrder(
   }
 
   // Valida y capita cada cantidad a recibir: entero positivo, nunca mayor al
-  // saldo pendiente (quantity_ordered - quantity_received).
+  // saldo pendiente (quantity_ordered - quantity_received). La clave incluye
+  // la variante porque la RPC (075) hace match por el par producto+variante.
+  const requestedByKey = new Map<string, number>();
+  for (const receivedItem of items) {
+    const key = receiveItemKey(String(receivedItem.product_id), receivedItem.variant_id);
+    requestedByKey.set(key, (requestedByKey.get(key) ?? 0) + (Number(receivedItem.quantity_received) || 0));
+  }
+
   const receivingQuantities = new Map<string, number>();
   let atLeastOne = false;
   for (const item of poItems as Record<string, unknown>[]) {
     const productId = item.product_id as string;
+    const variantId = item.variant_id ? String(item.variant_id) : null;
+    const key = receiveItemKey(productId, variantId);
     const orderedQty = Number(item.quantity_ordered) || 0;
     const currentQtyReceived = Number(item.quantity_received) || 0;
-
-    const receivedItem = items.find((i: { product_id: string }) => i.product_id === productId);
-    const requested = Number(receivedItem?.quantity_received) || 0;
+    const requested = requestedByKey.get(key) ?? 0;
 
     if (requested <= 0 || !Number.isInteger(requested)) {
-      receivingQuantities.set(productId, 0);
+      receivingQuantities.set(key, 0);
       continue;
     }
 
     const pending = Math.max(0, orderedQty - currentQtyReceived);
     const capped = Math.min(requested, pending);
-    receivingQuantities.set(productId, capped);
+    receivingQuantities.set(key, capped);
     if (capped > 0) atLeastOne = true;
   }
 
@@ -499,17 +611,26 @@ export async function receivePurchaseOrder(
     return { ok: false, error: 'Ingresa una cantidad válida para recibir', status: 400 };
   }
 
-  const remitoItems = poItems.map((item: Record<string, unknown>) => {
+  const remitoItems: Array<{
+    variant_id?: string;
+    product_id: string;
+    description: string;
+    quantity: number;
+    unit_price_cents: number;
+  }> = poItems.map((item: Record<string, unknown>) => {
     const product = item.product as Record<string, unknown> | undefined;
+    const variant = item.variant as Record<string, unknown> | undefined;
+    const variantId = item.variant_id ? String(item.variant_id) : null;
     const productId = item.product_id as string;
     const productName = (product?.name as string) || 'Producto';
     const unitCostCents = Number(item.unit_cost_cents) || 0;
 
-    const qtyReceivingNow = receivingQuantities.get(productId) || 0;
+    const qtyReceivingNow = receivingQuantities.get(receiveItemKey(productId, variantId)) || 0;
 
     return {
+      ...(variantId ? { variant_id: variantId } : {}),
       product_id: productId,
-      description: productName,
+      description: sellableDisplayName(productName, variant?.label ? String(variant.label) : null),
       quantity: qtyReceivingNow,
       unit_price_cents: unitCostCents,
     };
@@ -567,6 +688,7 @@ export async function receivePurchaseOrder(
   const documentItems = remitoItems.map((item) => ({
     document_id: document.id,
     product_id: item.product_id,
+    ...(item.variant_id ? { variant_id: item.variant_id } : {}),
     description: item.description,
     quantity: item.quantity,
     unit_price_cents: item.unit_price_cents,
@@ -598,7 +720,16 @@ export async function receivePurchaseOrder(
   // que faltaba todo por recibir.
   const incItems = [...receivingQuantities.entries()]
     .filter(([, inc]) => inc > 0)
-    .map(([product_id, quantity_received]) => ({ product_id, quantity_received }));
+    .map(([key, quantity_received]) => {
+      const [product_id, variant_id] = JSON.parse(key) as [string, string];
+      return {
+        product_id,
+        // Los productos simples viajan SIN el campo: `undefined` y `null`
+        // cambiaban el payload que recibia la RPC 051.
+        ...(variant_id ? { variant_id } : {}),
+        quantity_received,
+      };
+    });
 
   const { data, error: receiveError } = await supabaseAdmin.rpc('receive_po_stock', {
     p_order_id: purchaseOrderId,

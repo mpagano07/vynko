@@ -33,6 +33,8 @@ import toast from 'react-hot-toast';
 
 interface ScannedProduct {
   id: string;
+  /** product_id para simples, variant_id para variantes. */
+  variant_id?: string;
   name: string;
   sku?: string;
   barcode?: string;
@@ -105,6 +107,40 @@ function ScanningPageContent() {
     setScanState('scanning');
 
     try {
+      // Primero el registro compartido: un SKU/barcode resuelve sin ambigüedad
+      // a un producto simple o a una variante, en la sucursal del usuario.
+      const lookup = await authFetch(`/api/sellable/lookup?code=${encodeURIComponent(code)}`);
+      if (!lookup.ok) {
+        setScanState('error');
+        toast.error('Error al buscar producto');
+        return;
+      }
+      const item = (await lookup.json()) as {
+        id: string; productId: string; variantId?: string; displayName: string;
+        name: string; sku: string; barcode: string | null; price: number;
+        cost: number | null; stock: number; description: string | null;
+      } | null;
+
+      if (item) {
+        setProduct({
+          id: item.id,
+          variant_id: item.variantId,
+          name: item.displayName,
+          sku: item.sku,
+          barcode: item.barcode ?? undefined,
+          price: item.price,
+          cost: item.cost ?? undefined,
+          stock: item.stock,
+          description: item.description ?? undefined,
+        });
+        setActiveAction('add');
+        setQuantity(1);
+        setAddReason('found');
+        setRemoveReason('damaged');
+        setScanState('found');
+        return;
+      }
+
       const res = await authFetch(`/api/products/barcode/${encodeURIComponent(code)}`);
       if (!res.ok) {
         setScanState('error');
@@ -114,6 +150,17 @@ function ScanningPageContent() {
       const data = await res.json();
 
       if (data.product) {
+        // Un padre con variantes no se mueve por product_id: se muestran sus
+        // variantes en el listado de productos para elegir una.
+        const variantRes = await authFetch(`/api/variants/products/${encodeURIComponent(String(data.product.id))}`);
+        if (variantRes.ok) {
+          const variants = await variantRes.json();
+          if (Array.isArray(variants) && variants.length > 0) {
+            toast.error('Este producto tiene variantes: elegí una en Productos');
+            router.push(`/products?variants=${encodeURIComponent(String(data.product.id))}`);
+            return;
+          }
+        }
         setProduct(data.product);
         setActiveAction('add');
         setQuantity(1);
@@ -149,11 +196,17 @@ function ScanningPageContent() {
       const reason = isRemove ? removeReason : addReason;
       const delta = isRemove ? -Math.abs(quantity) : Math.abs(quantity);
 
-      const res = await authFetch(`/api/products/${product.id}/adjust`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quantity: delta, reason }),
-      });
+      const res = product.variant_id
+        ? await authFetch(`/api/variants/${product.variant_id}/stock`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ quantity: delta, reason }),
+          })
+        : await authFetch(`/api/products/${product.id}/adjust`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ quantity: delta, reason }),
+          });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al ajustar stock');

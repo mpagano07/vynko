@@ -365,6 +365,7 @@ interface ResolvedPayment {
 
 interface SaleItemData {
   product_id: string;
+  variant_id: string | null;
   quantity: number;
   unit_price_cents: number;
   subtotal_cents: number;
@@ -382,7 +383,7 @@ interface ProductRow {
 interface CreateSaleBody {
   customer_id?: string;
   notes?: string;
-  items: { product_id: string; quantity: number }[];
+  items: { product_id: string; variant_id?: string | null; quantity: number }[];
   payment_method?: string;
   amount_paid?: number | null;
   discount_percent?: number | null;
@@ -565,13 +566,18 @@ export async function createSale(
   }
 
   const productIds = items.map((i) => i.product_id);
+  const variantIds = items
+    .map((i) => (i.variant_id ? String(i.variant_id) : null))
+    .filter((id): id is string => Boolean(id));
 
   const [
     { data: tenantRow },
     { data: openSession },
     customerRes,
     { data: products, error: prodError },
-    { data: stockRows, error: stockError }
+    { data: stockRows, error: stockError },
+    { data: variantRows, error: variantError },
+    { data: variantStockRows, error: variantStockError }
   ] = await Promise.all([
     supabaseAdmin.from('tenants').select('settings').eq('id', auth.tenantId).maybeSingle(),
     supabaseAdmin
@@ -596,7 +602,20 @@ export async function createSale(
       .from('product_stock')
       .select('product_id, stock')
       .in('product_id', productIds)
-      .eq('tenant_id', auth.tenantId)
+      .eq('tenant_id', auth.tenantId),
+    variantIds.length > 0
+      ? supabaseAdmin
+          .from('product_variants')
+          .select('id, product_id, label, price_cents')
+          .in('id', variantIds)
+      : Promise.resolve({ data: [], error: null }),
+    variantIds.length > 0
+      ? supabaseAdmin
+          .from('variant_stock')
+          .select('variant_id, stock, active')
+          .in('variant_id', variantIds)
+          .eq('tenant_id', auth.tenantId)
+      : Promise.resolve({ data: [], error: null })
   ]);
 
   const checkoutSettings = normalizeCheckoutSettings(
@@ -608,12 +627,26 @@ export async function createSale(
     return { ok: false, error: 'El cliente no pertenece a esta sucursal', status: 400 };
   }
 
-  if (prodError || stockError) {
-    logger.error('DB error fetching products/stock:', { error: prodError || stockError });
+  if (prodError || stockError || variantError || variantStockError) {
+    logger.error('DB error fetching products/stock:', { error: prodError || stockError || variantError || variantStockError });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
   }
 
   const stockMap = new Map((stockRows ?? []).map((s) => [s.product_id, s.stock ?? 0]));
+  const variantMap = new Map((variantRows ?? []).map((v) => [v.id, v]));
+  const variantStockMap = new Map((variantStockRows ?? []).map((s) => [s.variant_id, s]));
+  const { data: variantOwners } = await supabaseAdmin
+    .from('product_variants')
+    .select('product_id, variant_stock!inner(tenant_id, active)')
+    .in('product_id', productIds);
+  const productsWithVariants = new Set(
+    (variantOwners ?? [])
+      .filter((v) =>
+        ((v.variant_stock ?? []) as Array<Record<string, unknown>>)
+          .some((s) => String(s.tenant_id) === auth.tenantId && Boolean(s.active))
+      )
+      .map((v) => v.product_id as string)
+  );
 
   // `products` es global: la consulta de arriba trae tambien los productos que
   // solo existen para otra empresa. El filtro que decide es `product_stock`, y
@@ -640,6 +673,29 @@ export async function createSale(
     if (!Number.isInteger(quantity) || quantity <= 0) {
       throw new Error(`La cantidad de "${product.name}" debe ser un número entero mayor a 0`);
     }
+
+    // La variante viaja como id, pero precio, etiqueta y stock se resuelven en
+    // el servidor: el cliente nunca puede decidir el precio ni el tenant.
+    const variantId = item.variant_id ? String(item.variant_id) : null;
+    let displayName = product.name;
+    let unitPriceCents: number | null = product.price_cents ?? null;
+    let availableStock = stockMap.get(item.product_id) ?? 0;
+
+    if (variantId) {
+      const variant = variantMap.get(variantId);
+      const variantStock = variantStockMap.get(variantId);
+      if (!variant || !variantStock || variant.product_id !== item.product_id) {
+        throw new Error('La variante no pertenece a este producto o sucursal');
+      }
+      if (!variantStock.active) throw new Error(`La variante "${variant.label}" está desactivada`);
+      displayName = `${product.name} · ${variant.label}`;
+      unitPriceCents = variant.price_cents ?? null;
+      availableStock = Number(variantStock.stock) || 0;
+    } else if (productsWithVariants.has(item.product_id)) {
+      throw new Error(
+        `El producto "${product.name}" tiene variantes: elegí una variante para venderlo`
+      );
+    }
     // El precio sale de `price_cents`, que es la unica columna que el producto
     // escribe hoy: `product-service` guarda `price_cents = round(price * 100)` y
     // la columna `price` en pesos quedo en su default 0 para 163 de los productos
@@ -651,19 +707,25 @@ export async function createSale(
     // llega en NULL, `price` tambien es 0 y la venta se registra a $0.00 con un
     // 201 adelante. No es un precio barato, es una venta sin facturar. Se
     // rechaza en vez de vender gratis, que es el unico resultado defendible.
-    if (product.price_cents == null) {
+    if (unitPriceCents == null) {
       throw new Error(
-        `El producto "${product.name}" no tiene precio de venta cargado. Cargale un precio antes de venderlo.`
+        `El producto "${displayName}" no tiene precio de venta cargado. Cargale un precio antes de venderlo.`
       );
     }
-    const unit_price_cents = product.price_cents;
+    const unit_price_cents = unitPriceCents;
     const subtotal_cents = quantity * unit_price_cents;
 
-    const availableStock = stockMap.get(item.product_id) ?? 0;
-    const stockResult = reduceStockForSale(availableStock, quantity, product.name);
+    const stockResult = reduceStockForSale(availableStock, quantity, displayName);
     if (!stockResult.ok) throw new Error(stockResult.error);
 
-    return { product_id: item.product_id, quantity, unit_price_cents, subtotal_cents, product_name: product.name };
+    return {
+      product_id: item.product_id,
+      variant_id: variantId,
+      quantity,
+      unit_price_cents,
+      subtotal_cents,
+      product_name: displayName,
+    };
   });
 
   const subtotal_cents = saleItems.reduce((sum, item) => sum + item.subtotal_cents, 0);
@@ -798,6 +860,7 @@ export async function createSale(
       p_payments: paymentRows,
       p_items: saleItems.map((item) => ({
         product_id: item.product_id,
+        variant_id: item.variant_id,
         quantity: item.quantity,
         unit_price_cents: item.unit_price_cents,
         subtotal_cents: item.subtotal_cents,
@@ -806,6 +869,7 @@ export async function createSale(
       // lugar donde ya existe el id de venta para el folio.
       p_stock_movements: saleItems.map((item) => ({
         product_id: item.product_id,
+        variant_id: item.variant_id,
         quantity: -item.quantity,
         type: 'out',
         created_by: auth.userId,
@@ -859,6 +923,7 @@ export async function createSale(
     const itemsWithSaleId = saleItems.map((item) => ({
       sale_id: sale.id,
       product_id: item.product_id,
+      variant_id: item.variant_id,
       product_name: item.product_name,
       quantity: item.quantity,
       unit_price_cents: item.unit_price_cents,

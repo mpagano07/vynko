@@ -4,7 +4,13 @@ import { findLog } from '@/test/log-output';
 import { __resetRateLimitStateForTests } from '@/lib/rate-limit';
 import { MAX_IMPORT_ROWS } from './excel-import-parse';
 import { buildStockMovement } from './stock';
-import { importProducts, LOOKUP_CHUNK, prepareImport, WRITE_CHUNK } from './product-service';
+import {
+  createProduct,
+  importProducts,
+  LOOKUP_CHUNK,
+  prepareImport,
+  WRITE_CHUNK,
+} from './product-service';
 
 const auth = {
   tenantId: 'tenant-1',
@@ -26,6 +32,15 @@ vi.mock('@/lib/upload-service', () => ({
 vi.mock('./stock', async () => {
   const actual = await vi.importActual<typeof import('./stock')>('./stock');
   return { ...actual, buildStockMovement: vi.fn(actual.buildStockMovement) };
+});
+
+/**
+ * `register_sellable_code` (migración 074) devuelve BOOLEAN. El mock global no
+ * la declara: acá la habilitamos para que el registro de códigos no derribe
+ * importaciones que antes eran válidas. Los códigos vacíos no llegan a la RPC.
+ */
+beforeEach(() => {
+  supabaseMock.__rpcResults.register_sellable_code = { data: true, error: null };
 });
 
 /**
@@ -82,6 +97,10 @@ function upsertsOn(table: string) {
 
 function updatesOn(table: string) {
   return supabaseMock.__calls.filter((c) => c.table === table && c.method === 'update');
+}
+
+function deletesOn(table: string) {
+  return supabaseMock.__calls.filter((c) => c.table === table && c.method === 'delete');
 }
 
 /** Filas del lote `n` que se insertó en `products` (el alta va multi-fila). */
@@ -1101,5 +1120,186 @@ describe('importProducts: escrituras en lote', () => {
     // reintento individual es lo que evita perder las 99 filas sanas del lote.
     expect(result.body.summary).toEqual({ created: 2, updated: 0, skipped: 1, total: 3 });
     expect(result.body.results[1]).toMatchObject({ row: 2, status: 'skipped' });
+  });
+});
+
+describe('registro de códigos transaccionales', () => {
+  beforeEach(() => {
+    supabaseMock.__reset();
+    __resetRateLimitStateForTests();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    asOwner();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function registerCalls() {
+    return supabaseMock.rpc.mock.calls.filter(([fn]) => fn === 'register_sellable_code');
+  }
+
+  it('rechaza un SKU duplicado y borra el producto recién creado', async () => {
+    supabaseMock.__rpcQueue('register_sellable_code', {
+      data: null,
+      error: { message: 'duplicate_sellable_code' },
+    });
+    supabaseMock.__queue('products', {
+      data: [{ id: 'p-dup', sku: 'DUP-1', barcode: null, name: 'Coca' }],
+      error: null,
+    });
+
+    const result = await createProduct(auth, { name: 'Coca', sku: 'DUP-1', price: 10, stock: 0 });
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'El SKU o código de barras ya lo usa otro artículo de esta sucursal',
+      status: 400,
+    });
+    expect(registerCalls()).toHaveLength(1);
+    expect(registerCalls()[0][1]).toMatchObject({
+      p_tenant_id: 'tenant-1',
+      p_kind: 'sku',
+      p_code: 'DUP-1',
+      p_product_id: 'p-dup',
+      p_variant_id: null,
+    });
+    // La RPC es su propia transacción: aunque haya reservado el código antes
+    // de fallar en otro, no puede quedar una reserva colgando del producto.
+    expect(deletesOn('sellable_codes')).toHaveLength(1);
+    expect(deletesOn('products')).toHaveLength(1);
+    const deletedIds = supabaseMock.__calls.filter(
+      (c) => c.table === 'products' && c.method === 'eq' && c.args[0] === 'id'
+    );
+    expect(deletedIds.map((c) => c.args[1])).toEqual(['p-dup']);
+    expect(insertsOn('product_stock')).toHaveLength(0);
+  });
+
+  it('no llama a la RPC cuando SKU y código de barras están vacíos', async () => {
+    supabaseMock.__queue('products', {
+      data: [{ id: 'p-1', sku: '', barcode: '', name: 'Sin código' }],
+      error: null,
+    });
+    supabaseMock.__queue('product_stock', { data: null, error: null });
+
+    const result = await createProduct(auth, {
+      name: 'Sin código',
+      sku: '',
+      barcode: '',
+      price: 10,
+      stock: 2,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(registerCalls()).toHaveLength(0);
+    expect(insertsOn('product_stock')).toHaveLength(1);
+  });
+});
+
+describe('importProducts: variantes creadas a mano', () => {
+  const variantRow = {
+    parent_name: 'Remera',
+    variant_label: 'Rojo / M',
+    variant_attributes: 'Color: Rojo',
+    variant_sku: 'REM-ROJ-M',
+    variant_stock: 3,
+    variant_price: 159,
+    // Solo informativo: el tenant siempre es el de la sesión.
+    branch_name: 'Sucursal Central',
+  };
+
+  beforeEach(() => {
+    supabaseMock.__reset();
+    __resetRateLimitStateForTests();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    asOwner();
+    // Lecturas previas: padres por nombre, variantes por código y categorías.
+    supabaseMock.__queue('products', { data: [], error: null });
+    supabaseMock.__queue('product_variants', { data: [], error: null });
+    supabaseMock.__queue('categories', { data: [], error: null });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function queueAttributeValue() {
+    supabaseMock.__queue('product_attributes', { data: { id: 'attr-1' }, error: null });
+    supabaseMock.__queue('product_attribute_values', { data: null, error: null });
+    supabaseMock.__queue('product_attribute_values', {
+      data: [{ id: 'val-1', value: 'Rojo' }],
+      error: null,
+    });
+  }
+
+  it('crea una variante con padre sintético sin generar combinaciones', async () => {
+    queueAttributeValue();
+    supabaseMock.__queue('products', { data: null, error: null });
+    supabaseMock.__queue('product_stock', { data: null, error: null });
+    supabaseMock.__rpcQueue('create_product_variant', { data: [{ id: 'v-1' }], error: null });
+
+    const result = await importProducts(auth, [variantRow]);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.body.summary).toEqual({ created: 1, updated: 0, skipped: 0, total: 1 });
+    expect(result.body.results[0]).toMatchObject({
+      row: 1,
+      status: 'created',
+      name: 'Remera · Rojo / M',
+    });
+
+    // El padre se inserta de a una fila (no en lote): el id lo genera acá.
+    const parent = insertsOn('products')[0].args[0] as Record<string, unknown>;
+    expect(parent).toMatchObject({
+      name: 'Remera',
+      sku: '',
+      barcode: '',
+      price_cents: 15900,
+    });
+    expect(insertsOn('product_stock')[0].args[0]).toMatchObject({
+      product_id: parent.id,
+      tenant_id: 'tenant-1',
+      stock: 0,
+    });
+    const createCall = supabaseMock.rpc.mock.calls.find(([fn]) => fn === 'create_product_variant');
+    expect(createCall?.[1]).toMatchObject({
+      p_product_id: parent.id,
+      p_tenant_id: 'tenant-1',
+      p_sku: 'REM-ROJ-M',
+      p_label: 'Rojo / M',
+      p_stock: 3,
+      p_value_ids: ['val-1'],
+    });
+    // El archivo pide una sola variante: no se inventan las demás.
+    expect(supabaseMock.rpc.mock.calls.filter(([fn]) => fn === 'create_product_variant')).toHaveLength(1);
+  });
+
+  it('no deja un padre huérfano si la RPC rechaza el código de la variante', async () => {
+    queueAttributeValue();
+    supabaseMock.__queue('products', { data: null, error: null });
+    supabaseMock.__queue('product_stock', { data: null, error: null });
+    supabaseMock.__rpcQueue('create_product_variant', {
+      data: null,
+      error: { message: 'duplicate_sellable_code' },
+    });
+
+    const result = await importProducts(auth, [variantRow]);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.body.summary).toEqual({ created: 0, updated: 0, skipped: 1, total: 1 });
+    expect(result.body.results[0]).toMatchObject({
+      row: 1,
+      status: 'skipped',
+      error: 'El SKU o código de barras ya lo usa otro artículo de esta sucursal',
+    });
+    expect(deletesOn('product_stock')).toHaveLength(1);
+    expect(deletesOn('products')).toHaveLength(1);
+    const parentId = (insertsOn('products')[0].args[0] as Record<string, unknown>).id;
+    const deletedIds = supabaseMock.__calls.filter(
+      (c) => c.table === 'products' && c.method === 'eq' && c.args[0] === 'id'
+    );
+    expect(deletedIds.map((c) => c.args[1])).toEqual([parentId]);
   });
 });

@@ -46,6 +46,7 @@ import { cn } from '@/lib/utils/cn';
 import { authFetch } from '@/lib/fetchWithTenant';
 import { matchesQuery } from '@/lib/utils/text';
 import type { Customer } from '@/lib/types/sale';
+import type { SellableItem } from '@/lib/types/variant';
 import type { ArcaConfig } from '@/lib/types/arca';
 import type { CheckoutPayload } from '@/components/sales/checkout-modal';
 import type { ReceiptSale, ReceiptTenant } from '@/lib/sales-receipt';
@@ -74,7 +75,10 @@ import { canUseFacturacion } from '@/lib/arca/access';
 import { printWhenReady } from '@/lib/print-when-ready';
 
 interface CartItem {
+  /** product_id o variant_id: identifica al artículo comercializable del carrito. */
+  id: string;
   product_id: string;
+  variant_id: string | null;
   name: string;
   price: number;
   quantity: number;
@@ -83,13 +87,35 @@ interface CartItem {
 }
 
 interface ProductOption {
+  /** Clave del carrito: variant_id para variantes, product_id para simples. */
   id: string;
+  product_id: string;
+  variant_id: string | null;
+  kind: 'product' | 'variant';
   name: string;
+  productName: string;
+  variantLabel: string | null;
   price: number;
   stock: number;
   min_stock?: number;
-  barcode?: string;
+  barcode?: string | null;
   sku?: string;
+}
+
+function sellableToOption(item: SellableItem): ProductOption {
+  return {
+    id: item.id,
+    product_id: item.productId,
+    variant_id: item.variantId ?? null,
+    kind: item.kind,
+    name: item.displayName,
+    productName: item.name,
+    variantLabel: item.variantLabel,
+    price: item.price,
+    stock: item.stock,
+    barcode: item.barcode,
+    sku: item.sku,
+  };
 }
 
 interface SaleRecord {
@@ -199,6 +225,7 @@ export default function SalesPage() {
   const [discountPercent, setDiscountPercent] = useState(0);
   const [surchargePercent, setSurchargePercent] = useState(0);
   const [showAdjustments, setShowAdjustments] = useState(false);
+  const [variantPicker, setVariantPicker] = useState<ProductOption[] | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutSettings, setCheckoutSettings] = useState<CheckoutSettings>(DEFAULT_CHECKOUT_SETTINGS);
   const [arcaConfig, setArcaConfig] = useState<ArcaConfig | null>(null);
@@ -288,16 +315,38 @@ export default function SalesPage() {
 
     (async () => {
       const [prodRes, custRes] = await Promise.all([
-        // Catálogo slim: el POS sólo usa id, nombre, precio, stock, stock
-        // mínimo, SKU y código de barras. `/api/products` manda todas las
-        // columnas (~600 KB con 1000 artículos) y bloqueaba la grilla varios
-        // segundos sin aportar nada acá.
-        authFetch('/api/products/slim'),
+        // Catálogo comercializable: productos simples + variantes. Un producto
+        // con variantes NO se ofrece como artículo vendible, solo sus variantes.
+        authFetch('/api/sellable'),
         authFetch('/api/customers'),
       ]);
 
       if (cancelled) return;
-      if (prodRes.ok) setProducts(await prodRes.json());
+      if (prodRes.ok) {
+        const items = (await prodRes.json()) as SellableItem[];
+        setProducts(Array.isArray(items) ? items.map(sellableToOption) : []);
+      } else {
+        // Compatibilidad durante el deploy: si la migración todavía no corrió,
+        // el POS sigue funcionando con el catálogo slim de siempre.
+        const fallback = await authFetch('/api/products/slim');
+        if (fallback.ok) {
+          const legacy = (await fallback.json()) as Array<Record<string, unknown>>;
+          setProducts(legacy.map((p) => sellableToOption({
+            kind: 'product',
+            id: String(p.id),
+            productId: String(p.id),
+            sku: (p.sku as string) ?? '',
+            barcode: (p.barcode as string) ?? null,
+            name: String(p.name ?? ''),
+            variantLabel: null,
+            description: null,
+            price: Number(p.price ?? 0),
+            cost: null,
+            stock: Number(p.stock ?? 0),
+            displayName: String(p.name ?? ''),
+          })));
+        }
+      }
       if (custRes.ok) setCustomers(await custRes.json());
 
       await fetchSales(salesPage);
@@ -353,9 +402,24 @@ export default function SalesPage() {
   const filteredProducts = products.filter(
     (p) =>
       matchesQuery(p.name, productSearch) ||
+      matchesQuery(p.productName, productSearch) ||
+      matchesQuery(p.variantLabel, productSearch) ||
       matchesQuery(p.barcode, productSearch) ||
       matchesQuery(p.sku, productSearch)
   );
+
+  // Variantes del mismo padre: al tocar cualquiera se muestra el selector con
+  // precio y stock propios (el escaneo directo las agrega sin este paso).
+  const variantGroups = useMemo(() => {
+    const groups = new Map<string, ProductOption[]>();
+    for (const item of products) {
+      if (item.kind !== 'variant') continue;
+      const group = groups.get(item.product_id) ?? [];
+      group.push(item);
+      groups.set(item.product_id, group);
+    }
+    return groups;
+  }, [products]);
 
   const sortedProducts = useMemo(() => {
     const saleCount = new Map<string, number>();
@@ -367,7 +431,9 @@ export default function SalesPage() {
       }
     }
     if (saleCount.size === 0) return filteredProducts;
-    return [...filteredProducts].sort((a, b) => (saleCount.get(b.id) || 0) - (saleCount.get(a.id) || 0));
+    return [...filteredProducts].sort((a, b) =>
+      (saleCount.get(b.product_id) || 0) - (saleCount.get(a.product_id) || 0)
+    );
   }, [filteredProducts, sales]);
 
   const productsPerPage = productView === 'list' ? LIST_PER_PAGE : PRODUCTS_PER_PAGE;
@@ -383,7 +449,7 @@ export default function SalesPage() {
 
   const addToCart = useCallback((product: ProductOption, quantity = 1) => {
     setCart((prev) => {
-      const existing = prev.find((item) => item.product_id === product.id);
+      const existing = prev.find((item) => item.id === product.id);
       if (product.stock <= 0) {
         toast.error(`"${product.name}" no tiene stock disponible`);
         return prev;
@@ -398,7 +464,7 @@ export default function SalesPage() {
       const toAdd = Math.max(1, Math.min(quantity, product.stock - currentQuantity));
       if (existing) {
         return prev.map((item) =>
-          item.product_id === product.id
+          item.id === product.id
             ? {
                 ...item,
                 quantity: currentQuantity + toAdd,
@@ -410,7 +476,9 @@ export default function SalesPage() {
       return [
         ...prev,
         {
-          product_id: product.id,
+          id: product.id,
+          product_id: product.product_id,
+          variant_id: product.variant_id,
           name: product.name,
           price: product.price,
           quantity: toAdd,
@@ -446,6 +514,11 @@ export default function SalesPage() {
   }, [loadingData, products, addToCart]);
 
   const handleAddToCart = (product: ProductOption, e: React.MouseEvent<HTMLButtonElement>) => {
+    const variants = variantGroups.get(product.product_id) ?? [];
+    if (variants.length > 1) {
+      setVariantPicker(variants);
+      return;
+    }
     const btn = e.currentTarget;
     const btnRect = btn.getBoundingClientRect();
     const cartEl = cartRef.current;
@@ -468,35 +541,59 @@ export default function SalesPage() {
 
   const handleScanBarcode = async (code: string) => {
     try {
-      const res = await authFetch(`/api/products/barcode/${encodeURIComponent(code)}`);
+      // El registro compartido resuelve SKU/barcode a un único comercializable:
+      // si es variante, se agrega directamente, sin selector ni pasos extra.
+      const res = await authFetch(`/api/sellable/lookup?code=${encodeURIComponent(code)}`);
       if (!res.ok) throw new Error('Error al buscar producto');
-      const data = await res.json();
-      if (data.product) {
-        const p = data.product;
-        const productOption: ProductOption = {
-          id: p.id,
-          name: p.name,
-          price: p.price,
-          stock: p.stock ?? 0,
-          min_stock: p.min_stock ?? 0,
-          barcode: p.barcode,
-          sku: p.sku,
-        };
-        addToCart(productOption);
-        toast.success(`"${p.name}" agregado al carrito`);
-      } else {
-        toast.error(`Código "${code}" no encontrado en productos`);
+      const item = (await res.json()) as SellableItem | null;
+      if (item) {
+        const option = sellableToOption(item);
+        addToCart(option);
+        toast.success(`"${option.name}" agregado al carrito`);
+        return;
       }
+
+      // Códigos históricos no migrados: se mantiene el lookup anterior.
+      const legacyRes = await authFetch(`/api/products/barcode/${encodeURIComponent(code)}`);
+      if (legacyRes.ok) {
+        const legacy = await legacyRes.json();
+        if (legacy.product) {
+          const p = legacy.product;
+          const variants = variantGroups.get(String(p.id)) ?? [];
+          if (variants.length > 0) {
+            setVariantPicker(variants);
+            toast('Este producto tiene variantes: elegí una', { icon: '🔎' });
+            return;
+          }
+          addToCart(sellableToOption({
+            kind: 'product',
+            id: String(p.id),
+            productId: String(p.id),
+            sku: p.sku ?? '',
+            barcode: p.barcode ?? null,
+            name: p.name ?? '',
+            variantLabel: null,
+            description: null,
+            price: Number(p.price ?? 0),
+            cost: null,
+            stock: Number(p.stock ?? 0),
+            displayName: p.name ?? '',
+          }));
+          toast.success(`"${p.name}" agregado al carrito`);
+          return;
+        }
+      }
+      toast.error(`Código "${code}" no encontrado en productos`);
     } catch {
       toast.error('Error al buscar el producto escaneado');
     }
   };
 
-  const updateQuantity = (productId: string, delta: number) => {
+  const updateQuantity = (itemId: string, delta: number) => {
     setCart((prev) =>
       prev
         .map((item) => {
-          if (item.product_id !== productId) return item;
+          if (item.id !== itemId) return item;
           const newQty = item.quantity + delta;
           if (newQty <= 0) return null;
           if (newQty > item.stock) {
@@ -509,8 +606,8 @@ export default function SalesPage() {
     );
   };
 
-  const removeFromCart = (productId: string) => {
-    setCart((prev) => prev.filter((item) => item.product_id !== productId));
+  const removeFromCart = (itemId: string) => {
+    setCart((prev) => prev.filter((item) => item.id !== itemId));
   };
 
   const subtotal = cart.reduce((sum, item) => sum + item.subtotal, 0);
@@ -600,6 +697,7 @@ export default function SalesPage() {
         surcharge_percent: surchargePercent,
         items: cart.map((item) => ({
           product_id: item.product_id,
+          variant_id: item.variant_id,
           quantity: item.quantity,
         })),
         ...(arcaPayload ? { arca: arcaPayload } : {}),
@@ -897,7 +995,7 @@ export default function SalesPage() {
               {productView === 'grid' ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {paginatedProducts.map((product) => {
-                  const inCart = cart.some((item) => item.product_id === product.id);
+                  const inCart = cart.some((item) => item.id === product.id);
                   return (
                     <button
                       key={product.id}
@@ -947,7 +1045,7 @@ export default function SalesPage() {
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
                       {paginatedProducts.map((product) => {
-                        const inCart = cart.some((item) => item.product_id === product.id);
+                        const inCart = cart.some((item) => item.id === product.id);
                         return (
                           <tr key={product.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
                             <td className="py-1.5 px-3">
@@ -1040,7 +1138,7 @@ export default function SalesPage() {
               <div className="space-y-2 max-h-80 overflow-y-auto">
                 {cart.map((item) => (
                   <div
-                    key={item.product_id}
+                    key={item.id}
                     data-testid="cart-item"
                     className="flex items-center justify-between p-2 rounded-lg bg-gray-100 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700"
                   >
@@ -1057,7 +1155,7 @@ export default function SalesPage() {
                         icon={Minus}
                         label={`Quitar una unidad de ${item.name}`}
                         className="h-9 w-9 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-all"
-                        onClick={() => updateQuantity(item.product_id, -1)}
+                        onClick={() => updateQuantity(item.id, -1)}
                       />
                       <span className="w-7 text-center text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                         {item.quantity}
@@ -1066,14 +1164,14 @@ export default function SalesPage() {
                         icon={Plus}
                         label={`Agregar una unidad de ${item.name}`}
                         className="h-9 w-9 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-all"
-                        onClick={() => updateQuantity(item.product_id, 1)}
+                        onClick={() => updateQuantity(item.id, 1)}
                       />
                       <IconAction
                         icon={Trash2}
                         label={`Eliminar ${item.name} del carrito`}
                         tone="red"
                         className="h-9 w-9 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 ml-1 active:scale-95 transition-all"
-                        onClick={() => removeFromCart(item.product_id)}
+                        onClick={() => removeFromCart(item.id)}
                       />
                     </div>
                   </div>
@@ -1524,6 +1622,52 @@ export default function SalesPage() {
           tenant={tenant as ReceiptTenant}
           paperSize={paperSize}
         />
+      )}
+
+      {variantPicker && (
+        <Modal
+          onClose={() => setVariantPicker(null)}
+          className="max-w-lg"
+          header={
+            <span className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+              <Package className="h-5 w-5 text-indigo-600" /> Elegí una variante
+            </span>
+          }
+        >
+          <div className="p-4 space-y-2">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {variantPicker[0]?.productName} · cada variante tiene su precio y stock.
+            </p>
+            {variantPicker.map((variant) => (
+              <button
+                key={variant.id}
+                type="button"
+                disabled={variant.stock <= 0}
+                onClick={() => {
+                  addToCart(variant);
+                  setVariantPicker(null);
+                  toast.success(`"${variant.name}" agregado al carrito`);
+                }}
+                className="w-full flex items-center justify-between gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-left"
+              >
+                <div className="min-w-0">
+                  <p className="font-medium text-gray-900 dark:text-gray-100 text-sm truncate">
+                    {variant.variantLabel ?? variant.name}
+                  </p>
+                  {(variant.sku || variant.barcode) && (
+                    <p className="text-xs text-gray-400 font-mono truncate">
+                      {variant.barcode || variant.sku}
+                    </p>
+                  )}
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="font-bold text-indigo-600 dark:text-indigo-400">{formatARS(variant.price)}</p>
+                  <p className="text-xs text-gray-500">Stock: {variant.stock}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </Modal>
       )}
 
       {showScanner && (

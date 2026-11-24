@@ -96,6 +96,12 @@ function mockSuccessfulEndpoints() {
         ],
       });
     }
+    if (url.includes('/api/dashboard/variants')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => [],
+      });
+    }
     if (url.includes('/api/products/counters')) {
       return Promise.resolve({
         ok: true,
@@ -275,7 +281,7 @@ describe('DashboardPage: desglose multi-sucursal', () => {
     expect(centralRow).toBeTruthy();
     expect(norteRow).toBeTruthy();
 
-    expect(fetchHandler).toHaveBeenCalledTimes(10); // 5 endpoints x 2 sucursales
+    expect(fetchHandler).toHaveBeenCalledTimes(12); // 6 endpoints x 2 sucursales
 
     // El dashboard pide solo los contadores, no el catálogo completo.
     const urls = fetchHandler.mock.calls.map(([url]) => String(url));

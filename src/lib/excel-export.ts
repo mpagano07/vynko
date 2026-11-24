@@ -15,6 +15,18 @@
 
 import type { Product } from '@/lib/types/product';
 import type { Category } from '@/lib/types/category';
+import type { ProductVariant } from '@/lib/types/variant';
+
+/**
+ * Las variantes se exportan como filas hijas. `attributes` es opcional porque
+ * el listado de variantes trae los valores pero no el nombre del atributo; si
+ * el llamador no lo pasa se usa un nombre generico para que la fila vuelva a
+ * entrar por el import.
+ */
+export type ExportVariant = ProductVariant & {
+  attributes?: string | Array<{ attribute: string; value: string }>;
+};
+export type VariantsByProduct = Record<string, ExportVariant[]>;
 
 /**
  * `generico` es la planilla completa de Vynko (todos los campos internos),
@@ -139,14 +151,60 @@ function mercadolibreRow(product: Product, categories: Category[]): Record<strin
   };
 }
 
+function variantAttributesText(variant: ExportVariant): string {
+  const raw = variant.attributes;
+  if (typeof raw === 'string') return raw;
+  if (Array.isArray(raw)) {
+    return raw
+      .filter((pair) => String(pair.attribute).trim() && String(pair.value).trim())
+      .map((pair) => `${String(pair.attribute).trim()}: ${String(pair.value).trim()}`)
+      .join('; ');
+  }
+  // `ProductVariant.values` trae el texto del valor pero no el nombre del
+  // atributo. Un nombre generico mantiene el round-trip con el import.
+  return (variant.values ?? [])
+    .map((value) => `Atributo: ${String(value.value).trim()}`)
+    .join('; ');
+}
+
+/**
+ * Una fila por variante creada a mano, sin generar combinaciones. El padre no
+ * se exporta como fila simple: hacerlo duplicaria el producto al reimportar.
+ */
+function variantRows(
+  base: Record<string, unknown>,
+  product: Product,
+  variants: ExportVariant[]
+): Record<string, unknown>[] {
+  return variants.map((variant) => ({
+    ...base,
+    'Producto Principal': product.name,
+    'Etiqueta Variante': variant.label,
+    'Atributos Variante': variantAttributesText(variant),
+    'SKU Variante': variant.sku || '',
+    'Código de Barras Variante': variant.barcode || '',
+    'Precio Variante': variant.price ?? 0,
+    'Costo Variante': variant.cost ?? '',
+    'Stock Variante': variant.stock ?? 0,
+    'Stock Mínimo Variante': variant.min_stock ?? '',
+    'Stock Máximo Variante': variant.max_stock ?? '',
+    'Tipo de Fila': 'variante',
+  }));
+}
+
 export function buildExportRows(
   products: Product[],
   categories: Category[],
   platform: ExportPlatform,
+  variantsByProduct: VariantsByProduct = {},
 ): Record<string, unknown>[] {
   const toRow =
     platform === 'generico' ? genericRow : platform === 'tiendanube' ? tiendanubeRow : mercadolibreRow;
-  return products.map((product) => toRow(product, categories));
+  return products.flatMap((product) => {
+    const base = toRow(product, categories);
+    const variants = variantsByProduct[product.id] ?? [];
+    return variants.length > 0 ? variantRows(base, product, variants) : [base];
+  });
 }
 
 /**
@@ -235,10 +293,11 @@ export async function generateExportBlob(options: {
   categories: Category[];
   platform: ExportPlatform;
   format: ExportFormat;
+  variantsByProduct?: VariantsByProduct;
   now?: Date;
 }): Promise<{ blob: Blob; fileName: string }> {
-  const { products, categories, platform, format } = options;
-  const rows = buildExportRows(products, categories, platform);
+  const { products, categories, platform, format, variantsByProduct } = options;
+  const rows = buildExportRows(products, categories, platform, variantsByProduct);
   const sheetName = platform === 'generico' ? 'Productos' : EXPORT_PLATFORM_LABELS[platform];
   const blob = await sheetToBlob(rows, sheetName, format);
   return { blob, fileName: exportFileName(platform, format, options.now) };

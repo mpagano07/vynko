@@ -67,6 +67,7 @@ export async function POST(request: Request) {
   if (arcaReq?.emit) {
     const items = ((result.items ?? []) as Array<Record<string, unknown>>).map((item) => ({
       product_id: (item.product_id as string) || undefined,
+      variant_id: (item.variant_id as string) || undefined,
       description: (item.product_name as string) || 'Producto',
       quantity: item.quantity as number,
       unit_price_cents: item.unit_price_cents as number,

@@ -1011,14 +1011,22 @@ await POST(
     );
 
     const call = createSaleCall()!;
+    // `variant_id: null` explícito distingue al producto simple de una variante
+    // y evita que la RPC mezcle ambos al descontar stock (migración 075).
     expect(call.p_items).toEqual([
-      { product_id: 'p1', quantity: 3, unit_price_cents: 200, subtotal_cents: 600 },
+      {
+        product_id: 'p1', variant_id: null, quantity: 3,
+        unit_price_cents: 200, subtotal_cents: 600,
+      },
     ]);
     expect(call.p_payments).toEqual([
       { method: 'cash', amount_cents: 600, received_cents: 600, change_cents: 0 },
     ]);
     expect(call.p_stock_movements).toEqual([
-      { product_id: 'p1', quantity: -3, type: 'out', created_by: 'user-1' },
+      {
+        product_id: 'p1', variant_id: null, quantity: -3,
+        type: 'out', created_by: 'user-1',
+      },
     ]);
   });
 

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { supabaseMock } from '@/test/supabase-mock';
-import { listPurchaseOrders, listPendingPurchaseOrders, receivePurchaseOrder } from './purchase-order-service';
+import { createPurchaseOrder, listPurchaseOrders, listPendingPurchaseOrders, receivePurchaseOrder } from './purchase-order-service';
 import type { AuthInfo } from '@/lib/api-auth';
 
 vi.mock('@/lib/supabaseAdmin', () => ({
@@ -315,5 +315,229 @@ describe('listas de pedidos de compra', () => {
     const result = await listPendingPurchaseOrders(AUTH);
 
     expect(result).toMatchObject({ ok: false, status: 500, error: 'Ocurrio un error inesperado. Intenta de nuevo.' });
+  });
+
+  it('muestra la etiqueta de la variante en el nombre del item', async () => {
+    supabaseMock.__queue('purchase_orders', {
+      data: [
+        {
+          id: 'po-1',
+          tenant_id: 'tenant-1',
+          status: 'sent',
+          supplier: { name: 'Proveedor Uno' },
+          items: [
+            {
+              id: 'pitem-1',
+              product: { name: 'Producto' },
+              variant: { label: '128 GB' },
+            },
+          ],
+        },
+      ],
+      error: null,
+    });
+
+    const result = await listPurchaseOrders(AUTH, null);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect((result.data as Array<{ items: Array<{ product_name: string }> }>)[0].items[0].product_name).toBe(
+      'Producto · 128 GB'
+    );
+  });
+});
+
+const queueCreateFlow = (productRows: unknown[], variantRows?: unknown[]) => {
+  supabaseMock.__queue('products', { data: productRows, error: null });
+  if (variantRows) supabaseMock.__queue('product_variants', { data: variantRows[0], error: null });
+  supabaseMock.__queue('providers', { data: [], error: null });
+  supabaseMock.__queue('suppliers', {
+    data: [{ id: 'sup-1', name: 'Proveedor', payment_term_days: null }],
+    error: null,
+  });
+  supabaseMock.__queue('purchase_orders', { data: { id: 'po-1' }, error: null });
+  supabaseMock.__queue('purchase_order_items', { data: null, error: null });
+};
+
+const createdItemsInsert = () =>
+  supabaseMock.__calls.find(
+    (c) => c.table === 'purchase_order_items' && c.method === 'insert'
+  )?.args[0] as Array<Record<string, unknown>> | undefined;
+
+describe('createPurchaseOrder con variantes', () => {
+  beforeEach(() => {
+    supabaseMock.__reset();
+    mockCreateActivityLog.mockClear();
+  });
+
+  it('guarda un producto simple sin variant_id y respeta su costo', async () => {
+    queueCreateFlow([{ id: 'prod-1', name: 'Producto', cost: 10, cost_cents: 1000 }]);
+
+    const result = await createPurchaseOrder(AUTH, {
+      supplier_id: 'sup-1',
+      items: [{ product_id: 'prod-1', quantity: 2, unit_cost: 12.5 }],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(createdItemsInsert()).toEqual([
+      {
+        purchase_order_id: 'po-1',
+        product_id: 'prod-1',
+        quantity_ordered: 2,
+        quantity_received: 0,
+        unit_cost_cents: 1250,
+      },
+    ]);
+    expect(
+      supabaseMock.__calls.some((c) => c.table === 'product_variants')
+    ).toBe(false);
+  });
+
+  it('usa el costo de la variante de la DB e ignora el unit_cost del cliente', async () => {
+    queueCreateFlow(
+      [{ id: 'prod-1', name: 'Producto', cost: 10, cost_cents: 1000 }],
+      [{
+        id: 'var-1',
+        product_id: 'prod-1',
+        label: '128 GB',
+        cost: 12.75,
+        variant_stock: [{ tenant_id: 'tenant-1', stock: 4, active: true }],
+      }]
+    );
+
+    const result = await createPurchaseOrder(AUTH, {
+      supplier_id: 'sup-1',
+      items: [{ product_id: 'prod-1', variant_id: 'var-1', quantity: 3, unit_cost: 999 }],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(createdItemsInsert()).toEqual([
+      {
+        purchase_order_id: 'po-1',
+        product_id: 'prod-1',
+        variant_id: 'var-1',
+        quantity_ordered: 3,
+        quantity_received: 0,
+        unit_cost_cents: 1275,
+      },
+    ]);
+  });
+
+  it('rechaza una variante cuyo stock pertenece a otra sucursal', async () => {
+    queueCreateFlow(
+      [{ id: 'prod-1', name: 'Producto', cost: 10, cost_cents: 1000 }],
+      [{
+        id: 'var-1',
+        product_id: 'prod-1',
+        label: '128 GB',
+        cost: 12,
+        variant_stock: [{ tenant_id: 'tenant-2', stock: 4, active: true }],
+      }]
+    );
+
+    const result = await createPurchaseOrder(AUTH, {
+      supplier_id: 'sup-1',
+      items: [{ product_id: 'prod-1', variant_id: 'var-1', quantity: 1 }],
+    });
+
+    expect(result).toMatchObject({ ok: false, status: 400, error: 'La variante no pertenece al producto o a la sucursal' });
+    expect(
+      supabaseMock.__calls.some((c) => c.table === 'purchase_orders' && c.method === 'insert')
+    ).toBe(false);
+  });
+
+  it('rechaza una variante que no pertenece al producto de la línea', async () => {
+    queueCreateFlow(
+      [{ id: 'prod-1', name: 'Producto', cost: 10, cost_cents: 1000 }],
+      [{
+        id: 'var-1',
+        product_id: 'prod-other',
+        label: '128 GB',
+        cost: 12,
+        variant_stock: [{ tenant_id: 'tenant-1', stock: 4, active: true }],
+      }]
+    );
+
+    const result = await createPurchaseOrder(AUTH, {
+      supplier_id: 'sup-1',
+      items: [{ product_id: 'prod-1', variant_id: 'var-1', quantity: 1 }],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(
+      supabaseMock.__calls.some((c) => c.table === 'purchase_orders' && c.method === 'insert')
+    ).toBe(false);
+  });
+});
+
+describe('receivePurchaseOrder con variantes', () => {
+  beforeEach(() => {
+    supabaseMock.__reset();
+    mockCreateActivityLog.mockClear();
+  });
+
+  const queueReceiveWithItems = (poItems: unknown[]) => {
+    supabaseMock.__queue('purchase_orders', {
+      data: { id: 'po-1', status: 'pending', supplier: { name: 'Proveedor' } },
+      error: null,
+    });
+    supabaseMock.__queue('purchase_order_items', { data: poItems, error: null });
+    supabaseMock.__queue('commercial_document_sequences', { data: { next_number: 5 }, error: null });
+    supabaseMock.__queue('commercial_document_sequences', { data: [{ next_number: 6 }], error: null });
+    supabaseMock.__queue('commercial_documents', { data: { id: 'doc-1' }, error: null });
+    supabaseMock.__queue('commercial_document_items', { data: null, error: null });
+    supabaseMock.__queue('commercial_documents', { data: { id: 'doc-1' }, error: null });
+  };
+
+  it('hace match por producto + variante y guarda descripciones completas en el remito', async () => {
+    queueReceiveWithItems([
+      { id: 'i-simple', product_id: 'prod-1', quantity_ordered: 4, quantity_received: 0, unit_cost_cents: 100, product: { name: 'Producto' } },
+      { id: 'i-var', product_id: 'prod-1', variant_id: 'var-1', quantity_ordered: 5, quantity_received: 0, unit_cost_cents: 200, product: { name: 'Producto' }, variant: { label: '128 GB' } },
+      { id: 'i-var2', product_id: 'prod-1', variant_id: 'var-2', quantity_ordered: 6, quantity_received: 0, unit_cost_cents: 300, product: { name: 'Producto' }, variant: { label: '256 GB' } },
+    ]);
+
+    const result = await receivePurchaseOrder(AUTH, 'po-1', {
+      items: [
+        { product_id: 'prod-1', quantity_received: 1 },
+        { product_id: 'prod-1', variant_id: 'var-2', quantity_received: 2 },
+        { product_id: 'prod-1', variant_id: 'var-1', quantity_received: 3 },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(supabaseMock.rpc).toHaveBeenCalledWith(
+      'receive_po_stock',
+      expect.objectContaining({
+        p_items: [
+          { product_id: 'prod-1', quantity_received: 1 },
+          { product_id: 'prod-1', variant_id: 'var-1', quantity_received: 3 },
+          { product_id: 'prod-1', variant_id: 'var-2', quantity_received: 2 },
+        ],
+      })
+    );
+
+    const docItems = supabaseMock.__calls.find(
+      (c) => c.table === 'commercial_document_items' && c.method === 'insert'
+    )?.args[0] as Array<Record<string, unknown>>;
+    expect(docItems.map((i) => i.description)).toEqual([
+      'Producto',
+      'Producto · 128 GB',
+      'Producto · 256 GB',
+    ]);
+    expect(docItems[1]).toMatchObject({ variant_id: 'var-1' });
+    expect(docItems[0]).not.toHaveProperty('variant_id');
+  });
+
+  it('ignora una variante/producto que no está en la orden', async () => {
+    queueReceiveWithItems([ITEM]);
+
+    const result = await receivePurchaseOrder(AUTH, 'po-1', {
+      items: [{ product_id: 'prod-foreign', variant_id: 'var-foreign', quantity_received: 5 }],
+    });
+
+    expect(result).toMatchObject({ ok: false, status: 400, error: 'Ingresa una cantidad válida para recibir' });
+    expect(
+      supabaseMock.__calls.some((c) => c.table === 'commercial_documents' && c.method === 'insert')
+    ).toBe(false);
   });
 });

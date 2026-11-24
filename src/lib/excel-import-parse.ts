@@ -76,6 +76,52 @@ const IMPORT_COLUMN_ALIASES: Record<string, string> = {
   estanteria: 'estanteria',
   'estantería': 'estanteria',
   estante: 'estanteria',
+  // Variantes creadas a mano: una fila por variante, sin combos automaticos.
+  // `producto` sigue siendo alias de `name` (formatos de TN/ML) y no se toca.
+  'producto principal': 'parent_name',
+  'producto padre': 'parent_name',
+  'nombre padre': 'parent_name',
+  parent_name: 'parent_name',
+  parent: 'parent_name',
+  'etiqueta variante': 'variant_label',
+  'etiqueta de variante': 'variant_label',
+  'variante': 'variant_label',
+  variant: 'variant_label',
+  variant_label: 'variant_label',
+  'sku variante': 'variant_sku',
+  'sku de variante': 'variant_sku',
+  variant_sku: 'variant_sku',
+  'código de barras variante': 'variant_barcode',
+  'codigo de barras variante': 'variant_barcode',
+  'barcode variante': 'variant_barcode',
+  'gtin variante': 'variant_barcode',
+  variant_barcode: 'variant_barcode',
+  'precio variante': 'variant_price',
+  'precio de variante': 'variant_price',
+  variant_price: 'variant_price',
+  'costo variante': 'variant_cost',
+  'costo de variante': 'variant_cost',
+  variant_cost: 'variant_cost',
+  'stock variante': 'variant_stock',
+  'stock de variante': 'variant_stock',
+  variant_stock: 'variant_stock',
+  'stock mínimo variante': 'variant_min_stock',
+  'stock minimo variante': 'variant_min_stock',
+  variant_min_stock: 'variant_min_stock',
+  'stock máximo variante': 'variant_max_stock',
+  'stock maximo variante': 'variant_max_stock',
+  variant_max_stock: 'variant_max_stock',
+  'atributos variante': 'variant_attributes',
+  'atributos de variante': 'variant_attributes',
+  atributos: 'variant_attributes',
+  variant_attributes: 'variant_attributes',
+  sucursal: 'branch_name',
+  branch: 'branch_name',
+  branch_name: 'branch_name',
+  'tipo de fila': 'kind',
+  'tipo fila': 'kind',
+  kind: 'kind',
+  row_kind: 'kind',
 };
 
 /**
@@ -101,6 +147,118 @@ export function foldImportHeader(header: string): string {
 const IMPORT_COLUMN_ALIASES_FOLDED: Record<string, string> = Object.fromEntries(
   Object.entries(IMPORT_COLUMN_ALIASES).map(([key, target]) => [foldImportHeader(key), target])
 );
+
+export const VARIANT_LABEL_REQUIRED_ERROR = 'La etiqueta de la variante es requerida';
+export const VARIANT_ATTRIBUTE_REQUIRED_ERROR = 'La variante debe tener al menos un valor de atributo';
+
+/** Un valor de atributo leido de la planilla (puede venir de Excel o de JSON). */
+export type ParsedVariantAttribute = { attribute: string; value: string };
+
+const VARIANT_KEYS = new Set([
+  'parent_name',
+  'variant_label',
+  'variant_sku',
+  'variant_barcode',
+  'variant_price',
+  'variant_cost',
+  'variant_stock',
+  'variant_min_stock',
+  'variant_max_stock',
+  'variant_attributes',
+  'branch_name',
+]);
+
+const VARIANT_KINDS = new Set(['variante', 'variant', 'variedad', 'hijo', 'child']);
+const SIMPLE_KINDS = new Set(['producto', 'product', 'simple', 'producto simple']);
+
+/**
+ * Clasifica una fila como variante sin depender de una sola columna: los
+ * archivos de Tiendanube/MercadoLibre a veces traen `Producto` con el nombre
+ * del padre y la etiqueta en otra columna, y no siempre completan `Tipo fila`.
+ */
+export function isVariantImportRow(row: Record<string, unknown>): boolean {
+  const folded = Object.fromEntries(
+    Object.entries(row).map(([key, value]) => [foldImportHeader(key), value])
+  );
+  const kind = foldImportHeader(String(folded.kind ?? folded['tipo de fila'] ?? folded['tipo fila'] ?? ''));
+  if (VARIANT_KINDS.has(kind)) return true;
+  if (SIMPLE_KINDS.has(kind)) return false;
+  return Object.keys(folded).some((key) => VARIANT_KEYS.has(IMPORT_COLUMN_ALIASES_FOLDED[key] ?? key));
+}
+
+/**
+ * Parsea `Color: Rojo; Talle: M` (o `Color=Rojo|M`, JSON, saltos de linea) a
+ * pares atributo/valor. Los pares sin separador se ignoran: una etiqueta como
+ * "Rojo/M" no es un valor de atributo y convertirla en uno ensuciaria el
+ * catalogo global.
+ */
+export function parseVariantAttributes(raw: unknown): ParsedVariantAttribute[] {
+  if (Array.isArray(raw)) {
+    const pairs: ParsedVariantAttribute[] = [];
+    for (const item of raw) {
+      if (typeof item === 'string') {
+        pairs.push(...parseVariantAttributes(item));
+      } else if (item && typeof item === 'object') {
+        const record = item as Record<string, unknown>;
+        const attribute = String(
+          record.attribute ?? record.name ?? record.key ?? record.atributo ?? record.nombre ?? ''
+        ).trim();
+        const value = String(record.value ?? record.valor ?? '').trim();
+        if (attribute && value) pairs.push({ attribute, value });
+      }
+    }
+    return dedupeAttributes(pairs);
+  }
+
+  const text = String(raw ?? '').trim();
+  if (!text) return [];
+
+  if (text.startsWith('[') || text.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(text) as unknown;
+      if (Array.isArray(parsed)) return parseVariantAttributes(parsed);
+      if (parsed && typeof parsed === 'object') {
+        return dedupeAttributes(
+          Object.entries(parsed as Record<string, unknown>).flatMap(([attribute, value]) =>
+            Array.isArray(value)
+              ? value.map((v) => ({ attribute: attribute.trim(), value: String(v).trim() }))
+              : [{ attribute: attribute.trim(), value: String(value).trim() }]
+          ).filter((pair) => pair.attribute && pair.value)
+        );
+      }
+    } catch {
+      // Un JSON roto se trata como texto plano: quizas es una lista "A: 1; B: 2".
+    }
+  }
+
+  // La coma solo separa pares cuando delante de otro par (evita "Rojo, claro").
+  // Se normaliza a `;` antes de dividir: `String.split()` con un grupo de
+  // captura devuelve también la captura, y eso rompía el segundo par.
+  const parts = text
+    .replace(/,\s*(?=[^\s:,=]+\s*[:=])/g, ';')
+    .split(/[\n|;]/)
+    .map((part) => String(part ?? '').trim())
+    .filter((part) => part.length > 0);
+  const pairs: ParsedVariantAttribute[] = [];
+  for (const part of parts) {
+    const match = part.match(/^\s*([^:=]+?)\s*[:=]\s*(.+?)\s*$/);
+    if (!match) continue;
+    const attribute = match[1].trim();
+    const value = match[2].trim();
+    if (attribute && value) pairs.push({ attribute, value });
+  }
+  return dedupeAttributes(pairs);
+}
+
+function dedupeAttributes(pairs: ParsedVariantAttribute[]): ParsedVariantAttribute[] {
+  const seen = new Set<string>();
+  return pairs.filter((pair) => {
+    const key = `${foldImportHeader(pair.attribute)}\u0000${foldImportHeader(pair.value)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 /**
  * Alias de encabezados para la importación de terceros (clientes y
@@ -147,7 +305,19 @@ const PARTY_IMPORT_COLUMN_ALIASES: Record<string, string> = {
 };
 
 /** Columnas cuyo valor se interpreta como numero. */
-const NUMERIC_COLUMNS = ['price', 'cost', 'stock', 'min_stock', 'max_stock'] as const;
+const NUMERIC_COLUMNS = [
+  'price',
+  'cost',
+  'stock',
+  'min_stock',
+  'max_stock',
+  // Variantes: una fila por combinacion creada a mano.
+  'variant_price',
+  'variant_cost',
+  'variant_stock',
+  'variant_min_stock',
+  'variant_max_stock',
+] as const;
 
 /**
  * Configuración del parseo por dominio. Los alias pliegan distinto (productos

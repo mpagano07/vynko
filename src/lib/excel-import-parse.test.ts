@@ -6,9 +6,11 @@ import {
   MAX_IMPORT_BYTES,
   MAX_IMPORT_ROWS,
   foldImportHeader,
+  isVariantImportRow,
   mapImportColumns,
   normalizeImportRow,
   parseImportRows,
+  parseVariantAttributes,
   parsePartyWorkbookFile,
   parseSpreadsheetNumber,
   parseWorkbookFile,
@@ -570,5 +572,62 @@ describe('el import no ejecuta ni sirve el archivo que recibe', () => {
       const tipo = typeof value;
       expect(['string', 'number', 'boolean', 'undefined']).toContain(tipo);
     }
+  });
+});
+
+describe('variantes creadas a mano', () => {
+  it('reconoce columnas de variante sin perder los alias de TN/ML', () => {
+    expect(
+      mapImportColumns({
+        'Producto Principal': 'Remera',
+        'Etiqueta Variante': 'Rojo / M',
+        'SKU Variante': 'REM-ROJ-M',
+        'Atributos Variante': 'Color: Rojo; Talle: M',
+        'Stock Variante': '3',
+      })
+    ).toEqual({
+      parent_name: 'Remera',
+      variant_label: 'Rojo / M',
+      variant_sku: 'REM-ROJ-M',
+      variant_attributes: 'Color: Rojo; Talle: M',
+      // `mapImportColumns` solo renombra: el número se convierte al normalizar.
+      variant_stock: '3',
+    });
+    expect(normalizeImportRow({ 'Producto Principal': 'Remera', 'Stock Variante': '3' })).toMatchObject({
+      parent_name: 'Remera',
+      variant_stock: 3,
+    });
+    expect(mapImportColumns({ Producto: 'Coca', Cantidad: 2 })).toEqual({
+      name: 'Coca',
+      stock: 2,
+    });
+  });
+
+  it('clasifica la fila como variante aunque no traiga Tipo de Fila', () => {
+    expect(isVariantImportRow({ parent_name: 'Remera', variant_label: 'Rojo' })).toBe(true);
+    expect(isVariantImportRow({ 'Tipo de Fila': 'variante', Nombre: 'Remera' })).toBe(true);
+    expect(isVariantImportRow({ name: 'Coca', sku: 'COC-1' })).toBe(false);
+    expect(isVariantImportRow({ 'Tipo de Fila': 'producto', parent_name: 'x' })).toBe(false);
+  });
+
+  it('parsea pares Atributo: Valor con distintos separadores', () => {
+    expect(parseVariantAttributes('Color: Rojo; Talle: M')).toEqual([
+      { attribute: 'Color', value: 'Rojo' },
+      { attribute: 'Talle', value: 'M' },
+    ]);
+    expect(parseVariantAttributes('Color=Rojo|Talle=M')).toEqual([
+      { attribute: 'Color', value: 'Rojo' },
+      { attribute: 'Talle', value: 'M' },
+    ]);
+    expect(parseVariantAttributes('Color: Rojo\nTalle: M')).toHaveLength(2);
+    expect(parseVariantAttributes('Color: Rojo, Talle: M')).toHaveLength(2);
+  });
+
+  it('acepta arrays JSON y descarta texto sin separador', () => {
+    expect(
+      parseVariantAttributes(JSON.stringify([{ attribute: 'Color', value: 'Rojo' }]))
+    ).toEqual([{ attribute: 'Color', value: 'Rojo' }]);
+    expect(parseVariantAttributes('Rojo/M')).toEqual([]);
+    expect(parseVariantAttributes('')).toEqual([]);
   });
 });

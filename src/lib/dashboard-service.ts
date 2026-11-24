@@ -1,9 +1,22 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import type { AuthInfo } from '@/lib/api-auth';
+import { getCriticalVariants } from '@/lib/variant-service';
+import { sellableDisplayName } from '@/lib/types/variant';
 
 export type DashboardSummaryResult =
   | { ok: true; data: Record<string, unknown> }
   | { ok: false; error: string };
+
+export type DashboardVariantsResult =
+  | { ok: true; data: Array<Record<string, unknown>> }
+  | { ok: false; error: string };
+
+/** Críticos por variante: el service ya aplica el scope y el display name. */
+export async function getDashboardVariantSummary(auth: AuthInfo): Promise<DashboardVariantsResult> {
+  const result = await getCriticalVariants(auth);
+  if (!result.ok) return { ok: false, error: result.error };
+  return { ok: true, data: result.data };
+}
 
 export async function getDashboardSummary(auth: AuthInfo): Promise<DashboardSummaryResult> {
   try {
@@ -37,22 +50,36 @@ export async function getDashboardSummary(auth: AuthInfo): Promise<DashboardSumm
     const saleIds = ((recentSalesRes.data ?? []) as { id: string }[]).map((s) => s.id);
 
     let topPid: string | undefined;
+    let topVariantLabel: string | null = null;
     let topProductQty = 0;
     if (saleIds.length > 0) {
       const { data: saleItems } = await supabaseAdmin
         .from('sale_items')
-        .select('product_id, quantity')
+        .select('product_id, variant_id, quantity')
         .in('sale_id', saleIds);
 
       if (saleItems && saleItems.length > 0) {
-        const qtyByProduct: Record<string, number> = {};
+        // Un producto con variantes vende varias unidades comerciales distintas:
+        // agrupar solo por product_id las mezclaba en un mismo "top producto".
+        const qtyBySellable: Record<string, number> = {};
         for (const item of saleItems) {
-          const pid = item.product_id as string;
-          qtyByProduct[pid] = (qtyByProduct[pid] || 0) + ((item.quantity as number) || 0);
+          const key = `${String(item.product_id ?? '')}|${String(item.variant_id ?? '')}`;
+          qtyBySellable[key] = (qtyBySellable[key] || 0) + ((item.quantity as number) || 0);
         }
-        topPid = Object.entries(qtyByProduct).sort((a, b) => b[1] - a[1])[0]?.[0];
-        if (topPid) {
-          topProductQty = qtyByProduct[topPid];
+        const topKey = Object.entries(qtyBySellable).sort((a, b) => b[1] - a[1])[0]?.[0];
+        if (topKey) {
+          const [productId, variantId] = topKey.split('|');
+          topPid = productId || undefined;
+          topProductQty = qtyBySellable[topKey];
+          if (variantId) {
+            const { data: variant } = await supabaseAdmin
+              .from('product_variants')
+              .select('product_id, label')
+              .eq('id', variantId)
+              .maybeSingle();
+            if (variant?.product_id) topPid = String(variant.product_id);
+            topVariantLabel = variant?.label ? String(variant.label) : null;
+          }
         }
       }
     }
@@ -92,7 +119,9 @@ export async function getDashboardSummary(auth: AuthInfo): Promise<DashboardSumm
       topSid ? supabaseAdmin.from('suppliers').select('name').eq('id', topSid).maybeSingle() : Promise.resolve({ data: null }),
     ]);
 
-    const topProduct = topPid ? { name: prodRes.data?.name || '—', qty: topProductQty } : null;
+    const topProduct = topPid
+      ? { name: sellableDisplayName(String(prodRes.data?.name ?? '—'), topVariantLabel), qty: topProductQty }
+      : null;
     const topCustomer = topCid ? { name: custRes.data?.name || '—', total: topCustomerTotal } : null;
     const topSupplier = topSid ? { name: suppRes.data?.name || '—' } : null;
 

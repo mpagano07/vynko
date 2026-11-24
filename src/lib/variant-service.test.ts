@@ -1,0 +1,380 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { supabaseMock } from '@/test/supabase-mock';
+import {
+  adjustVariantStock,
+  createAttribute,
+  createVariant,
+  getCriticalVariants,
+  listSellableItems,
+  listVariants,
+  lookupSellableByCode,
+  setVariantActive,
+} from '@/lib/variant-service';
+import type { AuthInfo } from '@/lib/api-auth';
+
+vi.mock('@/lib/supabaseAdmin', () => ({ supabaseAdmin: supabaseMock }));
+
+let role: string = 'owner';
+vi.mock('@/lib/membership-role', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('@/lib/membership-role')>();
+  return { ...mod, getRoleInTenant: vi.fn(async () => role) };
+});
+vi.mock('@/lib/activity-log', () => ({ createActivityLog: vi.fn(async () => undefined) }));
+vi.mock('@/lib/track-event', () => ({ trackEvent: vi.fn(async () => undefined) }));
+
+const TENANT = 'tenant-a';
+const OTHER_TENANT = 'tenant-b';
+const auth: AuthInfo = {
+  userId: 'user-1',
+  tenantId: TENANT,
+  tenantIds: [TENANT],
+  allTenants: false,
+  role: 'owner',
+} as AuthInfo;
+
+const variantInput = {
+  label: 'Rojo / M',
+  sku: 'REM-ROJO-M',
+  barcode: '7790001',
+  price: 15.5,
+  cost: 8,
+  stock: 3,
+  valueIds: ['val-color-rojo', 'val-talle-m'],
+};
+
+function rpcArgs(name: string): Record<string, unknown> {
+  const call = supabaseMock.rpc.mock.calls.find(([fn]) => fn === name);
+  return (call?.[1] ?? {}) as Record<string, unknown>;
+}
+
+beforeEach(() => {
+  role = 'owner';
+  supabaseMock.__reset();
+});
+
+describe('createVariant', () => {
+  it('crea la variante con precio propio y deja el registro de códigos al servidor', async () => {
+    supabaseMock.__rpcQueue('create_product_variant', { data: { id: 'v-1' }, error: null });
+
+    const result = await createVariant(auth, 'p-1', variantInput);
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { id: 'v-1', product_id: 'p-1', price: 15.5, cost: 8, stock: 3, label: 'Rojo / M' },
+    });
+    // tenant y precios NO vienen del cliente: viajan desde la sesión y se
+    // convierten a centavos acá. El código se registra dentro de la misma RPC.
+    expect(rpcArgs('create_product_variant')).toMatchObject({
+      p_product_id: 'p-1',
+      p_tenant_id: TENANT,
+      p_by: 'user-1',
+      p_sku: 'REM-ROJO-M',
+      p_barcode: '7790001',
+      p_price_cents: 1550,
+      p_cost: 8,
+      p_stock: 3,
+      p_value_ids: ['val-color-rojo', 'val-talle-m'],
+    });
+  });
+
+  it('traduce una colisión de SKU/barcode en un error claro', async () => {
+    supabaseMock.__rpcQueue('create_product_variant', {
+      data: null,
+      error: { message: 'duplicate_sellable_code' },
+    });
+
+    const result = await createVariant(auth, 'p-1', variantInput);
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: 400,
+      error: 'El SKU o código de barras ya lo usa otro artículo de esta sucursal',
+    });
+  });
+
+  it('rechaza la creación sin capacidad de catálogo', async () => {
+    role = 'viewer';
+
+    const result = await createVariant(auth, 'p-1', variantInput);
+
+    expect(result).toMatchObject({ ok: false, status: 403 });
+    expect(supabaseMock.rpc).not.toHaveBeenCalled();
+  });
+
+  it('exige etiqueta y al menos un valor de atributo (nada de combinaciones automáticas)', async () => {
+    const noLabel = await createVariant(auth, 'p-1', { ...variantInput, label: '  ' });
+    const noValues = await createVariant(auth, 'p-1', { ...variantInput, valueIds: [] });
+
+    expect(noLabel).toMatchObject({ ok: false, status: 400 });
+    expect(noValues).toMatchObject({ ok: false, status: 400 });
+    expect(supabaseMock.rpc).not.toHaveBeenCalled();
+  });
+});
+
+describe('createAttribute', () => {
+  it('normaliza valores repetidos y vacíos antes de persistirlos', async () => {
+    supabaseMock.__queue('product_attributes', { data: { id: 'a-1', name: 'Color' }, error: null });
+    supabaseMock.__queue('product_attribute_values', { data: null, error: null });
+    supabaseMock.__queue('product_attribute_values', {
+      data: [
+        { id: 'v-1', attribute_id: 'a-1', value: 'Azul' },
+        { id: 'v-2', attribute_id: 'a-1', value: 'Rojo' },
+      ],
+      error: null,
+    });
+
+    const result = await createAttribute(auth, ' Color ', ['Rojo', ' Rojo ', '', 'Azul']);
+
+    expect(result).toMatchObject({ ok: true, data: { name: 'Color' } });
+    const upsert = supabaseMock.__calls.find((c) => c.table === 'product_attribute_values' && c.method === 'upsert');
+    expect(upsert?.args[0]).toEqual([
+      { attribute_id: 'a-1', value: 'Rojo' },
+      { attribute_id: 'a-1', value: 'Azul' },
+    ]);
+  });
+});
+
+describe('listVariants', () => {
+  it('consolida solo el stock del tenant y resuelve las etiquetas de atributos', async () => {
+    supabaseMock.__queue('product_variants', {
+      data: [{
+        id: 'v-1',
+        product_id: 'p-1',
+        sku: 'V-1',
+        barcode: null,
+        label: 'Rojo',
+        price_cents: 1500,
+        cost: 5,
+        product_variant_values: [{ value_id: 'val-1' }],
+        variant_stock: [
+          {
+            tenant_id: TENANT, stock: 4, min_stock: 2, max_stock: 10, active: true,
+            deposito: 'Central', pasillo: 'A', estanteria: '2', category_id: 'c-1',
+          },
+          {
+            tenant_id: OTHER_TENANT, stock: 99, min_stock: 50, max_stock: 100, active: false,
+            deposito: 'Ajeno', pasillo: 'Z', estanteria: '9', category_id: 'c-2',
+          },
+        ],
+      }],
+      error: null,
+    });
+    supabaseMock.__queue('product_attribute_values', {
+      data: [{ id: 'val-1', attribute_id: 'a-1', value: 'Rojo' }],
+      error: null,
+    });
+
+    const result = await listVariants(auth, 'p-1');
+    if (!result.ok) throw new Error(result.error);
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0]).toMatchObject({
+      id: 'v-1',
+      price: 15,
+      cost: 5,
+      stock: 4,
+      min_stock: 2,
+      max_stock: 10,
+      active: true,
+      deposito: 'Central',
+      values: [{ value: 'Rojo' }],
+    });
+  });
+});
+
+describe('lookupSellableByCode', () => {
+  it('resuelve un código de variante directamente al artículo vendible', async () => {
+    supabaseMock.__queue('sellable_codes', {
+      data: [{ kind: 'variant', tenant_id: TENANT, product_id: 'p-1', variant_id: 'v-1', code: '7790001' }],
+      error: null,
+    });
+    // `maybeSingle()` devuelve un objeto, no un array: el mock no transforma
+    // la fila encolada, así que hay que encolar la misma forma que PostgREST.
+    supabaseMock.__queue('product_variants', {
+      data: {
+        id: 'v-1',
+        product_id: 'p-1',
+        sku: 'V-1',
+        barcode: '7790001',
+        label: 'Rojo / M',
+        price_cents: 1500,
+        cost: 6,
+        product: {
+          id: 'p-1', name: 'Remera', description: null, sku: 'P-1',
+          barcode: null, price_cents: 1000, cost: 4,
+        },
+        variant_stock: [{ tenant_id: TENANT, stock: 3, active: true }],
+      },
+      error: null,
+    });
+
+    const result = await lookupSellableByCode(auth, '7790001');
+    if (!result.ok) throw new Error(result.error);
+
+    expect(result.data).toMatchObject({
+      kind: 'variant',
+      id: 'v-1',
+      productId: 'p-1',
+      variantId: 'v-1',
+      name: 'Remera',
+      variantLabel: 'Rojo / M',
+      displayName: 'Remera · Rojo / M',
+      price: 15,
+      stock: 3,
+    });
+  });
+
+  it('rechaza un código ambiguo heredado en vez de elegir un dueño al azar', async () => {
+    supabaseMock.__queue('sellable_codes', {
+      data: [
+        { kind: 'sku', tenant_id: TENANT, product_id: 'p-1', variant_id: null, code: 'DUP' },
+        { kind: 'barcode', tenant_id: TENANT, product_id: 'p-2', variant_id: null, code: 'DUP' },
+      ],
+      error: null,
+    });
+
+    const result = await lookupSellableByCode(auth, 'DUP');
+    if (!result.ok) throw new Error(result.error);
+
+    expect(result.data).toBeNull();
+  });
+
+  it('no devuelve el padre cuando el código histórico pertenece a un producto con variantes', async () => {
+    supabaseMock.__queue('sellable_codes', { data: [], error: null });
+    supabaseMock.__queue('products', {
+      data: [{
+        id: 'p-1', name: 'Remera', description: null, sku: 'P-1', barcode: 'P-1',
+        price_cents: 1000, cost: 4,
+        product_stock: [{ tenant_id: TENANT, stock: 5, active: true }],
+      }],
+      error: null,
+    });
+    supabaseMock.__queue('products', {
+      data: {
+        id: 'p-1', name: 'Remera', description: null, sku: 'P-1', barcode: 'P-1',
+        price_cents: 1000, cost: 4,
+        product_stock: [{ tenant_id: TENANT, stock: 5, active: true }],
+      },
+      error: null,
+    });
+    supabaseMock.__queue('product_variants', {
+      data: [{ id: 'v-1', variant_stock: [{ tenant_id: TENANT, active: true }] }],
+      error: null,
+    });
+
+    const result = await lookupSellableByCode(auth, 'P-1');
+    if (!result.ok) throw new Error(result.error);
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toBeNull();
+  });
+});
+
+describe('listSellableItems', () => {
+  it('ofrece cada variante con su precio propio y nunca el padre como artículo vendible', async () => {
+    supabaseMock.__queue('products', {
+      data: [
+        {
+          id: 'p-1', name: 'Remera', description: null, sku: 'P-1', barcode: null,
+          price_cents: 1000, cost: 4,
+          product_stock: [{ tenant_id: TENANT, stock: 7, active: true }],
+          product_variants: [{
+            id: 'v-1', sku: 'V-1', barcode: null, label: 'Rojo',
+            price_cents: 1500, cost: 6,
+            variant_stock: [{ tenant_id: TENANT, stock: 2, active: true }],
+          }],
+        },
+        {
+          id: 'p-2', name: 'Café', description: null, sku: 'P-2', barcode: 'CAFE',
+          price_cents: 800, cost: 3,
+          product_stock: [{ tenant_id: TENANT, stock: 9, active: true }],
+          product_variants: [],
+        },
+      ],
+      error: null,
+    });
+
+    const result = await listSellableItems(auth);
+    if (!result.ok) throw new Error(result.error);
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toHaveLength(2);
+    expect(result.data[0]).toMatchObject({
+      kind: 'variant', id: 'v-1', productId: 'p-1', price: 15, stock: 2,
+      displayName: 'Remera · Rojo',
+    });
+    expect(result.data[0].id).not.toBe('p-1');
+    expect(result.data[1]).toMatchObject({
+      kind: 'product', id: 'p-2', price: 8, stock: 9, displayName: 'Café',
+    });
+  });
+});
+
+describe('setVariantActive / adjustVariantStock', () => {
+  it('desactiva solo la fila del tenant', async () => {
+    supabaseMock.__queue('variant_stock', { data: { id: 'vs-1' }, error: null });
+
+    const result = await setVariantActive(auth, 'v-1', false);
+
+    expect(result).toMatchObject({ ok: true, data: { ok: true } });
+    const tenantFilter = supabaseMock.__calls.find(
+      (c) => c.table === 'variant_stock' && c.method === 'eq' && c.args[0] === 'tenant_id'
+    );
+    expect(tenantFilter?.args[1]).toBe(TENANT);
+  });
+
+  it('rechaza un ajuste que dejaría stock negativo antes de llamar a la RPC', async () => {
+    supabaseMock.__queue('variant_stock', { data: { stock: 2 }, error: null });
+
+    const result = await adjustVariantStock(auth, 'v-1', -5, 'merma');
+
+    expect(result).toMatchObject({ ok: false, status: 400, error: 'El stock no puede ser negativo' });
+    expect(supabaseMock.rpc).not.toHaveBeenCalled();
+  });
+
+  it('aclara el stock de la variante por RPC atómica y respeta un rechazo por carrera', async () => {
+    supabaseMock.__queue('variant_stock', { data: { stock: 2 }, error: null });
+    supabaseMock.__rpcQueue('adjust_variant_stock_atomic', {
+      data: [{ ok: true, old_stock: 2, new_stock: 5 }],
+      error: null,
+    });
+
+    const ok = await adjustVariantStock(auth, 'v-1', 3, 'ingreso');
+    expect(ok).toMatchObject({ ok: true, data: { previousStock: 2, newStock: 5 } });
+    expect(rpcArgs('adjust_variant_stock_atomic')).toMatchObject({
+      p_variant_id: 'v-1',
+      p_tenant_id: TENANT,
+      p_quantity: 3,
+      p_created_by: 'user-1',
+    });
+
+    supabaseMock.__queue('variant_stock', { data: { stock: 1 }, error: null });
+    supabaseMock.__rpcQueue('adjust_variant_stock_atomic', {
+      data: [{ ok: false, error: 'insufficient_stock' }],
+      error: null,
+    });
+    const raced = await adjustVariantStock(auth, 'v-1', -2, 'merma');
+    expect(raced).toMatchObject({ ok: false, status: 400 });
+  });
+});
+
+describe('getCriticalVariants', () => {
+  it('devuelve el nombre completo y filtra por los tenants de la sesión', async () => {
+    supabaseMock.__rpcQueue('get_critical_variants', {
+      data: [{
+        id: 'v-1', product_id: 'p-1', name: 'Remera', label: 'Rojo',
+        sku: 'V-1', stock: 1, min_stock: 2,
+      }],
+      error: null,
+    });
+
+    const result = await getCriticalVariants(auth);
+    if (!result.ok) throw new Error(result.error);
+
+    expect(result.data[0]).toMatchObject({
+      stock: 1, min_stock: 2, display_name: 'Remera · Rojo',
+    });
+    expect(rpcArgs('get_critical_variants')).toEqual({ p_tenant_ids: [TENANT] });
+  });
+});

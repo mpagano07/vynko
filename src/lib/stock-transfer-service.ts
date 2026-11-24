@@ -3,6 +3,29 @@ import { createActivityLog } from '@/lib/activity-log';
 import type { AuthInfo } from '@/lib/api-auth';
 import { getRoleInTenant, hasCapability } from '@/lib/membership-role';
 import { logger } from '@/lib/logger';
+import { sellableDisplayName } from '@/lib/types/variant';
+
+interface VariantStockRow {
+  id: string;
+  product_id: string;
+  label: string;
+  stock: number;
+}
+
+function variantStocks(value: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(value)) return value as Array<Record<string, unknown>>;
+  return value ? [value as Record<string, unknown>] : [];
+}
+
+function variantRows(value: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(value)) return value as Array<Record<string, unknown>>;
+  return value ? [value as Record<string, unknown>] : [];
+}
+
+// Una transferencia no mezcla el padre con sus variantes: la clave de agrupacion
+// es el par (producto, variante), igual que la usa `send_transfer` (075).
+const transferItemKey = (productId: string, variantId: string | null) =>
+  JSON.stringify([productId, variantId ?? '']);
 
 export type StockTransferResult<T = unknown> =
   | { ok: true; data: T; status: number }
@@ -18,7 +41,8 @@ export async function listTransfers(auth: AuthInfo, statusFilter: string | null,
       *,
       items:stock_transfer_items(
         *,
-        product:products(name)
+        product:products(name),
+        variant:product_variants(label)
       )
     `);
 
@@ -73,7 +97,14 @@ export async function listTransfers(auth: AuthInfo, statusFilter: string | null,
     created_by_name: userMap.get(t.created_by) || 'Usuario',
     items: (t.items || []).map((item: Record<string, unknown>) => {
       const product = item.product as Record<string, unknown> | undefined;
-      return { ...item, product_name: product?.name ?? null };
+      const variant = item.variant as Record<string, unknown> | undefined;
+      const productName = product?.name ?? null;
+      return {
+        ...item,
+        product_name: productName
+          ? sellableDisplayName(String(productName), variant?.label ? String(variant.label) : null)
+          : null,
+      };
     }),
   }));
 
@@ -114,38 +145,85 @@ export async function createTransfer(
   // cantidades negativas, decimales o el mismo producto repetido; dos líneas
   // de 6 contra un stock de 10 pasaban el chequeo por separado y el envío
   // fallaba recién al descontar 12.
-  const quantities = new Map<string, number>();
+  const quantities = new Map<string, { productId: string; variantId: string | null; quantity: number }>();
+  const usageByProduct = new Map<string, { simple: boolean; variant: boolean }>();
   for (const item of items) {
     const productId = typeof item.product_id === 'string' ? item.product_id : '';
+    const variantId = item.variant_id ? String(item.variant_id) : null;
     const quantity = typeof item.quantity === 'number' ? item.quantity : Number(item.quantity);
     if (!productId || !Number.isInteger(quantity) || quantity <= 0) {
       return { ok: false, error: 'Las cantidades deben ser enteros mayores a 0', status: 400 };
     }
-    quantities.set(productId, (quantities.get(productId) ?? 0) + quantity);
+    const key = transferItemKey(productId, variantId);
+    const current = quantities.get(key);
+    if (current) current.quantity += quantity;
+    else quantities.set(key, { productId, variantId, quantity });
+
+    const usage = usageByProduct.get(productId) ?? { simple: false, variant: false };
+    if (variantId) usage.variant = true;
+    else usage.simple = true;
+    usageByProduct.set(productId, usage);
+  }
+  for (const [productId, usage] of usageByProduct) {
+    if (usage.simple && usage.variant) {
+      return {
+        ok: false,
+        error: `No se puede transferir "${productId}" como producto y como variante en la misma transferencia`,
+        status: 400,
+      };
+    }
   }
 
   // `products` es global y `product_id` viene del body: sin exigir la fila de
   // `product_stock` del tenant ORIGEN, A puede mover un producto que solo
   // existe para B y el alta de stock en destino lo deja expuesto en el
   // catalogo y en el forecast de una empresa que nunca lo compro.
-  const productIds = [...quantities.keys()];
-  const [{ data: ownedStock }, { data: productRows }] = await Promise.all([
-    supabaseAdmin
-      .from('product_stock')
-      .select('product_id, stock')
-      .in('product_id', productIds)
-      .eq('tenant_id', from_tenant_id),
-    supabaseAdmin
-      .from('products')
-      .select('id, name')
-      .in('id', productIds),
-  ]);
+  const lines = [...quantities.values()];
+  const productIds = [...new Set(lines.map((line) => line.productId))];
+  const [{ data: ownedStock }, { data: productRows }, { data: variantData, error: variantError }] =
+    await Promise.all([
+      supabaseAdmin
+        .from('product_stock')
+        .select('product_id, stock')
+        .in('product_id', productIds)
+        .eq('tenant_id', from_tenant_id),
+      supabaseAdmin
+        .from('products')
+        .select('id, name')
+        .in('id', productIds),
+      supabaseAdmin
+        .from('product_variants')
+        .select('id, product_id, label, variant_stock!inner(tenant_id, stock, active)')
+        .in('product_id', productIds),
+    ]);
+
+  if (variantError) {
+    logger.error('DB error:', { error: variantError });
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
+  }
   const stockById = new Map(
     (ownedStock ?? []).map((row) => [row.product_id as string, Number(row.stock) || 0])
   );
   const nameById = new Map(
     (productRows ?? []).map((row) => [row.id as string, row.name as string])
   );
+  const variantById = new Map<string, VariantStockRow>();
+  const productsWithVariants = new Set<string>();
+  for (const raw of variantRows(variantData)) {
+    const row = raw as Record<string, unknown>;
+    const own = variantStocks(row.variant_stock).filter(
+      (s) => String(s.tenant_id) === from_tenant_id
+    );
+    if (own.some((s) => Boolean(s.active))) {
+      productsWithVariants.add(String(row.product_id));
+      variantById.set(String(row.id), {
+        id: String(row.id),
+        product_id: String(row.product_id),
+        label: String(row.label ?? ''),
+        stock: own.reduce((sum, s) => sum + (Number(s.stock) || 0), 0),
+      });
+    }
+  }
   if (productIds.some((id) => !stockById.has(id))) {
     return { ok: false, error: 'Uno o mas productos no pertenecen a la sucursal origen', status: 400 };
   }
@@ -154,10 +232,32 @@ export async function createTransfer(
   // nace imposible: antes se aceptaba y el error aparecía recién al confirmar
   // el envío. El `send_transfer` vuelve a chequear bajo lock por si el stock
   // cambió entre la creación y el envío.
-  for (const [productId, quantity] of quantities) {
-    const available = stockById.get(productId) ?? 0;
+  for (const { productId, variantId, quantity } of lines) {
+    let available: number;
+    let label: string | null = null;
+    if (variantId) {
+      const variant = variantById.get(variantId);
+      if (!variant || variant.product_id !== productId) {
+        return {
+          ok: false,
+          error: 'La variante no pertenece al producto o a la sucursal origen',
+          status: 400,
+        };
+      }
+      available = variant.stock;
+      label = variant.label;
+    } else {
+      if (productsWithVariants.has(productId)) {
+        return {
+          ok: false,
+          error: `El producto "${nameById.get(productId) || productId}" tiene variantes: transferí una variante`,
+          status: 400,
+        };
+      }
+      available = stockById.get(productId) ?? 0;
+    }
     if (quantity > available) {
-      const name = nameById.get(productId) || productId;
+      const name = sellableDisplayName(nameById.get(productId) || productId, label);
       return {
         ok: false,
         error: `Stock insuficiente de "${name}". Disponible: ${available}, requerido: ${quantity}`,
@@ -186,10 +286,11 @@ export async function createTransfer(
     };
   }
 
-  const transferItems = [...quantities].map(([productId, quantity]) => ({
+  const transferItems = lines.map(({ productId, variantId, quantity }) => ({
     transfer_id: transfer.id,
     product_id: productId,
     quantity,
+    ...(variantId ? { variant_id: variantId } : {}),
   }));
 
   const { error: itemsError } = await supabaseAdmin

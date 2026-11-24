@@ -67,6 +67,23 @@ describe('GET /api/dashboard/summary', () => {
     }
   });
 
+  it('muestra el top producto como nombre · etiqueta cuando la venta fue de una variante', async () => {
+    supabaseMock.__queue('sales', { data: [{ id: 's1' }] });
+    supabaseMock.__queue('sales', { data: [{ customer_id: 'c1', total_cents: 5000 }] });
+    supabaseMock.__queue('sales', { data: [{ created_at: '2026-08-01T12:00:00.000Z' }] });
+    supabaseMock.__queue('purchase_orders', { data: [{ supplier_id: 'sup1' }] });
+    supabaseMock.__queue('sale_items', { data: [{ product_id: 'p1', variant_id: 'v1', quantity: 2 }] });
+    supabaseMock.__queue('product_variants', { data: { product_id: 'p1', label: 'Rojo / M' } });
+    supabaseMock.__queue('products', { data: { name: 'Remera' } });
+    supabaseMock.__queue('customers', { data: { name: 'Ana' } });
+    supabaseMock.__queue('suppliers', { data: { name: 'Proveedor' } });
+
+    const res = await GET(makeRequest());
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.topProduct).toEqual({ name: 'Remera · Rojo / M', qty: 2 });
+  });
+
   it('filtra con in() cuando el usuario ve todas las sucursales', async () => {
     vi.mocked(getAuth).mockResolvedValueOnce({ ...mockAuth, allTenants: true, tenantIds: ['tenant-1', 'tenant-2'] });
     queueSummary();

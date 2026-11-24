@@ -18,6 +18,12 @@ vi.mock('@/lib/supabaseAdmin', () => ({ supabaseAdmin: supabaseMock }));
 vi.mock('@/lib/activity-log', () => ({ createActivityLog: vi.fn(async () => undefined) }));
 vi.mock('@/lib/track-event', () => ({ trackEvent: vi.fn(async () => undefined) }));
 
+// `register_sellable_code` (migración 074) devuelve BOOLEAN; el mock global no
+// la declara. Sin este resultado las filas con SKU se contarían como omitidas.
+beforeEach(() => {
+  supabaseMock.__rpcResults.register_sellable_code = { data: true, error: null };
+});
+
 function makeRequest(body: unknown): Request {
   return new Request('http://localhost/api/products/import', {
     method: 'POST',

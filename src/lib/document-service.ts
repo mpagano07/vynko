@@ -8,6 +8,73 @@ import type { AuthInfo } from '@/lib/api-auth';
 import { getRoleInTenant, hasCapability } from '@/lib/membership-role';
 import { trackEvent } from '@/lib/track-event';
 import { logger } from '@/lib/logger';
+import { sellableDisplayName } from '@/lib/types/variant';
+
+/** Item que acepta el alta, con la variante ya resuelta en servidor. */
+interface DocumentItemInput {
+  product_id?: string;
+  variant_id?: string;
+  description: string;
+  quantity: number;
+  unit_price_cents: number;
+}
+
+interface ResolvedVariant {
+  label: string;
+}
+
+type VariantLookup =
+  | { ok: true; variant: ResolvedVariant }
+  | { ok: false; error: string; status: 400 | 500 };
+
+function stockRows(value: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(value)) return value as Array<Record<string, unknown>>;
+  return value ? [value as Record<string, unknown>] : [];
+}
+
+/**
+ * `product_variants` es global: la pertenencia al producto se chequea en la
+ * fila y la pertenencia al tenant en `variant_stock`. Sin el join, una variante
+ * de otra sucursal podía colarse en un documento.
+ */
+async function lookupDocumentVariant(
+  tenantId: string,
+  productId: string,
+  variantId: string,
+  cache: Map<string, VariantLookup>
+): Promise<VariantLookup> {
+  const key = `${tenantId}|${productId}|${variantId}`;
+  const cached = cache.get(key);
+  if (cached) return cached;
+
+  const { data, error } = await supabaseAdmin
+    .from('product_variants')
+    .select('id, product_id, label, variant_stock!inner(tenant_id, active)')
+    .eq('id', variantId)
+    .maybeSingle();
+
+  if (error) {
+    logger.error('DB error:', { error });
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
+  }
+  const row = data as Record<string, unknown> | null;
+  const ownStock = stockRows(row?.variant_stock).find(
+    (s) => String(s.tenant_id) === tenantId && Boolean(s.active)
+  );
+  let result: VariantLookup;
+  if (!row || String(row.product_id) !== productId || !ownStock) {
+    result = { ok: false, error: 'La variante no pertenece al producto o a la sucursal', status: 400 };
+  } else {
+    result = { ok: true, variant: { label: String(row.label ?? '') } };
+  }
+  cache.set(key, result);
+  return result;
+}
+
+function fullVariantDescription(description: string, label: string): string {
+  if (!label || description.includes(` · ${label}`)) return description;
+  return sellableDisplayName(description, label);
+}
 
 export type DocumentResult<T = unknown> =
   | { ok: true; data: T; status: number }
@@ -51,7 +118,11 @@ export async function listDocuments(
 
 export async function createDocument(
   auth: AuthInfo,
-  body: CreateDocumentRequest & { sale_id?: string; purchase_order_id?: string }
+  body: Omit<CreateDocumentRequest, 'items'> & {
+    items?: DocumentItemInput[];
+    sale_id?: string;
+    purchase_order_id?: string;
+  }
 ): Promise<DocumentResult> {
   try {
     const {
@@ -101,7 +172,33 @@ export async function createDocument(
       }
     }
 
-    const totalCents = items.reduce((sum, item) => sum + item.unit_price_cents * item.quantity, 0);
+    // La variante llega del cliente pero la validamos en servidor: debe existir
+    // en el producto de la línea y tener stock activo en este tenant. La
+    // descripción guardada queda completa ("producto · etiqueta") para que el
+    // histórico no dependa de cómo se llame la variante en el futuro.
+    const variantCache = new Map<string, VariantLookup>();
+    const resolvedItems: DocumentItemInput[] = [];
+    for (const item of items) {
+      const variantId = item.variant_id ? String(item.variant_id) : null;
+      if (!variantId) {
+        resolvedItems.push(item);
+        continue;
+      }
+      const productId = item.product_id ? String(item.product_id) : '';
+      if (!productId) {
+        return { ok: false, error: 'La variante requiere un producto', status: 400 };
+      }
+      const lookup = await lookupDocumentVariant(auth.tenantId, productId, variantId, variantCache);
+      if (!lookup.ok) return lookup;
+      resolvedItems.push({
+        ...item,
+        product_id: productId,
+        variant_id: variantId,
+        description: fullVariantDescription(item.description, lookup.variant.label),
+      });
+    }
+
+    const totalCents = resolvedItems.reduce((sum, item) => sum + item.unit_price_cents * item.quantity, 0);
 
     let document: Record<string, unknown> | null = null;
     let claimedNumber = 0;
@@ -150,9 +247,10 @@ export async function createDocument(
       return { ok: false, error: 'No se pudo generar el número de documento. Intentá de nuevo.', status: 409 };
     }
 
-    const documentItems = items.map((item) => ({
+    const documentItems = resolvedItems.map((item) => ({
       document_id: document.id,
       product_id: item.product_id || null,
+      ...(item.variant_id ? { variant_id: item.variant_id } : {}),
       description: item.description,
       quantity: item.quantity,
       unit_price_cents: item.unit_price_cents,

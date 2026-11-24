@@ -23,6 +23,12 @@ vi.mock('@/lib/activity-log', () => ({
   createActivityLog: vi.fn(async () => undefined),
 }));
 
+// `register_sellable_code` (migración 074) devuelve BOOLEAN; el mock global no
+// la declara y sin esto el alta válida se rechazaría con 400.
+beforeEach(() => {
+  supabaseMock.__rpcResults.register_sellable_code = { data: true, error: null };
+});
+
 function makeRequest(body: unknown): Request {
   return new Request('http://localhost/api/products', {
     method: 'POST',

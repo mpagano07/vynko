@@ -102,6 +102,8 @@ export interface ArcaIvaItem {
 
 export interface CreateElectronicInvoiceItem {
   product_id?: string;
+  /** Variante comercializable, cuando el producto principal tiene variantes. */
+  variant_id?: string;
   description: string;
   quantity: number;
   unit_price_cents: number;
@@ -161,6 +163,7 @@ export interface ElectronicInvoiceRecord {
   items?: {
     id: string;
     product_id?: string;
+    variant_id?: string;
     description: string;
     quantity: number;
     unit_price_cents: number;

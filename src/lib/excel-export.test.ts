@@ -247,3 +247,65 @@ describe('sheetToBlob', () => {
     expect(csv).not.toContain(`'Coca Cola`);
   });
 });
+
+describe('buildExportRows: variantes', () => {
+  const variants = {
+    p1: [
+      {
+        id: 'v1',
+        product_id: 'p1',
+        sku: 'COCA-ROJA',
+        barcode: '7790000000001',
+        label: 'Roja',
+        price: 1600,
+        cost: 900,
+        active: true,
+        stock: 7,
+        min_stock: 2,
+        max_stock: 20,
+        attributes: [
+          { attribute: 'Color', value: 'Roja' },
+          { attribute: 'Tamaño', value: '1.5L' },
+        ],
+      },
+    ],
+  };
+
+  it('exporta una fila hija por variante sin repetir el padre como producto simple', () => {
+    const rows = buildExportRows(PRODUCTS, CATEGORIES, 'generico', variants);
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      'Nombre': 'Coca Cola 1.5L',
+      'Producto Principal': 'Coca Cola 1.5L',
+      'Etiqueta Variante': 'Roja',
+      'Atributos Variante': 'Color: Roja; Tamaño: 1.5L',
+      'SKU Variante': 'COCA-ROJA',
+      'Código de Barras Variante': '7790000000001',
+      'Precio Variante': 1600,
+      'Stock Variante': 7,
+      'Tipo de Fila': 'variante',
+    });
+    expect(rows[1]).toMatchObject({ 'Nombre': 'Papas Fritas' });
+    expect(rows[1]).not.toHaveProperty('Etiqueta Variante');
+  });
+
+  it('mantiene el shape exacto cuando no hay variantes', () => {
+    const rows = buildExportRows(PRODUCTS, CATEGORIES, 'generico');
+    expect(Object.keys(rows[0])).toEqual([
+      'Nombre',
+      'Categoría',
+      'SKU',
+      'Código de Barras',
+      'Descripción',
+      'Costo',
+      'Precio Venta',
+      'Stock',
+      'Stock Mínimo',
+      'Stock Máximo',
+      'Depósito',
+      'Pasillo',
+      'Estantería',
+    ]);
+  });
+});
