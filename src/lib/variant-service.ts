@@ -467,6 +467,15 @@ export async function deleteVariant(
   });
   if (error) {
     logger.error('delete_product_variant fallo:', { error });
+    // postgREST devuelve PGRST202 cuando la funcion todavia no se aplico: sin
+    // este caso el usuario solo ve un "error inesperado" que no dice qué hacer.
+    if (error.code === 'PGRST202' || error.message?.includes('Could not find the function')) {
+      return {
+        ok: false,
+        error: 'Falta aplicar la migración 076_delete_product_variant.sql en la base de datos',
+        status: 500,
+      };
+    }
     if (error.message?.includes('variant_in_use')) {
       return {
         ok: false,

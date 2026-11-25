@@ -372,6 +372,24 @@ describe('deleteVariant', () => {
     });
   });
 
+  it('avisa si la RPC de baja todavía no está aplicada en la base', async () => {
+    supabaseMock.__rpcQueue('delete_product_variant', {
+      data: null,
+      error: {
+        code: 'PGRST202',
+        message: 'Could not find the function public.delete_product_variant(p_tenant_id, p_variant_id) in the schema cache',
+      },
+    });
+
+    const result = await deleteVariant(auth, 'v-1');
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: 500,
+      error: 'Falta aplicar la migración 076_delete_product_variant.sql en la base de datos',
+    });
+  });
+
   it('no confunde una variante de otra sucursal con una baja local', async () => {
     supabaseMock.__rpcQueue('delete_product_variant', {
       data: null,
