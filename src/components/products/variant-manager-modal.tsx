@@ -12,7 +12,7 @@ import { authFetch } from '@/lib/fetchWithTenant';
 import type { Category } from '@/lib/types/category';
 import type { ProductAttribute, ProductVariant } from '@/lib/types/variant';
 import type { Product } from '@/lib/types/product';
-import { Layers3, Plus, Edit, Trash2, Check } from 'lucide-react';
+import { Layers3, Plus, Edit, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface Props {
@@ -58,10 +58,6 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
   const [newAttribute, setNewAttribute] = useState('');
   const [newAttributeValues, setNewAttributeValues] = useState('');
   const [valueInputs, setValueInputs] = useState<Record<string, string>>({});
-  // El stock se edita como valor final (lo que ve el usuario en la fila), no
-  // como un delta suelto: el endpoint sigue recibiendo el delta para no romper
-  // el historial de movimientos.
-  const [stockEdits, setStockEdits] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -212,49 +208,6 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
     onChanged();
   };
 
-  const clearStockEdit = (variantId: string) => {
-    setStockEdits((prev) => {
-      const next = { ...prev };
-      delete next[variantId];
-      return next;
-    });
-  };
-
-  const handleSetStock = async (variant: ProductVariant) => {
-    const raw = stockEdits[variant.id];
-    if (raw == null) return;
-    const next = Number(raw);
-    const current = Number(variant.stock ?? 0);
-    if (raw.trim() === '' || !Number.isInteger(next) || next < 0) {
-      toast.error('Ingresá un número entero de stock (0 o más)');
-      return;
-    }
-    if (next === current) {
-      clearStockEdit(variant.id);
-      return;
-    }
-    // El endpoint de stock sólo acepta deltas: mandamos la diferencia entre el
-    // valor editado y el actual para mantener el historial de movimientos.
-    const res = await authFetch(`/api/variants/${variant.id}/stock`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        quantity: next - current,
-        reason: 'Ajuste desde ficha de producto',
-        notes: `Stock fijado en ${next}`,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      toast.error(data.error || 'No se pudo ajustar el stock');
-      return;
-    }
-    toast.success(`Stock actualizado: ${data.newStock}`);
-    clearStockEdit(variant.id);
-    await load();
-    onChanged();
-  };
-
   const handleCreateAttribute = async (e: React.FormEvent) => {
     e.preventDefault();
     const values = newAttributeValues.split(',').map((v) => v.trim()).filter(Boolean);
@@ -382,35 +335,7 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
                               </span>
                             )}
                           </td>
-                          <td className="px-2 py-2 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <Input
-                                type="number"
-                                min={0}
-                                step={1}
-                                value={stockEdits[variant.id] ?? String(variant.stock ?? 0)}
-                                onChange={(e) => setStockEdits((prev) => ({ ...prev, [variant.id]: e.target.value }))}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    void handleSetStock(variant);
-                                  }
-                                }}
-                                aria-label={`Stock de ${variant.label}`}
-                                className="h-7 w-16 text-right text-xs font-semibold tabular-nums"
-                              />
-                              {stockEdits[variant.id] != null && (
-                                <IconAction
-                                  icon={Check}
-                                  label={`Guardar stock de ${variant.label}`}
-                                  title="Guardar stock"
-                                  tone="indigo"
-                                  size="xs"
-                                  onClick={() => void handleSetStock(variant)}
-                                />
-                              )}
-                            </div>
-                          </td>
+                          <td className="px-2 py-2 text-right font-semibold tabular-nums">{variant.stock ?? 0}</td>
                           <td className="px-2 py-2">
                             <button type="button" onClick={() => void handleToggleActive(variant)} className="text-xs text-indigo-600 dark:text-indigo-400 underline">
                               {variant.active ? 'Activa' : 'Inactiva'}
@@ -494,7 +419,17 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
                     onChange={(e) => handleAmountChange('price')(e.target.value)}
                   />
                 </div>
-                <div><FormLabel>Stock inicial</FormLabel><Input type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} disabled={Boolean(editingId)} /></div>
+                <div>
+                  <FormLabel htmlFor="variant-stock">{editingId ? 'Stock' : 'Stock inicial'}</FormLabel>
+                  <Input
+                    id="variant-stock"
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={form.stock}
+                    onChange={(e) => setForm({ ...form, stock: e.target.value })}
+                  />
+                </div>
                 <div><FormLabel>Stock mínimo</FormLabel><Input type="number" value={form.min_stock} onChange={(e) => setForm({ ...form, min_stock: e.target.value })} /></div>
                 <div><FormLabel>Stock máximo</FormLabel><Input type="number" value={form.max_stock} onChange={(e) => setForm({ ...form, max_stock: e.target.value })} /></div>
                 <div><FormLabel>Depósito</FormLabel><Input value={form.deposito} onChange={(e) => setForm({ ...form, deposito: e.target.value })} /></div>

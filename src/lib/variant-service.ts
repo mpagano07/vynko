@@ -354,6 +354,28 @@ export async function updateVariant(
   const input = normalizeVariantInput(body);
   if ('error' in input) return { ok: false, error: input.error, status: 400 };
 
+  // `update_product_variant` no mueve stock (ver 074_product_variants.sql).
+  // El formulario de edición manda el stock final, así que lo comparamos con el
+  // actual y mandamos sólo la diferencia a `adjust_variant_stock_atomic`, igual
+  // que hace el import. Así se preserva el historial de movimientos.
+  let stockDelta = 0;
+  let previousStock: number | null = null;
+  if (body.stock !== undefined) {
+    const { data: stockRow } = await supabaseAdmin
+      .from('variant_stock')
+      .select('stock')
+      .eq('variant_id', variantId)
+      .eq('tenant_id', auth.tenantId)
+      .maybeSingle();
+    if (!stockRow) return { ok: false, error: 'Variante no encontrada en tu sucursal', status: 404 };
+    previousStock = Number(stockRow.stock) || 0;
+    stockDelta = input.stock - previousStock;
+    if (stockDelta !== 0) {
+      const stockCheck = await requireStockManager(auth);
+      if (!stockCheck.ok) return stockCheck;
+    }
+  }
+
   const { data, error } = await supabaseAdmin.rpc('update_product_variant', {
     p_variant_id: variantId,
     p_tenant_id: auth.tenantId,
@@ -375,6 +397,19 @@ export async function updateVariant(
   const row = (Array.isArray(data) ? data?.[0] : data) as Record<string, unknown> | null;
   if (!row) return { ok: false, error: 'Variante no encontrada en tu sucursal', status: 404 };
 
+  let stock = previousStock;
+  if (stockDelta !== 0) {
+    const adjusted = await adjustVariantStock(
+      auth,
+      variantId,
+      stockDelta,
+      'Edición de variante',
+      `Stock fijado en ${input.stock}`
+    );
+    if (!adjusted.ok) return adjusted;
+    stock = adjusted.data.newStock;
+  }
+
   return {
     ok: true,
     data: {
@@ -388,6 +423,7 @@ export async function updateVariant(
       active: input.active,
       valueIds: input.valueIds,
       values: [],
+      ...(stock === null ? {} : { stock }),
     },
   };
 }

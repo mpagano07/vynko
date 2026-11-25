@@ -27,6 +27,7 @@ const variant: ProductVariant = {
   cost: 8000,
   active: true,
   stock: 90,
+  valueIds: ['val-color-rojo'],
 };
 
 function renderModal(onChanged = vi.fn()) {
@@ -74,31 +75,33 @@ describe('VariantManagerModal · formato de moneda', () => {
 });
 
 describe('VariantManagerModal · stock y estado', () => {
-  it('muestra el stock como valor editable, sin delta ni botón Aplicar', async () => {
+  it('muestra el stock como solo valor, sin input, check ni botón Aplicar', async () => {
     renderModal();
 
-    const stock = await screen.findByLabelText('Stock de Rojo');
-    expect(stock).toHaveValue(90);
+    const row = (await screen.findByText('Rojo')).closest('tr');
+    expect(row).toHaveTextContent('90');
+    expect(row?.querySelector('input')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Aplicar' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Guardar stock/ })).not.toBeInTheDocument();
   });
 
-  it('fija el stock editado enviando la diferencia al endpoint', async () => {
+  it('modifica el stock desde Editar enviando el valor final en el PATCH', async () => {
     const { onChanged } = renderModal();
 
-    fireEvent.change(await screen.findByLabelText('Stock de Rojo'), { target: { value: '45' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar stock de Rojo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar Rojo' }));
+    const stock = await screen.findByLabelText('Stock');
+    expect(stock).toHaveValue(90);
+    fireEvent.change(stock, { target: { value: '45' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
     await waitFor(() => expect(authFetch).toHaveBeenCalledWith(
-      '/api/variants/v-1/stock',
+      '/api/variants/v-1',
       expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify({
-          quantity: -45,
-          reason: 'Ajuste desde ficha de producto',
-          notes: 'Stock fijado en 45',
-        }),
+        method: 'PATCH',
+        body: expect.stringContaining('"stock":"45"'),
       }),
     ));
+    expect(authFetch).not.toHaveBeenCalledWith('/api/variants/v-1/stock', expect.anything());
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
   });
 

@@ -9,6 +9,7 @@ import {
   listVariants,
   lookupSellableByCode,
   setVariantActive,
+  updateVariant,
 } from '@/lib/variant-service';
 import type { AuthInfo } from '@/lib/api-auth';
 
@@ -308,6 +309,49 @@ describe('listSellableItems', () => {
     expect(result.data[1]).toMatchObject({
       kind: 'product', id: 'p-2', price: 8, stock: 9, displayName: 'Café',
     });
+  });
+});
+
+describe('updateVariant · stock desde el formulario de edición', () => {
+  const updatedRow = {
+    id: 'v-1',
+    product_id: 'p-1',
+    sku: 'REM-ROJO-M',
+    barcode: '7790001',
+    label: 'Rojo / M',
+    price_cents: 1550,
+    cost: 8,
+  };
+
+  it('aplica el stock final como delta por RPC y registra el movimiento', async () => {
+    supabaseMock.__queue('variant_stock', { data: { stock: 90 }, error: null });
+    supabaseMock.__rpcQueue('update_product_variant', { data: updatedRow, error: null });
+    supabaseMock.__queue('variant_stock', { data: { stock: 90 }, error: null });
+    supabaseMock.__rpcQueue('adjust_variant_stock_atomic', {
+      data: [{ ok: true, old_stock: 90, new_stock: 45 }],
+      error: null,
+    });
+
+    const result = await updateVariant(auth, 'v-1', { ...variantInput, stock: 45 });
+
+    expect(result).toMatchObject({ ok: true, data: { stock: 45 } });
+    expect(rpcArgs('adjust_variant_stock_atomic')).toMatchObject({
+      p_variant_id: 'v-1',
+      p_tenant_id: TENANT,
+      p_quantity: -45,
+      p_reason: 'Edición de variante: Stock fijado en 45',
+      p_created_by: 'user-1',
+    });
+  });
+
+  it('no toca el stock si el formulario manda el mismo valor', async () => {
+    supabaseMock.__queue('variant_stock', { data: { stock: 90 }, error: null });
+    supabaseMock.__rpcQueue('update_product_variant', { data: updatedRow, error: null });
+
+    const result = await updateVariant(auth, 'v-1', { ...variantInput, stock: 90 });
+
+    expect(result).toMatchObject({ ok: true, data: { stock: 90 } });
+    expect(supabaseMock.rpc).not.toHaveBeenCalledWith('adjust_variant_stock_atomic', expect.anything());
   });
 });
 
