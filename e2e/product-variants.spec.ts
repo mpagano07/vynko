@@ -82,11 +82,13 @@ test.describe('Productos con variantes', () => {
     await modal.getByRole('button', { name: 'Crear variante' }).click();
     await expect(modal.getByText(BLUE, { exact: true }).first()).toBeVisible({ timeout: 10_000 });
 
-    // 6. Ajuste de stock de la variante, sin tocar el stock del padre.
+    // 6. Edición directa del stock de la variante, sin tocar el del padre.
     const redRow = modal.locator('tr').filter({ hasText: RED }).first();
-    await redRow.getByPlaceholder('±').fill('3');
-    await redRow.getByRole('button', { name: 'Aplicar' }).click();
-    await expect(redRow).toContainText('5', { timeout: 10_000 });
+    const stockInput = redRow.getByLabel(`Stock de ${RED}`);
+    await expect(stockInput).toHaveValue('2');
+    await stockInput.fill('5');
+    await redRow.getByRole('button', { name: `Guardar stock de ${RED}` }).click();
+    await expect(stockInput).toHaveValue('5', { timeout: 10_000 });
 
     await modal.getByRole('button', { name: 'Cerrar' }).click();
     await modal.waitFor({ state: 'hidden', timeout: 10_000 });

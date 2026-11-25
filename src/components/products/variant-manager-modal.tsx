@@ -12,7 +12,7 @@ import { authFetch } from '@/lib/fetchWithTenant';
 import type { Category } from '@/lib/types/category';
 import type { ProductAttribute, ProductVariant } from '@/lib/types/variant';
 import type { Product } from '@/lib/types/product';
-import { Layers3, Plus, Edit, Trash2 } from 'lucide-react';
+import { Layers3, Plus, Edit, Trash2, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface Props {
@@ -58,7 +58,10 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
   const [newAttribute, setNewAttribute] = useState('');
   const [newAttributeValues, setNewAttributeValues] = useState('');
   const [valueInputs, setValueInputs] = useState<Record<string, string>>({});
-  const [stockDeltas, setStockDeltas] = useState<Record<string, string>>({});
+  // El stock se edita como valor final (lo que ve el usuario en la fila), no
+  // como un delta suelto: el endpoint sigue recibiendo el delta para no romper
+  // el historial de movimientos.
+  const [stockEdits, setStockEdits] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -190,18 +193,56 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
     }
     toast.success(variant.active ? 'Variante desactivada' : 'Variante activada');
     await load();
+    onChanged();
   };
 
-  const handleAdjustStock = async (variant: ProductVariant) => {
-    const delta = Number(stockDeltas[variant.id]);
-    if (!Number.isInteger(delta) || delta === 0) {
-      toast.error('Ingresá una cantidad entera distinta de cero');
+  const handleDeactivate = async (variant: ProductVariant) => {
+    const res = await authFetch(`/api/variants/${variant.id}/active`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: false }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      toast.error(data.error || 'No se pudo desactivar la variante');
       return;
     }
+    toast.success('Variante desactivada');
+    await load();
+    onChanged();
+  };
+
+  const clearStockEdit = (variantId: string) => {
+    setStockEdits((prev) => {
+      const next = { ...prev };
+      delete next[variantId];
+      return next;
+    });
+  };
+
+  const handleSetStock = async (variant: ProductVariant) => {
+    const raw = stockEdits[variant.id];
+    if (raw == null) return;
+    const next = Number(raw);
+    const current = Number(variant.stock ?? 0);
+    if (raw.trim() === '' || !Number.isInteger(next) || next < 0) {
+      toast.error('Ingresá un número entero de stock (0 o más)');
+      return;
+    }
+    if (next === current) {
+      clearStockEdit(variant.id);
+      return;
+    }
+    // El endpoint de stock sólo acepta deltas: mandamos la diferencia entre el
+    // valor editado y el actual para mantener el historial de movimientos.
     const res = await authFetch(`/api/variants/${variant.id}/stock`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ quantity: delta, reason: 'Ajuste desde ficha de producto' }),
+      body: JSON.stringify({
+        quantity: next - current,
+        reason: 'Ajuste desde ficha de producto',
+        notes: `Stock fijado en ${next}`,
+      }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -209,7 +250,7 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
       return;
     }
     toast.success(`Stock actualizado: ${data.newStock}`);
-    setStockDeltas((prev) => ({ ...prev, [variant.id]: '' }));
+    clearStockEdit(variant.id);
     await load();
     onChanged();
   };
@@ -345,13 +386,29 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
                             <div className="flex items-center justify-end gap-1">
                               <Input
                                 type="number"
-                                value={stockDeltas[variant.id] ?? ''}
-                                onChange={(e) => setStockDeltas((prev) => ({ ...prev, [variant.id]: e.target.value }))}
-                                placeholder="±"
-                                className="h-7 w-16 text-xs"
+                                min={0}
+                                step={1}
+                                value={stockEdits[variant.id] ?? String(variant.stock ?? 0)}
+                                onChange={(e) => setStockEdits((prev) => ({ ...prev, [variant.id]: e.target.value }))}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    void handleSetStock(variant);
+                                  }
+                                }}
+                                aria-label={`Stock de ${variant.label}`}
+                                className="h-7 w-16 text-right text-xs font-semibold tabular-nums"
                               />
-                              <Button type="button" variant="outline" size="sm" onClick={() => void handleAdjustStock(variant)}>Aplicar</Button>
-                              <span className="font-semibold">{variant.stock ?? 0}</span>
+                              {stockEdits[variant.id] != null && (
+                                <IconAction
+                                  icon={Check}
+                                  label={`Guardar stock de ${variant.label}`}
+                                  title="Guardar stock"
+                                  tone="indigo"
+                                  size="xs"
+                                  onClick={() => void handleSetStock(variant)}
+                                />
+                              )}
                             </div>
                           </td>
                           <td className="px-2 py-2">
@@ -366,11 +423,7 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
                                 icon={Trash2}
                                 label={`Desactivar ${variant.label}`}
                                 tone="red"
-                                onClick={() => void authFetch(`/api/variants/${variant.id}/active`, {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ active: false }),
-                                }).then(() => load())}
+                                onClick={() => void handleDeactivate(variant)}
                               />
                             </div>
                           </td>

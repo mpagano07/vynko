@@ -1,6 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { authFetch } from '@/lib/fetchWithTenant';
 import type { Product } from '@/lib/types/product';
+import type { ProductVariant } from '@/lib/types/variant';
 import { VariantManagerModal } from './variant-manager-modal';
 
 vi.mock('@/lib/fetchWithTenant', () => ({
@@ -15,16 +17,40 @@ const product: Product = {
   cost: 1500.5,
 };
 
-function renderModal() {
-  return render(
-    <VariantManagerModal
-      product={product}
-      categories={[]}
-      onClose={vi.fn()}
-      onChanged={vi.fn()}
-    />,
-  );
+const variant: ProductVariant = {
+  id: 'v-1',
+  product_id: product.id,
+  sku: 'REM-001-ROJO',
+  barcode: null,
+  label: 'Rojo',
+  price: 15000,
+  cost: 8000,
+  active: true,
+  stock: 90,
+};
+
+function renderModal(onChanged = vi.fn()) {
+  return {
+    onChanged,
+    ...render(
+      <VariantManagerModal
+        product={product}
+        categories={[]}
+        onClose={vi.fn()}
+        onChanged={onChanged}
+      />,
+    ),
+  };
 }
+
+beforeEach(() => {
+  vi.mocked(authFetch).mockImplementation(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes('/attributes')) return new Response('[]', { status: 200 });
+    if (url.includes('/products/')) return new Response(JSON.stringify([variant]), { status: 200 });
+    return new Response(JSON.stringify({ success: true, newStock: 45 }), { status: 200 });
+  });
+});
 
 describe('VariantManagerModal · formato de moneda', () => {
   it('muestra costo y precio con el formato ARS de la plataforma', async () => {
@@ -44,5 +70,47 @@ describe('VariantManagerModal · formato de moneda', () => {
     expect(price).toHaveValue('80.000');
     fireEvent.change(price, { target: { value: '80.000,50' } });
     expect(price).toHaveValue('80.000,50');
+  });
+});
+
+describe('VariantManagerModal · stock y estado', () => {
+  it('muestra el stock como valor editable, sin delta ni botón Aplicar', async () => {
+    renderModal();
+
+    const stock = await screen.findByLabelText('Stock de Rojo');
+    expect(stock).toHaveValue(90);
+    expect(screen.queryByRole('button', { name: 'Aplicar' })).not.toBeInTheDocument();
+  });
+
+  it('fija el stock editado enviando la diferencia al endpoint', async () => {
+    const { onChanged } = renderModal();
+
+    fireEvent.change(await screen.findByLabelText('Stock de Rojo'), { target: { value: '45' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar stock de Rojo' }));
+
+    await waitFor(() => expect(authFetch).toHaveBeenCalledWith(
+      '/api/variants/v-1/stock',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          quantity: -45,
+          reason: 'Ajuste desde ficha de producto',
+          notes: 'Stock fijado en 45',
+        }),
+      }),
+    ));
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+
+  it('refresca la tabla de productos al activar o desactivar una variante', async () => {
+    const { onChanged } = renderModal();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Activa' }));
+
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+    expect(authFetch).toHaveBeenCalledWith(
+      '/api/variants/v-1/active',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ active: false }) }),
+    );
   });
 });
