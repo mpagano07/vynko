@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { FormLabel } from '@/components/ui/form-label';
 import { IconAction } from '@/components/ui/icon-action';
-import { formatARS } from '@/lib/utils/currency';
+import { amountToInput, formatARS, groupThousands, parseAmountInput } from '@/lib/utils/currency';
 import { marginPercent } from '@/lib/product-margin';
 import { authFetch } from '@/lib/fetchWithTenant';
 import type { Category } from '@/lib/types/category';
@@ -49,6 +49,10 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(() => formFromProduct(product));
+  // Costo y precio se muestran con el formato de moneda de la plataforma
+  // ("80.000,50"): `form` conserva el número crudo para la API y este borrador
+  // conserva lo que el usuario está tipeando, igual que en ProductFormModal.
+  const [amountDraft, setAmountDraft] = useState<{ price?: string; cost?: string }>({});
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedValues, setSelectedValues] = useState<string[]>([]);
   const [newAttribute, setNewAttribute] = useState('');
@@ -80,8 +84,22 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
     return chosen.join(' · ');
   }, [attributes, selectedValues]);
 
+  const priceDisplay = amountDraft.price ?? amountToInput(Number(form.price));
+  const costDisplay = amountDraft.cost ?? amountToInput(Number(form.cost));
+
+  const handleAmountChange = (field: 'price' | 'cost') => (raw: string) => {
+    const formatted = groupThousands(raw);
+    setAmountDraft((prev) => ({ ...prev, [field]: formatted }));
+    setForm((prev) => ({
+      ...prev,
+      // Costo vacío significa "sin costo" (null en la API); precio vacío es 0.
+      [field]: formatted === '' && field === 'cost' ? '' : String(parseAmountInput(formatted)),
+    }));
+  };
+
   const resetForm = () => {
     setForm(formFromProduct(product));
+    setAmountDraft({});
     setEditingId(null);
     setSelectedValues([]);
   };
@@ -141,6 +159,7 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
 
   const handleEdit = (variant: ProductVariant) => {
     setEditingId(variant.id);
+    setAmountDraft({});
     setForm({
       label: variant.label,
       sku: variant.sku ?? '',
@@ -396,8 +415,32 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
                     {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
-                <div><FormLabel>Costo</FormLabel><Input type="number" step="0.01" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} /></div>
-                <div><FormLabel>Precio</FormLabel><Input type="number" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} /></div>
+                <div>
+                  <FormLabel htmlFor="variant-cost">Costo ($)</FormLabel>
+                  <Input
+                    id="variant-cost"
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    placeholder="0,00"
+                    className="tabular-nums"
+                    value={costDisplay}
+                    onChange={(e) => handleAmountChange('cost')(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <FormLabel htmlFor="variant-price">Precio ($)</FormLabel>
+                  <Input
+                    id="variant-price"
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    placeholder="0,00"
+                    className="tabular-nums"
+                    value={priceDisplay}
+                    onChange={(e) => handleAmountChange('price')(e.target.value)}
+                  />
+                </div>
                 <div><FormLabel>Stock inicial</FormLabel><Input type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} disabled={Boolean(editingId)} /></div>
                 <div><FormLabel>Stock mínimo</FormLabel><Input type="number" value={form.min_stock} onChange={(e) => setForm({ ...form, min_stock: e.target.value })} /></div>
                 <div><FormLabel>Stock máximo</FormLabel><Input type="number" value={form.max_stock} onChange={(e) => setForm({ ...form, max_stock: e.target.value })} /></div>

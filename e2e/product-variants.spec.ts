@@ -64,8 +64,8 @@ test.describe('Productos con variantes', () => {
     await field('Etiqueta').fill(RED);
     await field('SKU').fill(RED_SKU);
     await field('Código de barras').fill('');
-    await field('Costo').fill('8');
-    await field('Precio').fill('15.5');
+    await field('Costo ($)').fill('8');
+    await field('Precio ($)').fill('15,5');
     await field('Stock inicial').fill('2');
     await modal.getByRole('button', { name: 'Crear variante' }).click();
     await expect(modal.getByText(RED, { exact: true }).first()).toBeVisible({ timeout: 10_000 });
@@ -76,8 +76,8 @@ test.describe('Productos con variantes', () => {
     await field('Etiqueta').fill(BLUE);
     await field('SKU').fill('');
     await field('Código de barras').fill(BLUE_BARCODE);
-    await field('Costo').fill('3');
-    await field('Precio').fill('7');
+    await field('Costo ($)').fill('3');
+    await field('Precio ($)').fill('7');
     await field('Stock inicial').fill('4');
     await modal.getByRole('button', { name: 'Crear variante' }).click();
     await expect(modal.getByText(BLUE, { exact: true }).first()).toBeVisible({ timeout: 10_000 });
