@@ -281,4 +281,31 @@ describe('productos: la categoría se escribe en el catálogo del tenant (migrac
     const upsert = callsTo(supabaseMock.__calls, 'product_stock', 'upsert')[0];
     expect(upsert?.args[0]).toMatchObject({ product_id: 'p-1', category_id: null });
   });
+
+  it('no permite bajar el stock del padre por debajo del total de variantes', async () => {
+    supabaseMock.__queue('tenant_users', { data: { role: 'owner' }, error: null });
+    supabaseMock.__queue('product_stock', { data: { product_id: 'p-1', stock: 90 }, error: null }); // pertenencia
+    supabaseMock.__queue('products', { data: { id: 'p-1', name: 'Coca', price_cents: 1000 }, error: null });
+    supabaseMock.__queue('product_stock', { data: { stock: 90 }, error: null }); // stock previo
+    supabaseMock.__queue('product_stock', { data: { stock: 90 }, error: null }); // tope del helper
+    supabaseMock.__queue('product_variants', {
+      data: [
+        { variant_stock: [{ stock: 30 }] },
+        { variant_stock: [{ stock: 30 }] },
+        { variant_stock: [{ stock: 30 }] },
+      ],
+      error: null,
+    });
+
+    const res = await updateProductRoute(
+      apiRequest('http://localhost/api/products/p-1', 'PATCH', { stock: 50 }),
+      routeParams('p-1')
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: 'El stock del producto (50) no puede ser menor que el total de sus variantes (90)',
+    });
+    expect(callsTo(supabaseMock.__calls, 'product_stock', 'upsert')).toHaveLength(0);
+  });
 });

@@ -430,3 +430,41 @@ describe('modal de nueva transferencia', () => {
     );
   });
 });
+
+describe('ubicación de variantes en la tabla principal', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    searchParamsMock.get.mockReturnValue(null);
+    window.history.replaceState({}, '', '/products');
+    authMock.mockReturnValue({
+      tenant: { id: 't1', name: 'Central' },
+      tenants: [{ id: 't1', name: 'Central' }],
+    } as unknown as ReturnType<typeof useAuth>);
+    categoriesMock.mockReturnValue({
+      categories: [{ id: 'c1', name: 'Tv' }],
+      mutate: vi.fn(),
+    } as unknown as ReturnType<typeof useCategories>);
+  });
+
+  it('muestra la ubicación de las variantes sin esperar a recargar', async () => {
+    authFetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).includes('/api/variants/products/')) {
+        return jsonResponse([{
+          id: 'v1', product_id: 'p1', label: 'Rojo', sku: 'V-1', barcode: null,
+          price: 10, cost: null, active: true, stock: 2, valueIds: [],
+          deposito: 'Depósito norte', pasillo: 'B', estanteria: '3',
+        }]);
+      }
+      return jsonResponse({});
+    });
+    renderPage([product({ deposito: 'Depósito viejo', pasillo: 'Z', estanteria: '9' })]);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver variantes de TV 100 Pulgadas' }));
+
+    expect(await screen.findByText('Ubicación de variantes')).toBeInTheDocument();
+    expect(screen.getByText('Depósito norte')).toBeInTheDocument();
+    expect(screen.getByText('B')).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(screen.queryByText('Depósito viejo')).not.toBeInTheDocument();
+  });
+});

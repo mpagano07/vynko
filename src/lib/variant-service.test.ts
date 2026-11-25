@@ -79,6 +79,23 @@ describe('createVariant', () => {
     });
   });
 
+  it('no crea una variante que supera el stock del producto principal', async () => {
+    supabaseMock.__queue('product_stock', { data: { stock: 90 }, error: null });
+    supabaseMock.__queue('product_variants', {
+      data: [{ variant_stock: [{ stock: 60 }] }, { variant_stock: [{ stock: 30 }] }],
+      error: null,
+    });
+
+    const result = await createVariant(auth, 'p-1', { ...variantInput, stock: 10 });
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: 400,
+      error: 'El total de variantes (100) no puede superar el stock del producto principal (90)',
+    });
+    expect(supabaseMock.rpc).not.toHaveBeenCalledWith('create_product_variant', expect.anything());
+  });
+
   it('traduce una colisión de SKU/barcode en un error claro', async () => {
     supabaseMock.__rpcQueue('create_product_variant', {
       data: null,
@@ -353,6 +370,64 @@ describe('updateVariant · stock desde el formulario de edición', () => {
 
     expect(result).toMatchObject({ ok: true, data: { stock: 90 } });
     expect(supabaseMock.rpc).not.toHaveBeenCalledWith('adjust_variant_stock_atomic', expect.anything());
+  });
+
+  it('guarda la ubicación y la categoría en variant_stock del tenant', async () => {
+    supabaseMock.__queue('variant_stock', { data: { stock: 90 }, error: null });
+    supabaseMock.__rpcQueue('update_product_variant', { data: updatedRow, error: null });
+
+    const result = await updateVariant(auth, 'v-1', {
+      ...variantInput,
+      stock: 90,
+      deposito: 'Depósito norte',
+      pasillo: 'B',
+      estanteria: '3',
+      category_id: 'c-1',
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { deposito: 'Depósito norte', pasillo: 'B', estanteria: '3', category_id: 'c-1' },
+    });
+    const calls = supabaseMock.__calls.filter((call) => call.table === 'variant_stock');
+    const updateIndex = calls.findIndex((call) => call.method === 'update');
+    expect(updateIndex).toBeGreaterThanOrEqual(0);
+    expect(calls[updateIndex]?.args[0]).toMatchObject({
+      deposito: 'Depósito norte',
+      pasillo: 'B',
+      estanteria: '3',
+      category_id: 'c-1',
+    });
+    expect(calls[updateIndex + 1]).toMatchObject({ method: 'eq', args: ['variant_id', 'v-1'] });
+    expect(calls[updateIndex + 2]).toMatchObject({ method: 'eq', args: ['tenant_id', TENANT] });
+  });
+
+  it('un PATCH sin ubicación no borra la ubicación existente', async () => {
+    supabaseMock.__queue('variant_stock', { data: { stock: 90 }, error: null });
+    supabaseMock.__rpcQueue('update_product_variant', { data: updatedRow, error: null });
+
+    await updateVariant(auth, 'v-1', { ...variantInput, stock: 90 });
+
+    expect(supabaseMock.__calls.some((call) => call.table === 'variant_stock' && call.method === 'update')).toBe(false);
+  });
+
+  it('no guarda un stock final que supera el tope del producto', async () => {
+    supabaseMock.__queue('variant_stock', { data: { stock: 30 }, error: null }); // stock previo de la variante
+    supabaseMock.__queue('product_variants', { data: { product_id: 'p-1' }, error: null }); // dueño de la variante
+    supabaseMock.__queue('product_stock', { data: { stock: 90 }, error: null }); // tope
+    supabaseMock.__queue('product_variants', {
+      data: [{ variant_stock: [{ stock: 30 }] }, { variant_stock: [{ stock: 30 }] }, { variant_stock: [{ stock: 30 }] }],
+      error: null,
+    });
+
+    const result = await updateVariant(auth, 'v-1', { ...variantInput, stock: 100 });
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: 400,
+      error: 'El total de variantes (160) no puede superar el stock del producto principal (90)',
+    });
+    expect(supabaseMock.rpc).not.toHaveBeenCalledWith('update_product_variant', expect.anything());
   });
 });
 

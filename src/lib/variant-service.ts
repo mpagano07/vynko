@@ -6,6 +6,7 @@ import { adjustStock } from '@/lib/stock';
 import { logger } from '@/lib/logger';
 import { createActivityLog } from '@/lib/activity-log';
 import { selectAllRows } from '@/lib/supabase-paging';
+import { readVariantStockCap, variantStockCapError } from '@/lib/variant-stock-cap';
 import {
   sellableDisplayName,
   toSellableItem,
@@ -286,6 +287,12 @@ export async function createVariant(
   const input = normalizeVariantInput(body);
   if ('error' in input) return { ok: false, error: input.error, status: 400 };
 
+  const cap = await readVariantStockCap(productId, auth.tenantId);
+  if ('error' in cap) return { ok: false, error: cap.error, status: 500 };
+  if (cap.cap !== null && cap.total + input.stock > cap.cap) {
+    return { ok: false, error: variantStockCapError(cap.cap, cap.total + input.stock), status: 400 };
+  }
+
   const { data, error } = await supabaseAdmin.rpc('create_product_variant', {
     p_product_id: productId,
     p_tenant_id: auth.tenantId,
@@ -370,6 +377,23 @@ export async function updateVariant(
     if (!stockRow) return { ok: false, error: 'Variante no encontrada en tu sucursal', status: 404 };
     previousStock = Number(stockRow.stock) || 0;
     stockDelta = input.stock - previousStock;
+
+    // El stock del padre es el tope del total de sus variantes. La suma actual
+    // ya incluye esta variante, por eso se descuenta su valor anterior.
+    const { data: variantRow } = await supabaseAdmin
+      .from('product_variants')
+      .select('product_id')
+      .eq('id', variantId)
+      .maybeSingle();
+    if (variantRow) {
+      const cap = await readVariantStockCap(String(variantRow.product_id), auth.tenantId);
+      if ('error' in cap) return { ok: false, error: cap.error, status: 500 };
+      const candidateTotal = cap.total - previousStock + input.stock;
+      if (cap.cap !== null && candidateTotal > cap.cap) {
+        return { ok: false, error: variantStockCapError(cap.cap, candidateTotal), status: 400 };
+      }
+    }
+
     if (stockDelta !== 0) {
       const stockCheck = await requireStockManager(auth);
       if (!stockCheck.ok) return stockCheck;
@@ -410,6 +434,30 @@ export async function updateVariant(
     stock = adjusted.data.newStock;
   }
 
+  // `update_product_variant` sólo toca la fila global (códigos, precio, etc.) y
+  // el flag `active` de `variant_stock`. La ubicación y la categoría son
+  // específicas de la sucursal, así que se escriben acá. Sólo si el caller las
+  // mandó: un PATCH parcial no debe borrarlas.
+  const updatesLocation = (['deposito', 'pasillo', 'estanteria', 'category_id'] as const)
+    .some((field) => body[field] !== undefined);
+  if (updatesLocation) {
+    const { error: stockError } = await supabaseAdmin
+      .from('variant_stock')
+      .update({
+        deposito: input.deposito,
+        pasillo: input.pasillo,
+        estanteria: input.estanteria,
+        category_id: input.categoryId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('variant_id', variantId)
+      .eq('tenant_id', auth.tenantId);
+    if (stockError) {
+      logger.error('update variant_stock (ubicación) fallo:', { error: stockError });
+      return { ok: false, error: 'No se pudo guardar la ubicación de la variante', status: 500 };
+    }
+  }
+
   return {
     ok: true,
     data: {
@@ -424,6 +472,12 @@ export async function updateVariant(
       valueIds: input.valueIds,
       values: [],
       ...(stock === null ? {} : { stock }),
+      ...(updatesLocation ? {
+        deposito: input.deposito,
+        pasillo: input.pasillo,
+        estanteria: input.estanteria,
+        category_id: input.categoryId,
+      } : {}),
     },
   };
 }
@@ -526,6 +580,22 @@ export async function adjustVariantStock(
   if (!stockRow) return { ok: false, error: 'Variante no encontrada en tu sucursal', status: 404 };
   const preview = adjustStock(Number(stockRow.stock) || 0, quantity);
   if (!preview.ok) return { ok: false, error: preview.error, status: 400 };
+
+  if (quantity > 0) {
+    const { data: variantRow } = await supabaseAdmin
+      .from('product_variants')
+      .select('product_id')
+      .eq('id', variantId)
+      .maybeSingle();
+    if (variantRow) {
+      const cap = await readVariantStockCap(String(variantRow.product_id), auth.tenantId);
+      if ('error' in cap) return { ok: false, error: cap.error, status: 500 };
+      const candidateTotal = cap.total + quantity;
+      if (cap.cap !== null && candidateTotal > cap.cap) {
+        return { ok: false, error: variantStockCapError(cap.cap, candidateTotal), status: 400 };
+      }
+    }
+  }
 
   const { data, error } = await supabaseAdmin.rpc('adjust_variant_stock_atomic', {
     p_variant_id: variantId,

@@ -4,6 +4,7 @@ import { createActivityLog } from '@/lib/activity-log';
 import { PLAN_LIMITS, NEW_ACCOUNT_PLAN } from '@/lib/plans';
 import type { PlanId } from '@/lib/plans';
 import { validatePrice, validateProduct, validateStock } from '@/lib/product-validation';
+import { readVariantStockCap } from '@/lib/variant-stock-cap';
 import { normalizeForSearch } from '@/lib/utils/text';
 import { adjustStock, buildStockMovement } from '@/lib/stock';
 import { isAllowedImagePath, pathFromLegacyPublicUrl, signProductImageUrls } from '@/lib/upload-service';
@@ -36,7 +37,7 @@ export type CreateProductResult =
 
 export type UpdateProductResult =
   | { ok: true; product: Record<string, unknown> }
-  | { ok: false; error: string; status: 400 | 403 };
+  | { ok: false; error: string; status: 400 | 403 | 500 };
 
 export type DeleteProductResult =
   | { ok: true }
@@ -613,6 +614,18 @@ export async function updateProduct(auth: AuthInfo, id: string, body: Record<str
           .eq('tenant_id', auth.tenantId)
           .maybeSingle();
         previousStock = Number((currentStockRow as Record<string, unknown> | null)?.stock) || 0;
+
+        // El stock del padre es el tope de la suma de sus variantes: no se
+        // puede bajar por debajo de lo ya cargado en la sucursal.
+        const cap = await readVariantStockCap(id, auth.tenantId);
+        if ('error' in cap) return { ok: false, error: cap.error, status: 500 };
+        if (Number(body.stock) < cap.total) {
+          return {
+            ok: false,
+            error: `El stock del producto (${Number(body.stock)}) no puede ser menor que el total de sus variantes (${cap.total})`,
+            status: 400,
+          };
+        }
       }
 
       const { error: stockError } = await supabaseAdmin

@@ -27,6 +27,7 @@ import { Tooltip } from '@/components/ui/tooltip';
 import type { Product } from '@/lib/types/product';
 import type { Category } from '@/lib/types/category';
 import type { ProductVariant } from '@/lib/types/variant';
+import { effectiveLocation, locationParts } from '@/lib/product-location';
 import { VariantManagerModal } from '@/components/products/variant-manager-modal';
 import toast from 'react-hot-toast';
 import {
@@ -1135,6 +1136,9 @@ function ProductsPageContent() {
                   const isLow = !isCritical && (product.stock ?? 0) <= (product.min_stock ?? 0) * 1.5;
 
                   const productVariants = variantsByProduct[product.id] ?? [];
+                  const hasVariantLocation = productVariants.some((variant) => locationParts(variant).length > 0);
+                  const shownLocation = effectiveLocation(product, productVariants);
+                  const variantStockTotal = productVariants.reduce((sum, variant) => sum + (variant.stock ?? 0), 0);
                   const expanded = expandedRows.has(product.id);
 
                   return (
@@ -1168,7 +1172,7 @@ function ProductsPageContent() {
                             {productVariants.length > 0 && (
                               <div className="inline-flex items-center gap-1 mt-0.5 text-xs font-medium text-indigo-600 dark:text-indigo-400">
                                 <Layers3 className="h-3 w-3" />
-                                {productVariants.length} variante{productVariants.length === 1 ? '' : 's'} · stock total {productVariants.reduce((sum, v) => sum + (v.stock ?? 0), 0)}
+                                {productVariants.length} variante{productVariants.length === 1 ? '' : 's'} · stock total {variantStockTotal}
                               </div>
                             )}
                             {category && (
@@ -1207,7 +1211,12 @@ function ProductsPageContent() {
                         )}
                       </td>
                       <td className="hidden lg:table-cell py-4 px-3">
-                        {product.deposito || product.pasillo || product.estanteria ? (
+                        {hasVariantLocation ? (
+                          <div className="text-xs text-gray-700 dark:text-gray-300 leading-tight">
+                            <p className="font-medium text-indigo-600 dark:text-indigo-400">Ubicación de variantes</p>
+                            {shownLocation.map((part) => <p key={part} className="mt-0.5 break-words">{part}</p>)}
+                          </div>
+                        ) : product.deposito || product.pasillo || product.estanteria ? (
                           <div className="text-xs text-gray-700 dark:text-gray-300 leading-tight">
                             <p>{product.deposito ? <>Depósito: {product.deposito}</> : <span className="text-gray-300 dark:text-gray-600">Depósito: —</span>}</p>
                             <p className="mt-0.5">{product.pasillo ? <>Pasillo: {product.pasillo}</> : <span className="text-gray-300 dark:text-gray-600">Pasillo: —</span>}</p>
@@ -1336,7 +1345,9 @@ function ProductsPageContent() {
                                       </td>
                                       <td className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-200">
                                         {product.stock ?? 0}
-                                        <span className="mt-0.5 block text-[10px] font-normal text-gray-400">Informativo</span>
+                                        <span className="mt-0.5 block text-[10px] font-normal text-gray-500">
+                                          Tope · {variantStockTotal} en variantes
+                                        </span>
                                       </td>
                                       <td className="px-3 py-2 text-gray-500">
                                         {[product.deposito, product.pasillo, product.estanteria].filter(Boolean).join(' · ') || '—'}
@@ -1399,7 +1410,9 @@ function ProductsPageContent() {
               const isLow = !isCritical && (product.stock ?? 0) <= (product.min_stock ?? 0) * 1.5;
               const margin = product.cost != null && product.cost > 0 ? marginPercent(product.price, product.cost) : null;
               const code = product.sku || product.barcode;
-              const location = [product.deposito, product.pasillo, product.estanteria].filter(Boolean).join(' · ');
+              const productVariants = variantsByProduct[product.id] ?? [];
+              const location = effectiveLocation(product, productVariants).join(' · ');
+              const variantStockTotal = productVariants.reduce((sum, variant) => sum + (variant.stock ?? 0), 0);
 
               return (
                 <div key={product.id} className="space-y-3 p-4">
@@ -1528,7 +1541,7 @@ function ProductsPageContent() {
                               )}
                             </p>
                             <p className="mt-0.5 truncate text-[11px] text-gray-500" title={location}>
-                              Stock {product.stock ?? 0} (informativo){location ? ` · ${location}` : ''}
+                              Tope {product.stock ?? 0} · {variantStockTotal} en variantes{location ? ` · ${location}` : ''}
                             </p>
                           </div>
                           {(variantsByProduct[product.id] ?? []).length === 0 ? (
@@ -1636,7 +1649,11 @@ function ProductsPageContent() {
           product={managerProduct}
           categories={categories}
           onClose={() => setManagerProduct(null)}
-          onChanged={() => { mutateProducts(); void loadProductVariants(managerProduct.id); }}
+          onChanged={async (productId) => {
+            // El modal espera este callback antes de dejar de guardar: los dos
+            // fetches tienen que terminar para que la tabla ya muestre el dato.
+            await Promise.allSettled([mutateProducts(), loadProductVariants(productId)]);
+          }}
         />
       )}
 

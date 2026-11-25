@@ -20,7 +20,7 @@ interface Props {
   product: Product;
   categories: Category[];
   onClose: () => void;
-  onChanged: () => void;
+  onChanged: (productId: string) => void | Promise<void>;
 }
 
 /**
@@ -151,7 +151,7 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
       toast.success(editingId ? 'Variante actualizada' : 'Variante creada');
       resetForm();
       await load();
-      onChanged();
+      await onChanged(product.id);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error al guardar la variante');
     } finally {
@@ -192,7 +192,7 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
     }
     toast.success(variant.active ? 'Variante desactivada' : 'Variante activada');
     await load();
-    onChanged();
+    await onChanged(product.id);
   };
 
   const handleDeleteVariant = async () => {
@@ -205,7 +205,7 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
       toast.success(`Variante ${variantToDelete.label} eliminada`);
       setVariantToDelete(null);
       await load();
-      onChanged();
+      await onChanged(product.id);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo eliminar la variante');
     } finally {
@@ -323,6 +323,7 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
                         <th className="px-2 py-2 text-right">Costo</th>
                         <th className="px-2 py-2 text-right">Precio</th>
                         <th className="px-2 py-2 text-right">Stock</th>
+                        <th className="px-2 py-2">Ubicación</th>
                         <th className="px-2 py-2">Estado</th>
                         <th className="px-2 py-2 text-right">Acciones</th>
                       </tr>
@@ -342,6 +343,9 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
                             )}
                           </td>
                           <td className="px-2 py-2 text-right font-semibold tabular-nums">{variant.stock ?? 0}</td>
+                          <td className="px-2 py-2 text-gray-500">
+                            {[variant.deposito, variant.pasillo, variant.estanteria].filter(Boolean).join(' · ') || '—'}
+                          </td>
                           <td className="px-2 py-2">
                             <button type="button" onClick={() => void handleToggleActive(variant)} className="text-xs text-indigo-600 dark:text-indigo-400 underline">
                               {variant.active ? 'Activa' : 'Inactiva'}

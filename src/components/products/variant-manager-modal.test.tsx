@@ -27,6 +27,9 @@ const variant: ProductVariant = {
   cost: 8000,
   active: true,
   stock: 90,
+  deposito: 'Depósito norte',
+  pasillo: 'B',
+  estanteria: '3',
   valueIds: ['val-color-rojo'],
 };
 
@@ -102,7 +105,14 @@ describe('VariantManagerModal · stock y estado', () => {
       }),
     ));
     expect(authFetch).not.toHaveBeenCalledWith('/api/variants/v-1/stock', expect.anything());
-    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+    await waitFor(() => expect(onChanged).toHaveBeenCalledWith(product.id));
+  });
+
+  it('muestra la ubicación guardada en la tabla del modal', async () => {
+    renderModal();
+
+    const row = (await screen.findByText('Rojo')).closest('tr');
+    expect(row).toHaveTextContent('Depósito norte · B · 3');
   });
 
   it('elimina la variante desde la acción Eliminar, con confirmación', async () => {
