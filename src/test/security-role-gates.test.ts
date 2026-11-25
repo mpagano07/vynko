@@ -56,6 +56,7 @@ import {
   DELETE as deleteProduct,
 } from '@/app/api/products/[id]/route';
 import { POST as adjustProductStock } from '@/app/api/products/[id]/adjust/route';
+import { DELETE as deleteVariant } from '@/app/api/variants/[id]/route';
 import { POST as adjustPrices } from '@/app/api/products/adjust-prices/route';
 import { PATCH as updateCollaborator, DELETE as deleteCollaborator } from '@/app/api/settings/collaborators/[id]/route';
 import { POST as completeOnboarding } from '@/app/api/onboarding/route';
@@ -67,6 +68,7 @@ const supplierParams = { params: Promise.resolve({ id: 'sup-1' }) } as never;
 const poParams = { params: Promise.resolve({ id: 'po-1' }) } as never;
 const transferParams = { params: Promise.resolve({ id: 'tr-1' }) } as never;
 const productParams = { params: Promise.resolve({ id: 'prod-1' }) } as never;
+const variantParams = { params: Promise.resolve({ id: 'v-1' }) } as never;
 const collaboratorParams = { params: Promise.resolve({ id: 'user-9' }) } as never;
 
 function jsonRequest(url: string, method: string, body?: unknown): Request {
@@ -348,6 +350,19 @@ describe('gateos por rol', () => {
       supabaseMock.__queue('product_stock', { data: { id: 'ps-1' }, error: null });
       supabaseMock.__queue('products', { data: { name: 'Coca' }, error: null });
       const res = await deleteProduct(jsonRequest('http://localhost/api/products/prod-1', 'DELETE'), productParams);
+      expect(res.status).toBe(200);
+    });
+
+    it('variantes: un member sí puede eliminar una variante de su sucursal', async () => {
+      supabaseMock.__queue('tenant_users', { data: { role: 'member' }, error: null });
+      supabaseMock.__rpcQueue('delete_product_variant', {
+        data: { ok: true, label: 'Rojo' },
+        error: null,
+      });
+      const res = await deleteVariant(
+        jsonRequest('http://localhost/api/variants/v-1', 'DELETE'),
+        variantParams
+      );
       expect(res.status).toBe(200);
     });
 

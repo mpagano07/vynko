@@ -3,6 +3,7 @@ import { supabaseMock } from '@/test/supabase-mock';
 import {
   adjustVariantStock,
   createAttribute,
+  deleteVariant,
   createVariant,
   getCriticalVariants,
   listSellableItems,
@@ -352,6 +353,49 @@ describe('updateVariant · stock desde el formulario de edición', () => {
 
     expect(result).toMatchObject({ ok: true, data: { stock: 90 } });
     expect(supabaseMock.rpc).not.toHaveBeenCalledWith('adjust_variant_stock_atomic', expect.anything());
+  });
+});
+
+describe('deleteVariant', () => {
+  it('borra la variante del tenant por RPC y registra la baja', async () => {
+    supabaseMock.__rpcQueue('delete_product_variant', {
+      data: { ok: true, label: 'Rojo / M' },
+      error: null,
+    });
+
+    const result = await deleteVariant(auth, 'v-1');
+
+    expect(result).toMatchObject({ ok: true, data: { label: 'Rojo / M' } });
+    expect(rpcArgs('delete_product_variant')).toEqual({
+      p_variant_id: 'v-1',
+      p_tenant_id: TENANT,
+    });
+  });
+
+  it('no confunde una variante de otra sucursal con una baja local', async () => {
+    supabaseMock.__rpcQueue('delete_product_variant', {
+      data: null,
+      error: { message: 'variant_not_in_tenant' },
+    });
+
+    const result = await deleteVariant(auth, 'v-2');
+
+    expect(result).toMatchObject({ ok: false, status: 404, error: 'Variante no encontrada en tu sucursal' });
+  });
+
+  it('rechaza borrar una variante con transferencia o compra pendiente', async () => {
+    supabaseMock.__rpcQueue('delete_product_variant', {
+      data: null,
+      error: { message: 'variant_in_use' },
+    });
+
+    const result = await deleteVariant(auth, 'v-1');
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: 400,
+      error: expect.stringMatching(/pendiente/),
+    });
   });
 });
 

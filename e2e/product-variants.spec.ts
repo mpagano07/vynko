@@ -91,6 +91,16 @@ test.describe('Productos con variantes', () => {
     await modal.getByRole('button', { name: 'Guardar cambios' }).click();
     await expect(modal.locator('tr').filter({ hasText: RED }).first()).toContainText('5', { timeout: 10_000 });
 
+    // 6b. Eliminar la azul con confirmación: desaparece del catálogo y la roja sigue.
+    await modal.locator('tr').filter({ hasText: BLUE }).first()
+      .getByRole('button', { name: `Eliminar ${BLUE}` }).click();
+    const confirm = page.getByRole('dialog').last();
+    await confirm.getByRole('button', { name: 'Eliminar', exact: true }).click();
+    await expect(page.getByRole('dialog').first().locator('tr').filter({ hasText: BLUE }))
+      .toHaveCount(0, { timeout: 10_000 });
+    await expect(page.getByRole('dialog').first().locator('tr').filter({ hasText: RED }))
+      .toHaveCount(1);
+
     await modal.getByRole('button', { name: 'Cerrar' }).click();
     await modal.waitFor({ state: 'hidden', timeout: 10_000 });
 

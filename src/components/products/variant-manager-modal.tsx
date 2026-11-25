@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { FormLabel } from '@/components/ui/form-label';
 import { IconAction } from '@/components/ui/icon-action';
+import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { amountToInput, formatARS, groupThousands, parseAmountInput } from '@/lib/utils/currency';
 import { marginPercent } from '@/lib/product-margin';
 import { authFetch } from '@/lib/fetchWithTenant';
@@ -55,6 +56,8 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
   const [amountDraft, setAmountDraft] = useState<{ price?: string; cost?: string }>({});
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedValues, setSelectedValues] = useState<string[]>([]);
+  const [variantToDelete, setVariantToDelete] = useState<ProductVariant | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [newAttribute, setNewAttribute] = useState('');
   const [newAttributeValues, setNewAttributeValues] = useState('');
   const [valueInputs, setValueInputs] = useState<Record<string, string>>({});
@@ -192,20 +195,22 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
     onChanged();
   };
 
-  const handleDeactivate = async (variant: ProductVariant) => {
-    const res = await authFetch(`/api/variants/${variant.id}/active`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ active: false }),
-    });
-    if (!res.ok) {
+  const handleDeleteVariant = async () => {
+    if (!variantToDelete) return;
+    setDeleting(true);
+    try {
+      const res = await authFetch(`/api/variants/${variantToDelete.id}`, { method: 'DELETE' });
       const data = await res.json();
-      toast.error(data.error || 'No se pudo desactivar la variante');
-      return;
+      if (!res.ok) throw new Error(data.error || 'No se pudo eliminar la variante');
+      toast.success(`Variante ${variantToDelete.label} eliminada`);
+      setVariantToDelete(null);
+      await load();
+      onChanged();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo eliminar la variante');
+    } finally {
+      setDeleting(false);
     }
-    toast.success('Variante desactivada');
-    await load();
-    onChanged();
   };
 
   const handleCreateAttribute = async (e: React.FormEvent) => {
@@ -248,6 +253,7 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
   };
 
   return (
+    <>
     <Modal
       onClose={onClose}
       className="max-w-5xl"
@@ -346,9 +352,9 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
                               <IconAction icon={Edit} label={`Editar ${variant.label}`} tone="indigo" onClick={() => handleEdit(variant)} />
                               <IconAction
                                 icon={Trash2}
-                                label={`Desactivar ${variant.label}`}
+                                label={`Eliminar ${variant.label}`}
                                 tone="red"
-                                onClick={() => void handleDeactivate(variant)}
+                                onClick={() => setVariantToDelete(variant)}
                               />
                             </div>
                           </td>
@@ -448,5 +454,16 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
         )}
       </div>
     </Modal>
+    <ConfirmModal
+      open={Boolean(variantToDelete)}
+      title="Eliminar variante"
+      message={`¿Eliminar "${variantToDelete?.label ?? ''}"? Se quita del catálogo y sus códigos quedan libres. El historial de ventas y movimientos se conserva.`}
+      confirmLabel="Eliminar"
+      variant="danger"
+      loading={deleting}
+      onConfirm={() => void handleDeleteVariant()}
+      onCancel={() => setVariantToDelete(null)}
+    />
+    </>
   );
 }

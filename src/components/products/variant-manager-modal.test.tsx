@@ -105,6 +105,20 @@ describe('VariantManagerModal · stock y estado', () => {
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
   });
 
+  it('elimina la variante desde la acción Eliminar, con confirmación', async () => {
+    const { onChanged } = renderModal();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Eliminar Rojo' }));
+    expect(screen.getByText('Eliminar variante')).toBeInTheDocument();
+    expect(authFetch).not.toHaveBeenCalledWith('/api/variants/v-1', { method: 'DELETE' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar' }));
+
+    await waitFor(() => expect(authFetch).toHaveBeenCalledWith('/api/variants/v-1', { method: 'DELETE' }));
+    expect(authFetch).not.toHaveBeenCalledWith('/api/variants/v-1/active', expect.anything());
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+
   it('refresca la tabla de productos al activar o desactivar una variante', async () => {
     const { onChanged } = renderModal();
 

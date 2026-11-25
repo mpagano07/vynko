@@ -449,6 +449,52 @@ export async function setVariantActive(
   return { ok: true, data: { ok: true } };
 }
 
+/**
+ * Baja definitiva en la sucursal: borra `variant_stock` y los códigos, pero no
+ * la fila global de `product_variants` (es la que sostiene el historial y la
+ * que pueden compartir otras sucursales). La RPC lo hace en una transacción.
+ */
+export async function deleteVariant(
+  auth: AuthInfo,
+  variantId: string
+): Promise<ActionResult<{ label: string }>> {
+  const check = await requireStockManager(auth);
+  if (!check.ok) return check;
+
+  const { data, error } = await supabaseAdmin.rpc('delete_product_variant', {
+    p_variant_id: variantId,
+    p_tenant_id: auth.tenantId,
+  });
+  if (error) {
+    logger.error('delete_product_variant fallo:', { error });
+    if (error.message?.includes('variant_in_use')) {
+      return {
+        ok: false,
+        error: 'La variante está en una transferencia o compra pendiente: desactivála en vez de eliminarla',
+        status: 400,
+      };
+    }
+    if (error.message?.includes('variant_not_in_tenant')) {
+      return { ok: false, error: 'Variante no encontrada en tu sucursal', status: 404 };
+    }
+    return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.', status: 500 };
+  }
+  const outcome = (Array.isArray(data) ? data?.[0] : data) as Record<string, unknown> | null;
+  if (!outcome?.ok) return { ok: false, error: 'No se pudo eliminar la variante', status: 500 };
+  const label = String(outcome.label ?? '');
+
+  await createActivityLog({
+    tenantId: auth.tenantId,
+    userId: auth.userId,
+    action: 'deleted',
+    entityType: 'product_variant',
+    entityId: variantId,
+    details: { label },
+  });
+
+  return { ok: true, data: { label } };
+}
+
 export async function adjustVariantStock(
   auth: AuthInfo,
   variantId: string,
