@@ -1279,62 +1279,108 @@ function ProductsPageContent() {
                       </td>
                     </tr>
                     {expanded && (
-                      <tr className="bg-gray-50/70 dark:bg-gray-900/40">
-                        <td colSpan={8} className="px-4 py-3">
-                          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                              Stock por variante · {product.name}
-                            </span>
-                            <Button size="sm" variant="outline" onClick={() => openVariantManager(product)}>
-                              <Layers3 className="h-3.5 w-3.5 mr-1" /> Administrar variantes
-                            </Button>
-                          </div>
-                          {productVariants.length === 0 ? (
-                            <p className="text-sm text-gray-500 py-2">
-                              Este producto todavía no tiene variantes. Podés crearlas manualmente desde “Administrar variantes”.
-                            </p>
-                          ) : (
-                            <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-                              <table className="w-full text-left text-xs border-collapse">
-                                <thead className="bg-gray-100 dark:bg-gray-800 text-gray-500 uppercase">
-                                  <tr>
-                                    <th className="px-3 py-2">Variante</th>
-                                    <th className="px-3 py-2">SKU / Código</th>
-                                    <th className="px-3 py-2 text-right">Costo</th>
-                                    <th className="px-3 py-2 text-right">Precio</th>
-                                    <th className="px-3 py-2 text-right">Margen</th>
-                                    <th className="px-3 py-2 text-right">Stock</th>
-                                    <th className="px-3 py-2">Ubicación</th>
-                                    <th className="px-3 py-2 text-right">Estado</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                                  {productVariants.map((variant) => (
-                                    <tr key={variant.id}>
-                                      <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100">{variant.label}</td>
+                      <tr>
+                        <td colSpan={8} className="p-0">
+                          <div className="mx-4 my-2 overflow-hidden rounded-lg border-l-4 border-indigo-500 bg-indigo-50/60 dark:bg-indigo-950/20">
+                            <div className="px-5 py-3">
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Package className="h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
+                                    <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">{product.name}</h3>
+                                    <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">
+                                      Producto principal
+                                    </span>
+                                  </div>
+                                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                    Variantes de este producto · cada una con su propio SKU, costo, precio y stock.
+                                  </p>
+                                </div>
+                                <Button size="sm" variant="outline" onClick={() => openVariantManager(product)}>
+                                  <Layers3 className="h-3.5 w-3.5 mr-1" /> Administrar variantes
+                                </Button>
+                              </div>
+
+                              <div className="mt-3 overflow-x-auto rounded-lg border border-indigo-100 bg-white dark:border-indigo-900/40 dark:bg-gray-900">
+                                <table className="w-full text-left text-xs border-collapse">
+                                  <thead className="bg-gray-50 dark:bg-gray-800 text-gray-500 uppercase">
+                                    <tr>
+                                      <th className="px-3 py-2">Variante</th>
+                                      <th className="px-3 py-2">SKU / Código</th>
+                                      <th className="px-3 py-2 text-right">Costo</th>
+                                      <th className="px-3 py-2 text-right">Precio</th>
+                                      <th className="px-3 py-2 text-right">Margen</th>
+                                      <th className="px-3 py-2 text-right">Stock</th>
+                                      <th className="px-3 py-2">Ubicación</th>
+                                      <th className="px-3 py-2 text-right">Estado</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                                    <tr className="bg-indigo-50/70 dark:bg-indigo-950/30">
+                                      <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100">
+                                        <div className="flex items-center gap-1.5">
+                                          <Package className="h-3 w-3 text-indigo-500" />
+                                          Producto principal
+                                        </div>
+                                        <span className="mt-0.5 block text-[10px] font-normal text-gray-500">Base de las variantes</span>
+                                      </td>
                                       <td className="px-3 py-2 font-mono text-gray-500">
-                                        {variant.sku || '—'}{variant.barcode ? ` · ${variant.barcode}` : ''}
+                                        {product.sku || '—'}{product.barcode ? <span className="block text-[10px]">GTIN: {product.barcode}</span> : null}
                                       </td>
-                                      <td className="px-3 py-2 text-right">{formatARS(variant.cost ?? 0)}</td>
-                                      <td className="px-3 py-2 text-right font-semibold text-green-600 dark:text-green-400">{formatARS(variant.price)}</td>
+                                      <td className="px-3 py-2 text-right text-gray-500">{formatARS(product.cost || 0)}</td>
+                                      <td className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-200">{formatARS(product.price)}</td>
                                       <td className="px-3 py-2 text-right text-gray-500">
-                                        {variant.cost != null && variant.cost > 0 ? `${marginPercent(variant.price, variant.cost).toFixed(0)}%` : '—'}
+                                        {product.cost != null && product.cost > 0 && product.price > 0
+                                          ? `${marginPercent(product.price, product.cost).toFixed(0)}%`
+                                          : '—'}
                                       </td>
-                                      <td className="px-3 py-2 text-right font-semibold">{variant.stock ?? 0}</td>
+                                      <td className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-200">
+                                        {product.stock ?? 0}
+                                        <span className="mt-0.5 block text-[10px] font-normal text-gray-400">Informativo</span>
+                                      </td>
                                       <td className="px-3 py-2 text-gray-500">
-                                        {[variant.deposito, variant.pasillo, variant.estanteria].filter(Boolean).join(' · ') || '—'}
+                                        {[product.deposito, product.pasillo, product.estanteria].filter(Boolean).join(' · ') || '—'}
                                       </td>
                                       <td className="px-3 py-2 text-right">
-                                        <span className={variant.active ? 'text-emerald-600' : 'text-gray-400'}>
-                                          {variant.active ? 'Activa' : 'Inactiva'}
+                                        <span className={product.is_active === false ? 'text-gray-400' : 'text-emerald-600'}>
+                                          {product.is_active === false ? 'Inactivo' : 'Activo'}
                                         </span>
                                       </td>
                                     </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                                    {productVariants.map((variant) => (
+                                      <tr key={variant.id}>
+                                        <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100">{variant.label}</td>
+                                        <td className="px-3 py-2 font-mono text-gray-500">
+                                          {variant.sku || '—'}{variant.barcode ? ` · ${variant.barcode}` : ''}
+                                        </td>
+                                        <td className="px-3 py-2 text-right">{formatARS(variant.cost ?? 0)}</td>
+                                        <td className="px-3 py-2 text-right font-semibold text-green-600 dark:text-green-400">{formatARS(variant.price)}</td>
+                                        <td className="px-3 py-2 text-right text-gray-500">
+                                          {variant.cost != null && variant.cost > 0 ? `${marginPercent(variant.price, variant.cost).toFixed(0)}%` : '—'}
+                                        </td>
+                                        <td className="px-3 py-2 text-right font-semibold">{variant.stock ?? 0}</td>
+                                        <td className="px-3 py-2 text-gray-500">
+                                          {[variant.deposito, variant.pasillo, variant.estanteria].filter(Boolean).join(' · ') || '—'}
+                                        </td>
+                                        <td className="px-3 py-2 text-right">
+                                          <span className={variant.active ? 'text-emerald-600' : 'text-gray-400'}>
+                                            {variant.active ? 'Activa' : 'Inactiva'}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                    {productVariants.length === 0 && (
+                                      <tr>
+                                        <td colSpan={8} className="px-3 py-3 text-center text-xs text-gray-500">
+                                          Este producto todavía no tiene variantes. Podés crearlas manualmente desde “Administrar variantes”.
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
                             </div>
-                          )}
+                          </div>
                         </td>
                       </tr>
                     )}
@@ -1450,29 +1496,67 @@ function ProductsPageContent() {
                     </div>
                   </div>
                   {expandedRows.has(product.id) && (
-                    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 p-3">
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="text-xs font-semibold uppercase text-gray-500">Stock por variante</span>
-                        <Button size="sm" variant="outline" onClick={() => openVariantManager(product)}>Administrar</Button>
-                      </div>
-                      {(variantsByProduct[product.id] ?? []).length === 0 ? (
-                        <p className="text-xs text-gray-500">Sin variantes cargadas.</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {(variantsByProduct[product.id] ?? []).map((variant) => (
-                            <div key={variant.id} className="flex items-center justify-between gap-2 text-xs">
-                              <div className="min-w-0">
-                                <p className="truncate font-medium text-gray-900 dark:text-gray-100">{variant.label}</p>
-                                <p className="truncate font-mono text-gray-500">{variant.sku || '—'}</p>
-                              </div>
-                              <div className="text-right shrink-0">
-                                <p className="font-semibold text-indigo-600 dark:text-indigo-400">{formatARS(variant.price)}</p>
-                                <p className="text-gray-500">{variant.stock ?? 0} u. · {variant.active ? 'Activa' : 'Inactiva'}</p>
-                              </div>
+                    <div className="overflow-hidden rounded-lg border-l-4 border-indigo-500 bg-indigo-50/60 dark:bg-indigo-950/20">
+                      <div className="px-3 py-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <Package className="h-3.5 w-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" />
+                              <p className="truncate text-xs font-bold text-gray-900 dark:text-gray-100">{product.name}</p>
                             </div>
-                          ))}
+                            <p className="mt-0.5 text-[11px] text-gray-500">Variantes de este producto</p>
+                          </div>
+                          <Button size="sm" variant="outline" onClick={() => openVariantManager(product)}>Administrar</Button>
                         </div>
-                      )}
+
+                        <div className="mt-2 space-y-2">
+                          <div className="rounded-md border border-indigo-100 bg-white p-2 dark:border-indigo-900/40 dark:bg-gray-900">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">Producto principal</p>
+                              <span className={product.is_active === false ? 'text-[11px] text-gray-400' : 'text-[11px] text-emerald-600'}>
+                                {product.is_active === false ? 'Inactivo' : 'Activo'}
+                              </span>
+                            </div>
+                            {code && <p className="mt-1 truncate font-mono text-[11px] text-gray-500" title={code}>{code}</p>}
+                            <p className="mt-1 text-[11px] text-gray-500">
+                              Costo {formatARS(product.cost || 0)} ·{' '}
+                              <span className="font-semibold text-gray-700 dark:text-gray-200">{formatARS(product.price)}</span>
+                              {margin !== null && (
+                                <span className={margin >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
+                                  {' '}· {margin >= 0 ? '+' : ''}{margin.toFixed(0)}%
+                                </span>
+                              )}
+                            </p>
+                            <p className="mt-0.5 truncate text-[11px] text-gray-500" title={location}>
+                              Stock {product.stock ?? 0} (informativo){location ? ` · ${location}` : ''}
+                            </p>
+                          </div>
+                          {(variantsByProduct[product.id] ?? []).length === 0 ? (
+                            <p className="text-xs text-gray-500">Sin variantes cargadas. Podés crearlas desde “Administrar”.</p>
+                          ) : (
+                            (variantsByProduct[product.id] ?? []).map((variant) => (
+                              <div key={variant.id} className="rounded-md border border-gray-100 bg-white p-2 dark:border-gray-800 dark:bg-gray-900">
+                                <div className="flex items-center justify-between gap-2 text-xs">
+                                  <div className="min-w-0">
+                                    <p className="truncate font-medium text-gray-900 dark:text-gray-100">{variant.label}</p>
+                                    <p className="truncate font-mono text-gray-500">{variant.sku || '—'}{variant.barcode ? ` · ${variant.barcode}` : ''}</p>
+                                  </div>
+                                  <div className="shrink-0 text-right">
+                                    <p className="font-semibold text-indigo-600 dark:text-indigo-400">{formatARS(variant.price)}</p>
+                                    <p className="text-gray-500">{variant.stock ?? 0} u. · {variant.active ? 'Activa' : 'Inactiva'}</p>
+                                  </div>
+                                </div>
+                                <p className="mt-1 truncate text-[11px] text-gray-500">
+                                  Costo {formatARS(variant.cost ?? 0)}
+                                  {variant.cost != null && variant.cost > 0 && ` · ${marginPercent(variant.price, variant.cost).toFixed(0)}%`}
+                                  {[variant.deposito, variant.pasillo, variant.estanteria].filter(Boolean).length > 0 &&
+                                    ` · ${[variant.deposito, variant.pasillo, variant.estanteria].filter(Boolean).join(' · ')}`}
+                                </p>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>

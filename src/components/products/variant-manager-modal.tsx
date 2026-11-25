@@ -22,27 +22,33 @@ interface Props {
   onChanged: () => void;
 }
 
-const emptyForm = {
+/**
+ * El formulario de alta arranca con los valores visibles del producto principal
+ * para que la variante se lea como parte del mismo producto. Son defaults
+ * editables: SKU, código, costo, precio y stock quedan bajo control de la
+ * variante en cuanto se guarda.
+ */
+export const formFromProduct = (product: Product) => ({
   label: '',
-  sku: '',
-  barcode: '',
-  price: '0',
-  cost: '0',
-  stock: '0',
-  min_stock: '0',
-  max_stock: '0',
-  deposito: '',
-  pasillo: '',
-  estanteria: '',
-  category_id: '',
-};
+  sku: product.sku ?? '',
+  barcode: product.barcode ?? '',
+  price: String(product.price ?? 0),
+  cost: product.cost == null ? '' : String(product.cost),
+  stock: String(product.stock ?? 0),
+  min_stock: String(product.min_stock ?? 0),
+  max_stock: String(product.max_stock ?? 0),
+  deposito: product.deposito ?? '',
+  pasillo: product.pasillo ?? '',
+  estanteria: product.estanteria ?? '',
+  category_id: product.category_id ?? '',
+});
 
 export function VariantManagerModal({ product, categories, onClose, onChanged }: Props) {
   const [attributes, setAttributes] = useState<ProductAttribute[]>([]);
   const [variants, setVariants] = useState<ProductVariant[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ ...emptyForm, category_id: product.category_id ?? '' });
+  const [form, setForm] = useState(() => formFromProduct(product));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedValues, setSelectedValues] = useState<string[]>([]);
   const [newAttribute, setNewAttribute] = useState('');
@@ -75,7 +81,7 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
   }, [attributes, selectedValues]);
 
   const resetForm = () => {
-    setForm({ ...emptyForm, category_id: product.category_id ?? '' });
+    setForm(formFromProduct(product));
     setEditingId(null);
     setSelectedValues([]);
   };
@@ -89,6 +95,20 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
     if (selectedValues.length === 0) {
       toast.error('Elegí al menos un valor de atributo para la variante');
       return;
+    }
+    // Los defaults vienen del padre, pero sus códigos quedan reservados:
+    // dejar el mismo valor sería ambiguo para el escáner y para el POS.
+    if (!editingId) {
+      const parentSku = (product.sku ?? '').trim();
+      const parentBarcode = (product.barcode ?? '').trim();
+      if (parentSku && form.sku.trim() === parentSku) {
+        toast.error('El SKU del producto principal es reservado: cargá un SKU propio para la variante');
+        return;
+      }
+      if (parentBarcode && form.barcode.trim() === parentBarcode) {
+        toast.error('El código de barras del producto principal es reservado: cargá uno propio para la variante');
+        return;
+      }
     }
     setSaving(true);
     try {
@@ -347,6 +367,11 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
               <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
                 3. {editingId ? 'Editar variante' : 'Nueva variante'} (creación manual, sin combinaciones automáticas)
               </h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {editingId
+                  ? 'Los valores son propios de esta variante.'
+                  : `Valores iniciales tomados de ${product.name}. Ajustá SKU, código, costo, precio y stock: son propios de cada variante y el SKU/código del producto principal está reservado.`}
+              </p>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <div>
                   <FormLabel>Etiqueta</FormLabel>
