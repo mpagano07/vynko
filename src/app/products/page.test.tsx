@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import ProductsPage from './page';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useProducts } from '@/lib/hooks/useProducts';
@@ -457,7 +457,7 @@ describe('ubicación de variantes en la tabla principal', () => {
       }
       return jsonResponse({});
     });
-    renderPage([product({ deposito: 'Depósito viejo', pasillo: 'Z', estanteria: '9' })]);
+    renderPage([product({ has_variants: true, deposito: 'Depósito viejo', pasillo: 'Z', estanteria: '9' })]);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Ver variantes de TV 100 Pulgadas' }));
 
@@ -466,5 +466,50 @@ describe('ubicación de variantes en la tabla principal', () => {
     expect(screen.getByText('B')).toBeInTheDocument();
     expect(screen.getByText('3')).toBeInTheDocument();
     expect(screen.queryByText('Depósito viejo')).not.toBeInTheDocument();
+  });
+
+  it('muestra carga en vez del estado vacío hasta que llegan las variantes', async () => {
+    let resolveVariants!: (value: Response) => void;
+    const variantsRequest = new Promise<Response>((resolve) => {
+      resolveVariants = resolve;
+    });
+    authFetchMock.mockImplementation((input: RequestInfo | URL) => {
+      if (String(input).includes('/api/variants/products/')) return variantsRequest;
+      return Promise.resolve(jsonResponse({}));
+    });
+    renderPage([product({ has_variants: true })]);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver variantes de TV 100 Pulgadas' }));
+
+    expect((await screen.findAllByText('Cargando variantes…')).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/todavía no tiene variantes/)).toHaveLength(0);
+
+    await act(async () => {
+      resolveVariants(jsonResponse([{
+        id: 'v1', product_id: 'p1', label: 'Rojo', sku: 'V-1', barcode: null,
+        price: 10, cost: null, active: true, stock: 2, valueIds: [],
+        deposito: '', pasillo: '', estanteria: '',
+      }]));
+    });
+
+    expect(await screen.findAllByText('Rojo')).not.toHaveLength(0);
+    expect(screen.queryAllByText('Cargando variantes…')).toHaveLength(0);
+  });
+
+  it('no muestra la flecha en productos sin variantes', async () => {
+    renderPage();
+
+    expect((await screen.findAllByText('TV 100 Pulgadas')).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'Ver variantes de TV 100 Pulgadas' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /Crear primera variante de TV 100 Pulgadas/ }).length).toBeGreaterThan(0);
+  });
+
+  it('pide confirmación antes de convertir un producto en principal', async () => {
+    renderPage();
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Crear primera variante de TV 100 Pulgadas/ })[0]);
+
+    expect(await screen.findByText('Crear primera variante')).toBeInTheDocument();
+    expect(screen.getByText(/pasa a ser un producto principal/)).toBeInTheDocument();
   });
 });

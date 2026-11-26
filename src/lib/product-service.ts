@@ -271,6 +271,19 @@ export async function listProducts(auth: AuthInfo): Promise<ListProductsResult> 
     logger.error('DB error:', { error });
     return { ok: false, error: 'Ocurrio un error inesperado. Intenta de nuevo.' };
   }
+
+  // Un único query liviano para saber qué productos ya son padre. Contamos
+  // cualquier `variant_stock` del tenant (activa o no) para poder reactivarlas
+  // desde el listado. No traemos ni precios ni atributos: sólo el product_id.
+  const { data: variantRows, error: variantsError } = await supabaseAdmin
+    .from('product_variants')
+    .select('product_id, variant_stock!inner(tenant_id)')
+    .in('variant_stock.tenant_id', scopedTenantIds(auth));
+  if (variantsError) {
+    logger.error('DB error al consultar variantes:', { error: variantsError });
+  }
+  const variantProductIds = new Set((variantRows ?? []).map((row) => String(row.product_id)));
+
   const products = data?.map((p) => ({
     ...p,
     // La categoría se lee del catálogo del tenant activo (`product_stock`),
@@ -286,6 +299,7 @@ export async function listProducts(auth: AuthInfo): Promise<ListProductsResult> 
     estanteria: p.stock_data?.[0]?.estanteria ?? null,
     stock_data: undefined,
     price: p.price_cents != null ? p.price_cents / 100 : 0,
+    has_variants: variantProductIds.has(String(p.id)),
   })) || [];
   return { ok: true, products: await signProductImageUrls(products, auth.tenantId) };
 }

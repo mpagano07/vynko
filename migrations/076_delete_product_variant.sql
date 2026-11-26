@@ -5,7 +5,9 @@
 -- ON DELETE SET NULL y otras sucursales pueden compartir el mismo producto.
 -- Lo que se elimina es la pertenencia de este tenant: `variant_stock` (la
 -- variante deja de aparecer en catálogo/POS) y `sellable_codes` (sus códigos
--- quedan libres). La fila global queda como metadata del historial.
+-- quedan libres). La fila global queda como metadata del historial, pero sus
+-- códigos se liberan: `uq_product_variants_sku` es global por producto y, si no,
+-- un SKU borrado no se podría reutilizar aunque ya no lo use nadie.
 --
 -- Se bloquea si hay transferencias o compras abiertas que todavía la usan:
 -- esos flujos necesitan la fila de `variant_stock` para mover/creditar stock.
@@ -59,6 +61,18 @@ BEGIN
    WHERE variant_id = p_variant_id
      AND tenant_id = p_tenant_id;
 
+  -- La fila global se conserva para el historial, pero uq_product_variants_sku
+  -- /uq_product_variants_barcode la siguen considerando ocupada. Si ningún
+  -- tenant tiene ya esta variante, liberamos sus códigos para poder crear otra
+  -- con el mismo SKU/barcode. El label se conserva para leer documentos viejos.
+  IF NOT EXISTS (
+    SELECT 1 FROM public.variant_stock s WHERE s.variant_id = p_variant_id
+  ) THEN
+    UPDATE public.product_variants
+       SET sku = '', barcode = NULL, updated_at = now()
+     WHERE id = p_variant_id;
+  END IF;
+
   RETURN jsonb_build_object('ok', true, 'label', v_label);
 END;
 $$;
@@ -66,3 +80,14 @@ $$;
 REVOKE ALL ON FUNCTION public.delete_product_variant(UUID, UUID)
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.delete_product_variant(UUID, UUID) TO service_role;
+
+-- Reparación para bases donde ya se borraron variantes con la versión anterior
+-- de esta RPC: la fila global quedó con el SKU ocupado aunque ningún tenant
+-- tenga ya `variant_stock`. Sólo se limpia lo que nadie usa: si otra sucursal
+-- conserva la variante, sus códigos siguen vigentes y no se tocan.
+UPDATE public.product_variants v
+   SET sku = '', barcode = NULL, updated_at = now()
+ WHERE (COALESCE(v.sku, '') <> '' OR v.barcode IS NOT NULL)
+   AND NOT EXISTS (
+     SELECT 1 FROM public.variant_stock s WHERE s.variant_id = v.id
+   );

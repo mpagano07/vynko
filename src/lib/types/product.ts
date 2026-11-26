@@ -18,6 +18,8 @@ export interface Product {
   pasillo?: string;
   estanteria?: string;
   is_active?: boolean;
+  /** Tiene variantes vendibles en la sucursal (activas o no). Lo calcula `/api/products`. */
+  has_variants?: boolean;
   attributes?: Record<string, unknown>;
   created_at?: string;
   updated_at?: string;

@@ -55,6 +55,7 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
   // conserva lo que el usuario está tipeando, igual que en ProductFormModal.
   const [amountDraft, setAmountDraft] = useState<{ price?: string; cost?: string }>({});
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [labelEdited, setLabelEdited] = useState(false);
   const [selectedValues, setSelectedValues] = useState<string[]>([]);
   const [variantToDelete, setVariantToDelete] = useState<ProductVariant | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -99,10 +100,20 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
     }));
   };
 
+  // La etiqueta se arma sola a medida que se tildan atributos/valores. Si el
+  // usuario la escribió a mano, respetamos su texto: el autocompletado es un
+  // default, no una sobrescritura.
+  useEffect(() => {
+    if (labelEdited) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setForm((prev) => (prev.label === autoLabel ? prev : { ...prev, label: autoLabel }));
+  }, [autoLabel, labelEdited]);
+
   const resetForm = () => {
     setForm(formFromProduct(product));
     setAmountDraft({});
     setEditingId(null);
+    setLabelEdited(false);
     setSelectedValues([]);
   };
 
@@ -161,6 +172,9 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
 
   const handleEdit = (variant: ProductVariant) => {
     setEditingId(variant.id);
+    // Al editar, la etiqueta existente es intención del usuario: no la
+    // reemplazamos aunque cambie los valores seleccionados.
+    setLabelEdited(true);
     setAmountDraft({});
     setForm({
       label: variant.label,
@@ -381,8 +395,16 @@ export function VariantManagerModal({ product, categories, onClose, onChanged }:
               </p>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <div>
-                  <FormLabel>Etiqueta</FormLabel>
-                  <Input value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder={autoLabel || 'Ej: Rojo / Talle M'} />
+                  <FormLabel htmlFor="variant-label">Etiqueta</FormLabel>
+                  <Input
+                    id="variant-label"
+                    value={form.label}
+                    onChange={(e) => {
+                      setLabelEdited(true);
+                      setForm({ ...form, label: e.target.value });
+                    }}
+                    placeholder="Ej: Rojo / Talle M"
+                  />
                 </div>
                 <div>
                   <FormLabel>SKU</FormLabel>

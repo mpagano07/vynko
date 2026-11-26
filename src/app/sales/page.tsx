@@ -35,6 +35,7 @@ import {
   Scan,
   LayoutGrid,
   List,
+  Layers3,
   Percent,
   TriangleAlert,
   Printer,
@@ -45,6 +46,7 @@ import { formatDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { authFetch } from '@/lib/fetchWithTenant';
 import { matchesQuery } from '@/lib/utils/text';
+import { groupSellablesForDisplay } from '@/lib/sales-display';
 import type { Customer } from '@/lib/types/sale';
 import type { SellableItem } from '@/lib/types/variant';
 import type { ArcaConfig } from '@/lib/types/arca';
@@ -100,6 +102,8 @@ interface ProductOption {
   min_stock?: number;
   barcode?: string | null;
   sku?: string;
+  /** Variantes vendibles del mismo padre (sólo en la tarjeta agrupada del POS). */
+  variantCount?: number;
 }
 
 function sellableToOption(item: SellableItem): ProductOption {
@@ -421,6 +425,15 @@ export default function SalesPage() {
     return groups;
   }, [products]);
 
+  // El catálogo `products` conserva cada variante (lo usa el deep-link del
+  // escáner y el lookup de códigos). Para la grilla del POS mostramos una sola
+  // tarjeta por padre: así no aparece el mismo producto N veces y el selector
+  // de variantes se abre una sola vez al tocarlo.
+  const displayProducts = useMemo(
+    () => groupSellablesForDisplay(filteredProducts, variantGroups),
+    [filteredProducts, variantGroups]
+  );
+
   const sortedProducts = useMemo(() => {
     const saleCount = new Map<string, number>();
     for (const sale of sales) {
@@ -430,11 +443,11 @@ export default function SalesPage() {
         }
       }
     }
-    if (saleCount.size === 0) return filteredProducts;
-    return [...filteredProducts].sort((a, b) =>
+    if (saleCount.size === 0) return displayProducts;
+    return [...displayProducts].sort((a, b) =>
       (saleCount.get(b.product_id) || 0) - (saleCount.get(a.product_id) || 0)
     );
-  }, [filteredProducts, sales]);
+  }, [displayProducts, sales]);
 
   const productsPerPage = productView === 'list' ? LIST_PER_PAGE : PRODUCTS_PER_PAGE;
   const { currentPage: productPage, setCurrentPage: setProductPage, totalPages: totalProductPages, pageItems: paginatedProducts } = usePagination(sortedProducts, productsPerPage);
@@ -956,7 +969,7 @@ export default function SalesPage() {
 
           {loadingData ? (
             <LoadingState compact />
-          ) : filteredProducts.length === 0 ? (
+          ) : displayProducts.length === 0 ? (
             <Card className="p-8 border border-gray-100 dark:border-gray-800">
               <EmptyState icon={Package} title="No se encontraron productos" className="py-8" />
             </Card>
@@ -995,7 +1008,7 @@ export default function SalesPage() {
               {productView === 'grid' ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {paginatedProducts.map((product) => {
-                  const inCart = cart.some((item) => item.id === product.id);
+                  const inCart = cart.some((item) => item.product_id === product.product_id);
                   return (
                     <button
                       key={product.id}
@@ -1017,6 +1030,12 @@ export default function SalesPage() {
                       )}
                       <div className="font-semibold text-gray-900 dark:text-gray-100 text-sm pr-16">
                         {product.name}
+                        {product.variantCount ? (
+                          <span className="ml-1.5 inline-flex items-center gap-1 rounded bg-indigo-50 px-1.5 py-0.5 align-middle text-[10px] font-medium text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-300">
+                            <Layers3 className="h-3 w-3" />
+                            {product.variantCount} variantes
+                          </span>
+                        ) : null}
                       </div>
                     <div className="flex items-center justify-between gap-2 mt-1">
                       <span className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
@@ -1045,7 +1064,7 @@ export default function SalesPage() {
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
                       {paginatedProducts.map((product) => {
-                        const inCart = cart.some((item) => item.id === product.id);
+                        const inCart = cart.some((item) => item.product_id === product.product_id);
                         return (
                           <tr key={product.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
                             <td className="py-1.5 px-3">
@@ -1057,6 +1076,12 @@ export default function SalesPage() {
                               >
                                 <span className={`flex items-center gap-1.5 font-medium text-gray-900 dark:text-gray-100 ${inCart ? 'text-green-600 dark:text-green-400' : ''}`}>
                                   {product.name}
+                                  {product.variantCount ? (
+                                    <span className="inline-flex items-center gap-1 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-300">
+                                      <Layers3 className="h-3 w-3" />
+                                      {product.variantCount}
+                                    </span>
+                                  ) : null}
                                   {inCart && <Check className="h-3.5 w-3.5" />}
                                 </span>
                                 {(product.barcode || product.sku) && (

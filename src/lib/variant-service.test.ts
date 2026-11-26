@@ -111,6 +111,25 @@ describe('createVariant', () => {
     });
   });
 
+  it('explica el conflicto de SKU global con una variante borrada', async () => {
+    supabaseMock.__rpcQueue('create_product_variant', {
+      data: null,
+      error: {
+        code: '23505',
+        message: 'duplicate key value violates unique constraint "uq_product_variants_sku"',
+        details: 'Key (product_id, sku)=(p-1, SKU-01945) already exists.',
+      },
+    });
+
+    const result = await createVariant(auth, 'p-1', variantInput);
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: 400,
+      error: 'Ese SKU ya lo usa otra variante de este producto (incluso una borrada). Probá con otro o aplicá la migración 076 actualizada.',
+    });
+  });
+
   it('rechaza la creación sin capacidad de catálogo', async () => {
     role = 'viewer';
 

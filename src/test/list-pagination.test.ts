@@ -145,6 +145,25 @@ describe('listProducts con catálogo más grande que el tope de PostgREST', () =
     const selectArg = String(callsTo(supabaseMock.__calls, 'products', 'select')[0].args[0]);
     expect(selectArg).toContain('category_id');
   });
+
+  it('marca has_variants sólo para los productos con variantes del tenant', async () => {
+    supabaseMock.__queue('products', { data: productRows(2), error: null });
+    supabaseMock.__queue('product_variants', {
+      data: [{ product_id: 'p-0', variant_stock: [{ tenant_id: authAsTenantA().tenantId }] }],
+      error: null,
+    });
+
+    const result = await listProducts(authAsTenantA());
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.products[0].has_variants).toBe(true);
+    expect(result.products[1].has_variants).toBe(false);
+
+    // product_variants es global: el filtro tiene que caer en variant_stock.
+    const tenantFilter = callsTo(supabaseMock.__calls, 'product_variants', 'in');
+    expect(tenantFilter[0].args[0]).toBe('variant_stock.tenant_id');
+  });
 });
 
 describe('listProducts: la categoría viene del catálogo del tenant', () => {

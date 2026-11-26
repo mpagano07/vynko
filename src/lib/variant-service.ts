@@ -315,9 +315,11 @@ export async function createVariant(
     logger.error('create_product_variant fallo:', { error });
     const message = error.message?.includes('duplicate_sellable_code')
       ? 'El SKU o código de barras ya lo usa otro artículo de esta sucursal'
-      : error.message?.includes('product_not_in_tenant')
-        ? 'Producto no encontrado en tu sucursal'
-        : 'Ocurrio un error inesperado. Intenta de nuevo.';
+      : error.code === '23505' || error.message?.includes('uq_product_variants_sku')
+        ? 'Ese SKU ya lo usa otra variante de este producto (incluso una borrada). Probá con otro o aplicá la migración 076 actualizada.'
+        : error.message?.includes('product_not_in_tenant')
+          ? 'Producto no encontrado en tu sucursal'
+          : 'Ocurrio un error inesperado. Intenta de nuevo.';
     return { ok: false, error: message, status: 400 };
   }
   const row = (Array.isArray(data) ? data?.[0] : data) as Record<string, unknown> | null;

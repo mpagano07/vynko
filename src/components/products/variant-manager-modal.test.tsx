@@ -47,10 +47,21 @@ function renderModal(onChanged = vi.fn()) {
   };
 }
 
+const attributes = [
+  {
+    id: 'attr-color',
+    name: 'Color',
+    values: [
+      { id: 'val-color-rojo', value: 'Rojo' },
+      { id: 'val-color-azul', value: 'Azul' },
+    ],
+  },
+];
+
 beforeEach(() => {
   vi.mocked(authFetch).mockImplementation(async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url.includes('/attributes')) return new Response('[]', { status: 200 });
+    if (url.includes('/attributes')) return new Response(JSON.stringify(attributes), { status: 200 });
     if (url.includes('/products/')) return new Response(JSON.stringify([variant]), { status: 200 });
     return new Response(JSON.stringify({ success: true, newStock: 45 }), { status: 200 });
   });
@@ -81,7 +92,7 @@ describe('VariantManagerModal · stock y estado', () => {
   it('muestra el stock como solo valor, sin input, check ni botón Aplicar', async () => {
     renderModal();
 
-    const row = (await screen.findByText('Rojo')).closest('tr');
+    const row = (await screen.findByRole('button', { name: 'Editar Rojo' })).closest('tr');
     expect(row).toHaveTextContent('90');
     expect(row?.querySelector('input')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Aplicar' })).not.toBeInTheDocument();
@@ -111,7 +122,7 @@ describe('VariantManagerModal · stock y estado', () => {
   it('muestra la ubicación guardada en la tabla del modal', async () => {
     renderModal();
 
-    const row = (await screen.findByText('Rojo')).closest('tr');
+    const row = (await screen.findByRole('button', { name: 'Editar Rojo' })).closest('tr');
     expect(row).toHaveTextContent('Depósito norte · B · 3');
   });
 
@@ -139,5 +150,28 @@ describe('VariantManagerModal · stock y estado', () => {
       '/api/variants/v-1/active',
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ active: false }) }),
     );
+  });
+});
+
+describe('VariantManagerModal · etiqueta automática', () => {
+  it('precarga la etiqueta a medida que se tildan valores de atributo', async () => {
+    renderModal();
+
+    await waitFor(() => expect(screen.getByLabelText('Etiqueta')).toBeInTheDocument());
+    expect(screen.getByLabelText('Etiqueta')).toHaveValue('');
+
+    fireEvent.click(await screen.findByLabelText('Rojo'));
+
+    await waitFor(() => expect(screen.getByLabelText('Etiqueta')).toHaveValue('Color: Rojo'));
+  });
+
+  it('no sobrescribe una etiqueta escrita a mano', async () => {
+    renderModal();
+
+    const label = await screen.findByLabelText('Etiqueta');
+    fireEvent.change(label, { target: { value: 'Rojo edición especial' } });
+    fireEvent.click(await screen.findByLabelText('Azul'));
+
+    expect(screen.getByLabelText('Etiqueta')).toHaveValue('Rojo edición especial');
   });
 });

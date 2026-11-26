@@ -161,6 +161,12 @@ function ProductsPageContent() {
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [variantsByProduct, setVariantsByProduct] = useState<Record<string, ProductVariant[]>>({});
+  const [variantsLoading, setVariantsLoading] = useState<Set<string>>(new Set());
+  const [variantsError, setVariantsError] = useState<Record<string, string>>({});
+  // Cache de variantes ya cargadas y requests en vuelo: evita refetches al
+  // volver a desplegar y deduplica el hover + click del control.
+  const variantsLoadedRef = useRef<Set<string>>(new Set());
+  const variantsInFlightRef = useRef<Map<string, Promise<void>>>(new Map());
   const [managerProduct, setManagerProduct] = useState<Product | null>(null);
   const [variantDraftOpen, setVariantDraftOpen] = useState(false);
   const [variantDraft, setVariantDraft] = useState({ name: '', sku: '', barcode: '', description: '', category_id: '' });
@@ -613,8 +619,9 @@ function ProductsPageContent() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
   const [confirmAction, setConfirmAction] = useState<{
-    type: 'delete-product' | 'delete-category';
+    type: 'delete-product' | 'delete-category' | 'activate-variants';
     id: string;
+    name?: string;
   } | null>(null);
 
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
@@ -716,12 +723,52 @@ function ProductsPageContent() {
     handleOpenProductModal(target);
   }, [products, productsLoading, handleOpenProductModal]);
 
-  const loadProductVariants = useCallback(async (productId: string) => {
-    const res = await authFetch(`/api/variants/products/${encodeURIComponent(productId)}`);
-    if (!res.ok) return;
-    const rows = (await res.json()) as ProductVariant[];
-    setVariantsByProduct((prev) => ({ ...prev, [productId]: rows }));
-  }, []);
+  const loadProductVariants = useCallback(
+    async (productId: string, options?: { force?: boolean }) => {
+      const inFlight = variantsInFlightRef.current.get(productId);
+      if (inFlight) {
+        // Un refresh forzado (guardar en el modal) debe esperar al request
+        // anterior: si no, podría terminar mostrando datos pre-guardado.
+        if (options?.force) await inFlight.catch(() => {});
+        else return inFlight;
+      }
+      if (!options?.force && variantsLoadedRef.current.has(productId)) return;
+
+      setVariantsLoading((prev) => new Set(prev).add(productId));
+      setVariantsError((prev) => {
+        if (!prev[productId]) return prev;
+        const next = { ...prev };
+        delete next[productId];
+        return next;
+      });
+
+      const request = (async () => {
+        try {
+          const res = await authFetch(`/api/variants/products/${encodeURIComponent(productId)}`);
+          if (!res.ok) throw new Error(`No se pudieron cargar las variantes (${res.status})`);
+          const rows = (await res.json()) as ProductVariant[];
+          variantsLoadedRef.current.add(productId);
+          setVariantsByProduct((prev) => ({ ...prev, [productId]: rows }));
+        } catch (err) {
+          setVariantsError((prev) => ({
+            ...prev,
+            [productId]: err instanceof Error ? err.message : 'No se pudieron cargar las variantes',
+          }));
+        } finally {
+          variantsInFlightRef.current.delete(productId);
+          setVariantsLoading((prev) => {
+            const next = new Set(prev);
+            next.delete(productId);
+            return next;
+          });
+        }
+      })();
+
+      variantsInFlightRef.current.set(productId, request);
+      return request;
+    },
+    []
+  );
 
   const toggleProductRow = useCallback((productId: string) => {
     setExpandedRows((prev) => {
@@ -739,6 +786,16 @@ function ProductsPageContent() {
     setManagerProduct(product);
   }, []);
 
+  // Una sola entrada para el botón de Acciones: si ya tiene variantes abre el
+  // administrador; si no, pide confirmación antes de convertirlo en padre.
+  const handleVariantAction = useCallback((product: Product) => {
+    if (product.has_variants) {
+      setManagerProduct(product);
+      return;
+    }
+    setConfirmAction({ type: 'activate-variants', id: product.id, name: product.name });
+  }, []);
+
   // Deep-link desde el escáner: /products?variants=<id> despliega las variantes
   // del producto para elegir una, sin volver a buscarlo a mano.
   const variantDeepLinkHandled = useRef(false);
@@ -746,7 +803,7 @@ function ProductsPageContent() {
     const id = new URLSearchParams(window.location.search).get('variants');
     if (!id || variantDeepLinkHandled.current || productsLoading) return;
     const target = (products ?? []).find((p) => p.id === id);
-    if (!target) return;
+    if (!target || !target.has_variants) return;
     variantDeepLinkHandled.current = true;
     // Respuesta al deep-link del escáner: recién acá está cargado el catálogo
     // para saber qué producto desplegar (mismo patrón que otros fetch+effect).
@@ -936,6 +993,12 @@ function ProductsPageContent() {
     if (!confirmAction) return;
     const { type, id } = confirmAction;
     setConfirmAction(null);
+
+    if (type === 'activate-variants') {
+      const product = (products ?? []).find((p) => p.id === id);
+      if (product) setManagerProduct(product);
+      return;
+    }
 
     try {
       const headers = {
@@ -1145,14 +1208,20 @@ function ProductsPageContent() {
                     <React.Fragment key={product.id}>
                     <tr className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
                       <td className="py-4 pl-2">
-                        <button
-                          type="button"
-                          onClick={() => toggleProductRow(product.id)}
-                          aria-label={expanded ? `Ocultar variantes de ${product.name}` : `Ver variantes de ${product.name}`}
-                          className="rounded p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-                        >
-                          {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                        </button>
+                        {(product.has_variants || expanded) ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleProductRow(product.id)}
+                            onPointerEnter={() => void loadProductVariants(product.id)}
+                            onFocus={() => void loadProductVariants(product.id)}
+                            aria-label={expanded ? `Ocultar variantes de ${product.name}` : `Ver variantes de ${product.name}`}
+                            className="rounded p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                          >
+                            {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          </button>
+                        ) : (
+                          <span className="block w-6" aria-hidden="true" />
+                        )}
                       </td>
                       <td className="py-4 px-3 sm:px-6">
                         <div className="flex items-center gap-3">
@@ -1271,6 +1340,15 @@ function ProductsPageContent() {
                       <td className="py-4 px-3 sm:px-6 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <IconAction
+                            icon={Layers3}
+                            label={product.has_variants
+                              ? `Administrar variantes de ${product.name}`
+                              : `Crear primera variante de ${product.name}`}
+                            title={product.has_variants ? 'Administrar variantes' : 'Crear variantes'}
+                            tone={product.has_variants ? 'indigo' : 'neutral'}
+                            onClick={() => handleVariantAction(product)}
+                          />
+                          <IconAction
                             icon={Edit}
                             label={`Editar ${product.name}`}
                             title="Editar"
@@ -1345,9 +1423,6 @@ function ProductsPageContent() {
                                       </td>
                                       <td className="px-3 py-2 text-right font-semibold text-gray-700 dark:text-gray-200">
                                         {product.stock ?? 0}
-                                        <span className="mt-0.5 block text-[10px] font-normal text-gray-500">
-                                          Tope · {variantStockTotal} en variantes
-                                        </span>
                                       </td>
                                       <td className="px-3 py-2 text-gray-500">
                                         {[product.deposito, product.pasillo, product.estanteria].filter(Boolean).join(' · ') || '—'}
@@ -1380,13 +1455,35 @@ function ProductsPageContent() {
                                         </td>
                                       </tr>
                                     ))}
-                                    {productVariants.length === 0 && (
+                                    {variantsLoading.has(product.id) ? (
+                                      <tr>
+                                        <td colSpan={8} className="px-3 py-4 text-center text-xs text-gray-500">
+                                          <span className="inline-flex items-center gap-2">
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-500" />
+                                            Cargando variantes…
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    ) : variantsError[product.id] ? (
+                                      <tr>
+                                        <td colSpan={8} className="px-3 py-3 text-center text-xs">
+                                          <span className="text-red-600 dark:text-red-400">No se pudieron cargar las variantes.</span>{' '}
+                                          <button
+                                            type="button"
+                                            onClick={() => void loadProductVariants(product.id, { force: true })}
+                                            className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                                          >
+                                            Reintentar
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    ) : productVariants.length === 0 ? (
                                       <tr>
                                         <td colSpan={8} className="px-3 py-3 text-center text-xs text-gray-500">
                                           Este producto todavía no tiene variantes. Podés crearlas manualmente desde “Administrar variantes”.
                                         </td>
                                       </tr>
-                                    )}
+                                    ) : null}
                                   </tbody>
                                 </table>
                               </div>
@@ -1486,11 +1583,24 @@ function ProductsPageContent() {
                       )}
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
+                      {(product.has_variants || expandedRows.has(product.id)) && (
+                        <IconAction
+                          icon={expandedRows.has(product.id) ? ChevronUp : ChevronDown}
+                          label={`Ver variantes de ${product.name} (móvil)`}
+                          title="Variantes"
+                          onClick={() => toggleProductRow(product.id)}
+                          onPointerEnter={() => void loadProductVariants(product.id)}
+                          onFocus={() => void loadProductVariants(product.id)}
+                        />
+                      )}
                       <IconAction
-                        icon={expandedRows.has(product.id) ? ChevronUp : ChevronDown}
-                        label={`Ver variantes de ${product.name} (móvil)`}
-                        title="Variantes"
-                        onClick={() => toggleProductRow(product.id)}
+                        icon={Layers3}
+                        label={product.has_variants
+                          ? `Administrar variantes de ${product.name} (móvil)`
+                          : `Crear primera variante de ${product.name} (móvil)`}
+                        title={product.has_variants ? 'Administrar variantes' : 'Crear variantes'}
+                        tone={product.has_variants ? 'indigo' : 'neutral'}
+                        onClick={() => handleVariantAction(product)}
                       />
                       <IconAction
                         icon={Edit}
@@ -1541,10 +1651,31 @@ function ProductsPageContent() {
                               )}
                             </p>
                             <p className="mt-0.5 truncate text-[11px] text-gray-500" title={location}>
-                              Tope {product.stock ?? 0} · {variantStockTotal} en variantes{location ? ` · ${location}` : ''}
+                              Tope {product.stock ?? 0}{location ? ` · ${location}` : ''}
                             </p>
+                            {productVariants.length > 0 && (
+                              <p className="mt-0.5 text-[11px] text-indigo-600 dark:text-indigo-400">
+                                {productVariants.length} variante{productVariants.length === 1 ? '' : 's'} · stock total {variantStockTotal}
+                              </p>
+                            )}
                           </div>
-                          {(variantsByProduct[product.id] ?? []).length === 0 ? (
+                          {variantsLoading.has(product.id) ? (
+                            <p className="flex items-center gap-2 text-xs text-gray-500">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-500" />
+                              Cargando variantes…
+                            </p>
+                          ) : variantsError[product.id] ? (
+                            <p className="text-xs">
+                              <span className="text-red-600 dark:text-red-400">No se pudieron cargar las variantes.</span>{' '}
+                              <button
+                                type="button"
+                                onClick={() => void loadProductVariants(product.id, { force: true })}
+                                className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                              >
+                                Reintentar
+                              </button>
+                            </p>
+                          ) : (variantsByProduct[product.id] ?? []).length === 0 ? (
                             <p className="text-xs text-gray-500">Sin variantes cargadas. Podés crearlas desde “Administrar”.</p>
                           ) : (
                             (variantsByProduct[product.id] ?? []).map((variant) => (
@@ -1650,9 +1781,12 @@ function ProductsPageContent() {
           categories={categories}
           onClose={() => setManagerProduct(null)}
           onChanged={async (productId) => {
+            // Si se creó la primera variante desde Acciones, el panel recién
+            // tiene sentido ahora: lo desplegamos con los datos ya refrescados.
+            setExpandedRows((prev) => new Set(prev).add(productId));
             // El modal espera este callback antes de dejar de guardar: los dos
             // fetches tienen que terminar para que la tabla ya muestre el dato.
-            await Promise.allSettled([mutateProducts(), loadProductVariants(productId)]);
+            await Promise.allSettled([mutateProducts(), loadProductVariants(productId, { force: true })]);
           }}
         />
       )}
@@ -2216,15 +2350,19 @@ function ProductsPageContent() {
         onConfirm={handleConfirmAction}
         title={
           confirmAction?.type === 'delete-product' ? 'Eliminar producto' :
-            'Eliminar categoría'
+            confirmAction?.type === 'activate-variants' ? 'Crear primera variante' :
+              'Eliminar categoría'
         }
         message={
           confirmAction?.type === 'delete-product'
             ? '¿Estás seguro de que deseas eliminar este producto?'
-            : '¿Deseas eliminar esta categoría? Los productos asociados se quedarán sin categoría.'
+            : confirmAction?.type === 'activate-variants'
+              ? `Al crear la primera variante, "${confirmAction?.name ?? 'este producto'}" pasa a ser un producto principal: deja de venderse directo, su stock queda como tope y su SKU/código quedan reservados. El historial de ventas no se modifica.`
+              : '¿Deseas eliminar esta categoría? Los productos asociados se quedarán sin categoría.'
         }
-        variant="danger"
-        confirmLabel="Eliminar"
+        variant={confirmAction?.type === 'activate-variants' ? 'default' : 'danger'}
+        confirmLabel={confirmAction?.type === 'activate-variants' ? 'Crear variante' : 'Eliminar'}
+        confirmLabelShort={confirmAction?.type === 'activate-variants' ? 'Crear' : undefined}
       />
 
       {isTransferModalOpen && (
